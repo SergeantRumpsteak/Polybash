@@ -11,8 +11,7 @@ Steuerung:
   G              Granate werfen (2 zum Start, 2,5 s Zündzeit)
   F              benutzen: Lootkiste öffnen, am Boden liegende Waffe aufheben,
                  Fahrzeug ein-/aussteigen
-  Tab            Maus freigeben / wieder einfangen
-  Esc            Spiel beenden (mit Sicherheitsabfrage; J = ja, N = nein)
+  Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
   Menüs          auch mit der Maus bedienbar (Hover = gelb, Klick = wählen)
   3              Gadget in die Hand (dritter Slot, zusätzlich zu Haupt- und Kleinwaffe; Wahl im Hauptmenü "Ausrüstung"
                  oder auf dem Todesbildschirm mit 7-9): C4 (Rechtsklick kleben, Linksklick alle zünden),
@@ -144,6 +143,46 @@ if os.environ.get("SPIEL_OFFSCREEN"):  # nur für automatische Tests ohne Bildsc
 
 from direct.gui.OnscreenText import OnscreenText  # noqa: E402
 from direct.showbase.ShowBase import ShowBase     # noqa: E402
+
+
+_STICKY_SAVED = None
+
+
+def sticky_keys_off():
+    """Windows: das Tastenkürzel '5x Shift' (Einrastfunktion) abschalten, solange das Spiel läuft - sonst
+    öffnet sich mitten im Rennen ein Dialog und nimmt dem Fenster den Fokus."""
+    global _STICKY_SAVED
+    if os.name != "nt" or _STICKY_SAVED is not None:
+        return
+    try:
+        import ctypes
+
+        class STICKYKEYS(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint)]
+        sk = STICKYKEYS(ctypes.sizeof(STICKYKEYS), 0)
+        if not ctypes.windll.user32.SystemParametersInfoW(0x3A, sk.cbSize, ctypes.byref(sk), 0):   # SPI_GETSTICKYKEYS
+            return
+        _STICKY_SAVED = sk.dwFlags
+        new = STICKYKEYS(sk.cbSize, sk.dwFlags & ~0x4)       # SKF_HOTKEYACTIVE aus
+        ctypes.windll.user32.SystemParametersInfoW(0x3B, new.cbSize, ctypes.byref(new), 0)         # SPI_SETSTICKYKEYS
+    except Exception:
+        _STICKY_SAVED = None
+
+
+def sticky_keys_restore():
+    global _STICKY_SAVED
+    if os.name != "nt" or _STICKY_SAVED is None:
+        return
+    try:
+        import ctypes
+
+        class STICKYKEYS(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint)]
+        sk = STICKYKEYS(ctypes.sizeof(STICKYKEYS), _STICKY_SAVED)
+        ctypes.windll.user32.SystemParametersInfoW(0x3B, sk.cbSize, ctypes.byref(sk), 0)
+    except Exception:
+        pass
+    _STICKY_SAVED = None
 
 # ---------------------------------------------------------------- Konstanten
 SEED = 42
@@ -126690,7 +126729,6 @@ class Game(ShowBase):
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
         self.accept("n", self.on_confirm, [False])
-        self.accept("tab", self.toggle_capture)
         self.accept("r", self.on_r)
         for i in range(10):          # Ziffern: Waffenwahl im Spiel, Auswahl/IP-Eingabe im Menü
             self.accept(str(i), self.on_digit, [i])
@@ -126707,6 +126745,11 @@ class Game(ShowBase):
         self.captured = False
         self.mouse_prev = None
         self.warp_pending = False
+        self.warp_frames = 0
+        self.had_focus = True
+        sticky_keys_off()
+        import atexit
+        atexit.register(sticky_keys_restore)
         self.taskMgr.add(self.update_task, "update")
         self._keep = []                       # feste Knoten; alles andere gehört zu einem Spiel (leave_game)
         for name in ("render", "aspect2d", "render2d", "a2dTopCenter", "a2dTopLeft", "a2dTopRight",
@@ -126720,6 +126763,7 @@ class Game(ShowBase):
     def userExit(self):
         """Beenden: Netz schliessen, Einstellungen sichern, dann das Programm sicher beenden (auch wenn ein
         SystemExit im Task-Manager verschluckt wird oder ein Hintergrund-Thread offen bleibt)."""
+        sticky_keys_restore()
         try:
             self.shutdown_net()
         except Exception:
@@ -127927,7 +127971,7 @@ class Game(ShowBase):
                  "Im Hubschrauber: Leertaste steigt, Shift sinkt - ohne Taste verliert er an Höhe.",
                  "Die Bordwaffen des Hubschraubers zeigen dorthin, wohin die Nase zeigt (grünes Fadenkreuz).",
                  "Rechte Maustaste im Hubschrauber feuert eine Rakete - nachladen nur auf dem Helipad.",
-                 "Tab gibt die Maus frei, M schaltet den Ton ein und aus.",
+                 "Esc öffnet das Menü und gibt die Maus frei, M schaltet den Ton ein und aus.",
                  "Treffer auf Fahrzeuge lösen ebenfalls einen Treffermarker aus.")
 
     def loading_map_name(self, mode, attempt):
@@ -128393,7 +128437,7 @@ class Game(ShowBase):
         self.vm_rocket.setScale(0.9)
 
     def build_hud(self):
-        OnscreenText(text="Esc  Menü      Tab  Maus freigeben",
+        OnscreenText(text="Esc  Menü / Maus freigeben",
                      parent=self.a2dTopLeft, pos=(0.04, -0.07), scale=0.04,
                      fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=False)
         self.cross = Crosshair(self.aspect2d)
@@ -129142,6 +129186,7 @@ class Game(ShowBase):
             self.set_capture(not self.captured)
 
     def recenter(self):
+        self.warp_frames = 0
         if self.win.movePointer(0, self.win.getXSize() // 2, self.win.getYSize() // 2):
             self.warp_pending = True
 
@@ -129155,6 +129200,13 @@ class Game(ShowBase):
             return 0, 0
         if not self.win.getProperties().getForeground():
             self.mouse_prev = None
+            self.had_focus = False
+            return 0, 0
+        if not getattr(self, "had_focus", True):      # Fenster hat den Fokus zurück: Maus neu einfangen
+            self.had_focus = True
+            self.recenter()
+            self.mouse_prev = None
+            self.warp_frames = 0
             return 0, 0
         p = self.win.getPointer(0)
         x, y = p.getX(), p.getY()
@@ -129163,7 +129215,14 @@ class Game(ShowBase):
         outside = abs(x - cx) > sx * 0.25 or abs(y - cy) > sy * 0.25
         if self.warp_pending:
             if outside:                    # System meldet noch die alte Position
+                self.warp_frames = getattr(self, "warp_frames", 0) + 1
+                if self.warp_frames % 4 == 0:        # Windows hat das Zurücksetzen verschluckt: erneut versuchen
+                    self.win.movePointer(0, cx, cy)
+                if self.warp_frames > 30:            # nie dauerhaft warten, sonst steht die Kamera für immer
+                    self.warp_pending = False
+                    self.mouse_prev = (x, y)
                 return 0, 0
+            self.warp_frames = 0
             self.warp_pending = False
             self.mouse_prev = (x, y)
             return 0, 0
