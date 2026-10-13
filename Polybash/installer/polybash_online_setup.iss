@@ -173,7 +173,7 @@ begin
   Ok := False;
   App := ExpandConstant('{app}');
   VenvPy := App + '\venv\Scripts\python.exe';
-  Prog := CreateOutputMarqueeProgressWizardPage('Polybash wird eingerichtet', 'Bitte warten - das Fenster offen lassen.');
+  Prog := CreateOutputMarqueeProgressPage('Polybash wird eingerichtet', 'Bitte warten - das Fenster offen lassen.');
   try
     Prog.Show;
     if NeedPython then
