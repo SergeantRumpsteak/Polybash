@@ -6974,9 +6974,13 @@ def weapon_stats(w):
     ads = w.spread * w.ads_spread
     dmg_txt = f"{tot:g}" if w.pellets == 1 else f"{tot:g} ({w.pellets} x {w.dmg:g})"
     return [("Schaden", dmg_txt, _c01(tot / 90.0)),
+            ("Schaden / Sekunde", f"{dps:.0f}", _c01(dps / 200.0)),
             ("Feuerrate", f"{60.0 / w.interval:.0f}/min", _c01(60.0 / w.interval / 900.0)),
+            ("Mündungsgeschw.", f"{w.speed:.0f} m/s", _c01(w.speed / 700.0)),
             ("Genauigkeit Hüfte", f"{w.spread:.1f}°", _c01(1.0 - w.spread / 5.0)),
             ("Genauigkeit Zielen", f"{ads:.2f}°", _c01(1.0 - ads / 2.0)),
+            ("Rückstoss", f"{w.kick:.1f}°", _c01(1.0 - w.kick / 6.0)),
+            ("Nachladen", f"{w.reload:.1f} s", _c01(1.0 - (w.reload - 1.0) / 3.5)),
             ("Magazin / Reserve", f"{w.mag} / {w.max_reserve}", _c01(w.mag / 32.0))]
 
 
@@ -7265,7 +7269,8 @@ class LoadoutScreen:
         """Werte der Waffe links neben dem Symbol; Aufsätze erscheinen als schraffierter Zugewinn/Verlust."""
         base = weapon_stats(WEAPONS[wi])
         cur = weapon_stats(eff_weapon(wi, att))
-        W, rh = 0.75, 0.082
+        W = 0.75
+        rh = min(0.082, 0.50 / len(cur))               # bei vielen Zeilen enger, damit beide Waffenfelder passen
         H = 0.085 + rh * len(cur)
         top = cz + H / 2
         self.card(x0 + W / 2, cz, W + 0.01, H + 0.01, (0.55, 0.6, 0.68, 1.0), 16)
@@ -126904,7 +126909,7 @@ class Game(ShowBase):
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
-            self.menu_items.append(OnscreenText(text="Polybash", pos=(1.2, -0.94), scale=0.045,
+            self.menu_items.append(OnscreenText(text="Polybash Alpha v0.8", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
 
@@ -127731,8 +127736,7 @@ class Game(ShowBase):
         """Pause-Menü (Esc im Spiel): weiterspielen, Einstellungen, zum Hauptmenü, beenden."""
         net = self.net_mode
         if kind == "main":
-            leave = {"client": "Verbindung trennen, zum Hauptmenü", "host": "Spiel beenden, zum Hauptmenü"}.get(
-                net, "Zum Hauptmenü")
+            leave = "Zum Hauptmenü"
             self.open_overlay("pause", "Pause", [
                 ("Weiterspielen   (Esc)", self.close_quit_box),
                 ("Einstellungen", lambda: self.show_pause("settings")),
@@ -129002,15 +129006,27 @@ class Game(ShowBase):
             self.sel_req = wi
 
     def cycle_weapon(self, d):
+        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
         pl = self.player
-        cur = self.sel_req if self.sel_req is not None else (pl.switch_to if pl.switch_t > 0 else pl.cur)
-        have = [wi for wi in pl.slots if wi is not None]
-        if not have:
+        if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        i = have.index(cur) if cur in have else 0
-        self.sel_req = have[(i + d) % len(have)]
+        gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid))
+        order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else [])
+        if not order:
+            return
+        if pl.gad_out and "gad" in order:
+            cur = "gad"
+        else:
+            cur = self.sel_req if self.sel_req is not None else (pl.switch_to if pl.switch_t > 0 else pl.cur)
+        i = order.index(cur) if cur in order else 0
+        nxt = order[(i + d) % len(order)]
+        if nxt == "gad":
+            if not pl.gad_out:
+                self.toggle_gadget()
+        else:
+            self.sel_req = nxt
 
     def on_r(self):
         if self.mode != "play" or self.quit_box is not None:
