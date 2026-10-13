@@ -1,0 +1,25 @@
+POLYBASH - ONLINE-INSTALLER
+===========================
+
+Fuer dich (einmalig, auf einem Windows-PC):
+  1. Inno Setup 6 installieren: https://jrsoftware.org/isdl.php
+  2. Diesen Ordner "installer" neben spiel.py und den Ordner "maps" legen
+     (genau so, wie er hier im Download liegt).
+  3. build_online_installer.bat doppelklicken.
+  -> es entsteht installer\dist\Polybash-Installer.exe (ca. 15 MB).
+
+Fuer deine Freunde:
+  Polybash-Installer.exe doppelklicken, "Weiter", "Installieren". Fertig.
+  - Der Installer braucht kein Administratorpasswort.
+  - Hat der PC kein Python 3.9 - 3.12, laedt der Installer Python 3.12 von python.org und
+    installiert es nur fuer Polybash (Unterordner "python"); andere Programme bleiben unberuehrt.
+  - Danach holt er die Spiele-Engine Panda3D aus dem Internet (1-3 Minuten).
+  - Start ueber das Startmenue bzw. die Desktop-Verknuepfung "Polybash".
+  - Beim ersten Start fragt die Windows-Firewall: "Zugriff zulassen" waehlen (fuer den Mehrspieler im WLAN).
+  - Deinstallieren: Windows-Einstellungen > Apps > Polybash.
+
+Aktualisieren: neue spiel.py einsetzen, Installer neu bauen und verteilen; die Freunde fuehren ihn
+einfach noch einmal aus (er ueberschreibt die alte Version).
+
+Hinweis: Wird Windows Defender / SmartScreen warnen ("Unbekannter Herausgeber"), auf "Weitere Informationen"
+> "Trotzdem ausfuehren" klicken - der Installer ist nicht digital signiert.
