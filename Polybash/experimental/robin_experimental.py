@@ -692,6 +692,10 @@ WEAPONS = (
            kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2),
 )
 WEAPON_IDX = {w.name: i for i, w in enumerate(WEAPONS)}
+# Ansicht/Aufsätze/Visier gelten wie in den anderen Modi für Haupt- (Slot 1) und Kleinwaffen; hier ist "kind" nur
+# normal/special, darum die Einteilung nach Namen:
+PRIMARY_NAMES = ("Sturmgewehr", "Schrotflinte", "Scharfschütze")
+SECONDARY_NAMES = ("Pistole", "Revolver", "Maschinenpistole")
 
 
 @dataclass
@@ -896,7 +900,7 @@ def eff_weapon(wi, att=None):
     """Waffe mit den Faktoren der Aufsätze (att = (Lauf, Magazin, Griff))."""
     base = WEAPONS[wi]
     att = att_valid(att)
-    if att is None or att == ATT_NONE or base.kind == "loot":
+    if att is None or att == ATT_NONE or base.kind == "special":
         return base
     key = (wi, att)
     w = _EFF_CACHE.get(key)
@@ -130982,7 +130986,7 @@ class Game(ShowBase):
             parts, muzzle = GUN_PARTS[w.name]
             gm = Mesh()
             magp = MAG_PARTS.get(w.name)
-            if w.kind == "primary" and w.name == "Sturmgewehr":
+            if w.name == "Sturmgewehr":
                 parts = parts[:-8]                          # Kimme/Korn: eigener Knoten (nur mit Visier "Kimme und Korn")
             sg_h = sg_a = None
             if w.name == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
@@ -131026,7 +131030,7 @@ class Game(ShowBase):
                         mag = nd
             self.vm_mags.append((mag, ej, magp))
             an = {}
-            if w.kind in ("primary", "secondary"):            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
+            if w.name in PRIMARY_NAMES or w.name in SECONDARY_NAMES:            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
                 for si_ in (0, 2):
                     for v_ in (1, 2, 3):
                         am_ = Mesh()
@@ -131055,7 +131059,7 @@ class Game(ShowBase):
             self.gun_models.append(model)
             self.gun_flash.append(fl)
             sn = {}
-            if w.kind == "primary":
+            if w.name in PRIMARY_NAMES:
                 for sc in range(4):
                     sp = scope_parts(sc, w.name)
                     if not sp:
@@ -132802,7 +132806,7 @@ class Game(ShowBase):
             self.pre_seat = (pl.cur, pl.gad_out)                 # Waffe merken, die beim Einsteigen in der Hand war
         elif self.was_seated and not seated and not dead and self.pre_seat is not None:
             cur0, gad0 = self.pre_seat                           # ... und beim Aussteigen wieder in die Hand nehmen
-            if cur0 in pl.slots or WEAPONS[cur0].kind == "loot":
+            if cur0 in pl.slots or WEAPONS[cur0].kind == "special":
                 pl.cur = pl.switch_to = cur0
                 pl.switch_t = pl.reload_t = 0.0
             pl.gad_out = bool(gad0)
@@ -133491,7 +133495,7 @@ class Game(ShowBase):
             return "rocket"
         if w.scope:
             return "sniper"                                   # Railgun
-        if w.kind == "primary" and pl.cur == pl.slots[0]:
+        if w.name in PRIMARY_NAMES and pl.cur == pl.slots[0]:
             return SIGHT_NAMES[pl.scope]
         return "iron"
 
@@ -133507,7 +133511,7 @@ class Game(ShowBase):
         return w.ads_fov
 
     def ads_z(self, pl, w):
-        if w.kind == "primary" and pl.cur == pl.slots[0] and w.name in SCOPE_MOUNT:
+        if w.name in PRIMARY_NAMES and pl.cur == pl.slots[0] and w.name in SCOPE_MOUNT:
             return scope_ads_z(pl.scope, w.name)
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
@@ -133669,7 +133673,7 @@ class Game(ShowBase):
             (m.show if i == pl.cur and not pl.melee_out and not hidden and pl.hp > 0 and not driving else m.hide)()
         for i, m in enumerate(self.melee_models):
             (m.show if pl.melee_out and i == pl.melee and pl.hp > 0 and not driving else m.hide)()
-        rh = RHAND_GRIP.get(w.name) if (w.kind == "secondary" and pl.reload_t > 0 and pl.switch_t <= 0) else None
+        rh = RHAND_GRIP.get(w.name) if (w.name in SECONDARY_NAMES and pl.reload_t > 0 and pl.switch_t <= 0) else None
         if rh is not None and self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
             self.vm_rhand.setPos(*rh)               # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
             self.vm_rhand.show()
@@ -133706,7 +133710,7 @@ class Game(ShowBase):
         if pl.cur < len(self.gun_flash):                          # Mündungsfeuer sitzt am Ende des Laufaufsatzes
             self.gun_flash[pl.cur].setY(GUN_PARTS[w.name][1][1] + ATT_MUZZLE_EXT[att_[0]])
         for sc_, nd_ in self.scope_nodes[pl.cur].items():          # montiertes Visier der Primärwaffe zeigen
-            (nd_.show if sc_ == pl.scope and w.kind == "primary" and pl.cur == pl.slots[0] else nd_.hide)()
+            (nd_.show if sc_ == pl.scope and w.name in PRIMARY_NAMES and pl.cur == pl.slots[0] else nd_.hide)()
             if sc_ == 0 and w.name == SG_NAME and getattr(self, "sg_front", None) is not None:
                 (self.sg_front.show if sc_ == pl.scope and pl.cur == pl.slots[0] else self.sg_front.hide)()
         if rsc:
