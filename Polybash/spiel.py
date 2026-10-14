@@ -409,6 +409,15 @@ def norm(v):
 SUN = norm(SUN)
 
 
+def seg_point_dist(a, b, p):
+    """Abstand des Punkts p von der Strecke a-b (3D)."""
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ap = (p[0] - a[0], p[1] - a[1], p[2] - a[2])
+    l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+    t = 0.0 if l2 < 1e-12 else max(0.0, min(1.0, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / l2))
+    return math.dist(p, (a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t))
+
+
 def clampf(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -483,29 +492,30 @@ class Weapon:
     grav: float = 1.0         # Faktor auf die Schwerkraft der Kugel
     blast_r: float = 0.0      # Explosionsradius (0 = normale Kugel)
     blast_dmg: float = 0.0    # Schaden im Explosionszentrum
+    loud: float = 1.0         # Lautstärke-Faktor des Schusses (Lärmsystem: NOISE_SHOT * loud)
     head_mult: float = 2.0    # Faktor auf den Schaden bei Kopftreffern
 
 
 WEAPONS = (
     Weapon("Pistole", 28, 0.30, 12, 96, 240, 0.9, 1.3, kick=1.6, kick_yaw=0.4,
-           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, kind="secondary"),
+           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, kind="secondary", loud=0.75),
     Weapon("Sturmgewehr", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,
-           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30),
+           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0),
     Weapon("Schrotflinte", 9, 0.85, 7, 36, 200, 4.5, 2.4, pellets=9, kick=5.0,
-           kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6),
+           kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6, loud=1.1),
     Weapon("Scharfschütze", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,
-           kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0),
+           kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25),
     Weapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
-           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, kind="secondary"),
+           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, kind="secondary", loud=0.9),
     Weapon("Maschinenpistole", 11, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.5,
-           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, kind="secondary"),
+           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, kind="secondary", loud=0.85),
     Weapon("Raketenwerfer", 0, 1.4, 1, 6, 95, 0.4, 2.6, kick=5.0, kick_yaw=0.4,
            kick_back=9.0, ads_fov=26, ads_spread=0.5, grav=0.12, blast_r=6.0, sight="rocket",
-           blast_dmg=130, kind="loot"),
+           blast_dmg=130, kind="loot", loud=1.4),
     Weapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
-           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="loot"),
+           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="loot", loud=1.3),
     Weapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
-           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="loot"),
+           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="loot", loud=1.2),
 )
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
 SELECTIVE_FIRE = (1,)          # Waffen mit Feuermodus-Schalter (V): Sturmgewehr
@@ -640,12 +650,53 @@ TURRET_NAMES = {"mg": "MG-Geschütz", "flak": "Flak", "car": "Wagen-Geschütz"}
 
 MOB_KINDS = {
     "grunt": dict(hp=60.0, speed=4.6, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
-                  aggro=24.0, scale=1.0),
+                  aggro=24.0, scale=1.0, hear=1.0),
     "brute": dict(hp=220.0, speed=3.0, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
-                  aggro=18.0, scale=1.55),
+                  aggro=18.0, scale=1.55, hear=0.8),                # schwerhörig
     "huntress": dict(hp=45.0, speed=5.6, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
-                     aggro=30.0, scale=0.96),                    # flink und zerbrechlich
+                     aggro=30.0, scale=0.96, hear=1.3),             # flink, zerbrechlich, gute Ohren
 }
+
+
+# --- Lärm: Monster hören Spieler. Ein Geräusch alarmiert alle Monster im Radius (x hear der Art); sie laufen
+# zum Ort des Geräuschs (nicht direkt zum Spieler!) und suchen dort. Die Radien orientieren sich an der
+# Sichtweite der Monster (aggro 18-30 m): Schleichen bleibt darunter, Laufen etwa halb so weit, Sprinten etwa so
+# weit wie sie sehen, ein Schuss weckt ein ganzes Areal. Jede Waffe hat einen Lautstärke-Faktor (Weapon.loud).
+NOISE_CROUCH = 3.0        # geduckt: fast lautlos, nur direkt daneben
+NOISE_WALK = 10.0         # normal laufen: die nähere Umgebung
+NOISE_RUN = 22.0          # sprinten: deutlich weiter
+NOISE_SHOT = 60.0         # Schuss (x Weapon.loud: Pistole 0,75 ... Raketenwerfer 1,4)
+NOISE_EXPLOSION = 90.0    # Granate, Rakete, zerstörtes Fahrzeug
+NOISE_TOMAHAWK = 160.0    # Tomahawk-Einschlag
+NOISE_VEHICLE = 30.0      # fahrender Wagen (wie Sprinten, etwas lauter)
+NOISE_HELI = 55.0         # fliegender Helikopter
+NOISE_TICK = 0.4          # s: so oft wird der Bewegungslärm der Spieler ausgewertet
+NOISE_SEARCH_T = 5.0      # s: so lange sucht ein Monster am Geräuschort, dann zurück zu idle/wandern
+NOISE_INVESTIGATE = 0.75  # Faktor aufs Lauftempo beim Hinlaufen zum Geräusch
+# Kugeln entlang ihrer Flugbahn: Monster, an denen eine Kugel vorbeifliegt oder neben denen sie einschlägt,
+# laufen grob in die Richtung, aus der sie kam, und suchen dort.
+BULLET_NOISE_R = 3.0      # m: so nah muss eine Kugel an einem Monster vorbeifliegen
+BULLET_IMPACT_R = 4.0     # m: so nah muss sie neben ihm einschlagen
+BULLET_ALERT_MIN, BULLET_ALERT_MAX = 10.0, 20.0   # m: so weit läuft es in Richtung Herkunft
+BULLET_SEARCH_T = 5.0     # s: so lange sieht es sich dort um, dann zurück zu idle/wandern
+BULLET_DIR_ERR = 25.0     # Grad: so ungenau schätzt es die Herkunftsrichtung
+MOB_HIT_RUN = 80.0        # m: angeschossen läuft es bis zu so weit in Richtung Schütze (auch ohne Sicht)
+MOB_HIT_SEARCH_T = 6.0    # s: Suchzeit dort
+MOB_HIT_ERR = 8.0         # Grad: Richtungsfehler nach einem Treffer (spürt genauer, woher es kam)
+MOB_HIT_SPEED = 1.0       # Faktor aufs Lauftempo beim Hinlaufen nach einem Treffer
+NOISE_MINIMAP = True      # eigenen Lärm auf der Minimap zeigen (Kreis beim Laufen, Welle bei Schuss/Explosion)
+NOISE_MINIMAP_ZOOM = True # Welle grösser als der Ausschnitt: Minimap zoomt kurz heraus und wieder zurück
+NOISE_MM_ALPHA = 0.10     # Deckkraft der Kreisfläche (Rand etwas deutlicher)
+NOISE_WAVE_T = 0.7        # s: so lange breitet sich eine Schuss-Welle aus (Explosion: etwas länger)
+NOISE_ZOOM_MAX = 200.0    # m: weiter zoomt die Minimap nie heraus
+# Anflug der Tomahawk-Rakete (reine Darstellung, jeder rechnet sie selbst aus Ziel, Richtung und Countdown)
+TOMA_ROCKET_SPEED = 45.0    # m/s waagerecht
+TOMA_ROCKET_MIN = 420.0     # m: so weit (mindestens) startet sie vom Ziel entfernt - weit hinter dem Kartenrand
+TOMA_ROCKET_ALT = 230.0     # m: Flughöhe über dem Ziel
+TOMA_LOUD_T = 2.0           # s vor dem Einschlag: erst dann wird der Raketenton laut (dazu das Pfeifen)
+TOMA_JET_QUIET = 0.05       # Lautstärke des Dröhnens im Anflug (leise im Hintergrund)
+TOMA_JET_VOL = 0.55         # Lautstärke in der letzten Sekunde
+TOMA_WHISTLE_VOL = 0.5      # Lautstärke des Pfeifens
 
 
 # --------------------------------------------------------------- Spiellogik
@@ -1029,6 +1080,7 @@ class Bullet:
         self.blast_dmg = wp.blast_dmg if wp else 0.0
         self.life = 4.0
         self.travel = 0.0
+        self.alerted = set()      # Monster, die diese Kugel schon bemerkt haben (nur Host)
 
 
 class Grenade:
@@ -1140,6 +1192,52 @@ class Mob:
         self.kx = self.ky = 0.0   # Knockback-Geschwindigkeit
         self.phase = rng.uniform(0, 6.28)
         self.speed_now = 0.0
+        self.noise_at = None      # (x, y) eines gehörten Geräuschs, zu dem es hinläuft
+        self.search_t = 0.0       # restliche Suchzeit am Geräuschort
+        self.searching = False    # schon am Geräuschort angekommen?
+        self.inv_speed = NOISE_INVESTIGATE   # Tempo-Faktor beim Hinlaufen (Geräusch / Kugel / Treffer)
+
+    def on_noise(self, x, y, world):
+        """Ein Geräusch bei (x, y) gehört: hinlaufen und dort suchen (es sei denn, es jagt schon einen Spieler)."""
+        if self.state == "dead":
+            return
+        if self.state in ("chase", "attack") and self.noise_at is None:
+            return                                         # jagt schon einen Spieler, den es sieht
+        self.noise_at = (x, y)
+        self.search_t = NOISE_SEARCH_T
+        self.searching = False
+        self.inv_speed = NOISE_INVESTIGATE
+
+    def on_shot(self, world, d, hit=False, shooter=None):
+        """Eine Kugel flog nah vorbei / schlug daneben ein (hit=False) oder hat getroffen (hit=True). d = Flug-
+        richtung der Kugel, shooter = (x, y) des Schützen, falls bekannt. Monster drehen sich in Richtung
+        Herkunft und laufen ein Stück dorthin (getroffen: Richtung Schütze, bis MOB_HIT_RUN), suchen dort und
+        kehren dann zurück; sehen sie dabei einen Spieler, greifen sie an."""
+        if self.state == "dead":
+            return
+        if self.state == "attack" or (self.state == "chase" and self.noise_at is None and not hit):
+            return                                         # kämpft schon / jagt einen Spieler, den es sieht
+        rng = world.mrng
+        bx, by = -d[0], -d[1]
+        if math.hypot(bx, by) < 1e-6:                      # senkrecht von oben: Richtung unklar
+            a = rng.uniform(0, 2 * math.pi)
+        else:
+            a = math.atan2(by, bx)
+        if hit and shooter is not None:
+            dist = min(MOB_HIT_RUN, math.hypot(shooter[0] - self.x, shooter[1] - self.y))
+            a = math.atan2(shooter[1] - self.y, shooter[0] - self.x)
+        else:
+            dist = MOB_HIT_RUN if hit else rng.uniform(BULLET_ALERT_MIN, BULLET_ALERT_MAX)
+        a += math.radians(rng.uniform(-1, 1) * (MOB_HIT_ERR if hit else BULLET_DIR_ERR))
+        tx = clampf(self.x + math.cos(a) * dist, 3.0, WORLD - 3.0)
+        ty = clampf(self.y + math.sin(a) * dist, 3.0, WORLD - 3.0)
+        self.noise_at = (tx, ty)
+        self.search_t = MOB_HIT_SEARCH_T if hit else BULLET_SEARCH_T
+        self.searching = False
+        self.inv_speed = MOB_HIT_SPEED if hit else NOISE_INVESTIGATE
+        self.heading = math.degrees(math.atan2(-(tx - self.x), ty - self.y))   # sofort in die Richtung drehen
+        if self.state == "idle":
+            self.state = "chase"
 
     def turn_toward(self, dx, dy, dt, rate=420.0):
         target = math.degrees(math.atan2(-dx, dy))   # Blick = (-sin h, cos h)
@@ -1195,12 +1293,35 @@ class Mob:
                 self.atk_cd = k["cooldown"]
         elif sees:
             self.state = "chase"
+            self.noise_at, self.searching = None, False    # sieht einen Spieler: Geräusch egal
             self.turn_toward(dx, dy, dt)
             if d > self.reach * 0.85:
                 speed = k["speed"]
                 ux, uy = dx / d, dy / d
             if d <= self.reach and self.atk_cd <= 0:
                 self.state, self.atk_t, self.did_hit = "attack", 0.0, False
+        elif self.noise_at is not None:                    # Geräusch gehört: hinlaufen und dort suchen
+            self.state = "chase"
+            nx, ny = self.noise_at
+            tdx, tdy = nx - self.x, ny - self.y
+            td = math.hypot(tdx, tdy)
+            if td <= 2.0:
+                self.searching = True                      # angekommen: ab jetzt läuft die Suchzeit
+            if self.searching:
+                self.search_t -= dt
+            if self.search_t <= 0:                         # nichts gefunden: aufgeben
+                self.noise_at, self.searching = None, False
+                self.state = "idle"
+            elif td > 2.0:
+                self.turn_toward(tdx, tdy, dt)
+                speed = k["speed"] * (0.5 if self.searching else self.inv_speed)
+                ux, uy = tdx / td, tdy / td
+            else:                                          # kurz umsehen
+                self.heading += 90.0 * dt
+                if rng.random() < dt * 0.8:                # ein paar Schritte in eine zufällige Richtung
+                    a = rng.uniform(0, 2 * math.pi)
+                    self.noise_at = (clampf(nx + math.cos(a) * 4, 4, WORLD - 4),
+                                     clampf(ny + math.sin(a) * 4, 4, WORLD - 4))
         else:
             self.state = "idle"
             self.wander_t -= dt
@@ -1772,6 +1893,7 @@ class World:
         self.button = SimpleNamespace(x=80.0 + TO, y=62.55 + TO, z=TUN_Z)
         self.timer_panel = SimpleNamespace(x=85.0 + TO, y=62.55 + TO, z=TUN_Z)
         self.strike_dur = STRIKE_T
+        self.strike_ang = 0.0                # Himmelsrichtung, aus der die Rakete anfliegt (Grad)
         self.strike_x, self.strike_y = float(CENTER), float(CENTER)   # Einschlagpunkt (nur Host/Schütze kennt ihn)
         self.spawn_zs = {}
         self.ladders = {}
@@ -1845,6 +1967,7 @@ class World:
         self.bullets = []
         self.mobs = []
         self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
+        self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
         self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
         self.kills = 0           # erlegte Monster
         self.players = {}        # Spieler-ID -> Player (beim Host: alle, beim Client: nur Anzeige)
@@ -2884,6 +3007,63 @@ class World:
             return True
         return False
 
+    # ------------------------------------------------------------ Lärm
+    def make_noise(self, x, y, r):
+        """Geräusch mit Radius r bei (x, y): alarmiert jedes Monster, das näher als r * hear ist
+        (nur beim Host bzw. im Einzelspiel - dort laufen die Monster)."""
+        if r <= 0:
+            return
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            if (m.x - x) ** 2 + (m.y - y) ** 2 <= (r * MOB_KINDS[m.kind].get("hear", 1.0)) ** 2:
+                m.on_noise(x, y, self)
+
+    def player_noise(self, pl):
+        """Lärmradius, den ein Spieler gerade durch Bewegung/Fahrzeug macht."""
+        if pl.hp <= 0:
+            return 0.0
+        if pl.heli >= 0:
+            hc = self.heli_by_id(pl.heli)
+            return NOISE_HELI if hc is not None and not hc.ground else NOISE_VEHICLE
+        if pl.vehicle >= 0:
+            v = self.vehicle_by_id(pl.vehicle)
+            return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
+        if pl.mount >= 0 or not pl.moving:
+            return 0.0
+        if pl.crouch > 0.5:
+            return NOISE_CROUCH
+        return NOISE_RUN if getattr(pl, "running", False) else NOISE_WALK
+
+    def update_noise(self, dt, players):
+        self.noise_clock -= dt
+        if self.noise_clock > 0:
+            return
+        self.noise_clock = NOISE_TICK
+        if self.mobs:
+            for pl in players:
+                r = self.player_noise(pl)
+                if r > 0:
+                    self.make_noise(pl.x, pl.y, r)
+
+    def bullet_alert(self, b, p0, ended):
+        """Kugellärm entlang der Flugbahn: Monster, an denen die Kugel in diesem Schritt (p0 -> jetzt) näher als
+        BULLET_NOISE_R vorbeiflog oder neben denen sie (ended) einschlug, bemerken sie."""
+        p1 = (b.x, b.y, b.z)
+        d = norm((b.vx, b.vy, b.vz))
+        x0, x1 = min(p0[0], p1[0]) - BULLET_IMPACT_R - 2, max(p0[0], p1[0]) + BULLET_IMPACT_R + 2
+        y0, y1 = min(p0[1], p1[1]) - BULLET_IMPACT_R - 2, max(p0[1], p1[1]) + BULLET_IMPACT_R + 2
+        for m in self.mobs:
+            if m.state == "dead" or m.id in b.alerted or not (x0 < m.x < x1 and y0 < m.y < y1):
+                continue
+            c = (m.x, m.y, m.z + m.height * 0.5)
+            near = seg_point_dist(p0, p1, c) < BULLET_NOISE_R + m.radius
+            if not near and ended:
+                near = math.dist(p1, c) < BULLET_IMPACT_R + m.radius
+            if near:
+                b.alerted.add(m.id)
+                m.on_shot(self, d, False)
+
     # ------------------------------------------------------------ Spielregeln
     def underground(self, pl):
         """Unter der Erde (Tunnel, Keller unter dem Gelände)?"""
@@ -2980,6 +3160,8 @@ class World:
         m.hp -= dmg
         m.hurt_t = 0.15
         m.alert_t = 10.0
+        sh = self.players.get(owner) if isinstance(owner, int) else None
+        m.on_shot(self, d, True, (sh.x, sh.y) if sh is not None else None)   # reagiert immer: Richtung Schütze
         imp = dmg * 0.03 / m.scale                       # Knockback in Schussrichtung
         m.kx = clampf(m.kx + d[0] * imp, -6, 6)
         m.ky = clampf(m.ky + d[1] * imp, -6, 6)
@@ -3000,7 +3182,8 @@ class World:
     def explode(self, pos, owner, r, dmg, wi):
         """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
         Eine Rakete zerstört ein Fahrzeug in ROCKET_KILL_R Umkreis sofort."""
-        self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, wi))
+        self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, wi, owner))
+        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION)
         for v in list(self.vehicles):
             if v.hp <= 0:
                 continue
@@ -3379,6 +3562,7 @@ class World:
                     op.mount, op.trig = -1, False
                 t.op, op = -1, None
             was, t.firing = t.firing, False
+            t.noise_t = getattr(t, "noise_t", 0.0) - dt
             if t.over:
                 t.heat = max(0.0, t.heat - TUR_COOL_OVER * dt)
                 if t.heat <= TUR_RESUME:
@@ -3396,6 +3580,9 @@ class World:
                 continue
             flak = t.kind == "flak"
             t.firing = True
+            if getattr(t, "noise_t", 0.0) <= 0:            # Geschütz feuert: laut (alle 0,5 s gemeldet)
+                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2)
+                t.noise_t = 0.5
             t.cd = FLAK_INTERVAL if flak else TUR_INTERVAL
             t.heat += FLAK_HEAT if flak else TUR_HEAT_SHOT
             if t.heat >= 1.0:
@@ -3604,6 +3791,7 @@ class World:
         self.strike_x, self.strike_y = clampf(float(tx), 4.0, WORLD - 4.0), clampf(float(ty), 4.0, WORLD - 4.0)
         self.strike, self.strike_t, self.strike_by = 1, self.strike_dur, pl.pid
         pl.stats["toma_fired"] += 1
+        self.strike_ang = self.mrng.uniform(0.0, 360.0)      # Anflugrichtung der Rakete
         self.events.append(("strike", pl.pid))
         return True
 
@@ -3627,6 +3815,7 @@ class World:
         self.strike_wait = self.strike_cd
         tx, ty = self.strike_x, self.strike_y
         cz = self.height(tx, ty)
+        self.make_noise(tx, ty, NOISE_TOMAHAWK)
         self.events.append(("tomahawk", round(tx, 1), round(ty, 1)))
         self.events.append(("explosion", (round(tx, 2), round(ty, 2), round(cz + 1.0, 2)), 16.0))
         n, rr = 8, STRIKE_R * 0.6
@@ -3926,6 +4115,7 @@ class World:
             return
         self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
+        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0))
         for d in dirs:
             self.bullets.append(Bullet(eye[0], eye[1], eye[2],
                                        d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
@@ -4058,10 +4248,13 @@ class World:
             speed = math.sqrt(b.vx ** 2 + b.vy ** 2 + b.vz ** 2)
             n = max(1, int(speed * dt / 1.0) + 1)        # Teilstücke <= ~1 m
             ok = True
+            p0 = (b.x, b.y, b.z)
             for _ in range(n):
                 if not self.bullet_substep(b, dt / n):
                     ok = False
                     break
+            if self.mobs and b.blast_r <= 0:
+                self.bullet_alert(b, p0, not ok)
             if ok and -50 < b.x < WORLD + 50 and -50 < b.y < WORLD + 50:
                 alive.append(b)
         self.bullets = alive
@@ -4174,6 +4367,7 @@ class World:
             self.drops.remove(d)
         for d in self.drops:
             d.life -= dt
+        self.update_noise(dt, players)
         for m in self.mobs:
             m.update(dt, self, players)
         self.separate_mobs()
@@ -4245,6 +4439,7 @@ class Player:
         self.pitch = 0.0
         self.phase = 0.0     # für das Kopfwippen beim Laufen
         self.moving = False
+        self.running = False  # sprintet (für das Lärmsystem)
         self.hp = PLAYER_HP
         self.since_hurt = 99.0
         pri, sec = loadout[0], loadout[1]
@@ -4312,6 +4507,7 @@ def step(pl, forward, strafe, run, jump, dt, world):
     dy = fy * forward + ry * strafe
     l = math.hypot(dx, dy)
     pl.moving = l > 0
+    pl.running = pl.moving and bool(run) and pl.crouch < 0.3        # für das Lärmsystem
     ox, oy = pl.x, pl.y
     if pl.moving:
         speed = RUN if (run and pl.crouch < 0.3) else WALK     # geduckt kein Rennen
@@ -8739,6 +8935,7 @@ class HostSession:
             pl.z = clampf(z, -20, 60)
             pl.heading, pl.pitch = h, clampf(p, -90, 90)
             pl.moving = bool(m.get("mv"))
+            pl.running = bool(m.get("rn")) and pl.moving
             cur = m.get("cur")
             if isinstance(cur, int) and 0 <= cur < len(WEAPONS):
                 pl.cur = cur
@@ -8864,7 +9061,8 @@ class HostSession:
                 "hc": [[q.id, r2(q.x), r2(q.y), r2(q.z), r1(q.heading), r1(q.pitch), r1(q.roll),
                         r1(q.speed), r1(q.hp), q.driver, r1(q.dead_t), int(q.mg), q.rk, 1 if q.ground else 0,
                         1 if q.firing else 0] for q in w.helis],
-                "tm": [w.strike, r1(w.strike_t), w.strike_by, w.strike_dur, r1(w.strike_wait)],
+                "tm": [w.strike, r1(w.strike_t), w.strike_by, w.strike_dur, r1(w.strike_wait),
+                       r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
             snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
@@ -9086,6 +9284,8 @@ class ClientSession:
                 w.strike_dur = tm[3]
             if len(tm) > 4:
                 w.strike_wait = tm[4]
+            if len(tm) > 7:
+                w.strike_ang, w.strike_x, w.strike_y = tm[5], tm[6], tm[7]
         gm = m.get("gm")
         if gm:
             w.phase = "over" if gm[0] else "play"
@@ -9125,7 +9325,7 @@ class ClientSession:
         self.send_t = 1.0 / INPUT_RATE
         msg = {"t": "st", "p": [r2(pl.x), r2(pl.y), r2(pl.z), r1(pl.heading), r1(pl.pitch)],
                "mv": 1 if pl.moving else 0, "cur": pl.cur, "ln": r2(pl.lean),
-               "cr": r2(pl.crouch)}
+               "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0}
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
             msg["vh"] = [v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed)]
@@ -9390,6 +9590,24 @@ def synth_sounds():
         k = i / F
         loop[i] = loop[i] * k + base[N + i] * (1 - k)
     out["heli"] = norm(loop, 0.8)
+    # Tomahawk-Anflug: tiefes Triebwerksdröhnen (nahtlos wiederholbar) und Pfeifen kurz vor dem Einschlag
+    N, F = SR, int(0.08 * SR)
+    nz = lowpass(noise(N + F), 0.05)
+    nz2 = lowpass(noise(N + F), 0.25)
+    base = [nz[i] * 2.2 + nz2[i] * 0.35 + math.sin(tp * 38 * i / SR) * 0.25 for i in range(N + F)]
+    loop = base[:N]
+    for i in range(F):
+        k = i / F
+        loop[i] = loop[i] * k + base[N + i] * (1 - k)
+    out["jet"] = norm(loop, 0.85)
+    n = int(2.8 * SR)
+    wh, ph = [], 0.0
+    for i in range(n):
+        t = i / SR
+        ph += tp * (2400 - 1700 * (t / 2.8) ** 0.7) / SR
+        a = min(1.0, t / 0.4) * (0.4 + 0.6 * t / 2.8)
+        wh.append(math.sin(ph) * a)
+    out["whistle"] = norm(mix((wh, 1.0), (mul(lowpass(noise(n), 0.4), [0.15 + 0.3 * i / n for i in range(n)]), 0.4)), 0.8)
     return out
 
 
@@ -126338,13 +126556,13 @@ class Sfx:
     über OpenAL; fehlt eine Audioausgabe, läuft das Spiel ohne Ton weiter."""
 
     POOL = {"step_soft": 5, "step_hard": 5, "pistol": 4, "rifle": 8, "shotgun": 3, "heavy": 3,
-            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "swing": 2, "thud": 2}
+            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "whistle": 1, "swing": 2, "thud": 2}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
-             "click": 50.0, "reload": 50.0, "swing": 60.0, "thud": 70.0}
+             "click": 50.0, "reload": 50.0, "whistle": 700.0, "jet": 2500.0, "swing": 60.0, "thud": 70.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
-           "click": 40.0, "reload": 40.0, "swing": 8.0, "thud": 10.0}
+           "click": 40.0, "reload": 40.0, "whistle": 120.0, "jet": 150.0, "swing": 8.0, "thud": 10.0}
 
     def __init__(self, game):
         self.game = game
@@ -126356,6 +126574,7 @@ class Sfx:
         self.heli_snd = {}             # Heli-ID -> (Sound, Knoten)
         self.heli_mg = {}              # Heli-ID -> (letzter MG-Vorrat, Sperrzeit)
         self.nuke = None               # [Sound, Knoten, Lautstärke] des Tomahawk-Countdowns
+        self.jet = None                # Tomahawk-Anflug: (Sound, Knoten), Dauerschleife
         self.chat = None               # Funkgeräusch aus dem Kontrollraum (Sound, Knoten)
         self.music_path, self.music, self.music_v = None, None, 0.0     # Menümusik (Schleife)
         self.music_gain = 1.0          # Einstellung "Musik-Lautstärke" (0..1)
@@ -126455,6 +126674,30 @@ class Sfx:
             pass
         return None
 
+    def jet_sound(self, pos, left=99.0):
+        """Dröhnen der anfliegenden Tomahawk-Rakete (pos = None: aus). Im Anflug nur leise im Hintergrund;
+        erst in den letzten TOMA_LOUD_T Sekunden dreht es auf TOMA_JET_VOL auf ("gleich knallt's")."""
+        if not self.ok:
+            return
+        try:
+            if pos is None or self.muted:
+                if self.jet is not None:
+                    self.jet[0].stop()
+                return
+            if self.jet is None:
+                self.jet = self.make("jet")
+                self.jet[0].setLoop(True)
+            snd, node = self.jet
+            node.setPos(*pos)
+            k = max(0.0, min(1.0, 1.0 - left / TOMA_LOUD_T))          # 0 bis zu den letzten Sekunden, dann bis 1
+            vol = TOMA_JET_QUIET + (TOMA_JET_VOL - TOMA_JET_QUIET) * k * k
+            snd.setVolume(max(0.0, min(1.0, vol)))
+            snd.setPlayRate(0.8 + 0.35 * k)
+            if snd.status() != 2:
+                snd.play()
+        except Exception:
+            pass
+
     MUSIC_VOL = 0.45
 
     def menu_music(self, dt, on):
@@ -126500,6 +126743,11 @@ class Sfx:
             except Exception:
                 pass
         self.nuke = None
+        if self.jet is not None:
+            try:
+                self.jet[0].stop()
+            except Exception:
+                pass
         if self.chat:
             try:
                 self.chat[0].stop()
@@ -128743,6 +128991,7 @@ class Game(ShowBase):
 
         self.loading_step(0.92, "Oberfläche wird aufgebaut ...")
         self.build_crates()
+        self.build_toma()
         self.build_hud()
         if host is not None:
             OnscreenText(text=f"Mehrspieler: Freunde wählen 'Spiel beitreten' (IP {host.ip})",
@@ -130791,6 +131040,8 @@ class Game(ShowBase):
             if kind == "shot":
                 if e[2] == self.my_id:
                     self.sfx.shot(e[1], e[2])
+                    if 0 <= e[1] < len(WEAPONS):
+                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud)
                 if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse
                     continue
                 w = WEAPONS[e[1]]
@@ -130815,6 +131066,8 @@ class Game(ShowBase):
                 elif pw is not None:
                     self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
             elif kind == "explosion":
+                if len(e) > 4 and e[4] == self.my_id:
+                    self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
                 self.explosion_fx(e[1], e[2])
                 self.sfx.explosion(e[1], e[2], e[3] if len(e) > 3 else None)
                 pl = self.player
@@ -130950,6 +131203,8 @@ class Game(ShowBase):
                 self.feed_add(f"{self.pname(e[1])} hat den TOMAHAWK-ANGRIFF gestartet!")
             elif kind == "tomahawk":
                 tx, ty = (e[1], e[2]) if len(e) >= 3 else (CENTER, CENTER)
+                if self.world.strike_by == self.my_id:
+                    self.noise_wave(tx, ty, NOISE_TOMAHAWK)
                 self.sfx.play("explosion", (tx, ty, 20.0), 1.0, 0.6)
                 pl = self.player
                 d = math.dist((tx, ty), (pl.x, pl.y))
@@ -131336,6 +131591,7 @@ class Game(ShowBase):
         self.parts = keep
 
         self.update_crates()
+        self.update_toma_rocket(dt)
         self.update_gfx(dt)
         self.update_hud(dt)
         self.place_camera()
@@ -131887,6 +132143,26 @@ class Game(ShowBase):
         self.mm_arrow_factory = arrow
         self.mm_vehs = {v.id: dot(0.009, (1.0, 0.85, 0.2, 1)) for v in world.vehicles}
         self.mm_helis = {q.id: dot(0.012, (0.45, 0.85, 1.0, 1)) for q in world.helis}
+        # eigener Lärm: Fläche + Rand (Einheitskreis, skaliert); Wellen bei Schuss/Explosion
+        self.mm_zoom_hold = 0.0
+        nm = Mesh(lit=False)
+        for i in range(48):
+            a0, a1 = 2 * math.pi * i / 48, 2 * math.pi * (i + 1) / 48
+            p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)        # noqa: E731
+            nm.tri((0, 0, 0), p(0.97, a0), p(0.97, a1), (1, 1, 1, NOISE_MM_ALPHA), ref=(0, 5, 0))
+            nm.tri(p(0.97, a0), p(1.0, a0), p(1.0, a1), (1, 1, 1, NOISE_MM_ALPHA * 3), ref=(0, 5, 0))
+            nm.tri(p(0.97, a0), p(1.0, a1), p(0.97, a1), (1, 1, 1, NOISE_MM_ALPHA * 3), ref=(0, 5, 0))
+        self.mm_noise = marker(self.mm_root.attachNewNode(nm.node("mmnoise")), 22)
+        self.mm_noise.setTwoSided(True)
+        self.mm_noise.hide()
+        wm = Mesh(lit=False)
+        for i in range(48):
+            a0, a1 = 2 * math.pi * i / 48, 2 * math.pi * (i + 1) / 48
+            p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)        # noqa: E731
+            wm.tri(p(0.93, a0), p(1.0, a0), p(1.0, a1), (1, 1, 1), ref=(0, 5, 0))
+            wm.tri(p(0.93, a0), p(1.0, a1), p(0.93, a1), (1, 1, 1), ref=(0, 5, 0))
+        self.mm_wave_tpl = wm
+        self.mm_waves = []                         # [Knoten, Start, Radius (m), x, y]
         self.mm_north = OnscreenText(text="N", parent=self.mm_root, pos=(0, 0), scale=0.04,
                                      fg=(1.0, 0.35, 0.3, 1), shadow=(0, 0, 0, 0.9), mayChange=True)
         self.mm_north.setBin("fixed", 25)
@@ -132037,9 +132313,68 @@ class Game(ShowBase):
             sx, sy = sx / d * lim, sy / d * lim
         return sx, sy
 
+    def noise_wave(self, x, y, r):
+        """Eigener Lärm (Schuss, Explosion): Ring breitet sich auf der Minimap bis r m aus."""
+        if not NOISE_MINIMAP or r <= 0 or not hasattr(self, "mm_waves"):
+            return
+        now = time.time()
+        if self.mm_waves and now - self.mm_waves[-1][1] < 0.04 and abs(self.mm_waves[-1][2] - r) < 1.0:
+            return                                 # dieselbe Welle doppelt (Ereignis lokal + vom Host)
+        n = self.mm_root.attachNewNode(self.mm_wave_tpl.node("wave"))
+        n.setTwoSided(True)
+        n.setTransparency(TransparencyAttrib.MAlpha)
+        n.setBin("fixed", 22)
+        n.setDepthTest(False)
+        n.setDepthWrite(False)
+        self.mm_waves.append([n, now, r, x, y])
+        if len(self.mm_waves) > 8:
+            self.mm_waves.pop(0)[0].removeNode()
+        base = self.MM_LEVELS[self.mm_level]
+        if NOISE_MINIMAP_ZOOM and r > base * 0.92:                 # zu gross für den Ausschnitt: herauszoomen
+            self.mm_zoom_hold = max(self.mm_zoom_hold, min(NOISE_ZOOM_MAX, r * 1.1))
+            self.mm_zoom_until = now + self.wave_t(r) + 0.5
+
+    @staticmethod
+    def wave_t(r):
+        return NOISE_WAVE_T * max(0.6, min(2.2, math.sqrt(r / NOISE_SHOT)))
+
+    def update_noise_map(self, dt):
+        """Eigener Lärmkreis (Laufen/Rennen/Ducken/Fahren) und die Wellen; Zoom der Minimap."""
+        pl, now = self.player, time.time()
+        base = self.MM_LEVELS[self.mm_level]
+        # Zoom: bei grosser Welle weich heraus, danach wieder zurück auf die gewählte Stufe
+        want = self.mm_zoom_hold if now < getattr(self, "mm_zoom_until", 0.0) else base
+        if now >= getattr(self, "mm_zoom_until", 0.0):
+            self.mm_zoom_hold = 0.0
+        self.mm_vis += (max(want, base) - self.mm_vis) * min(1.0, dt * (6.0 if want > self.mm_vis else 2.5))
+        k = self.mm_R / self.mm_vis
+        r = self.world.player_noise(pl) if NOISE_MINIMAP and pl.hp > 0 else 0.0
+        if r > 0:
+            self.mm_noise.setScale(min(r * k, self.mm_R * 0.97))
+            self.mm_noise.show()
+        else:
+            self.mm_noise.hide()
+        keep = []
+        for w in self.mm_waves:
+            n, t0, rmax, x, y = w
+            u = (now - t0) / self.wave_t(rmax)
+            if u >= 1.0:
+                n.removeNode()
+                continue
+            keep.append(w)
+            p = self.mm_xy(x, y)
+            n.setPos(p[0], 0, p[1])
+            rad = rmax * (1.0 - (1.0 - u) ** 2) * k
+            n.setScale(max(0.002, min(rad, self.mm_R * 0.98)))
+            n.setColorScale(1, 1, 1, 0.55 * (1.0 - u) ** 1.3)
+        self.mm_waves = keep
+
     def update_minimap(self):
         pl = self.player
         R = self.mm_R
+        now_ = time.time()
+        self.update_noise_map(min(0.1, max(0.0, now_ - getattr(self, "mm_last_t", now_))))
+        self.mm_last_t = now_
         h = math.radians(pl.heading)
         ch, sh = math.cos(h), math.sin(h)
         if self.mm_disc is not None:
@@ -132142,6 +132477,105 @@ class Game(ShowBase):
             g = root.attachNewNode(gem.node("gem"))
             g.setFogOff()
             self.crate_views.append((c, f, e, g))
+
+    def build_toma(self):
+        """Rakete für den sichtbaren Anflug des Tomahawk (erscheint nur während des Countdowns)."""
+        self.toma_rk = None
+        self.toma_trail, self.toma_trail_t, self.toma_whistled = [], 0.0, False
+        rk, fl = build_rocket(False)
+        rr = self.render.attachNewNode("tomahawk_rocket")
+        rk.reparentTo(rr)
+        fl.reparentTo(rr)
+        glow = Mesh(alpha=0.45, lit=False)
+        box(glow, 0, -0.85, 0, 0.28, 0.6, 0.28, (1.0, 0.45, 0.1))          # Triebwerksglühen
+        gn = rr.attachNewNode(glow.node("glow"))
+        gn.setTransparency(TransparencyAttrib.MAlpha)
+        gn.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd))
+        gn.setDepthWrite(False)
+        rr.setScale(10.0)                                 # gross genug, um sie am Himmel zu sehen
+        rr.setFogOff()
+        rr.setLightOff()
+        rr.hide()
+        self.toma_rk = rr
+
+    def toma_rocket_pos(self, u):
+        """Flugbahn der Tomahawk-Rakete (u = 0 Start .. 1 Einschlag): von weit ausserhalb der Karte aus der
+        Richtung strike_ang in einem hohen Bogen genau auf den Zielpunkt. Jeder rechnet sie selbst aus."""
+        w = self.world
+        tx, ty = w.strike_x, w.strike_y
+        tz = w.height(tx, ty)
+        dist = max(TOMA_ROCKET_MIN, TOMA_ROCKET_SPEED * max(1.0, w.strike_dur))
+        a = math.radians(w.strike_ang)
+        sx, sy = tx + math.cos(a) * dist, ty + math.sin(a) * dist
+        u = max(0.0, min(1.0, u))
+        x, y = sx + (tx - sx) * u, sy + (ty - sy) * u
+        z = tz + TOMA_ROCKET_ALT * (1.0 - u ** 5) + 40.0 * math.sin(math.pi * u) * (1.0 - u)   # hoch, dann Sturzflug
+        return x, y, z
+
+    def update_toma_rocket(self, dt):
+        """Anflug der Tomahawk-Rakete während des Countdowns - für alle sichtbar (auf jeder Karte); der Zielort
+        wird nirgends angezeigt, man sieht nur, wohin sie fliegt."""
+        w = self.world
+        rr = getattr(self, "toma_rk", None)
+        if rr is None:
+            return
+        flying = w.strike == 1 and w.strike_dur > 0 and w.phase == "play"
+        if not flying:
+            rr.hide()
+            self.sfx.jet_sound(None)
+            self.toma_whistled = False
+        else:
+            u = 1.0 - max(0.0, w.strike_t) / w.strike_dur
+            p = self.toma_rocket_pos(u)
+            q = self.toma_rocket_pos(min(1.0, u + 0.002)) if u < 0.998 else self.toma_rocket_pos(u)
+            if q == p:
+                q2 = self.toma_rocket_pos(u - 0.002)
+                q = (2 * p[0] - q2[0], 2 * p[1] - q2[1], 2 * p[2] - q2[2])
+            rr.setPos(*p)
+            rr.lookAt(*q)                                    # Spitze (+y) in Flugrichtung
+            rr.setScale(10.0)
+            self.toma_far(rr, p, 10.0)
+            rr.show()
+            self.sfx.jet_sound(p, w.strike_t)
+            if w.strike_t <= TOMA_LOUD_T and not self.toma_whistled:
+                self.toma_whistled = True
+                self.sfx.play("whistle", None, TOMA_WHISTLE_VOL, 2.8 / max(0.5, TOMA_LOUD_T))   # passt in die Zeit
+            self.toma_trail_t -= dt
+            if self.toma_trail_t <= 0:                       # Rauchschweif hinter dem Triebwerk
+                self.toma_trail_t = 0.05
+                d = (p[0] - q[0], p[1] - q[1], p[2] - q[2])
+                ln = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2) or 1.0
+                tail = (p[0] + d[0] / ln * 9.0, p[1] + d[1] / ln * 9.0, p[2] + d[2] / ln * 9.0)
+                np_ = self.sphere_np.copyTo(self.render)        # Kopie: jede Wolke hat eigene Position/Grösse
+                np_.setTransparency(TransparencyAttrib.MAlpha)
+                np_.setDepthWrite(False)
+                np_.setLightOff()
+                np_.setFogOff()
+                f = Fx(np_, tail, 7.0, 3.0, 12.0, (0.62, 0.6, 0.58), (0.4, 0.4, 0.42), p=1.1, rise=0.6)
+                f.update(0.0)
+                self.toma_trail.append(f)
+                if len(self.toma_trail) > 140:
+                    self.toma_trail.pop(0).np.removeNode()
+        keep = []
+        for f in self.toma_trail:
+            if f.update(dt):
+                self.toma_far(f.np, (f.x, f.y, f.z), f.np.getScale()[0])
+                keep.append(f)
+            else:
+                f.np.removeNode()
+        self.toma_trail = keep
+
+    TOMA_FAR = 420.0      # Kamera-Sichtweite ist mindestens 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
+
+    def toma_far(self, np_, pos, scale):
+        """Rakete und Rauchschweif auch hinter der Sichtweite der Kamera zeigen: in derselben Richtung auf
+        TOMA_FAR heranziehen und im gleichen Verhältnis verkleinern - sieht gleich aus, wird nicht abgeschnitten."""
+        c = self.camera.getPos(self.render)
+        d = math.dist(pos, (c[0], c[1], c[2]))
+        if d > self.TOMA_FAR:
+            k = self.TOMA_FAR / d
+            np_.setPos(c[0] + (pos[0] - c[0]) * k, c[1] + (pos[1] - c[1]) * k, c[2] + (pos[2] - c[2]) * k)
+            np_.setScale(max(0.01, scale * k))
 
     def update_crates(self):
         t = time.time()
