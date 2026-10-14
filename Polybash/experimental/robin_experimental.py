@@ -6323,6 +6323,7 @@ class Player:
         self.score = 0.0                  # King of the Hill: Punkte
         self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
         self.dead_age = 0.0               # Sekunden seit dem Tod (Wartezeit bis zum Respawn)
+        self.prespawn = False             # Host/Beitritt: im Spiel, aber noch nicht gespawnt (Ausrüstungsbildschirm)
         self.respawn(world, x, y)
 
     def wp(self, wi):
@@ -6342,6 +6343,7 @@ class Player:
         self.phase = 0.0     # für das Kopfwippen beim Laufen
         self.moving = False
         self.hp = PLAYER_HP
+        self.prespawn = False
         self.max_hp = PLAYER_HP           # Tank-Buff: höher
         self.stun_t = 0.0                 # Betäubung (Drohne): s
         self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
@@ -12500,6 +12502,8 @@ class HostSession:
             w.players[pid] = Player(x, y, w, pid, name)
             lk = m.get("look")
             w.players[pid].look = lk if look_valid(lk) else ""
+            npl = w.players[pid]
+            npl.hp, npl.dead_age, npl.prespawn = 0.0, 1e9, True      # noch nicht gespawnt: wartet im Ausrüstungsbildschirm
             c.pid = pid
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
@@ -12654,7 +12658,7 @@ class HostSession:
             return
         self.snap_n = getattr(self, "snap_n", 0) + 1
         snap = {"t": "snap", "rd": w.respawn_delay,
-                "pl": [[p.pid, r2(p.x), r2(p.y), r2(p.z), r1(p.heading), r1(p.pitch), r1(p.hp),
+                "pl": [[p.pid, r2(-5.0 if p.prespawn else p.x), r2(-5.0 if p.prespawn else p.y), r2(-20.0 if p.prespawn else p.z), r1(p.heading), r1(p.pitch), r1(p.hp),
                         p.cur, 1 if p.moving else 0, p.name, p.kills, p.deaths, r1(p.score),
                         r1(p.protect), r2(p.lean), r2(p.crouch), r1(p.stun_t),
                         BUFF_KINDS.index(p.buff) if p.buff in BUFF_KINDS else -1, r1(p.buff_t),
@@ -109353,7 +109357,7 @@ class Game(ShowBase):
                 spec.append(("(Automatische Suche nicht möglich)", None))
             else:
                 spec.append(("Suche Spiele im WLAN" + "." * (int(time.time() * 2) % 4), None))
-            spec += [(f"IP-Adresse:  {self.current_ip()}_", None), ("(Zahlen und Punkt tippen)", None),
+            spec += [(f"IP-Adresse:  {self.current_ip()}_", None), 
                      ("Verbinden   (Enter)", self.menu_enter), ("Zurück   (Esc)", self.on_escape)]
         else:                                          # connecting
             host = self.attempt.host if self.attempt is not None else ""
@@ -109431,7 +109435,7 @@ class Game(ShowBase):
                     cm = CardMaker("btn")
                     cm.setFrame(-0.78, 0.78, zz - 0.3 * sc - 0.012, zz + 0.95 * sc + 0.012)
                     card = self.aspect2d.attachNewNode(cm.generate())
-                    card.setColor(0.10, 0.17, 0.26, 0.85)
+                    card.setColor(*((0.12, 0.45, 0.18, 0.92) if label.startswith("Verbinden") else (0.10, 0.17, 0.26, 0.85)))
                     card.setTransparency(TransparencyAttrib.MAlpha)
                 t = OnscreenText(text=label, pos=(0, zz), scale=sc,
                                  fg=Hot.BASE if action else ((1.0, 0.78, 0.3, 1) if head else (0.82, 0.88, 0.95, 1)),
@@ -109472,7 +109476,10 @@ class Game(ShowBase):
         for h in self.menu_lines:
             h.set(h is hit)
         for h, nd in self.menu_cards:
-            nd.setColor(*((0.22, 0.30, 0.42, 0.95) if h is hit else (0.10, 0.17, 0.26, 0.85)))
+            if h.label.startswith("Verbinden"):                   # grüner Knopf
+                nd.setColor(*((0.20, 0.62, 0.28, 0.98) if h is hit else (0.12, 0.45, 0.18, 0.92)))
+            else:
+                nd.setColor(*((0.22, 0.30, 0.42, 0.95) if h is hit else (0.10, 0.17, 0.26, 0.85)))
         if self.quit_box is not None:
             for h in self.quit_box[2]:
                 h.set(h is hit)
@@ -110732,6 +110739,8 @@ class Game(ShowBase):
         self.world, self.host = world, host
         self.my_id = attempt.my_id if mode == "client" else 0
         self.player = self.spawn_player()
+        if mode in ("host", "client"):             # erst im Server, dann Ausrüstung wählen und mit R spawnen
+            self.player.hp, self.player.dead_age, self.player.prespawn = 0.0, 1e9, True
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
         if mode == "client":
@@ -111730,7 +111739,7 @@ class Game(ShowBase):
         elif self.world.phase == "play":
             if self.net_mode == "client":
                 waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
-                if self.client is not None and not self.client.lost and waited >= self.world.respawn_delay:
+                if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
                     self.client.request_respawn()   # der Host sucht den Startpunkt aus
             elif self.world.can_respawn(pl):
                 self.world.respawn_player(pl)       # Einzelspiel/Host: Ereignis 'respawn' folgt
@@ -114455,8 +114464,9 @@ class Game(ShowBase):
         if dead_screen:
             if self.dead_since is None:
                 self.dead_since = now
-            wait = world.respawn_delay - (now - self.dead_since)
-            hint = "R   Respawn" if wait <= 0 else f"Respawn in {int(math.ceil(wait))} s"
+            pre = getattr(pl, "prespawn", False)
+            wait = 0.0 if pre else world.respawn_delay - (now - self.dead_since)
+            hint = ("R   Spawnen" if pre else "R   Respawn") if wait <= 0 else f"Respawn in {int(math.ceil(wait))} s"
         else:
             self.dead_since = None
             hint = ""
@@ -114469,7 +114479,7 @@ class Game(ShowBase):
                 self.set_capture(True)
         show_dead = dead_screen and self.loadscreen is None
         self.set_text(self.dead_hint, hint if show_dead else "")
-        self.set_text(self.dead_text, "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole." if show_dead else "")
+        self.set_text(self.dead_text, ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
         self.tip_hide()
         if dead_screen != self.hud_dead_hidden:           # Todesbildschirm: kein Spieler-HUD (Minimap, Slots, Munition ...)
