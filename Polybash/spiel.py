@@ -247,10 +247,11 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 40               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 41               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
+NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
 MAX_PLAYERS = 8
 
@@ -11918,7 +11919,9 @@ class HostSession:
                     self.handle(c, m)
                 except (KeyError, IndexError, TypeError, ValueError):
                     pass                          # kaputte Nachricht ignorieren
-            if not c.closed and now - c.last_rx > NET_TIMEOUT:
+            # Beitretende laden erst die Karte (bei Polytown mehrere Sekunden, ohne Daten zu senden): bis zur ersten
+            # Positionsmeldung gilt eine lange Frist
+            if not c.closed and now - c.last_rx > (NET_TIMEOUT if getattr(c, "playing", False) else NET_LOAD_TIMEOUT):
                 c.close("Zeitüberschreitung")
             if c.closed:
                 self.server.conns.remove(c)
@@ -11958,6 +11961,7 @@ class HostSession:
         if pl is None:
             return
         if t == "st":                             # Position/Blickrichtung des Spielers
+            c.playing = True
             x, y, z, h, p = m["p"]
             if not finite(x, y, z, h, p):
                 return
