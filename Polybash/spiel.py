@@ -1272,7 +1272,7 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen (Sniper: Luft anhalten)")
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2", "Waffe wählen"), ("3", "Gadget"), ("Mausrad", "Waffe / Gadget wechseln"), ("G", "Granate"),
               ("F", "benutzen / Schlag"), ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"),
-              ("X / Y", "Minimap zoomen"), ("Tab", "Übersicht"), ("M", "Ton an/aus"), ("F3", "Bildrate"),
+              ("X / Y", "Minimap zoomen"), ("Tab", "Übersicht"), ("M", "ganze Karte"), ("F3", "Bildrate"),
               ("Esc", "Menü"))
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin"}
 
@@ -126265,6 +126265,7 @@ class Sfx:
         self.nuke = None               # [Sound, Knoten, Lautstärke] des Tomahawk-Countdowns
         self.chat = None               # Funkgeräusch aus dem Kontrollraum (Sound, Knoten)
         self.music_path, self.music, self.music_v = None, None, 0.0     # Menümusik (Schleife)
+        self.music_gain = 1.0          # Einstellung "Musik-Lautstärke" (0..1)
         if not REAL_PANDA:
             return
         try:
@@ -126361,19 +126362,13 @@ class Sfx:
             pass
         return None
 
-    def toggle(self):
-        self.muted = not self.muted
-        if self.muted:
-            self.silence()
-        return self.muted
-
     MUSIC_VOL = 0.45
 
     def menu_music(self, dt, on):
         """Menümusik in Endlosschleife: blendet im Hauptmenü ein und beim Spielstart aus."""
         if not self.ok or self.music_path is None:
             return
-        want = self.MUSIC_VOL if (on and not self.muted) else 0.0
+        want = self.MUSIC_VOL * self.music_gain if (on and not self.muted) else 0.0
         if self.music is None:
             if want <= 0.0:
                 return
@@ -126890,6 +126885,8 @@ class Game(ShowBase):
         st = load_settings()
         self.gfx = st.get("gfx") if st.get("gfx") in GFX_MODES else "standard"
         self.sens_mult = st.get("sens") if st.get("sens") in SENS_CHOICES else 1.0
+        self.vol_music = st.get("vm") if st.get("vm") in VOL_CHOICES else 100      # Hintergrundmusik in %
+        self.vol_sfx = st.get("vs") if st.get("vs") in VOL_CHOICES else 100        # Soundeffekte in %
         self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
         self.apply_fps()
         self.overlay_kind = self.overlay_yes = None
@@ -127016,9 +127013,10 @@ class Game(ShowBase):
         self.accept("f3", self.toggle_fps)
         self.accept("c", self.toggle_duck)
         self.duck_lock = False
-        self.accept("m", self.toggle_sound)
+        self.accept("m", self.toggle_bigmap)
         self._hover_hit = None
         self.sfx = Sfx(self)
+        self.apply_volume()
         self.accept("v", self.on_alt)
         self.accept("g", self.on_grenade)
         self.accept("j", self.on_confirm, [True])
@@ -127238,6 +127236,8 @@ class Game(ShowBase):
                     (f"2   Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
                     (f"3   Bildrate:  {fps_label(self.fps_limit)}", dig(3)),
                     (f"4   Mausempfindlichkeit:  {int(round(self.sens_mult * 100))} %", dig(4)),
+                    (f"5   Musik-Lautstärke:  {self.vol_music} %", dig(5)),
+                    (f"6   Effekt-Lautstärke:  {self.vol_sfx} %", dig(6)),
                     ("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
@@ -127676,6 +127676,12 @@ class Game(ShowBase):
                     i = SENS_CHOICES.index(self.sens_mult) if self.sens_mult in SENS_CHOICES else 0
                     self.sens_mult = SENS_CHOICES[(i + 1) % len(SENS_CHOICES)]
                     self.save_prefs()
+                    self.menu_refresh()
+                elif d == 5:
+                    self.cycle_volume("music")
+                    self.menu_refresh()
+                elif d == 6:
+                    self.cycle_volume("sfx")
                     self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
@@ -128121,7 +128127,9 @@ class Game(ShowBase):
                     (f"Bildrate:  {fps_label(self.fps_limit)}", do(set_fps)),
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
-            items = [(f"Mausempfindlichkeit:  {int(round(self.sens_mult * 100))} %", do(set_sens))]
+            items = [(f"Mausempfindlichkeit:  {int(round(self.sens_mult * 100))} %", do(set_sens)),
+                     (f"Musik-Lautstärke:  {self.vol_music} %", do(lambda: self.cycle_volume("music"))),
+                     (f"Effekt-Lautstärke:  {self.vol_sfx} %", do(lambda: self.cycle_volume("sfx")))]
             if host_side:
                 def set_cd():
                     cd = cyc(STRIKE_CD_CHOICES, int(w.strike_cd))
@@ -128168,7 +128176,26 @@ class Game(ShowBase):
         self.open_quit_box()
 
     def save_prefs(self):
-        save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name})
+        save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
+                       "vm": self.vol_music, "vs": self.vol_sfx})
+
+    def apply_volume(self):
+        """Lautstärke übernehmen: Effekte über den Audio-Manager, Musik als Faktor der Menümusik."""
+        self.sfx.music_gain = self.vol_music / 100.0
+        try:
+            self.sfxManagerList[0].setVolume(self.vol_sfx / 100.0)
+        except Exception:
+            pass
+
+    def cycle_volume(self, which):
+        """which: "music" oder "sfx": nächste Stufe (0, 10, ... 100 %, dann wieder 0)."""
+        attr = "vol_music" if which == "music" else "vol_sfx"
+        cur = getattr(self, attr)
+        i = VOL_CHOICES.index(cur) if cur in VOL_CHOICES else len(VOL_CHOICES) - 1
+        setattr(self, attr, VOL_CHOICES[(i + 1) % len(VOL_CHOICES)])
+        self.apply_volume()
+        self.save_prefs()
+        self.sfx.ui_click()                                # Hörprobe in der neuen Lautstärke
 
     def apply_fps(self):
         """Bildraten-Grenze setzen (ohne V-Sync; 0 = unbegrenzt)."""
@@ -128310,7 +128337,7 @@ class Game(ShowBase):
                  "Im Hubschrauber: Leertaste steigt, Shift sinkt - ohne Taste verliert er an Höhe.",
                  "Die Bordwaffen des Hubschraubers zeigen dorthin, wohin die Nase zeigt (grünes Fadenkreuz).",
                  "Rechte Maustaste im Hubschrauber feuert eine Rakete - nachladen nur auf dem Helipad.",
-                 "Esc öffnet das Menü und gibt die Maus frei, M schaltet den Ton ein und aus.",
+                 "Esc öffnet das Menü und gibt die Maus frei, M zeigt die ganze Karte gross.",
                  "Treffer auf Fahrzeuge lösen ebenfalls einen Treffermarker aus.")
 
     def loading_map_name(self, mode, attempt):
@@ -129322,12 +129349,6 @@ class Game(ShowBase):
         """C: Ducken ein-/ausschalten (man bleibt geduckt, bis man C erneut drückt)."""
         if self.mode != "menu" and self.quit_box is None:
             self.duck_lock = not self.duck_lock
-
-    def toggle_sound(self):
-        if self.mode == "menu":
-            return
-        muted = self.sfx.toggle()
-        self.feed_add("Ton aus  (M)" if muted else "Ton an  (M)")
 
     def toggle_fps(self):
         self.show_fps = not getattr(self, "show_fps", False)
@@ -131689,6 +131710,113 @@ class Game(ShowBase):
         self.mm_zoom_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.07, 0.24 + 2 * R + 0.03),
                                          scale=0.032, fg=(0.85, 0.9, 0.95, 1), shadow=(0, 0, 0, 0.9),
                                          align=TextNode.ALeft, mayChange=True)
+        self.build_bigmap()
+
+    # ------------------------------------------------------------ grosse Karte (M)
+    BIGMAP_H = 0.80       # halbe Kantenlänge der grossen Karte (Bildschirmeinheiten)
+
+    def build_bigmap(self):
+        """Die ganze Karte gross vor dir (M ein/aus). Das Spiel läuft weiter, man kann sich dabei bewegen."""
+        H = self.BIGMAP_H
+        root = self.aspect2d.attachNewNode("bigmap")
+
+        def lay(n, sort):
+            n.setTransparency(TransparencyAttrib.MAlpha)
+            n.setBin("fixed", sort)
+            n.setDepthTest(False)
+            n.setDepthWrite(False)
+            return n
+
+        bg = CardMaker("bmbg")
+        bg.setFrame(-H - 0.025, H + 0.025, -H - 0.025, H + 0.025)
+        b = lay(root.attachNewNode(bg.generate()), 60)
+        b.setColor(0.03, 0.04, 0.06, 0.82)
+        mm = CardMaker("bmmap")
+        mm.setFrame(-H, H, -H, H)
+        try:
+            M, T = self.MAP_MARGIN, WORLD + 2 * self.MAP_MARGIN
+            from panda3d.core import LPoint2f
+            mm.setUvRange(LPoint2f(M / T, M / T), LPoint2f((M + WORLD) / T, (M + WORLD) / T))
+        except Exception:
+            pass
+        mp = lay(root.attachNewNode(mm.generate()), 61)
+        mp.setLightOff()
+        if self.map_tex is not None:
+            mp.setTexture(self.map_tex)
+        else:
+            mp.setColor(0.2, 0.34, 0.17, 1)
+
+        def arrow(size, col):
+            am = Mesh(lit=False)
+            for s_, c_ in ((size * 1.35, (0, 0, 0)), (size, (1, 1, 1))):
+                am.tri((0, 0, s_), (-0.62 * s_, 0, -0.72 * s_), (0, 0, -0.30 * s_), c_)
+                am.tri((0, 0, s_), (0, 0, -0.30 * s_), (0.62 * s_, 0, -0.72 * s_), c_)
+            n = root.attachNewNode(am.node("arrow"))
+            n.setTwoSided(True)
+            n.setColorScale(*col)
+            return lay(n, 63)
+
+        def dot(size, col):
+            c = CardMaker("dot")
+            c.setFrame(-size, size, -size, size)
+            n = root.attachNewNode(c.generate())
+            n.setColor(*col)
+            return lay(n, 62)
+
+        self.bm_arrow = arrow
+        self.bm_me = arrow(0.034, (0.3, 1.0, 0.3, 1))
+        self.bm_dots = {}                                   # Spieler-ID -> Pfeil (kurz nach einem Schuss)
+        self.bm_vehs = {v.id: dot(0.012, (1.0, 0.85, 0.2, 1)) for v in self.world.vehicles}
+        self.bm_helis = {q.id: dot(0.016, (0.45, 0.85, 1.0, 1)) for q in self.world.helis}
+        hint = OnscreenText(text="M   Karte schliessen", parent=root, pos=(0, -H - 0.085), scale=0.04,
+                            fg=(0.85, 0.9, 0.95, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
+        hint.setBin("fixed", 63)
+        root.hide()
+        self.bm_root, self.bm_open = root, False
+
+    def toggle_bigmap(self):
+        if self.mode != "play" or self.quit_box is not None or getattr(self, "bm_root", None) is None:
+            return
+        self.bm_open = not self.bm_open
+        (self.bm_root.show if self.bm_open else self.bm_root.hide)()
+
+    def bm_xy(self, x, y):
+        H = self.BIGMAP_H
+        return (-H + max(0.0, min(WORLD, x)) / WORLD * 2 * H, -H + max(0.0, min(WORLD, y)) / WORLD * 2 * H)
+
+    def update_bigmap(self):
+        if not getattr(self, "bm_open", False):
+            return
+        pl = self.player
+        p = self.bm_xy(pl.x, pl.y)
+        self.bm_me.setPos(p[0], 0, p[1])
+        self.bm_me.setR(-pl.heading)
+        now = time.time()
+        for pid, (t0, _x, _y) in list(self.pings.items()):          # schiessende Spieler: wie auf der Minimap, kurz sichtbar
+            age = now - t0
+            n = self.bm_dots.get(pid)
+            if n is None:
+                n = self.bm_dots[pid] = self.bm_arrow(0.028, (1.0, 0.25, 0.2, 1))
+            other = self.world.players.get(pid)
+            if age > self.PING_T or other is None or other.hp <= 0:
+                n.hide()
+                continue
+            q = self.bm_xy(other.x, other.y)
+            n.show()
+            n.setPos(q[0], 0, q[1])
+            n.setR(-other.heading)
+            n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
+        for v in self.world.vehicles:
+            n = self.bm_vehs.get(v.id)
+            if n is not None:
+                q = self.bm_xy(v.x, v.y)
+                n.setPos(q[0], 0, q[1])
+        for q_ in self.world.helis:
+            n = self.bm_helis.get(q_.id)
+            if n is not None:
+                q = self.bm_xy(q_.x, q_.y)
+                n.setPos(q[0], 0, q[1])
+                (n.show if q_.hp > 0 else n.hide)()
 
     def on_mm_zoom(self, d):
         """X (d=+1) zoomt heraus, Y (d=-1) hinein."""
@@ -131703,7 +131831,7 @@ class Game(ShowBase):
         else:
             self.on_mm_zoom(-1)
 
-    PING_T = 1.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
+    PING_T = 3.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
 
     def mm_xy(self, x, y, clamp=True):
         """Weltpunkt -> Position auf der runden Karte (relativ zu dir und deiner Blickrichtung).
@@ -131764,6 +131892,7 @@ class Game(ShowBase):
             n.setR(-(other.heading - pl.heading))
             n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
         self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
+        self.update_bigmap()
         # Funkbaken: eigene Baken als Punkte, alle Spieler in ihrem Radius als Pfeile
         mine = [g for g in self.world.gadgets if g.kind == GAD_BEACON and g.owner == self.my_id]
         ids = {g.gid for g in mine}
@@ -132002,6 +132131,7 @@ def _log_path():
     return os.path.join(base, "spiel_fehler.log")
 
 
+VOL_CHOICES = (0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)       # Lautstärke in Prozent (Musik, Effekte)
 SENS_CHOICES = (0.5, 0.75, 1.0, 1.5, 2.0)         # Mausempfindlichkeit (Faktor)
 FPS_CHOICES = (60, 90, 120, 144, 165, 240, 0)      # Bildraten-Grenze (0 = unbegrenzt)
 
