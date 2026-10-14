@@ -110822,6 +110822,8 @@ class Game(ShowBase):
         pl = self.player
         if cs.hp is not None:
             pl.hp = cs.hp                      # Lebenspunkte entscheidet der Host
+            if pl.hp > 0 and pl.prespawn:
+                pl.prespawn = False            # der Host hat uns gespawnt (auch wenn das Ereignis fehlen sollte)
         cs.advance(dt)
         cs.send_state(dt, pl)
         self.world.push_player(pl)
