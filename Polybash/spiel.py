@@ -110,11 +110,10 @@ Rückstoss: Das Waffenmodell hängt an gedämpften Federn
   x'' = -k x - c x'   (Impuls beim Schuss -> Ausschwingen), ebenso die Kamera.
 """
 # ===== Experimental: Robins Spielversion ===========================================================
-# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/robin_experimental.py
-# (eigene Einstellungsdatei spiel_einstellungen_experimental.json). Alle anderen Modi bleiben davon völlig
-# unberührt. Ein Fenster zugleich: Ein kleiner Aufpasser (unten) startet das Menü als Kindprozess; wählt man
-# Experimental, beendet sich das Menü mit Code 77, der Aufpasser startet Robins Version im neuen Fenster, und
-# beim "Zum Hauptmenü" (Code 78) kommt das Menü zurück. Code 0 = Spiel beendet.
+# Im Menü den Modus "Experimental" wählen und starten: dann wird experimental/robin_experimental.py in
+# DIESEM Fenster geladen (siehe _pb_switch weiter unten): dieselbe Game-Instanz bekommt Robins Klasse, Tasks,
+# Events und Szene des Menüs werden abgeräumt. "Zum Hauptmenü" schaltet genauso zurück. Eigene
+# Einstellungsdatei spiel_einstellungen_experimental.json. Alle anderen Modi bleiben davon unberührt.
 import os as _os
 import sys as _sys
 EXP_FILE = _os.path.join("experimental", "robin_experimental.py")
@@ -127,61 +126,6 @@ def _exp_path():
     return None
 
 
-if __name__ == "__main__" and _os.environ.get("POLYBASH_EXPERIMENTAL") == "1":
-    _p = _exp_path()
-    if _p is None:
-        raise SystemExit("Experimental: Datei " + EXP_FILE + " fehlt")
-    with open(_p, encoding="utf-8") as _f:
-        _src = _f.read()
-    _ns = {"__name__": "__main__", "__file__": _os.path.abspath(__file__), "__builtins__": __builtins__}
-    exec(compile(_src, _p, "exec"), _ns)
-    _sys.exit(0)
-
-
-def _supervise():
-    import json
-    import subprocess
-    import tempfile
-    frozen = getattr(_sys, "frozen", False)
-    cmd = [_sys.executable] if frozen else [_sys.executable, _os.path.abspath(__file__)]
-    cwd = _os.path.dirname(_os.path.abspath(_sys.executable if frozen else __file__))
-    fd, hand = tempfile.mkstemp(prefix="polybash_", suffix=".json")
-    _os.close(fd)
-    notice = ""
-    try:
-        while True:
-            env = dict(_os.environ, POLYBASH_CHILD="1", POLYBASH_HANDOFF=hand, POLYBASH_NOTICE=notice)
-            env.pop("POLYBASH_EXP_SPEC", None)
-            env.pop("POLYBASH_EXPERIMENTAL", None)
-            rc = subprocess.call(cmd, env=env, cwd=cwd)
-            if rc != 77:
-                return rc
-            try:
-                with open(hand, encoding="utf-8") as f:
-                    spec = f.read()
-                json.loads(spec)
-            except (OSError, ValueError):
-                notice = "Experimental konnte nicht gestartet werden."
-                continue
-            env = dict(_os.environ, POLYBASH_EXPERIMENTAL="1", POLYBASH_EXP_SPEC=spec)
-            env.pop("POLYBASH_CHILD", None)
-            rc = subprocess.call(cmd, env=env, cwd=cwd)
-            if rc == 0:
-                return 0
-            notice = "" if rc == 78 else "Experimental wurde mit einem Fehler beendet (spiel_fehler_experimental.log)"
-    finally:
-        try:
-            _os.remove(hand)
-        except OSError:
-            pass
-
-
-if (__name__ == "__main__" and _os.environ.get("POLYBASH_CHILD") != "1"
-        and _os.environ.get("POLYBASH_EXPERIMENTAL") != "1"):
-    try:
-        _sys.exit(_supervise())
-    except KeyboardInterrupt:
-        _sys.exit(0)
 # ====================================================================================================
 import base64
 import json
@@ -126809,9 +126753,133 @@ class Sfx:
 
 
 # --------------------------------------------------------------- Das Spiel
+_EXP_MOD = None
+_A2D = ("render", "aspect2d", "render2d", "a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter",
+        "a2dBottomLeft", "a2dBottomRight", "a2dLeftCenter", "a2dRightCenter")
+
+
+def _pb_snapshot(g):
+    """Zustand direkt nach ShowBase.__init__: alles danach gehört zum jeweiligen Spiel und wird beim Umschalten
+    zwischen Hauptspiel und Experimental wieder abgeräumt."""
+    nodes = [(n, set(n.getChildren())) for n in (getattr(g, nm, None) for nm in _A2D) if n is not None]
+    return dict(keys=set(g.__dict__), tasks=set(g.taskMgr.getAllTasks()), later=set(g.taskMgr.getDoLaters()),
+                events=set(g.getAllAccepting()), nodes=nodes)
+
+
+def _pb_strip(g, leave_restore):
+    """Räumt alles weg, was das bisherige Spiel an der Instanz hängen hat (das Fenster bleibt)."""
+    snap = g._pb_base
+    try:
+        leave_restore()                                  # Sticky-Keys-Einstellung des alten Spiels zurücksetzen
+    except Exception:
+        pass
+    for fn in (lambda: g.sfx.silence(), g.shutdown_net):
+        try:
+            fn()
+        except Exception:
+            pass
+    for t in list(g.taskMgr.getAllTasks()):
+        if t not in snap["tasks"]:
+            g.taskMgr.remove(t)
+    for t in list(g.taskMgr.getDoLaters()):
+        if t not in snap["later"]:
+            g.taskMgr.remove(t)
+    for ev in list(g.getAllAccepting()):
+        if ev not in snap["events"]:
+            g.ignore(ev)
+    for node, keep in snap["nodes"]:
+        for ch in list(node.getChildren()):
+            if ch not in keep:
+                ch.removeNode()
+    for k in list(g.__dict__):
+        if k not in snap["keys"] and k != "_pb_base":
+            del g.__dict__[k]
+
+
+def _pb_rehook(g, title):
+    try:
+        ev = g.win.getCloseRequestEvent()                # Fensterkreuz soll das Spiel der neuen Klasse beenden
+        g.ignore(ev)
+        g.accept(ev, g.userExit)
+    except Exception:
+        pass
+    try:
+        props = WindowProperties()
+        props.setTitle(title)
+        g.win.requestProperties(props)
+    except Exception:
+        pass
+
+
+def _exp_module():
+    global _EXP_MOD
+    if _EXP_MOD is None:
+        import types
+        path = _exp_path()
+        if path is None:
+            raise FileNotFoundError("Datei " + EXP_FILE + " nicht gefunden")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        mod = types.ModuleType("polybash_experimental")
+        mod.__file__ = os.path.abspath(__file__)         # Einstellungen/Log liegen neben spiel.py
+        sys.modules["polybash_experimental"] = mod
+        exec(compile(src, path, "exec"), mod.__dict__)
+        mod.ShowBase = type("_AdoptBase", (mod.ShowBase,), {"__init__": lambda self: None})   # Fenster existiert schon
+        mod.POLYBASH_BACK = _pb_back
+        _EXP_MOD = mod
+    return _EXP_MOD
+
+
+def _pb_to_exp(task, g, spec):
+    """Task (läuft vor dem Update-Task): Instanz wird zu Robins Game, dann Start nach spec."""
+    try:
+        mod = _exp_module()
+    except Exception as e:
+        g.menu_msg = f"Experimental konnte nicht geladen werden: {e}"
+        g.menu_refresh()
+        return task.done
+    own = Game
+    try:
+        _pb_strip(g, sticky_keys_restore)
+        g.__class__ = mod.Game
+        mod.Game.__init__(g)
+        os.environ["POLYBASH_EXP_SPEC"] = json.dumps(spec)
+        mod._exp_autostart(g)
+        _pb_rehook(g, "Polybash Experimental")
+    except Exception:
+        import traceback
+        try:
+            with open(_log_path(), "a", encoding="utf-8") as f:
+                f.write(time.strftime("%Y-%m-%d %H:%M:%S") + " (Experimental-Start)\n" + traceback.format_exc() + "\n")
+        except OSError:
+            pass
+        _pb_strip(g, getattr(mod, "sticky_keys_restore", lambda: None))
+        g.__class__ = own
+        g._pb_msg = "Experimental konnte nicht gestartet werden (spiel_fehler.log)"
+        own.__init__(g, adopt=True)
+        _pb_rehook(g, "Polybash")
+    return task.done
+
+
+def _pb_to_main(task, g):
+    mod = _EXP_MOD
+    _pb_strip(g, mod.sticky_keys_restore)
+    g.__class__ = Game
+    Game.__init__(g, adopt=True)
+    _pb_rehook(g, "Polybash")
+    return task.done
+
+
+def _pb_back(g):
+    """Von Robins leave_game aufgerufen: im nächsten Frame zurück zum Hauptmenü."""
+    g.taskMgr.add(lambda task: _pb_to_main(task, g), "pb-switch", sort=-100)
+
+
 class Game(ShowBase):
-    def __init__(self):
-        ShowBase.__init__(self)
+    def __init__(self, adopt=False):
+        if not adopt:                         # adopt=True: Fenster/ShowBase existieren schon (Rückkehr aus Experimental)
+            ShowBase.__init__(self)
+            self._pb_base = _pb_snapshot(self)
         self.disableMouse()
         self.setBackgroundColor(*SKY)
         self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
@@ -126980,8 +127048,7 @@ class Game(ShowBase):
             node = getattr(self, name, None)
             if node is not None:
                 self._keep.append((node, set(node.getChildren())))
-        self.show_menu("main" if str(st.get("name") or "").strip() else "name",
-                       os.environ.get("POLYBASH_NOTICE") or "")
+        self.show_menu("main" if str(st.get("name") or "").strip() else "name", getattr(self, "_pb_msg", ""))
 
     # ------------------------------------------------------------ Start-Menü
     def userExit(self):
@@ -128295,41 +128362,17 @@ class Game(ShowBase):
         self.launch_experimental({"do": "host", "cfg": cfg})
 
     def launch_experimental(self, spec):
-        """Wechselt in Robins Version: Menü beenden (Code 77); der Aufpasser öffnet Experimental im selben Fenster-Slot."""
+        """Wechselt im selben Fenster zu Robins Version (nächster Frame, siehe _pb_to_exp)."""
         if _exp_path() is None:
             self.menu_msg = "Experimental fehlt: Datei " + EXP_FILE + " nicht gefunden"
             self.menu_refresh()
             return
-        hand = os.environ.get("POLYBASH_HANDOFF")
-        if not hand:
-            self.menu_msg = "Experimental geht nur beim Start über spiel.py bzw. die Startdatei"
-            self.menu_refresh()
-            return
         spec = dict(spec, name=self.my_name, gfx=self.gfx, sens=self.sens_mult, fps=self.fps_limit)
-        try:
-            with open(hand, "w", encoding="utf-8") as f:
-                json.dump(spec, f)
-        except OSError as e:
-            self.menu_msg = f"Experimental konnte nicht gestartet werden: {e}"
-            self.menu_refresh()
-            return
-        sticky_keys_restore()
-        try:
-            self.shutdown_net()
-        except Exception:
-            pass
         try:
             self.save_prefs()
         except Exception:
             pass
-        for f in (sys.stdout, sys.stderr):
-            try:
-                f.flush()
-            except Exception:
-                pass
-        if REAL_PANDA:
-            os._exit(77)
-        sys.exit(77)
+        self.taskMgr.add(lambda task: _pb_to_exp(task, self, spec), "pb-switch", sort=-100)
 
     def start_game(self, mode, attempt=None):
         """mode: 'single' (allein), 'host' (Spiel eröffnen) oder 'client' (beitreten)."""

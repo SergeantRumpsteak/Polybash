@@ -130615,21 +130615,11 @@ class Game(ShowBase):
                     nd.show()
         self.mode, self.net_mode = "menu", "single"
         self.world = self.player = None
-        if os.environ.get("POLYBASH_EXPERIMENTAL") == "1":   # aus dem Hauptprogramm gestartet: zurück zu dessen Menü
-            sticky_keys_restore()
-            try:
-                self.save_prefs()
-            except Exception:
-                pass
-            for f in (sys.stdout, sys.stderr):
-                try:
-                    f.flush()
-                except Exception:
-                    pass
-            if REAL_PANDA:
-                os._exit(78)
-            sys.exit(78)
         self.show_menu("main")
+        back = globals().get("POLYBASH_BACK")             # aus dem Hauptprogramm geladen: im selben Fenster zurück
+        if back is not None:
+            back(self)
+            return
 
     def menu_task(self, dt):
         self.animate_menu_bg(dt)
