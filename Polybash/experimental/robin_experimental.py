@@ -8,7 +8,7 @@ Steuerung:
   Leertaste      springen (in der Luft nochmal: Doppelsprung mit Jetpack-Schuhen;
                  in der Luft halten: Jetpack)
   Linke Maus     schiessen       Rechte Maus          zielen (Zoom)
-  R              nachladen       1-3 / Mausrad        Waffe wechseln, 4 = Nahkampfwaffe, 5 = Gadget
+  R              nachladen       1-3 / Mausrad        Waffe wechseln, 4 = Gadget, 5 = Nahkampfwaffe
   Q / E          nach links / rechts um die Ecke lehnen
   G              Granate werfen (2 zum Start, 2,5 s Zündzeit)
   F              benutzen: Lootkiste öffnen, am Boden liegende Waffe aufheben,
@@ -717,7 +717,7 @@ MELEE = (
 )
 MELEE_IDX = {m.name: i for i, m in enumerate(MELEE)}
 START_MELEE = 0
-MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 4 / F ohne Ziel / Mausrad)
+MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel / Mausrad)
 MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in MELEE
 MELEE_SNEAK = 2.0         # Faktor, wenn das Monster nichts ahnt (idle, nicht am Suchen/Jagen) - leise erledigen
 NOISE_MELEE = 3.0         # m Lärmradius eines Schlags/Treffers (etwa wie Ducken)
@@ -1042,7 +1042,7 @@ TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schad
 KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / Jetpack"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
-              ("4", "Nahkampfwaffe"),
+              ("4", "Gadget"), ("5", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"),
               ("M", "Ton an/aus"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
@@ -5846,7 +5846,7 @@ class Player:
         self.scope = loadout[3] if len(loadout) > 3 else SC_IRON       # Visier der Primärwaffe
         self.gad_used = [0, 0, 0]         # beim Host: wie viele er von jeder Art schon aufgestellt hat
         self.gad_n = GAD_START            # eigene Anzeige: verbleibende Stück
-        self.gad_out = False              # Gadget in der Hand (Taste 5)
+        self.gad_out = False              # Gadget in der Hand (Taste 4)
         self.stats = new_stats()          # Rundenstatistik (Host)
         self.sb = None                    # Mitspieler: (Monster, Kisten, Buffs) aus dem Snapshot
         self.loot_history = {}            # Kisten-Gedächtnis (nur beim Host benutzt): Name -> in diesem Leben gezogen
@@ -130010,10 +130010,10 @@ class Game(ShowBase):
                 pass                               # tot: keine Ausrüstungswahl (Robins Regel: Start mit Pistole)
             elif 1 <= d <= N_SLOTS:
                 self.request_weapon(d - 1)
-            elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
-                self.sel_req = MELEE_SEL
-            elif self.player.hp > 0 and d == N_SLOTS + 2:      # 5 = Gadget
+            elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Gadget
                 self.toggle_gadget()
+            elif self.player.hp > 0 and d == N_SLOTS + 2:      # 5 = Nahkampfwaffe
+                self.sel_req = MELEE_SEL
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -131255,7 +131255,7 @@ class Game(ShowBase):
             icons = {"holder": holder, "cur": None, "nodes": {}}
             self.slot_icons.append(icons)
             lab = OnscreenText(
-                text=(str(N_SLOTS + 2) + " Gadget") if i == N_SLOTS else (str(i + 1) + (" Spezial" if i == SPECIAL_SLOT else "")), parent=self.bar_root, pos=(x - 0.135, 0.165), scale=0.04,
+                text=(str(N_SLOTS + 1) + " Gadget") if i == N_SLOTS else (str(i + 1) + (" Spezial" if i == SPECIAL_SLOT else "")), parent=self.bar_root, pos=(x - 0.135, 0.165), scale=0.04,
                 fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
             lab.setBin("fixed", 25)
             self.slot_labels.append(lab)
@@ -131263,14 +131263,14 @@ class Game(ShowBase):
         self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col)}
-        # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
+        # Nahkampf-Slot (eigener Slot: Taste 5 oder F ohne etwas Benutzbares in der Nähe)
         mx_ = ((N_SLOTS + 1) / 2) * 0.34 + 0.01
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
         self.melee_holder = self.a2dBottomCenter.attachNewNode("melee_holder")
         self.melee_holder.setPos(mx_, 0, 0.11)
         self.melee_icons, self.melee_icon_cur = {}, None
-        self.melee_label = OnscreenText(text="4 Nahkampf", parent=self.a2dBottomCenter, pos=(mx_ - 0.115, 0.165),
+        self.melee_label = OnscreenText(text="5 Nahkampf", parent=self.a2dBottomCenter, pos=(mx_ - 0.115, 0.165),
                                         scale=0.034, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft,
                                         mayChange=True)
         self.melee_label.setBin("fixed", 25)
@@ -131713,7 +131713,7 @@ class Game(ShowBase):
 
     # ------------------------------------------------------------ Eingabe
     def toggle_gadget(self):
-        """Taste 3: Gadget in die Hand nehmen bzw. wieder wegstecken."""
+        """Taste 4: Gadget in die Hand nehmen bzw. wieder wegstecken."""
         pl = self.player
         if pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
@@ -131769,7 +131769,7 @@ class Game(ShowBase):
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
         gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid))
-        order = [wi for wi in pl.slots if wi is not None] + [MELEE_SEL] + (["gad"] if gad_ok else [])
+        order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else []) + [MELEE_SEL]
         if not order:
             return
         if pl.gad_out and "gad" in order:
@@ -131836,9 +131836,13 @@ class Game(ShowBase):
         """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
         nicht in der Hand, wird sie für den Schlag gezogen und danach wieder weggesteckt."""
         pl = self.player
-        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.gad_out or pl.switch_t > 0
-                or pl.melee_cd > 0 or self.world.phase != "play"):
+        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.melee_cd > 0
+                or self.world.phase != "play"):
             return
+        pl.gad_out = False                                  # F schlägt immer mit dem Messer: Gadget wegstecken,
+        if pl.switch_t > 0:                                 # Waffenwechsel abbrechen (Messer statt Schusswaffe)
+            pl.switch_t = 0.0
+            pl.switch_to = pl.cur
         if not pl.melee_out:
             pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
             self.quick_melee = True
