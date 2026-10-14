@@ -19,7 +19,11 @@ Polybash/
 - **Sinan** ändert `Polybash/spiel.py` auf seinem Zweig.
 - **Robin** ändert nur `Polybash/experimental/robin_experimental.py` auf seinem Zweig.
   Im Start-Menü steht "Experimental" gleichberechtigt neben King of the Hill und Deathmatch; `spiel.py`
-  startet diese Datei dann als eigenen Prozess. Die anderen Modi sind davon nicht betroffen.
+  wechselt dann im selben Fenster-Slot in diese Datei (das Menü beendet sich mit Code 77, ein kleiner Aufpasser
+  in `spiel.py` startet Robins Version; "Zum Hauptmenü" beendet sie mit Code 78 und das Menü kommt zurück).
+  Die anderen Modi sind davon nicht betroffen. Beitreten: im normalen "Spiel beitreten" erscheinen auch
+  Experimental-Hosts; dafür muss `EXP_NET_VERSION` in `spiel.py` gleich `NET_VERSION` in Robins Datei sein.
+  Im Heli ist die Rüstungsanzeige rechts ausgeblendet.
   Regel in Experimental: Alle starten und respawnen nur mit der Pistole, alle anderen Waffen kommen aus Kisten.
   Das Ausrüstungsmenü (Aufsätze, Visier, Gadget), Sounds und Spielmechaniken stammen aus `spiel.py`
   (Stand: v0.8, zusammengeführt) - bei Änderungen im Hauptspiel bitte gelegentlich in Robins Datei übernehmen.

@@ -130615,6 +130615,20 @@ class Game(ShowBase):
                     nd.show()
         self.mode, self.net_mode = "menu", "single"
         self.world = self.player = None
+        if os.environ.get("POLYBASH_EXPERIMENTAL") == "1":   # aus dem Hauptprogramm gestartet: zurück zu dessen Menü
+            sticky_keys_restore()
+            try:
+                self.save_prefs()
+            except Exception:
+                pass
+            for f in (sys.stdout, sys.stderr):
+                try:
+                    f.flush()
+                except Exception:
+                    pass
+            if REAL_PANDA:
+                os._exit(78)
+            sys.exit(78)
         self.show_menu("main")
 
     def menu_task(self, dt):
@@ -132229,7 +132243,7 @@ class Game(ShowBase):
                 out.append((p[0], p[2], 0.16, 0.085, weapon_info(wi, pl.guns[wi])))
         for sl, tl in self.gear_tiles.items():
             gi = pl.gear.get(sl)
-            if gi is not None:
+            if gi is not None and pl.heli < 0:
                 p = tl["tile"].getPos(a2)
                 out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi)))
         p = self.melee_frame.getPos(a2)
@@ -134866,7 +134880,12 @@ class Game(ShowBase):
         else:
             self.shield_bg.hide()
             self.shield_fg.hide()
+        in_heli = alive and pl.heli >= 0                        # im Helikopter: Rüstungsanzeige rechts ausblenden
         for sl, tl in self.gear_tiles.items():
+            if in_heli:
+                tl["tile"].hide()
+                continue
+            tl["tile"].show()
             gi = pl.gear.get(sl) if alive else None
             self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
             if gi is not None:
@@ -135390,6 +135409,12 @@ def _exp_autostart(g):
         g.start_game("host")
     elif do == "join":
         g.show_menu("join")
+    elif do == "connect":                              # Host aus der Suche des Hauptmenüs: gleich verbinden
+        try:
+            g.show_menu("connecting")
+            g.attempt = JoinAttempt(str(spec["ip"]), int(spec.get("port", NET_PORT)), g.my_name)
+        except (KeyError, TypeError, ValueError):
+            g.show_menu("join")
 
 
 if __name__ == "__main__":

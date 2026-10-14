@@ -110,9 +110,11 @@ Rückstoss: Das Waffenmodell hängt an gedämpften Federn
   x'' = -k x - c x'   (Impuls beim Schuss -> Ausschwingen), ebenso die Kamera.
 """
 # ===== Experimental: Robins Spielversion ===========================================================
-# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/robin_experimental.py als
-# eigener Prozess (eigene Einstellungsdatei spiel_einstellungen_experimental.json). Alle anderen Modi bleiben
-# davon völlig unberührt. Das Hauptprogramm unten wird in diesem Fall gar nicht erst geladen.
+# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/robin_experimental.py
+# (eigene Einstellungsdatei spiel_einstellungen_experimental.json). Alle anderen Modi bleiben davon völlig
+# unberührt. Ein Fenster zugleich: Ein kleiner Aufpasser (unten) startet das Menü als Kindprozess; wählt man
+# Experimental, beendet sich das Menü mit Code 77, der Aufpasser startet Robins Version im neuen Fenster, und
+# beim "Zum Hauptmenü" (Code 78) kommt das Menü zurück. Code 0 = Spiel beendet.
 import os as _os
 import sys as _sys
 EXP_FILE = _os.path.join("experimental", "robin_experimental.py")
@@ -134,6 +136,52 @@ if __name__ == "__main__" and _os.environ.get("POLYBASH_EXPERIMENTAL") == "1":
     _ns = {"__name__": "__main__", "__file__": _os.path.abspath(__file__), "__builtins__": __builtins__}
     exec(compile(_src, _p, "exec"), _ns)
     _sys.exit(0)
+
+
+def _supervise():
+    import json
+    import subprocess
+    import tempfile
+    frozen = getattr(_sys, "frozen", False)
+    cmd = [_sys.executable] if frozen else [_sys.executable, _os.path.abspath(__file__)]
+    cwd = _os.path.dirname(_os.path.abspath(_sys.executable if frozen else __file__))
+    fd, hand = tempfile.mkstemp(prefix="polybash_", suffix=".json")
+    _os.close(fd)
+    notice = ""
+    try:
+        while True:
+            env = dict(_os.environ, POLYBASH_CHILD="1", POLYBASH_HANDOFF=hand, POLYBASH_NOTICE=notice)
+            env.pop("POLYBASH_EXP_SPEC", None)
+            env.pop("POLYBASH_EXPERIMENTAL", None)
+            rc = subprocess.call(cmd, env=env, cwd=cwd)
+            if rc != 77:
+                return rc
+            try:
+                with open(hand, encoding="utf-8") as f:
+                    spec = f.read()
+                json.loads(spec)
+            except (OSError, ValueError):
+                notice = "Experimental konnte nicht gestartet werden."
+                continue
+            env = dict(_os.environ, POLYBASH_EXPERIMENTAL="1", POLYBASH_EXP_SPEC=spec)
+            env.pop("POLYBASH_CHILD", None)
+            rc = subprocess.call(cmd, env=env, cwd=cwd)
+            if rc == 0:
+                return 0
+            notice = "" if rc == 78 else "Experimental wurde mit einem Fehler beendet (spiel_fehler_experimental.log)"
+    finally:
+        try:
+            _os.remove(hand)
+        except OSError:
+            pass
+
+
+if (__name__ == "__main__" and _os.environ.get("POLYBASH_CHILD") != "1"
+        and _os.environ.get("POLYBASH_EXPERIMENTAL") != "1"):
+    try:
+        _sys.exit(_supervise())
+    except KeyboardInterrupt:
+        _sys.exit(0)
 # ====================================================================================================
 import base64
 import json
@@ -253,6 +301,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
+EXP_NET_VERSION = 22    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 11         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -8541,12 +8590,13 @@ class Listener:
                     break
                 try:
                     m = json.loads(data.decode())
-                    if m.get("spiel") != NET_VERSION:
+                    if m.get("spiel") not in (NET_VERSION, EXP_NET_VERSION):
                         continue
+                    exp = m.get("spiel") == EXP_NET_VERSION      # Host läuft in Experimental (Robins Version)
                     self.hosts[addr[0]] = dict(name=str(m.get("name", "?"))[:20],
                                                port=int(m.get("port", NET_PORT)),
-                                               n=int(m.get("n", 1)), seen=time.time(),
-                                               mode=str(m.get("mode", ""))[:8])
+                                               n=int(m.get("n", 1)), seen=time.time(), exp=exp,
+                                               mode="experimental" if exp else str(m.get("mode", ""))[:8])
                 except (ValueError, AttributeError, TypeError):
                     continue
         now = time.time()
@@ -126791,7 +126841,6 @@ class Game(ShowBase):
         self.host = None            # HostSession (nur beim Host)
         self.client = None          # ClientSession (nur beim Mitspieler)
         self.listener = None        # Host-Suche im Menü
-        self.exp_proc = None        # laufender Experimental-Prozess (Robins Spielversion)
         self.attempt = None         # laufender Verbindungsversuch
         self.menu_items = []
         self.menu_lines = []                  # anklickbare Menüzeilen (Hot)
@@ -126931,7 +126980,8 @@ class Game(ShowBase):
             node = getattr(self, name, None)
             if node is not None:
                 self._keep.append((node, set(node.getChildren())))
-        self.show_menu("main" if str(st.get("name") or "").strip() else "name")
+        self.show_menu("main" if str(st.get("name") or "").strip() else "name",
+                       os.environ.get("POLYBASH_NOTICE") or "")
 
     # ------------------------------------------------------------ Start-Menü
     def userExit(self):
@@ -127105,7 +127155,7 @@ class Game(ShowBase):
             spec = []
         elif st == "multi":
             spec = [("Spielen", None), ("1   Spiel hosten", dig(1)), ("2   Spiel beitreten", dig(2)),
-                    ("3   Experimental beitreten", dig(3)), ("Zurück   (Esc)", back)]
+                    ("Zurück   (Esc)", back)]
         elif st == "settings":
             spec = [("Einstellungen", None), (f"1   Name:  {self.my_name}", dig(1)),
                     (f"2   Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
@@ -127516,8 +127566,6 @@ class Game(ShowBase):
                 elif d == 2:
                     self.ip_text, self.ip_edited = "", False
                     self.show_menu("join")
-                elif d == 3:
-                    self.launch_experimental({"do": "join"})
             elif st == "settings":
                 if d == 1:
                     self.name_back = "settings"
@@ -127605,6 +127653,9 @@ class Game(ShowBase):
                 return
             found = self.listener.hosts.get(ip) if self.listener is not None else None
             port = found["port"] if found else NET_PORT
+            if found and found.get("exp"):                 # Experimental-Host: im selben Fenster in Robins Version wechseln
+                self.launch_experimental({"do": "connect", "ip": ip, "port": port})
+                return
             self.show_menu("connecting")
             self.attempt = JoinAttempt(ip, port, self.my_name)
 
@@ -128244,59 +128295,41 @@ class Game(ShowBase):
         self.launch_experimental({"do": "host", "cfg": cfg})
 
     def launch_experimental(self, spec):
-        """Startet Robins eingebettete Version als eigenen Prozess; dieses Fenster wartet solange im Hintergrund."""
-        if self.exp_proc is not None:
-            return
+        """Wechselt in Robins Version: Menü beenden (Code 77); der Aufpasser öffnet Experimental im selben Fenster-Slot."""
         if _exp_path() is None:
             self.menu_msg = "Experimental fehlt: Datei " + EXP_FILE + " nicht gefunden"
             self.menu_refresh()
             return
-        import subprocess
+        hand = os.environ.get("POLYBASH_HANDOFF")
+        if not hand:
+            self.menu_msg = "Experimental geht nur beim Start über spiel.py bzw. die Startdatei"
+            self.menu_refresh()
+            return
         spec = dict(spec, name=self.my_name, gfx=self.gfx, sens=self.sens_mult, fps=self.fps_limit)
-        env = dict(os.environ, POLYBASH_EXPERIMENTAL="1", POLYBASH_EXP_SPEC=json.dumps(spec))
-        frozen = getattr(sys, "frozen", False)
-        cmd = [sys.executable] if frozen else [sys.executable, os.path.abspath(__file__)]
-        if self.listener is not None:
-            try:
-                self.listener.close()
-            except Exception:
-                pass
-            self.listener = None
         try:
-            self.save_prefs()
-            self.exp_proc = subprocess.Popen(cmd, env=env, cwd=os.path.dirname(os.path.abspath(
-                sys.executable if frozen else __file__)))
+            with open(hand, "w", encoding="utf-8") as f:
+                json.dump(spec, f)
         except OSError as e:
             self.menu_msg = f"Experimental konnte nicht gestartet werden: {e}"
             self.menu_refresh()
             return
+        sticky_keys_restore()
         try:
-            props = WindowProperties()
-            props.setMinimized(True)
-            self.win.requestProperties(props)
-            from panda3d.core import ClockObject
-            clock = ClockObject.getGlobalClock()
-            clock.setMode(ClockObject.MLimited)
-            clock.setFrameRate(5.0)                        # im Hintergrund kaum Rechenleistung verbrauchen
+            self.shutdown_net()
         except Exception:
             pass
-
-    def exp_watch(self, task, dt):
-        """Wartet auf das Ende von Experimental und holt dann das Hauptmenü zurück."""
-        self.sfx.menu_music(dt, False)
-        rc = self.exp_proc.poll()
-        if rc is None:
-            return task.cont
-        self.exp_proc = None
         try:
-            props = WindowProperties()
-            props.setMinimized(False)
-            self.win.requestProperties(props)
+            self.save_prefs()
         except Exception:
             pass
-        self.apply_fps()
-        self.show_menu("main", "" if rc == 0 else "Experimental wurde mit einem Fehler beendet (spiel_fehler_experimental.log)")
-        return task.cont
+        for f in (sys.stdout, sys.stderr):
+            try:
+                f.flush()
+            except Exception:
+                pass
+        if REAL_PANDA:
+            os._exit(77)
+        sys.exit(77)
 
     def start_game(self, mode, attempt=None):
         """mode: 'single' (allein), 'host' (Spiel eröffnen) oder 'client' (beitreten)."""
@@ -130094,8 +130127,6 @@ class Game(ShowBase):
 
     def update_task(self, task):
         dt = min(globalClock.getDt(), 0.1)  # noqa: F821  (von Panda3D bereitgestellt)
-        if self.exp_proc is not None:                      # Experimental läuft in einem eigenen Fenster
-            return self.exp_watch(task, dt)
         self.sfx.menu_music(dt, self.mode == "menu")
         if self.mode == "menu":
             self.menu_task(dt)
