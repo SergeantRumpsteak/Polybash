@@ -8711,6 +8711,7 @@ class Hot:
 
     def __init__(self, txt, x, z, scale, action=None, text=""):
         self.txt, self.action, self.on, self.label = txt, action, False, text
+        self.sel = False                       # gewählte Option einer Knopfreihe (gelb)
         w = 0.0
         try:
             w = float(txt.textNode.getWidth()) * scale
@@ -8727,7 +8728,7 @@ class Hot:
     def set(self, on):
         if on != self.on:
             self.on = on
-            self.txt.setFg(self.ON if on else (self.BASE if self.action else self.PLAIN))
+            self.txt.setFg(self.ON if on else (self.ON if self.sel else (self.BASE if self.action else self.PLAIN)))
 
     def destroy(self):
         self.txt.destroy()
@@ -8893,6 +8894,12 @@ class SliderSpec:
     def __init__(self, label, lo, hi, step, get, set_, fmt=str, enabled=True):
         self.label, self.lo, self.hi, self.step = label, lo, hi, step
         self.get, self.set_, self.fmt, self.enabled = get, set_, fmt, enabled
+
+
+class RowSpec:
+    """Knopfreihe im Pause-Overlay: Beschriftung und mehrere Optionen nebeneinander, eine ist gewählt."""
+    def __init__(self, label, options, cur, set_, enabled=True):
+        self.label, self.options, self.cur, self.set_, self.enabled = label, options, cur, set_, enabled
 
 
 class UiSlider:
@@ -129661,8 +129668,8 @@ class Game(ShowBase):
             if self.name_back == "main":
                 spec.append(("Beenden   (Esc)", self.open_quit_box))
         elif st == "main":
-            spec = [("1   Spielen", dig(1)), ("2   Einstellungen", dig(2)),
-                    ("3   Ausrüstung", dig(3)), ("Beenden   (Esc)", self.open_quit_box)]
+            spec = [("Spielen", dig(1)), ("Einstellungen", dig(2)),
+                    ("Ausrüstung", dig(3)), ("Beenden   (Esc)", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
                     ("Nein, weiterspielen   (N / Esc)", back)]
@@ -129671,22 +129678,21 @@ class Game(ShowBase):
         elif st == "loadconf":
             spec = []
         elif st == "multi":
-            spec = [("Spielen", None), ("1   Spiel hosten  (auch allein zum Testen)", dig(1)),
-                    ("2   Spiel beitreten", dig(2)), ("Zurück   (Esc)", back)]
+            spec = [("Spielen", None), ("Spiel hosten  (auch allein zum Testen)", dig(1)),
+                    ("Spiel beitreten", dig(2)), ("Zurück   (Esc)", back)]
         elif st == "settings":
-            spec = [("Einstellungen", None), (f"1   Name:  {self.my_name}", dig(1)),
-                    (f"2   Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
-                    (f"3   Bildrate:  {fps_label(self.fps_limit)}", dig(3)),
-                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),     # Platz für 3 Regler
+            spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
+                    (f"Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
+                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),     # Platz für 4 Regler
                     ("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
             mc = self.cfg_is_mc()
             spec = [("Weitere Einstellungen", None),
-                    ("1   Monster:  aus  (Minecraft-Karte)" if mc else f"1   Monster:  {'an' if c['mobs'] else 'aus'}", dig(1)),
-                    (f"2   Tomahawk-Abklingzeit:  {strike_cd_label(c['cd'])}", dig(2)),
-                    (f"3   Gesundheit regeneriert:  {regen_label(c['regen'])}", dig(3)),
-                    (f"4   Respawn-Zeit:  {respawn_label(c['resp'])}", dig(4)),
+                    ("Monster:  aus  (Minecraft-Karte)" if mc else f"Monster:  {'an' if c['mobs'] else 'aus'}", dig(1)),
+                    (f"Tomahawk-Abklingzeit:  {strike_cd_label(c['cd'])}", dig(2)),
+                    (f"Gesundheit regeneriert:  {regen_label(c['regen'])}", dig(3)),
+                    (f"Respawn-Zeit:  {respawn_label(c['resp'])}", dig(4)),
                     ("Fertig   (Esc)", back)]
         elif st == "join":
             hosts = self.listener.hosts if self.listener is not None else {}
@@ -129783,7 +129789,7 @@ class Game(ShowBase):
                     self.menu_cards.append((hot, card))
             self.ui_sliders_clear()
             if self.menu_state == "settings":
-                for k, sp in enumerate(self.personal_sliders()):
+                for k, sp in enumerate([self.fps_slider()] + self.personal_sliders()):
                     self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
 
     # ------------------------------------------------------------ Maus im Menü
@@ -130107,11 +130113,6 @@ class Game(ShowBase):
                     self.gfx = GFX_MODES[(GFX_MODES.index(self.gfx) + 1) % len(GFX_MODES)]
                     self.save_prefs()
                     self.menu_refresh()
-                elif d == 3:
-                    self.fps_limit = FPS_CHOICES[(FPS_CHOICES.index(self.fps_limit) + 1) % len(FPS_CHOICES)]
-                    self.apply_fps()
-                    self.save_prefs()
-                    self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
             elif st == "setup2":
@@ -130312,7 +130313,7 @@ class Game(ShowBase):
         items: (Text, Aktion oder None). Das Spiel läuft weiter, die Eingaben ruhen, die Maus ist frei."""
         self.close_quit_box(recapture=False)
         n = len(items)
-        hs = [0.19 if isinstance(it, SliderSpec) else 0.11 for it in items]     # Reglerzeilen sind höher
+        hs = [0.19 if isinstance(it, SliderSpec) else (0.22 if isinstance(it, RowSpec) else 0.11) for it in items]     # Reglerzeilen sind höher
         zs = []
         zc = 0.0
         for h_ in hs:
@@ -130339,6 +130340,23 @@ class Game(ShowBase):
             z = zs[i]
             if isinstance(it, SliderSpec):
                 self.ui_sliders.append(UiSlider(self.aspect2d, it, -(width - 0.45), width - 0.45, z))
+                continue
+            if isinstance(it, RowSpec):
+                lt = OnscreenText(text=it.label, pos=(0, z), scale=0.062, fg=Hot.PLAIN, shadow=(0, 0, 0, 0.9), mayChange=False)
+                lt.setBin("fixed", 95)
+                hots.append(Hot(lt, 0.0, z, 0.062, None, it.label))
+                k = len(it.options)
+                span_ = 2 * (width - 0.45)
+                for j, name in enumerate(it.options):
+                    x = -span_ / 2 + span_ * (j + 0.5) / k
+                    bt = OnscreenText(text=name, pos=(x, z - 0.11), scale=0.055, fg=Hot.BASE, shadow=(0, 0, 0, 0.9),
+                                      mayChange=True)
+                    bt.setBin("fixed", 95)
+                    hb = Hot(bt, x, z - 0.11, 0.055, (lambda j=j, f=it.set_: f(j)), name)
+                    hb.sel = j == it.cur
+                    if hb.sel:
+                        bt.setFg(Hot.ON)
+                    hots.append(hb)
                 continue
             label, action = it
             t = OnscreenText(text=label, pos=(0, z), scale=0.062, fg=Hot.BASE if action else Hot.PLAIN,
@@ -130576,15 +130594,10 @@ class Game(ShowBase):
             def set_gfx():
                 self.set_gfx(cyc(GFX_MODES, self.gfx))
 
-            def set_fps():
-                self.fps_limit = cyc(FPS_CHOICES, self.fps_limit)
-                self.apply_fps()
-                self.save_prefs()
-
             if kind == "settings_gfx":
                 self.open_overlay("settings_gfx", "Grafikeinstellungen", [
                     (f"Grafik:  {GFX_NAMES[self.gfx]}", do(set_gfx)),
-                    (f"Bildrate:  {fps_label(self.fps_limit)}", do(set_fps)),
+                    self.fps_slider(),
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
             if kind == "settings_game":                 # persönliche Einstellungen: Maus und Lautstärke
@@ -130609,8 +130622,8 @@ class Game(ShowBase):
                     w.respawn_delay = float(v)
                     self.cfg["resp"] = int(v)
 
-                def set_mobs():
-                    w.mob_level = (w.mob_level + 1) % len(MOB_LEVELS)
+                def set_mobs(k):
+                    w.mob_level = int(k)
                     w.mobs_on = w.mob_level > 0 and not w.mc
                     w.mobs.clear()
                     w.pending.clear()
@@ -130623,7 +130636,8 @@ class Game(ShowBase):
                     self.cfg["tomahawk"] = w.tomahawk_on
 
                 items = [info,
-                         (f"Monster:  {MOB_LEVELS[w.mob_level][0]}", do(set_mobs)),
+                         RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
+                                 lambda k: (set_mobs(k), self.show_pause(kind))),
                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
                          SliderSpec("Tomahawk-Abklingzeit", 0, 600, 10, lambda: int(w.strike_cd), set_cd,
                                     strike_cd_label, enabled=w.tomahawk_on),
@@ -130659,6 +130673,16 @@ class Game(ShowBase):
         setattr(self, "vol_music" if which == "music" else "vol_sfx", int(v))
         self.apply_volume()
         self.prefs_dirty = True
+
+    def set_fps_index(self, i):
+        self.fps_limit = FPS_CHOICES[max(0, min(len(FPS_CHOICES) - 1, int(i)))]
+        self.apply_fps()
+        self.prefs_dirty = True
+
+    def fps_slider(self):
+        idx = lambda: FPS_CHOICES.index(self.fps_limit) if self.fps_limit in FPS_CHOICES else 0      # noqa: E731
+        return SliderSpec("Bildrate", 0, len(FPS_CHOICES) - 1, 1, idx, self.set_fps_index,
+                          lambda i: fps_label(FPS_CHOICES[int(i)]))
 
     def personal_sliders(self):
         """Regler, die nur dich betreffen (Hauptmenü- und Spiel-Einstellungen)."""
