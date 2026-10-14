@@ -6613,11 +6613,11 @@ def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10)):
     """Rechte Hand, die einen senkrechten Pistolengriff umfasst (Ego-Ansicht). Ursprung: Mitte des Griffs, 0.033 hinter
     seiner Vorderseite. Handballen liegt seitlich am Griff, die vier Finger laufen quer um die Vorderseite, der Daumen
     liegt oben an der Seite, der Unterarm läuft nach hinten."""
-    xc, kn_y = 0.040 * s, 0.015
+    xc, kn_y = 0.038 * s, 0.015
     wr = (xc, kn_y - 0.085, 0.0)
-    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.0, dn=(-s, 0.0, 0.0))
-    cs = [(xc, wr[1] - 0.005, 0.0), (xc + 0.010 * s, wr[1] - 0.13, -0.030), (xc + 0.025 * s, wr[1] - 0.27, -0.085),
-          (xc + 0.040 * s, wr[1] - 0.50, -0.17)]
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.35, dn=(-s, 0.0, 0.0))      # Finger greifen weit um den Griff
+    cs = [(xc, wr[1] - 0.005, 0.0), (xc + 0.030 * s, wr[1] - 0.12, -0.07), (xc + 0.070 * s, wr[1] - 0.25, -0.17),
+          (xc + 0.120 * s, wr[1] - 0.50, -0.36)]
     loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
          lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
     loft(m, [(xc, wr[1] + 0.008, 0.0), (xc, wr[1] - 0.028, -0.001)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
