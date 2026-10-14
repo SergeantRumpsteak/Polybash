@@ -15,7 +15,8 @@ Steuerung:
                  Fahrzeug ein-/aussteigen; ist nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
   4              Nahkampfwaffe (zurück zu den Schusswaffen mit 1-3 / Mausrad); Linke Maus = zuschlagen
   Tab (halten)   Übersicht: Scoreboard (Punkte, Kills, Tode, Monster, Kisten, Buffs) und Tasten-Legende;
-                 die Maus ist solange frei - Mausover über Waffen, Ausrüstung und Buff zeigt die Werte
+                 die Maus ist solange frei - Mausover über Waffen, Ausrüstung und Buff zeigt die Werte;
+                 Klick auf eine Waffe: Aufsatz-Fenster (Aufsätze aus dem Lager aufstecken)
   Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
   Menüs          auch mit der Maus bedienbar (Hover = gelb, Klick = wählen)
   5              Gadget in die Hand (eigene Karte rechts neben den Waffen; Wahl im Hauptmenü "Ausrüstung"
@@ -45,7 +46,17 @@ Werte dort ergänzen) und schickt die Statistik am Rundenende an alle; danach Co
 HUD: oben Mitte Modus und Rundenzeit, oben links der Killfeed (nur Spieler-Kills und Wichtiges), unten links
 Leben/Schild, Minimap und Fähigkeits-/Buff-Symbole, unten Mitte die Waffen-Slots, unten rechts die Munition,
 rechts die Ausrüstung. Kurze Hinweise (Buff, Tomahawk wieder da, Helm zerstört ...) erscheinen dezent in der
-Mitte und verschwinden wieder.
+Mitte und verschwinden wieder. In Wagen, Heli und am Geschütz (7a) sind Waffenleiste, Nahkampf, Ausrüstung und
+Buff-Kacheln aus; zu sehen sind Tempo/Höhe, Fahrzeug-Leben, Fahrzeug-Munition (Geschütz: Hitze), eigenes Leben
+und die Minimap mit dem Lärmkreis des Fahrzeugs (NOISE_VEHICLE / NOISE_HELI; der Heckschütze sieht den Tacho).
+7a: Schieben und Monster-Schläge nur bei überlappender Höhe (Monster z .. z + height, Spieler z .. z + body_h;
+MOB_Z_TOL, MOB_HIT_UP/DOWN) - auf Dach, Turm oder Brücke über den Monstern schiebt einen keiner mehr, Monster
+untereinander ebenso. F-Schnellschlag: die Nahkampfwaffe bleibt in der Hand (QUICK_MELEE_STAY). Nach Spielstart,
+Respawn, Menü/Karte zu und Fensterwechsel zählt die Maus erst nach Loslassen + neuem Drücken und INPUT_LOCK_T.
+Monster-Tempo: Jägerin MOB_SPEED_HUNTRESS, Grunt MOB_SPEED_GRUNT, Brute MOB_SPEED_BRUTE. Der Titan läuft durch
+Bäume und Felsen (TITAN_PASS_PROPS); Titan und Koloss erkennen, wenn sie festhängen (MOB_STUCK_T) und nehmen einen
+Umweg (MOB_DETOUR_*). Drohnen fliegen je DRONE_FLY_MIN..MAX m hoch und steigen/sinken zu ihrem Ziel (bis
+DRONE_FLY_TOP, also auch zum Heli).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -54,19 +65,37 @@ Waffen und Kisten (in allen Modi und auf allen Karten):
   Minigun, Railgun). Sind die Plätze voll, wird getauscht: die Waffe in der Hand (normale Waffe) bzw. die
   Spezialwaffe fällt auf den Boden. Hält man die Spezialwaffe und hebt eine normale Waffe auf, wird die
   zuletzt benutzte normale Waffe getauscht. Hat man die Waffe schon, gibt es stattdessen Munition.
-  Drei Kistenarten: braune Holzkiste (überall, meist Schrotflinte/MP), blau leuchtende Metallkiste (seltener,
+  Kistenarten: braune Holzkiste (überall, meist Schrotflinte/MP), blau leuchtende Metallkiste (seltener,
   meist Sturmgewehr/Revolver/Minigun) und goldene Kiste mit rotem Rubin (nur ein paar pro Karte, meist Railgun,
   Raketenwerfer, Scharfschütze). In jeder Kiste ist jede Waffe möglich; die Prozente stehen in LOOT_TABLES.
   Waffen, die man gerade trägt, werden beim Öffnen herausgerechnet - so zieht man nicht ständig dasselbe.
   Dazu hat jeder Spieler ein Kisten-Gedächtnis für sein aktuelles Leben (beim Tod gelöscht): die zuletzt
   gezogene Waffe kommt in der nächsten Kiste nicht, und jede gezogene Waffe gibt pro Zug LOOT_PITY_STEP
   Prozentpunkte an jede andere Waffe ab (in allen Kistenarten) - so werden die guten Waffen mit jeder
-  Kiste wahrscheinlicher. Kisten liegen zufällig verteilt (bei Gebäuden, Türmen,
+  Kiste wahrscheinlicher. 7b: Jede Kiste gibt DREI Teile (CRATE_TRIPLE): Waffe oder Nahkampfwaffe + Ausrüstungsteil
+  + Aufsatz (Visier oder Lauf/Magazin/Griff, LOOT_ATT_TABLES; LOOT_GEAR_MISS/LOOT_ATT_MISS = Chance, dass eins fehlt).
+  Nichts wird sofort ausgerüstet: die Teile "ploppen" heraus und liegen nebeneinander LOOT_DROP_DIST m vor dem
+  Spieler. Draufschauen zeigt Name und Werte, F hebt genau dieses Teil auf (erst dann greift der Tausch).
+  LOOT_OWNER_T s lang nur für den Öffnenden, danach für jeden; liegen gelassen verschwindet es nach DROP_LIFE.
+  Aufsatz aufheben: passt er auf die Waffe in der Hand, kommt er sofort darauf (der alte desselben Platzes ins
+  Aufsatz-Lager), sonst ins Aufsatz-Lager (unsichtbar, Doppelte erlaubt, wird beim Tod geleert). Tab halten und auf
+  eine Waffe der Waffenleiste klicken: Aufsatz-Fenster mit Reitern (Visier, Lauf, Magazin, Griff - nur was zur
+  Waffe passt); Klick steckt ein Teil aus dem Lager auf, "Standard" geht immer. Visiere gelten jetzt je Waffe.
+  Waffen fallen mit ihren Aufsätzen und dem Visier (Tausch, Tod). Waffensymbol und Tab-Mausover zeigen sie.
+  Kisten liegen zufällig verteilt (bei Gebäuden, Türmen,
   Aussenposten, im Tunnel und im Gelände) und sind nicht auf der Minimap. Eine geöffnete Kiste verschwindet;
   nach CRATE_RESPAWN Sekunden (je Art) taucht anderswo eine neue derselben Art auf.
   Beim Tod fällt die Waffe in der Hand und EIN zufälliges getragenes Ausrüstungsteil auf den Boden (F zum
   Aufheben), alles andere geht verloren.
 
+Ausrüstung 7c (Tabelle GEAR + LOOT_GEAR_TABLES): Kopf Basic-Helm (rettet einmal), Armeehelm, Schild-Helm, Hermes-Helm;
+  Torso Plattenrüstung (+25 HP), Schild, Jetpack (Doppelsprung + Schub; die Jetpack-Schuhe sind entfallen),
+  Hermes-Weste; Füsse Hermes-Schuhe, Springfeder-Schuhe, Kampfstiefel, Schild-Stiefel. Sets (je drei Teile):
+  Rüstung (Armeehelm, Plattenrüstung, Kampfstiefel: je +25 HP, komplett +ARMOR_SET_BONUS), Schild (Schild-Helm,
+  Schild, Schild-Stiefel: Schild-HP addieren sich zu einem Balken, komplett Stromstoss auf Taste B: betäubt alles in
+  SHOCK_R m, Abklingzeit SHOCK_CD), Hermes (jedes Teil gibt den Dash; komplett x1,5 Tempo, doppelt schneller Dash,
+  Shift halten gleitet bis HERMES_GLIDE_MAX m). Komplettes Set: die Ausrüstungskacheln leuchten in der Set-Farbe.
+  Tank-Buff kommt zu den Ausrüstungs-HP dazu. Die folgenden Zeilen beschreiben den älteren Stand:
 Ausrüstung (aus allen Kistenarten, Tabelle GEAR + LOOT_GEAR_TABLES; LOOT_CATEGORIES = Anteil Ausrüstung je Kiste):
   Drei Slots: Kopf, Torso, Füsse - pro Slot ein Teil. Ein neues Teil ersetzt das alte (das alte fällt als Drop),
   ein identisches Teil lässt sich nicht aufheben ("Hast du schon"). Treibstoff und Abklingzeiten gehören dem
@@ -358,7 +387,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 23         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 26         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -408,7 +437,7 @@ VEH_RESPAWN = 35.0       # s bis ein zerstörtes Fahrzeug wieder dasteht
 VEH_BLAST_R, VEH_BLAST_DMG = 5.5, 110.0
 ROCKET_KILL_R = 5.5      # Rakete: Fahrzeug innerhalb dieses Radius ist sofort zerstört
 DROP_LIFE = 90.0         # s, so lange liegt eine fallengelassene Waffe herum
-MAX_DROPS = 24
+MAX_DROPS = 40           # 7b: mehr Platz, weil Kistenbeute jetzt erst am Boden liegt
 
 GREN_KILL_R = 2.6        # Granate: wer näher als das steht, stirbt sofort
 
@@ -495,7 +524,7 @@ WI_ROCK = -11            # Steinbrocken des Titans
 
 # --- Gebirge am Rand der Standardkarte
 MTN_BAND = 46.0          # so breit ist der Gebirgsgürtel (m, schwankt)
-MTN_H = 36.0             # Höhe am Kartenrand (dahinter steigt es weiter)
+MTN_H = 46.0             # Höhe am Kartenrand (dahinter steigt es weiter; 7a: von 36 auf 46 m erhöht)
 MTN_CLIMB = True         # True: Spieler UND Monster können das Gebirge hochlaufen (Sniper-Posten oben);
                          # False: alter Zustand - Felswände steiler als MTN_SLOPE sperren, jetzt auch für Monster
 MTN_SLOPE = 0.95         # (nur bei MTN_CLIMB = False) steiler als das (ca. 43 Grad) kommt man nicht hoch
@@ -736,11 +765,13 @@ DUP_AMMO_MAGS = 2              # hebt man eine Waffe auf, die man schon trägt: 
 
 # --- Kisten auf der Karte (drei Arten: braun = gewöhnlich, blau = selten, gold = legendär)
 CRATE_KINDS = ("common", "rare", "gold")      # Index in den Snapshots
+LOOT_CRATE_KINDS = CRATE_KINDS                # Spalten der LOOT_*-Tabellen
 CRATE_NAMES = {"common": "Kiste", "rare": "seltene Kiste", "gold": "goldene Kiste"}
 CRATES_STD = {"common": 30, "rare": 8, "gold": 4}   # gleichzeitig auf der Standardkarte (300 x 300 m)
 CRATES_MAP = {"common": 18, "rare": 5, "gold": 2}   # auf Kartendateien und der Minecraft-Karte (200 x 200 m)
 CRATE_RESPAWN = {"common": 20.0, "rare": 35.0, "gold": 60.0}   # s nach dem Öffnen bis zur Ersatzkiste (gleiche Art)
 CRATE_GAP = 11.0               # Mindestabstand zwischen zwei Kisten (m)
+CRATE_TRIPLE = True            # 7b: eine Kiste = Waffe/Nahkampf + Ausrüstung + Aufsatz (False: alter Einzelzug)
 CRATE_GOLD_GAP = 70.0          # goldene Kisten liegen mind. so weit auseinander (Standardkarte, kleinere anteilig)
 CRATE_PLAYER_GAP = 12.0        # während der Runde taucht keine Kiste näher als das an einem Spieler auf
 CRATE_REUSE_GAP = 20.0         # die Ersatzkiste taucht mind. so weit von der geöffneten entfernt auf
@@ -779,17 +810,21 @@ LOOT_TABLES = {
     "Raketenwerfer":    ( 2.0,  8.0, 27.0),
     "Scharfschütze":    ( 1.0,  4.0, 12.0),
 }
-# Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). Helm und Platte eher braun,
-# Schild/Jetpack/Schuhe eher blau und gold.
+# Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). 7c: Set-Teile eher blau/gold.
 LOOT_GEAR_TABLES = {
     #  Teil                   braun  blau   gold
-    "Basic-Helm":          (35.0, 10.0,  5.0),
-    "Plattenrüstung":      (30.0, 10.0,  5.0),
-    "Schild":              (10.0, 20.0, 20.0),
-    "Jetpack":             ( 5.0, 15.0, 20.0),
-    "Hermes-Schuhe":       ( 7.0, 15.0, 17.0),
-    "Springfeder-Schuhe":  ( 8.0, 15.0, 15.0),
-    "Jetpack-Schuhe":      ( 5.0, 15.0, 18.0),
+    "Basic-Helm":          (14.0,  6.0,  3.0),
+    "Armeehelm":           (12.0,  8.0,  7.0),     # Rüstungs-Set
+    "Schild-Helm":         ( 5.0,  8.0, 10.0),     # Schild-Set
+    "Hermes-Helm":         ( 3.0,  7.0, 10.0),     # Hermes-Set
+    "Plattenrüstung":      (14.0,  9.0,  8.0),     # Rüstungs-Set
+    "Schild":              ( 9.0, 10.0, 10.0),     # Schild-Set
+    "Jetpack":             ( 8.0, 10.0, 10.0),
+    "Hermes-Weste":        ( 3.0,  7.0, 10.0),     # Hermes-Set
+    "Hermes-Schuhe":       ( 8.0,  9.0,  9.0),     # Hermes-Set
+    "Springfeder-Schuhe":  (10.0,  9.0,  6.0),
+    "Kampfstiefel":        ( 9.0,  9.0,  7.0),     # Rüstungs-Set
+    "Schild-Stiefel":      ( 5.0,  8.0, 10.0),     # Schild-Set
 }
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
 LOOT_MELEE_TABLES = {
@@ -805,9 +840,44 @@ LOOT_CATEGORIES = {"common": {"weapon": 0.62, "gear": 0.25, "melee": 0.13},
                    "gold":   {"weapon": 0.57, "gear": 0.30, "melee": 0.13}}
 LOOT_TABLES.update(LOOT_GEAR_TABLES)
 LOOT_TABLES.update(LOOT_MELEE_TABLES)
+# --- 7b (neu): Jede Kiste gibt DREI Teile: 1 Waffe ODER Nahkampfwaffe (Verhältnis aus LOOT_CATEGORIES) + 1 Ausrüstungs-
+# teil + 1 Aufsatz (Visier oder Lauf/Magazin/Griff). Die Kistenart bestimmt die Qualität aller drei; das Kisten-
+# Gedächtnis (Ausgleich, "zuletzt gezogen") gilt je Art. Aufsätze in Prozent je Kistenart (Spalte = 100):
+LOOT_ATT_TABLES = {
+    #  Aufsatz               braun  blau   gold
+    "Schalldämpfer":       (12.0,  9.0,  7.0),     # Lauf
+    "Langer Lauf":         (10.0, 10.0, 10.0),
+    "Kompensator":         (12.0,  9.0,  7.0),
+    "Erweitert":           (12.0, 10.0,  8.0),     # Magazin
+    "Schnellmagazin":      (10.0, 10.0,  9.0),
+    "Panzerbrechend":      ( 5.0,  9.0, 12.0),
+    "Senkrechtgriff":      (12.0,  9.0,  7.0),     # Griff
+    "Winkelgriff":         (10.0,  9.0,  7.0),
+    "Laserpointer":        (10.0,  8.0,  6.0),
+    "Red Dot":             ( 5.0,  8.0,  8.0),     # Visier (Sturmgewehr, Schrotflinte, Scharfschütze)
+    "ACOG":                ( 2.0,  6.0, 10.0),
+    "Sniper-Visier":       ( 0.0,  3.0,  9.0),
+}
+LOOT_GEAR_MISS = 0.0           # Chance, dass in einer Kiste KEIN Ausrüstungsteil liegt (0 = immer dabei)
+LOOT_ATT_MISS = 0.0            # Chance, dass KEIN Aufsatz dabei ist
+LOOT_TABLES.update(LOOT_ATT_TABLES)
+ATT_LONG = {"Erweitert": "Erweitertes Magazin"}   # Anzeigename, wo der Kurzname missverständlich ist
+ATT_CODE = 8                   # Aufsatz als Zahl (Drops/Netz): Platz * ATT_CODE + Index
+ATT_SCOPE = 3                  # "Platz" der Visiere (Index wie SCOPES: 1 Red Dot, 2 ACOG, 3 Sniper-Visier)
+ATT_SCOPE_NAMES = ("Kimme und Korn", "Red Dot", "ACOG", "Sniper-Visier")   # wie SCOPES (steht weiter unten)
+# --- 7b: Kistenbeute fällt vor den Spieler, statt sofort ausgerüstet zu werden
+LOOT_DROP_DIST = 1.5           # m vor dem Spieler (Blickrichtung) landen die drei Teile ...
+LOOT_DROP_SPREAD = 1.15        # ... nebeneinander mit so viel Abstand (quer zur Blickrichtung)
+LOOT_DROP_MIN = 0.6            # ... ist dort kein Platz (Wand), näher heran, notfalls direkt vor die Füsse
+LOOT_OWNER_T = 3.0             # s darf nur der Öffnende ihn aufheben (0 = sofort jeder); danach jeder (wie andere Drops)
+LOOT_POP_T = 0.5               # s Flug aus der Kiste (Bogen) - nur Darstellung
+LOOT_POP_H = 1.1               # m Bogenhöhe
+LOOT_LOOK_R = 7.0              # m: so weit weg zeigt das Draufschauen Name und Werte eines Drops ...
+LOOT_LOOK_ANG = 9.0            # ... wenn er höchstens so viele Grad neben der Blickrichtung liegt
 # Art jedes Eintrags ("weapon" | "gear"; später z. B. "grenade"). Das Kisten-Gedächtnis (Ausgleich,
 # "zuletzt gezogen", getragene herausrechnen) gilt je Art - Waffen und Ausrüstung nehmen sich nichts weg.
-LOOT_ITEMS = {name: ("gear" if name in LOOT_GEAR_TABLES else "melee" if name in LOOT_MELEE_TABLES else "weapon")
+LOOT_ITEMS = {name: ("gear" if name in LOOT_GEAR_TABLES else "melee" if name in LOOT_MELEE_TABLES
+                     else "att" if name in LOOT_ATT_TABLES else "weapon")
               for name in LOOT_TABLES}
 # ======================================================================== AUSRÜSTUNG
 # Drei Slots, pro Slot ein Teil. Neue Teile: eine Zeile in GEAR (und in LOOT_GEAR_TABLES) - Platz für 5 je Slot.
@@ -819,21 +889,45 @@ GEAR_SLOT_NAMES = {"head": "Kopf", "torso": "Torso", "feet": "Füsse"}
 class Gear:
     name: str
     slot: str                  # head | torso | feet
-    kind: str                  # Wirkung: save_head | save_body | shield | jetpack | dash | spring | double_jump
+    kind: str                  # Wirkung: save_head | hp | shield | jetpack | dash | spring
     short: str                 # Kürzel für HUD
     col: tuple = (0.8, 0.8, 0.8)
     hud: str = ""              # kurzer Name für die Slot-Übersicht im HUD
+    set: str = ""              # 7c: Set ("armor" | "shield" | "hermes"), sonst ""
+    hp: float = 0.0            # 7c: + max. Lebenspunkte
+    shield: float = 0.0        # 7c: Schild-HP dieses Teils (alle Schild-Teile ergeben EINEN Balken)
 
 
+# 7c: Sets - alle drei Teile desselben Sets = Set-Bonus (Werte unten)
+GEAR_HP_PART = 25.0            # Rüstungs-Set: jedes Teil +25 max. HP
+SHIELD_HP_TORSO, SHIELD_HP_HEAD, SHIELD_HP_FEET = 30.0, 15.0, 15.0   # Schild-HP je Teil
 GEAR = (
     Gear("Basic-Helm", "head", "save_head", "H", (0.55, 0.58, 0.5), "Helm"),
-    Gear("Plattenrüstung", "torso", "save_body", "P", (0.6, 0.62, 0.66), "Platte"),
-    Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild"),
+    Gear("Armeehelm", "head", "hp", "A", (0.40, 0.45, 0.30), "Armeehelm", "armor", GEAR_HP_PART),
+    Gear("Schild-Helm", "head", "shield", "S", (0.3, 0.7, 1.0), "Schildhelm", "shield", 0.0, SHIELD_HP_HEAD),
+    Gear("Hermes-Helm", "head", "dash", "D", (1.0, 0.85, 0.3), "Hermeshelm", "hermes"),
+    Gear("Plattenrüstung", "torso", "hp", "P", (0.6, 0.62, 0.66), "Platte", "armor", GEAR_HP_PART),
+    Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild", "shield", 0.0, SHIELD_HP_TORSO),
     Gear("Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Jetpack"),
-    Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes"),
+    Gear("Hermes-Weste", "torso", "dash", "D", (1.0, 0.85, 0.3), "Hermesweste", "hermes"),
+    Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes", "hermes"),
     Gear("Springfeder-Schuhe", "feet", "spring", "F", (0.6, 1.0, 0.4), "Federn"),
-    Gear("Jetpack-Schuhe", "feet", "double_jump", "2", (1.0, 0.45, 0.2), "Jet-Schuhe"),
+    Gear("Kampfstiefel", "feet", "hp", "K", (0.28, 0.24, 0.20), "Kampfstiefel", "armor", GEAR_HP_PART),
+    Gear("Schild-Stiefel", "feet", "shield", "S", (0.3, 0.7, 1.0), "Schildstiefel", "shield", 0.0, SHIELD_HP_FEET),
 )
+GEAR_FIG_SCALE = {"head": 0.46, "torso": 0.74, "feet": 0.8}   # 7c: Ausrüstung an der Figur (Sinans Soldat ist schmaler)
+GEAR_FIG_HEAD_Z = 0.95         # Höhe des Helms über der Hüfte (Torso-Raum)
+SETS = {"armor": ("Rüstungs-Set", (0.55, 0.62, 0.40)), "shield": ("Schild-Set", (0.35, 0.75, 1.0)),
+        "hermes": ("Hermes-Set", (1.0, 0.85, 0.3))}
+ARMOR_SET_BONUS = 75.0         # Rüstungs-Set komplett: zusätzlich + so viele max. HP (3 x 25 + 75 = +150 -> 250 HP)
+SHIELD_RATE_PART = 0.25        # Schild lädt je weiterem Schild-Teil um so viel schneller (1 Teil x1, 3 Teile x1,5)
+SHOCK_R = 4.0                  # Schild-Set: Stromstoss betäubt alles in diesem Umkreis (m) ...
+SHOCK_STUN_MIN, SHOCK_STUN_MAX = 1.0, 3.0   # ... zufällig so lange (s) ...
+SHOCK_CD = 30.0                # ... Abklingzeit (s)
+HERMES_SET_SPEED = 1.5         # Hermes-Set: dauerhaft so viel schneller
+HERMES_SET_DASH = 2.0          # ... Dash so viel schneller als mit 1-2 Hermes-Teilen ...
+HERMES_GLIDE_MAX = 30.0        # ... und Shift halten gleitet weiter, bis zu so vielen Metern
+SET_ICON_KEY = "b"             # Taste der Set-Fähigkeit (Stromstoss); X/Y sind die Minimap
 GEAR_IDX = {g.name: i for i, g in enumerate(GEAR)}
 SAVE_HP = 10.0            # Helm/Platte: man überlebt den tödlichen Treffer mit so viel HP (Teil ist danach kaputt)
 SHIELD_HP = 30.0          # Schild fängt zuerst so viel Schaden ab
@@ -851,7 +945,8 @@ DOUBLE_JUMP_V = JUMP_V    # Doppelsprung: zweiter Sprung in der Luft
 # Zentrale Tastenzuordnung (Grundlage für ein späteres Menü "Steuerung"). Gelesen werden sie mit
 # Game.key_down(name); die übrigen Tasten (F, R, G, V, Tab, 1-3 ...) sind noch per accept() verdrahtet.
 KEYS = {"forward": "w", "back": "s", "left": "a", "right": "d", "sprint": "shift", "jump": "space",
-        "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g"}
+        "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g",
+        "ability": SET_ICON_KEY}
 # ======================================================================== Ende Loot
 
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
@@ -894,6 +989,42 @@ def att_valid(a):
                     for i, v in enumerate(a))):
         return tuple(a)
     return None
+
+
+def att_name(si, v):
+    """Anzeigename eines Aufsatzes (Platz si, Index v; si = ATT_SCOPE: Visier)."""
+    if si == ATT_SCOPE:
+        return ATT_SCOPE_NAMES[v] if 0 <= v < len(ATT_SCOPE_NAMES) else "?"
+    n = ATTACHMENTS[si][v][0]
+    return ATT_LONG.get(n, n) if v else "Standard"
+
+
+def att_info(si, v):
+    """Kurze Wirkung eines Aufsatzes."""
+    if si == ATT_SCOPE:
+        return ("Kimme und Korn (ab Werk)", "Leuchtpunkt, leichter Zoom", "4-fach-Zielfernrohr",
+                "starkes Zielfernrohr")[v] if 0 <= v < 4 else ""
+    return ATTACHMENTS[si][v][1] if v else "Serienausstattung"
+
+
+ATT_BY_NAME = {ATTACHMENTS[si][v][0]: (si, v) for si in range(len(ATT_SLOTS)) for v in range(1, len(ATTACHMENTS[si]))}
+ATT_BY_NAME.update({ATT_SCOPE_NAMES[v]: (ATT_SCOPE, v) for v in range(1, len(ATT_SCOPE_NAMES))})
+ATT_SLOT_NAMES = tuple(ATT_SLOTS) + ("Visier",)
+
+
+def att_fits(wi, si=0):
+    """Passt an diese Waffe ein Aufsatz des Platzes si? Lauf/Magazin/Griff: Haupt- und Kleinwaffen; Visier: nur
+    Waffen mit Schiene (Sturmgewehr, Schrotflinte, Scharfschütze). Spezialwaffen: nie."""
+    if not (0 <= wi < len(WEAPONS)) or WEAPONS[wi].kind == "special":
+        return False
+    if si == ATT_SCOPE:
+        return WEAPONS[wi].name in SCOPE_MOUNT
+    return WEAPONS[wi].name in GRIP_AT
+
+
+def pscope(pl, wi):
+    """Visier der Waffe wi des Spielers (7b: je Waffe; ab Werk DEFAULT_SCOPE)."""
+    return getattr(pl, "scopes", {}).get(wi, DEFAULT_SCOPE.get(wi, 0))
 
 
 def eff_weapon(wi, att=None):
@@ -987,12 +1118,39 @@ def regen_label(r):
 
 TURRET_NAMES = {"mg": "MG-Geschütz", "flak": "Flak", "car": "Wagen-Geschütz"}
 
+# --- 7a: Monster-Tempo. Die Jägerin ist die schnelle, gefährliche Gegnerin; normale Monster "latschen" zu.
+MOB_SPEED_HUNTRESS = 4.6   # Jägerin (früher 6,4; entspricht dem alten Grunt-Tempo)
+MOB_SPEED_GRUNT = 3.2      # Grunt (früher 4,6) - ca. 70 % der Jägerin
+MOB_SPEED_BRUTE = 2.1      # Brute (früher 3,0) - ca. 46 % der Jägerin
+# --- 7a: Höhe der Trefferzylinder. Schieben (Spieler/Monster, Monster/Monster) und Monster-Nahkampf nur, wenn sich
+# die Höhenbereiche überlappen (Monster z .. z + height, Spieler z .. z + body_h) - keine "unendliche Säule" mehr.
+MOB_Z_TOL = 0.1            # m: so viel Überlappung muss mindestens sein (Stehen auf dem Kopf zählt nicht)
+MOB_HIT_UP = 0.3           # m: Monster-Schlag reicht so weit über den eigenen Kopf hinaus ...
+MOB_HIT_DOWN = 0.5         # m: ... und so weit unter die eigenen Füsse (Spieler in einer Mulde)
+# --- 7a: Titan (und Koloss) bleiben nicht mehr hängen
+TITAN_PASS_PROPS = ("tree", "rock")   # durch diese Hindernisse läuft der Titan einfach durch (Gebäude/Mauern nicht)
+MOB_STUCK_KINDS = ("titan", "colossus")   # diese Arten erkennen, wenn sie festhängen ...
+MOB_STUCK_T = 2.5          # s ohne Fortschritt -> festgefahren ...
+MOB_DETOUR_T = 2.2         # ... dann so lange schräg zur Seite (Umweg) ...
+MOB_DETOUR_ANGS = (75.0, -75.0, 140.0, -140.0, 180.0)   # ... nacheinander um diese Winkel (Grad) neben die
+                           # eigentliche Richtung (erst seitlich, dann schräg zurück, dann ganz zurück aus einer Ecke)
+MOB_DETOUR_GROW = 5        # hängt er wieder fest, wird der Umweg länger (bis zum 5-Fachen, gleiche Seite)
+MOB_DETOUR_FORGET = 10.0   # s frei gelaufen: Umweg-Zähler zurücksetzen
+# --- 7a: Drohnen fliegen unterschiedlich hoch und steigen zu höheren Zielen
+DRONE_FLY_MIN, DRONE_FLY_MAX = 2.5, 6.0   # m: Grundhöhe jeder Drohne (zufällig dazwischen, schwankt leicht)
+DRONE_FLY_SWAY = 0.6       # m: so weit schwankt die Grundhöhe langsam auf und ab
+DRONE_FLY_TOP = 80.0       # m über Grund: höchste Flughöhe (der Heli ist bis HELI_CEIL erreichbar)
+DRONE_FLY_LOW = 2.0        # m: tiefer geht sie auch für ein tiefes Ziel nicht
+DRONE_TARGET_DZ = 1.0      # m: auf diese Höhe über den Füssen des Ziels geht sie (etwa Brusthöhe)
+DRONE_CLIMB = 4.5          # m/s: so schnell steigt/sinkt sie
+PLAYER_Z_MAX = 95.0        # m: Host nimmt Spielerhöhen bis hierher an (Heli-Pilot bis HELI_CEIL + 20)
+
 MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
-    "grunt": dict(hp=60.0, speed=4.6, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
+    "grunt": dict(hp=60.0, speed=MOB_SPEED_GRUNT, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
                   aggro=24.0, scale=1.0, hear=1.0),
-    "brute": dict(hp=220.0, speed=3.0, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
+    "brute": dict(hp=220.0, speed=MOB_SPEED_BRUTE, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
                   aggro=18.0, scale=1.55, hear=0.8),                # schwerhörig
-    "huntress": dict(hp=45.0, speed=6.4, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
+    "huntress": dict(hp=45.0, speed=MOB_SPEED_HUNTRESS, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
                      aggro=30.0, scale=0.96, hear=1.3),             # flink, zerbrechlich, gute Ohren
     # Koloss: 3x so gross, 780 HP (3,5x Brute). Leichter Schlag: holt 1,2 s sichtbar aus, 85 Schaden (fast
     # One-Hit). Bodenschlag: holt 2,4 s aus, Flächenschaden im Umkreis slam_r - im Zentrum (slam_kill) tödlich,
@@ -1008,7 +1166,7 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
                   aggro=45.0, scale=7.0, hear=0.8, slam_windup=3.2, slam_r=11.0, slam_dmg=150.0,
                   slam_kill=4.5, slam_chance=0.3, slam_crowd=12.0,
                   rock_min=20.0, rock_max=70.0, rock_windup=2.4, rock_recover=1.4),
-    # Elektro-Drohne: schwebt in fly m Höhe, schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
+    # Elektro-Drohne: schwebt in fly m Höhe (7a: je Drohne DRONE_FLY_MIN..MAX, steigt zu höheren Zielen), schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
     # betäubt für STUN_MIN..STUN_MAX s. Wenig HP, aber klein (hit_r/hit_h) und in der Luft.
     "drone": dict(hp=35.0, speed=5.5, wander=2.0, dmg=0.0, cooldown=7.0, windup=0.6, recover=0.3,
                   aggro=30.0, scale=1.0, hear=1.1, fly=3.6, range=20.0, hit_r=0.42, hit_h=0.5),
@@ -1047,9 +1205,13 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
-              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"),
-              ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
+              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht/Aufsätze"),
+              ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
+
+INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Karte zu, Fensterwechsel; dazu muss die
+                         # Maustaste erst losgelassen und neu gedrückt werden (der Klick auf "Spiel starten" schiesst nicht)
+QUICK_MELEE_STAY = True  # 7a: nach F (Schnellschlag) bleibt die Nahkampfwaffe in der Hand, bis man mit 1-3/Mausrad wechselt
 
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "colossus": "Koloss", "drone": "Drohne",
              "critter": "Hase", "titan": "Titan"}
@@ -1071,7 +1233,7 @@ def end_tabs(koth):
             ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
              + [("Gesamt", lambda e: sum(e["stats"].get("mob", {}).values()), True)],
              "Meister-Jäger", lambda e: sum(e["stats"].get("mob", {}).values())),
-            ("Looten", [(CRATE_NAMES[k].split()[0].capitalize() if k in CRATE_NAMES else k, (lambda e, k=k: crate(e, k)), True)
+            ("Looten", [((CRATE_NAMES[k].split()[0][:1].upper() + CRATE_NAMES[k].split()[0][1:]) if k in CRATE_NAMES else k, (lambda e, k=k: crate(e, k)), True)
                         for k in CRATE_KINDS]
              + [("Gesamt", lambda e: sum(e["stats"].get("crate", {}).values()), True),
                 ("Buffs", lambda e: st(e, "buffs"), True)],
@@ -1095,10 +1257,17 @@ def end_tabs(koth):
     return tabs
 
 
-def weapon_info(wi, gun=None):
-    """Mausover-Info einer Waffe - direkt aus WEAPONS (stimmt nach Balancing-Änderungen automatisch)."""
-    w = WEAPONS[wi]
+def weapon_info(wi, gun=None, att=None, scope=None):
+    """Mausover-Info einer Waffe - direkt aus WEAPONS (stimmt nach Balancing-Änderungen automatisch), mit den
+    Werten und Namen der Aufsätze (7b)."""
+    w = eff_weapon(wi, att)
     lines = [w.name + ("  (Spezialwaffe)" if w.kind == "special" else "")]
+    a = att_valid(att) or ATT_NONE
+    names = [f"{ATT_SLOTS[i]}: {att_name(i, v)}" for i, v in enumerate(a) if v]
+    if scope is not None and WEAPONS[wi].name in SCOPE_MOUNT:
+        names.insert(0, f"Visier: {att_name(ATT_SCOPE, scope)}")
+    if names:
+        lines.append("Aufsätze: " + ", ".join(names))
     if w.blast_r > 0:
         lines.append(f"Explosion: {w.blast_dmg:.0f} Schaden, Radius {w.blast_r:.0f} m")
     else:
@@ -1123,6 +1292,34 @@ def weapon_info(wi, gun=None):
     return "\n".join(lines)
 
 
+def drop_info(d):
+    """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
+    if d.att >= 0:
+        si, v = divmod(d.att, ATT_CODE)
+        if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
+            return f"Aufsatz ({ATT_SLOT_NAMES[si]}): {att_name(si, v)}\n{att_info(si, v)}"
+        return ""
+    if d.melee >= 0 and d.melee < len(MELEE):
+        m = MELEE[d.melee]
+        return f"{m.name}  (Nahkampf)\nSchaden {m.dmg:.0f}  |  {60.0 / m.interval:.0f} Schläge/min  |  Reichweite {m.reach:.1f} m"
+    if d.gear >= 0 and d.gear < len(GEAR):
+        txt = gear_info(d.gear).split("\n")
+        return txt[0] + ("\n" + txt[1] if len(txt) > 1 else "")
+    if 0 <= d.wi < len(WEAPONS):
+        w = eff_weapon(d.wi, d.atts)
+        if w.blast_r > 0:
+            st = f"Explosion {w.blast_dmg:.0f}, Radius {w.blast_r:.0f} m"
+        else:
+            st = f"Schaden {w.dmg:.0f}" + (f" x {w.pellets}" if w.pellets > 1 else "")
+        st += f"  |  {60.0 / w.interval:.0f} Schuss/min  |  Magazin {w.mag}"
+        names = [att_name(i, v) for i, v in enumerate(d.atts) if v]
+        if d.scope > 0 and d.scope != DEFAULT_SCOPE.get(d.wi, 0):
+            names.append(att_name(ATT_SCOPE, d.scope))
+        return (w.name + ("  (Spezialwaffe)" if w.kind == "special" else "")
+                + (f"  +  {', '.join(names)}" if names else "") + "\n" + st)
+    return ""
+
+
 def melee_info(mi):
     """Mausover-Info der Nahkampfwaffe - aus MELEE."""
     m = MELEE[mi]
@@ -1131,22 +1328,33 @@ def melee_info(mi):
             f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
 
 
-def gear_info(gi):
-    """Mausover-Info eines Ausrüstungsteils - aus GEAR und den Konstanten."""
+SET_BONUS_TEXT = {
+    "armor": f"+{ARMOR_SET_BONUS:.0f} max. HP (zusammen +{3 * GEAR_HP_PART + ARMOR_SET_BONUS:.0f})",
+    "shield": f"Stromstoss (Taste {SET_ICON_KEY.upper()}): betäubt alles in {SHOCK_R:.0f} m für "
+              f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s, alle {SHOCK_CD:.0f} s",
+    "hermes": f"x{HERMES_SET_SPEED:g} Tempo, Dash x{HERMES_SET_DASH:g} so schnell, Shift halten = bis {HERMES_GLIDE_MAX:.0f} m gleiten",
+}
+
+
+def gear_info(gi, pl=None):
+    """Mausover-Info eines Ausrüstungsteils - aus GEAR und den Konstanten (7c: mit Set und Set-Bonus)."""
     g = GEAR[gi]
     desc = {
         "save_head": f"Fängt einen tödlichen Kopftreffer ab (du überlebst mit {SAVE_HP:.0f} HP),\n"
                      "danach zerstört. Nicht gegen Tomahawk, Nahgranate, Sturz.",
-        "save_body": f"Fängt einen tödlichen Körpertreffer ab (du überlebst mit {SAVE_HP:.0f} HP),\n"
-                     "danach zerstört. Nicht gegen Tomahawk, Nahgranate, Sturz.",
-        "shield": f"Schild {SHIELD_HP:.0f} HP fängt Schaden vor den Lebenspunkten ab.\n"
-                  f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf.",
-        "jetpack": f"Leertaste in der Luft halten: Schub.\nTreibstoff {JET_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.",
+        "hp": f"+{g.hp:.0f} max. Lebenspunkte.",
+        "shield": f"Schild {g.shield:.0f} HP (alle Schild-Teile ein Balken) fängt Schaden vor den Lebenspunkten ab.\n"
+                  f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf (je weiteres Teil schneller).",
+        "jetpack": f"Leertaste in der Luft: Doppelsprung, danach halten = Schub.\n"
+                   f"Treibstoff {JET_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.",
         "dash": f"Shift beim Laufen: Dash {DASH_DIST:.0f} m nach vorne in {DASH_TIME:.1f} s,\n{DASH_CD:.0f} s Abklingzeit.",
         "spring": f"Springt deutlich höher (Sprungkraft x{SPRING_JUMP:g}).",
-        "double_jump": "Leertaste in der Luft: Doppelsprung.",
     }.get(g.kind, "")
-    return f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
+    out = f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
+    if g.set:
+        n = set_count(pl, g.set) if pl is not None else 0
+        out += f"\n{SETS[g.set][0]} {n}/3 - Set-Bonus: {SET_BONUS_TEXT[g.set]}"
+    return out
 
 
 def buff_info(kind, pl=None):
@@ -1638,13 +1846,19 @@ class Gadget:
 
 
 class Drop:
-    """Waffe, Ausrüstungsteil oder Nahkampfwaffe am Boden (F zum Aufheben). wi = Waffe (-1 sonst),
-    gear = Teil (-1), melee = Nahkampfwaffe (-1)."""
+    """Waffe, Ausrüstungsteil, Nahkampfwaffe oder Aufsatz am Boden (F zum Aufheben). wi = Waffe (-1 sonst),
+    gear = Teil (-1), melee = Nahkampfwaffe (-1), att = Aufsatz (Platz * ATT_CODE + Index, -1).
+    atts = Aufsätze, die an einer Waffe stecken (fallen mit ihr). owner/lock: Kistenbeute gehört LOOT_OWNER_T s
+    lang nur dem, der die Kiste geöffnet hat."""
 
-    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1):
+    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1):
         self.did, self.x, self.y, self.z, self.wi = did, x, y, z, wi
+        self.scope = scope if isinstance(scope, int) else -1   # Visier einer Waffe (-1 = ab Werk)
         self.gear = gear
         self.melee = melee
+        self.att = att
+        self.atts = att_valid(atts) or ATT_NONE
+        self.owner, self.lock = owner, lock
         self.life = DROP_LIFE
 
 
@@ -1714,6 +1928,11 @@ class Mob:
         self.kind = kind
         self.x, self.y = x, y
         self.hover = k.get("fly", 0.0)                 # Flughöhe (Drohne), sonst 0
+        self.fly_base = 0.0
+        if self.hover > 0:                             # 7a: jede Drohne fliegt anders hoch
+            self.fly_base = self.hover = rng.uniform(DRONE_FLY_MIN, DRONE_FLY_MAX)
+        self.stuck_t = self.detour_t = self.calm_t = 0.0   # 7a: Festgefahren-Erkennung (MOB_STUCK_KINDS)
+        self.detour_side, self.stuck_n, self.detour_grow = 1.0, 0, 0
         self.gz = world.height(x, y)                   # Bodenhöhe unter dem Monster
         self.z = self.gz + self.hover
         self.scale = k["scale"]
@@ -1824,7 +2043,10 @@ class Mob:
         for p in players:
             if p.hp <= 0:
                 continue
-            if (abs(p.z - self.gz) > max(3.5, self.height * 0.6)
+            if self.hover > 0:                             # 7a: Drohne steigt bis DRONE_FLY_TOP - erreicht fast alle
+                if p.z - self.gz > DRONE_FLY_TOP + DRONE_TARGET_DZ:
+                    continue
+            elif (abs(p.z - self.gz) > max(3.5, self.height * 0.6)
                     and not (on_terrain and abs(p.z - world.height(p.x, p.y)) < 0.6)):
                 continue
             d2 = (p.x - self.x) ** 2 + (p.y - self.y) ** 2
@@ -1847,6 +2069,11 @@ class Mob:
             self.z = self.gz + self.hover
             return
         rng = world.mrng
+        if getattr(self, "stun_t", 0.0) > 0:            # 7c: Stromstoss - steht still, greift nicht an
+            self.stun_t -= dt
+            self.speed_now = 0.0
+            self.hurt_t = max(0.0, self.hurt_t - dt)
+            return
         self.hurt_t = max(0.0, self.hurt_t - dt)
         self.alert_t = max(0.0, self.alert_t - dt)
         self.atk_cd = max(0.0, self.atk_cd - dt)
@@ -1880,8 +2107,9 @@ class Mob:
                     world.colossus_slam(self)
                 elif ranged:
                     world.drone_zap(self, pl)
-                elif pl is not None and d <= reach * 1.25 and abs(pl.z - self.gz) < 2.5 + self.height * 0.15:
-                    world.mob_damage(pl, k["dmg"])
+                elif (pl is not None and d <= reach * 1.25
+                      and z_overlap(pl.z, pl.z + body_h(pl), self.z - MOB_HIT_DOWN, self.z + self.height + MOB_HIT_UP)):
+                    world.mob_damage(pl, k["dmg"])         # 7a: nur bei überlappender Höhe
             if self.atk_t >= self.windup() + self.recover():
                 self.state = "chase"
                 self.atk_cd = k["cooldown"]
@@ -1970,13 +2198,20 @@ class Mob:
                 self.turn_toward(tdx, tdy, dt, 200.0)
                 speed = k["wander"]
                 ux, uy = tdx / td, tdy / td
+        stuck_kind = self.kind in MOB_STUCK_KINDS
+        if stuck_kind and self.detour_t > 0 and speed > 0:   # 7a: Umweg nach dem Festfahren
+            self.detour_t -= dt
+            a = math.radians(MOB_DETOUR_ANGS[(self.stuck_n - 1) % len(MOB_DETOUR_ANGS)]) * self.detour_side
+            ux, uy = ux * math.cos(a) - uy * math.sin(a), ux * math.sin(a) + uy * math.cos(a)
+            self.turn_toward(ux, uy, dt, 200.0)
         ox, oy = self.x, self.y
         self.x += (ux * speed + self.kx) * dt
         self.y += (uy * speed + self.ky) * dt
         self.kx *= decay
         self.ky *= decay
         if self.hover <= 0:                          # Fliegende stossen nicht an niedrige Hindernisse
-            self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz)
+            self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz,
+                                      skip=TITAN_PASS_PROPS if self.kind == "titan" else ())
         lo = edge_margin(world)
         self.x = clampf(self.x, lo, WORLD - lo)
         self.y = clampf(self.y, lo, WORLD - lo)
@@ -1992,13 +2227,35 @@ class Mob:
                 self.x, self.y = ox, oy
         if self.hover > 0:
             self.gz = world.height(self.x, self.y)
-            self.hover = k.get("fly", 0.0)
+            want = self.fly_base + DRONE_FLY_SWAY * math.sin(self.phase * 0.13 + self.id * 1.7)
+            if pl is not None and self.state in ("chase", "attack") and self.noise_at is None:
+                want = clampf(pl.z + DRONE_TARGET_DZ - self.gz, DRONE_FLY_LOW, DRONE_FLY_TOP)   # auf Zielhöhe
+            self.hover += clampf(want - self.hover, -DRONE_CLIMB * dt, DRONE_CLIMB * dt)
+            self.hover = max(0.3, self.hover)
             self.z = self.gz + self.hover + 0.25 * math.sin(self.phase * 0.7 + self.id)
         else:
             self.gz = world.floor_at(self.x, self.y, self.gz)
             self.z = self.gz
         if speed > 0 and ux * ux + uy * uy > 0 and math.hypot(self.x - ox, self.y - oy) < speed * dt * 0.3:
             self.leg_left = 0.0                      # festgefahren: Fluchttier schlägt neuen Haken
+            if stuck_kind:
+                self.stuck_t += dt
+                if self.stuck_t >= MOB_STUCK_T:      # 7a: 2-3 s kein Fortschritt -> Umweg (jedes Mal länger)
+                    self.stuck_t = 0.0
+                    if self.stuck_n == 0:
+                        self.detour_side = rng.choice((-1.0, 1.0))
+                    if self.detour_t > 0:            # auch der Umweg hängt: nächster Winkel (andere Seite, zurück)
+                        self.stuck_n += 1
+                    else:                            # wieder an derselben Wand: gleicher Winkel, aber länger
+                        self.stuck_n = max(1, self.stuck_n)
+                        self.detour_grow = min(MOB_DETOUR_GROW, self.detour_grow + 1)
+                    self.detour_t = MOB_DETOUR_T * max(1, self.detour_grow)
+                    self.calm_t = 0.0
+        elif stuck_kind:
+            self.stuck_t = max(0.0, self.stuck_t - dt * 0.5)
+            self.calm_t += dt
+            if self.calm_t > MOB_DETOUR_FORGET:      # lange frei gelaufen: Umweg-Zähler vergessen
+                self.stuck_n = self.detour_grow = 0
         self.speed_now = speed
         self.phase += (speed if speed > 0 else (1.5 if self.hover > 0 else 0.0)) * dt * 2.0
 
@@ -2112,7 +2369,7 @@ def loot_base(kind, history=None, art="weapon"):
     jedes Mal, wenn ein Eintrag in diesem Leben schon gezogen wurde, verliert er LOOT_PITY_STEP Punkte pro
     anderem Eintrag derselben Art, und jeder andere bekommt LOOT_PITY_STEP dazu. Nie unter 0 - fehlt etwas,
     wird nur verteilt, was da ist."""
-    col = CRATE_KINDS.index(kind) if kind in CRATE_KINDS else 0
+    col = LOOT_CRATE_KINDS.index(kind) if kind in LOOT_CRATE_KINDS else 0
     base = {n: max(0.0, float(v[col])) for n, v in LOOT_TABLES.items()
             if LOOT_ITEMS.get(n) == art and WEAPON_IDX.get(n) != START_WEAPON}
     if LOOT_PITY and history:
@@ -2193,6 +2450,37 @@ def wears(pl, kind):
     return False
 
 
+def set_count(pl, name):
+    """7c: Wie viele Teile des Sets name trägt der Spieler?"""
+    return sum(1 for gi in getattr(pl, "gear", {}).values() if gi is not None and GEAR[gi].set == name)
+
+
+def set_full(pl, name):
+    return set_count(pl, name) >= 3
+
+
+def gear_hp_bonus(pl):
+    """7c: + max. HP aus der Ausrüstung (Rüstungs-Teile, Set-Bonus)."""
+    b = sum(GEAR[gi].hp for gi in getattr(pl, "gear", {}).values() if gi is not None)
+    return b + (ARMOR_SET_BONUS if set_full(pl, "armor") else 0.0)
+
+
+def shield_max(pl):
+    """7c: Schild-HP aller getragenen Schild-Teile zusammen (ein Balken)."""
+    return sum(GEAR[gi].shield for gi in getattr(pl, "gear", {}).values() if gi is not None)
+
+
+def update_max_hp(pl):
+    """7c: max. HP = 100 + Ausrüstung (+ Set-Bonus) + Tank-Buff; Leben anteilig mitnehmen."""
+    new = PLAYER_HP + gear_hp_bonus(pl) + getattr(pl, "tank_add", 0.0)
+    old = getattr(pl, "max_hp", PLAYER_HP) or PLAYER_HP
+    if abs(new - old) > 1e-6:
+        if pl.hp > 0:
+            pl.hp = max(1.0, min(new, pl.hp * new / old))
+        pl.max_hp = new
+    pl.shield_hp = min(pl.shield_hp, shield_max(pl)) if hasattr(pl, "shield_hp") else 0.0
+
+
 def remember_loot(pl, name):
     """Kisten-Gedächtnis des Spielers (nur beim Host): name wurde gerade aus einer Kiste gezogen."""
     pl.loot_history[name] = pl.loot_history.get(name, 0) + 1
@@ -2202,12 +2490,20 @@ def remember_loot(pl, name):
 PUSH_H = (STEP_H + 0.4, PLAYER_H - 0.4)       # Höhen (über den Füssen) der Kugeln, die Wände aus dem Netz schieben
 
 
-def push_out(x, y, r, world, z=None, veh=-1):
+def z_overlap(a0, a1, b0, b1, tol=MOB_Z_TOL):
+    """Überlappen sich die Höhenbereiche a0..a1 und b0..b1 um mehr als tol?"""
+    return min(a1, b1) - max(a0, b0) > tol
+
+
+def push_out(x, y, r, world, z=None, veh=-1, skip=()):
     """Kreis (x,y,r) aus allen festen Objekten (Bäume, Felsen, Teiche, Gebäude,
     Fahrzeuge) schieben. z = Fusshöhe: Quader, über deren Oberkante man steht
     (abzüglich STEP_H), und Quader über dem Kopf blockieren nicht.
-    veh = ID eines Fahrzeugs, das ignoriert wird (das eigene)."""
+    veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
+    (Titan: TITAN_PASS_PROPS)."""
     for p in world.props:
+        if skip and p.kind in skip:
+            continue
         ddx, ddy = x - p.x, y - p.y
         min_d = p.solid_r + r
         if abs(ddx) > min_d or abs(ddy) > min_d:
@@ -3846,7 +4142,11 @@ class World:
         if pl.vehicle >= 0:
             v = self.vehicle_by_id(pl.vehicle)
             return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
-        if pl.mount >= 0 or not pl.moving:
+        if pl.mount >= 0:                                  # Heckschütze: fährt der Wagen, ist er so laut wie dieser
+            t = self.turrets[pl.mount] if 0 <= pl.mount < len(self.turrets) else None
+            v = self.vehicle_by_id(t.vid) if t is not None and t.kind == "car" else None
+            return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
+        if not pl.moving:
             return 0.0
         if pl.crouch > 0.5:
             return NOISE_CROUCH
@@ -3900,7 +4200,7 @@ class World:
                 self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
             if dmg <= 0:
                 return
-        if not instant and dmg >= pl.hp:                 # tödlich: Helm (Kopf) bzw. Platte (Körper) rettet einmal
+        if not instant and dmg >= pl.hp and head:        # tödlich: der Basic-Helm rettet einmal (7c: nur Kopf)
             save = "save_head" if head else "save_body"
             slot = "head" if head else "torso"
             gi = pl.gear.get(slot)
@@ -3935,13 +4235,15 @@ class World:
             if not 0 <= act < len(WEAPONS) or act not in pl.slots:   # alle anderen sind verloren
                 act = next((wi for wi in pl.slots if wi is not None), START_WEAPON)
             if not air:                                  # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
-                self.add_drop(pl.x, pl.y, pl.z, act)
+                self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))   # 7b: mit Aufsätzen
         worn = [gi for gi in pl.gear.values() if gi is not None]
         if worn and not air:                             # dazu genau EIN zufälliges getragenes Teil
             self.add_drop(pl.x + 0.8, pl.y + 0.4, pl.z, -1, self.mrng.choice(worn))
         pl.gear = {sl: None for sl in GEAR_SLOTS}
         pl.slots = [None] * N_SLOTS
         pl.loot_history, pl.last_loot = {}, None         # Kisten-Gedächtnis gilt nur für ein Leben
+        pl.last_by = {}
+        pl.att_store = []                                # 7b: Aufsatz-Lager wird beim Tod geleert
         self.end_buff(pl)                                # Buff läuft beim Tod sofort ab
         pl.stun_t = pl.stun_lock = 0.0
         self.leave_vehicle(pl)
@@ -3971,6 +4273,30 @@ class World:
         """Schadens-Buff des Verursachers (Fluchttier): eigene Treffer machen BUFF_DAMAGE-fachen Schaden."""
         p = self.players.get(owner) if isinstance(owner, int) and owner >= 0 else None
         return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
+
+    def shock(self, pl):
+        """7c: Schild-Set-Fähigkeit "Stromstoss": betäubt alle Spieler und Monster im Umkreis SHOCK_R (nicht einen
+        selbst) zufällig SHOCK_STUN_MIN..MAX s. Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
+        if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "shield") or getattr(pl, "shock_cd", 0.0) > 0
+                or pl.vehicle >= 0 or pl.heli >= 0):
+            return False
+        pl.shock_cd = SHOCK_CD
+        rng = self.mrng
+        for q in self.players.values():
+            if q is pl or q.hp <= 0:
+                continue
+            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R and abs(q.z - pl.z) < 2.5:
+                q.stun_lock = 0.0
+                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
+                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+                m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
+        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
+        return True
 
     def stun_player(self, pl, dur):
         """Betäubung (Drohne): nicht laufen, nicht schiessen, nicht steuern - Umschauen geht."""
@@ -4146,18 +4472,16 @@ class World:
         self.end_buff(pl)
         kind = self.mrng.choice(BUFF_KINDS)
         pl.buff, pl.buff_t = kind, BUFF_T[kind]
-        if kind == "tank":
-            mx = self.mrng.choice(BUFF_TANK_HP)
-            pl.hp = pl.hp * mx / pl.max_hp               # Leben mitskalieren (80/100 -> 160/200)
-            pl.max_hp = mx
+        if kind == "tank":                               # 7c: Tank kommt zu Ausrüstung/Set dazu
+            pl.tank_add = self.mrng.choice(BUFF_TANK_HP) - PLAYER_HP
+            update_max_hp(pl)                            # Leben mitskalieren (80/100 -> 160/200)
         pl.stats["buffs"] += 1
         self.events.append(("buff", pl.pid, kind, BUFF_T[kind], pl.max_hp))
 
     def end_buff(self, pl):
-        if pl.buff == "tank" and pl.max_hp != PLAYER_HP:
-            if pl.hp > 0:
-                pl.hp = max(1.0, pl.hp * PLAYER_HP / pl.max_hp)   # prozentual zurück: 180/200 -> 90/100
-            pl.max_hp = PLAYER_HP
+        if pl.buff == "tank":
+            pl.tank_add = 0.0
+            update_max_hp(pl)                            # prozentual zurück: 180/200 -> 90/100
         pl.buff, pl.buff_t = None, 0.0
 
     def head_mult(self, wi):
@@ -4393,6 +4717,9 @@ class World:
         """Kiste öffnen: Inhalt würfeln, Kiste verschwindet, später taucht woanders eine neue auf."""
         if c not in self.crates:
             return
+        if CRATE_TRIPLE:                                  # 7b (neu): drei Teile
+            self.open_crate_triple(pl, c)
+            return
         for _ in range(20):
             art, name = roll_loot(c.kind, self.mrng, pl.slots, pl.loot_history, pl.last_loot, worn_names(pl))
             if art == "weapon" and name in WEAPON_IDX and WEAPON_IDX[name] != START_WEAPON:
@@ -4410,12 +4737,12 @@ class World:
         self.crates.remove(c)
         if not c.bonus:                                  # Titan-Kiste wird nicht ersetzt
             self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
-        if art == "gear":
-            self.give_gear(pl, GEAR_IDX[name], CRATE_KINDS.index(c.kind))
+        if art == "gear":                                # 7b: nicht sofort ausrüsten - fällt vor den Spieler
+            self.loot_drop(pl, c, gear=GEAR_IDX[name])
         elif art == "melee":
-            self.give_melee(pl, MELEE_IDX[name], CRATE_KINDS.index(c.kind))
+            self.loot_drop(pl, c, melee=MELEE_IDX[name])
         else:
-            self.give_weapon(pl, WEAPON_IDX[name], "loot", CRATE_KINDS.index(c.kind))
+            self.loot_drop(pl, c, wi=WEAPON_IDX[name])
 
     def give_gear(self, pl, gi, crate=-1):
         """Ausrüstung anlegen. Gleiches Teil schon getragen: blockiert (sonst liessen sich Treibstoff/Abklingzeiten
@@ -4431,6 +4758,9 @@ class World:
         pl.gear[g.slot] = gi
         if g.kind == "shield" and old != gi:
             pl.shield_t = 0.0                            # Schildstand gehört dem Spieler (kein Zurücksetzen)
+        update_max_hp(pl)                                # 7c: Rüstung/Set/Schild neu verrechnen
+        if g.shield > 0 and old != gi:                   # neues Schild-Teil bringt seine Schild-HP gleich mit
+            pl.shield_hp = min(shield_max(pl), pl.shield_hp + g.shield)
         self.events.append(("gear", pl.pid, gi, gear_list(pl), crate))
         return True
 
@@ -4439,7 +4769,7 @@ class World:
         short = {"Schrotflinte": "SG", "Maschinenpistole": "MP", "Sturmgewehr": "AR", "Revolver": "Rev",
                  "Minigun": "Mini", "Railgun": "Rail", "Raketenwerfer": "RPG", "Scharfschütze": "Sniper"}
         lines = []
-        for k in CRATE_KINDS:
+        for k in LOOT_CRATE_KINDS:
             ch = loot_chances(k, pl.slots, pl.loot_history, pl.last_loot)
             ch.update({f"[{n}]": v for n, v in loot_chances(k, (), pl.loot_history, pl.last_loot, "gear",
                                                              worn_names(pl)).items()})
@@ -4453,13 +4783,33 @@ class World:
             pass
         self.events.append(("lootdbg", pl.pid, txt))
 
-    def give_weapon(self, pl, wi, how, extra=0):
-        """Host/Einzelspiel: Waffe ins Inventar legen; eine verdrängte Waffe fällt auf den Boden.
-        Das Ereignis trägt die neue Slot-Belegung, der Mitspieler übernimmt sie genau so."""
+    def give_weapon(self, pl, wi, how, extra=0, atts=None, scope=-1):
+        """Host/Einzelspiel: Waffe ins Inventar legen; eine verdrängte Waffe fällt auf den Boden (mit ihren
+        Aufsätzen). atts = Aufsätze der aufgehobenen Waffe (7b). Das Ereignis trägt die neue Slot-Belegung und
+        die Aufsätze, der Mitspieler übernimmt sie genau so."""
+        out_att = pl.att.get(wi) if wi in pl.slots else None
         out, dup = take_weapon(pl, wi)
+        if not dup:
+            a = att_valid(atts)
+            if a is not None and a != ATT_NONE and att_fits(wi):
+                pl.att[wi] = a
+            else:
+                pl.att.pop(wi, None)
+            pl.guns[wi] = GunState(pl.wp(wi))
+            if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
+                pl.scopes[wi] = scope
+            else:
+                pl.scopes.pop(wi, None)
+        else:
+            pl.att[wi] = out_att if out_att else pl.att.get(wi)
+            if pl.att.get(wi) is None:
+                pl.att.pop(wi, None)
         if out is not None:
-            self.add_drop(pl.x, pl.y, pl.z, out)
-        self.events.append((how, pl.pid, wi, list(pl.slots), 1 if dup else 0, extra))
+            osc = pl.scopes.pop(out, -1)
+            self.add_drop(pl.x, pl.y, pl.z, out, atts=pl.att.pop(out, None), scope=osc)
+        self.events.append((how, pl.pid, wi, list(pl.slots), 1 if dup else 0, extra,
+                            list(pl.att.get(wi) or ATT_NONE)))
+        self.att_state_event(pl)
 
     def nearest_use(self, pl):
         """Was würde F jetzt tun? -> (Art, Objekt) oder None.
@@ -4627,17 +4977,167 @@ class World:
         self.events.append(("melee", pl.pid, mi, crate))
         return True
 
-    def add_drop(self, x, y, z, wi, gear=-1, melee=-1):
+    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1):
         while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
-        d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee)
+        d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
+                 scope)
         self.next_did += 1
         self.drops.append(d)
         return d
 
+    def loot_spot(self, pl, side=0.0):
+        """7b: Wohin fällt Kistenbeute? LOOT_DROP_DIST m vor den Spieler (Blickrichtung, egal wie er steht), side m
+        seitlich versetzt; ist dort eine Wand oder ein Loch, näher heran, notfalls direkt vor die Füsse. -> (x, y, z)"""
+        h = math.radians(pl.heading)
+        fx, fy = -math.sin(h), math.cos(h)
+        rx, ry = math.cos(h), math.sin(h)
+        d = LOOT_DROP_DIST
+        while d >= LOOT_DROP_MIN - 1e-6:
+            x, y = pl.x + fx * d + rx * side, pl.y + fy * d + ry * side
+            z = self.floor_at(x, y, pl.z + 0.5)
+            if (not self.in_solid(x, y, 0.25, pl.z) and not self.in_void(x, y, 0.3) and abs(z - pl.z) < 1.0
+                    and self.los((pl.x, pl.y, pl.z + 0.8), (x, y, z + 0.4))):
+                return x, y, z
+            d -= 0.45
+        return pl.x + fx * 0.3 + rx * side * 0.4, pl.y + fy * 0.3 + ry * side * 0.4, pl.z
+
+    def open_crate_triple(self, pl, c):
+        """7b: Kiste öffnen -> Waffe ODER Nahkampfwaffe + Ausrüstungsteil + Aufsatz, alles als Drops vor dem Spieler.
+        Die Kistenart bestimmt die Tabelle (Qualität); Kisten-Gedächtnis je Art (Ausgleich, zuletzt gezogen)."""
+        rng = self.mrng
+        last = getattr(pl, "last_by", None)
+        if last is None:
+            last = pl.last_by = {}
+        worn = worn_names(pl)
+
+        def draw(art):
+            ch = loot_chances(c.kind, pl.slots, pl.loot_history, last.get(art), art, worn)
+            if art == "weapon":
+                ch = {n: v for n, v in ch.items() if WEAPON_IDX.get(n) != START_WEAPON}
+            if not ch:
+                return None
+            names = list(ch)
+            return rng.choices(names, weights=[ch[n] for n in names])[0]
+        cats = LOOT_CATEGORIES.get(c.kind) or {"weapon": 1.0}
+        wm = {a: cats.get(a, 0.0) for a in ("weapon", "melee") if cats.get(a, 0.0) > 0}
+        first = rng.choices(list(wm), weights=list(wm.values()))[0] if wm else "weapon"
+        items = []
+        n1 = draw(first) or (draw("weapon") if first != "weapon" else None)
+        if n1:
+            items.append((LOOT_ITEMS.get(n1, "weapon"), n1))
+        if rng.random() >= LOOT_GEAR_MISS:
+            n2 = draw("gear")
+            if n2:
+                items.append(("gear", n2))
+        if rng.random() >= LOOT_ATT_MISS:
+            n3 = draw("att")
+            if n3:
+                items.append(("att", n3))
+        if LOOT_DEBUG:
+            self.loot_debug(pl, c.kind)
+        for art, name in items:
+            pl.loot_history[name] = pl.loot_history.get(name, 0) + 1
+            last[art] = name
+            if art == "weapon":
+                pl.last_loot = name
+        pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
+        self.crates.remove(c)
+        if not c.bonus:
+            self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
+        n = len(items)
+        for i, (art, name) in enumerate(items):
+            side = (i - (n - 1) / 2.0) * LOOT_DROP_SPREAD
+            if art == "gear":
+                self.loot_drop(pl, c, gear=GEAR_IDX[name], side=side)
+            elif art == "melee":
+                self.loot_drop(pl, c, melee=MELEE_IDX[name], side=side)
+            elif art == "att":
+                si, v = ATT_BY_NAME[name]
+                self.loot_drop(pl, c, att=si * ATT_CODE + v, side=side)
+            else:
+                self.loot_drop(pl, c, wi=WEAPON_IDX[name], side=side)
+
+    def loot_drop(self, pl, c, wi=-1, gear=-1, melee=-1, att=-1, side=0.0):
+        """7b: Inhalt der Kiste c "ploppt" heraus und fällt vor den Spieler (aufheben mit F); side = seitlich (m)."""
+        x, y, z = self.loot_spot(pl, side)
+        d = self.add_drop(x, y, z, wi, gear, melee, att, None, pl.pid, LOOT_OWNER_T)
+        ki = CRATE_KINDS.index(c.kind) if c.kind in CRATE_KINDS else 0
+        self.events.append(("lootpop", pl.pid, d.did, ki, round(c.x, 2), round(c.y, 2), round(c.z + 0.7, 2)))
+        return d
+
+    def set_att_value(self, pl, wi, si, v):
+        """Aufsatz-Platz si der Waffe wi auf v setzen. -> vorheriger Wert."""
+        if si == ATT_SCOPE:
+            old = pscope(pl, wi)
+            pl.scopes[wi] = v
+            return old
+        cur = list(pl.att.get(wi) or ATT_NONE)
+        old = cur[si]
+        cur[si] = v
+        if tuple(cur) == ATT_NONE:
+            pl.att.pop(wi, None)
+        else:
+            pl.att[wi] = tuple(cur)
+        clamp_ammo(pl, wi)
+        return old
+
+    def att_state_event(self, pl, msg=0, code=-1, wi=-1):
+        """7b: Aufsätze, Visiere und Aufsatz-Lager des Spielers an alle (der Spieler übernimmt sie)."""
+        self.events.append(("attstate", pl.pid, {str(k): list(v) for k, v in pl.att.items()},
+                            {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi))
+
+    def give_attachment(self, pl, si, v):
+        """7b: Aufsatz aufheben. Passt er auf die Waffe in der Hand, kommt er sofort darauf (ein dort steckender
+        Aufsatz desselben Platzes wandert ins Aufsatz-Lager); sonst (Nahkampf, Spezialwaffe, passt nicht) ins Lager.
+        -> True (wird immer genommen)."""
+        wi = pl.cur
+        code = si * ATT_CODE + v
+        if not pl.melee_out and not getattr(pl, "gad_out", False) and wi in pl.slots and att_fits(wi, si):
+            old = self.set_att_value(pl, wi, si, v)
+            if old:                                      # der bisherige Aufsatz (auch ein Visier ab Werk) ins Lager
+                pl.att_store.append(si * ATT_CODE + old)
+            self.att_state_event(pl, 1, code, wi)
+        else:
+            pl.att_store.append(code)
+            self.att_state_event(pl, 2, code, wi)
+        return True
+
+    def equip_att(self, pl, wi, si, v):
+        """7b: Aufsatz aus dem Lager an die Waffe wi stecken (Tab-Fenster); v = 0: Standard. Der bisherige geht ins
+        Lager. -> True, wenn geändert."""
+        if pl.hp <= 0 or wi not in pl.slots or not att_fits(wi, si):
+            return False
+        n = len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)
+        if not (isinstance(v, int) and 0 <= v < n):
+            return False
+        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+        if cur == v:
+            return False
+        code = si * ATT_CODE + v
+        if v and code not in pl.att_store:
+            return False
+        if v:
+            pl.att_store.remove(code)
+        old = self.set_att_value(pl, wi, si, v)
+        if old:
+            pl.att_store.append(si * ATT_CODE + old)
+        self.att_state_event(pl, 3, code, wi)
+        return True
+
     def pickup_drop(self, pl, d):
-        """Waffe vom Boden aufheben (gleiche Slot-Regeln wie bei Kisten, siehe take_weapon)."""
+        """Waffe/Teil vom Boden aufheben (gleiche Slot-Regeln wie bei Kisten, siehe take_weapon). Kistenbeute
+        gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
         if d not in self.drops:
+            return
+        if d.lock > 0 and d.owner >= 0 and d.owner != pl.pid and d.owner in self.players:
+            self.events.append(("droplock", pl.pid, d.owner, round(d.lock, 1)))
+            return
+        if d.att >= 0:                                   # Aufsatz: an die Waffe in der Hand oder ins Lager
+            si, v = divmod(d.att, ATT_CODE)
+            if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
+                self.drops.remove(d)
+                self.give_attachment(pl, si, v)
             return
         if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
             if self.give_gear(pl, d.gear):
@@ -4649,7 +5149,7 @@ class World:
                 self.drops.append(d)
             return
         self.drops.remove(d)
-        self.give_weapon(pl, d.wi, "pickup")
+        self.give_weapon(pl, d.wi, "pickup", 0, d.atts, d.scope)
 
     # ------------------------------------------------------------ Fahrzeuge
     def damage_vehicle(self, v, dmg, attacker):
@@ -5625,13 +6125,16 @@ class World:
                 m.on_shot(self, d, False)
 
     def separate_mobs(self):
-        """Monster schieben sich gegenseitig auseinander."""
+        """Monster schieben sich gegenseitig auseinander - nur, wenn sie auch in der Höhe aneinanderstossen
+        (Drohne über einem Grunt schiebt nicht)."""
         ms = [m for m in self.mobs if m.state != "dead"]
         for i, a in enumerate(ms):
             for b in ms[i + 1:]:
                 dx, dy = b.x - a.x, b.y - a.y
                 md = a.radius + b.radius
                 if abs(dx) > md or abs(dy) > md:
+                    continue
+                if not z_overlap(a.z, a.z + a.height, b.z, b.z + b.height):
                     continue
                 d = math.hypot(dx, dy) or 0.01
                 if d < md:
@@ -5642,15 +6145,20 @@ class World:
                     b.y += dy / d * push
 
     def push_player(self, pl):
-        """Spieler aus lebenden Monstern herausschieben."""
+        """Spieler aus lebenden Monstern herausschieben - nur bei überlappendem Höhenbereich (Monster z .. z +
+        height, Spieler z .. z + body_h). Wer auf einem Dach/Turm/Obergeschoss über den Monstern steht, wird
+        nicht mehr geschoben (früher: "unendliche Säule")."""
         if pl.hp <= 0:
             return
+        bh = body_h(pl)
         for a in self.mobs:
             if a.state == "dead":
                 continue
             dx, dy = pl.x - a.x, pl.y - a.y
             md = a.radius + PLAYER_R
             if abs(dx) > md or abs(dy) > md:
+                continue
+            if not z_overlap(pl.z, pl.z + bh, a.z, a.z + a.height):
                 continue
             d = math.hypot(dx, dy)
             if d < md:
@@ -5740,6 +6248,8 @@ class World:
             self.drops.remove(d)
         for d in self.drops:
             d.life -= dt
+            if d.lock > 0:
+                d.lock = max(0.0, d.lock - dt)
         self.update_noise(dt, players)
         for m in self.mobs:
             m.update(dt, self, players)
@@ -5769,8 +6279,12 @@ class World:
             pl.stun_lock = max(0.0, pl.stun_lock - dt)
             if pl.hp > 0 and wears(pl, "shield"):
                 pl.shield_t += dt
-                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < SHIELD_HP:
-                    pl.shield_hp = min(SHIELD_HP, pl.shield_hp + SHIELD_RATE * dt)
+                smax = shield_max(pl)
+                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < smax:
+                    n_ = sum(1 for gi in pl.gear.values() if gi is not None and GEAR[gi].shield > 0)
+                    rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
+                    pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
+            pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
             if pl.buff is not None:
                 pl.buff_t -= dt
                 if pl.buff_t <= 0:
@@ -5831,7 +6345,10 @@ class Player:
         self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
         self.buff, self.buff_t = None, 0.0   # Buff vom Fluchttier: "speed" | "damage" | "tank", Restzeit
         self.gear = {sl: None for sl in GEAR_SLOTS}   # Ausrüstung je Slot (Index in GEAR)
-        self.shield_hp, self.shield_t = SHIELD_HP, 99.0   # Schild: Stand, s seit dem letzten Schildschaden
+        self.shield_hp, self.shield_t = 0.0, 99.0   # Schild: Stand, s seit dem letzten Schildschaden (7c: Teile laden ihn)
+        self.tank_add = 0.0               # 7c: + max. HP durch den Tank-Buff
+        self.shock_cd = 0.0               # 7c: Abklingzeit Stromstoss (Schild-Set)
+        self.dash_dist = 0.0              # 7c: Hermes-Set: so weit ist der laufende Dash schon geglitten
         self.jet_fuel = JET_FUEL          # Jetpack-Treibstoff (s); gehört dem Spieler, nicht dem Teil
         self.jet_on = False               # Jetpack feuert gerade (Anzeige, auch für andere)
         self.dash_cd, self.dash_t = 0.0, 0.0   # Hermes: Abklingzeit, laufender Dash (s)
@@ -5855,6 +6372,9 @@ class Player:
         self.stats = new_stats()          # Rundenstatistik (Host)
         self.sb = None                    # Mitspieler: (Monster, Kisten, Buffs) aus dem Snapshot
         self.loot_history = {}            # Kisten-Gedächtnis (nur beim Host benutzt): Name -> in diesem Leben gezogen
+        self.last_by = {}                 # 7b: zuletzt gezogen je Art (weapon/melee/gear/att)
+        self.att_store = []               # 7b: Aufsatz-Lager (Codes Platz * ATT_CODE + Index), pro Leben
+        self.scopes = {}                  # 7b: Visier je Waffe (sonst DEFAULT_SCOPE)
         self.last_loot = None             # zuletzt aus einer Kiste gezogen (kommt in der nächsten nicht)
         self.slots = [None] * N_SLOTS     # Slot 1..N_FREE_SLOTS: normale Waffen, danach: Spezialwaffe
         self.slots[0] = START_WEAPON
@@ -5887,6 +6407,13 @@ def note_hand(pl):
     """Merkt sich den zuletzt benutzten normalen Slot (für den Sonderfall beim Tausch)."""
     if 0 <= pl.cur < len(WEAPONS) and WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
         pl.last_slot = pl.slots.index(pl.cur)
+
+
+def clamp_ammo(pl, wi):
+    """Nach einem Aufsatz-Wechsel: Magazin und Reserve auf die neuen Grössen begrenzen."""
+    w, g = pl.wp(wi), pl.guns[wi]
+    g.mag = min(g.mag, w.mag)
+    g.reserve = min(g.reserve, w.max_reserve)
 
 
 def stock_ammo(pl, wi):
@@ -5966,12 +6493,18 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.dash_cd = max(0.0, pl.dash_cd - dt)
         if (pl.run_edge and pl.moving and pl.dash_cd <= 0 and pl.dash_t <= 0 and pl.crouch < 0.3
                 and wears(pl, "dash")):                             # Hermes: Shift drücken = Dash nach vorn
-            pl.dash_t, pl.dash_cd = DASH_TIME, DASH_CD
+            hs = set_full(pl, "hermes")
+            pl.dash_t, pl.dash_cd = DASH_TIME / (HERMES_SET_DASH if hs else 1.0), DASH_CD
             pl.dash_dir = (dx / l, dy / l)
+            pl.dash_dist = 0.0
         pl.run_edge = False
     if gear is not None and pl.dash_t > 0:
+        hs = set_full(pl, "hermes")
+        sp = DASH_DIST / DASH_TIME * (HERMES_SET_DASH if hs else 1.0)
         pl.dash_t -= dt
-        sp = DASH_DIST / DASH_TIME
+        pl.dash_dist += sp * dt
+        if hs and run and pl.dash_dist < HERMES_GLIDE_MAX:     # 7c: Shift halten = weitergleiten (bis 30 m)
+            pl.dash_t = max(pl.dash_t, dt * 1.5)
         pl.x += pl.dash_dir[0] * sp * dt
         pl.y += pl.dash_dir[1] * sp * dt
         pl.moving = True
@@ -5982,6 +6515,8 @@ def step(pl, forward, strafe, run, jump, dt, world):
         speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
         if getattr(pl, "buff", None) == "speed" and pl.buff_t > 0:
             speed *= BUFF_SPEED
+        if gear is not None and set_full(pl, "hermes"):
+            speed *= HERMES_SET_SPEED                              # 7c: Hermes-Set
         pl.x += dx / l * speed * dt
         pl.y += dy / l * speed * dt
         if pl.on_ground:
@@ -6014,12 +6549,12 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.on_ground = False
         pl.air_jump = False
         jedge = False                                # dieser Druck war der normale Sprung
-    elif jedge and not pl.on_ground and not pl.air_jump and wears(pl, "double_jump"):
+    elif jedge and not pl.on_ground and not pl.air_jump and (wears(pl, "double_jump") or wears(pl, "jetpack")):
         pl.vz = max(pl.vz, DOUBLE_JUMP_V)            # Jetpack-Schuhe: zweiter Sprung in der Luft
         pl.air_jump = True
         jedge = False
     jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
-           and pl.jet_fuel > 0 and (pl.air_jump or not wears(pl, "double_jump")))
+           and pl.jet_fuel > 0 and pl.air_jump)               # 7c: Jetpack = erst Doppelsprung, dann Schub
     pl.jet_on = jet                                  # Jetpack: Leertaste in der Luft halten
     if jet:
         pl.jet_fuel = max(0.0, pl.jet_fuel - dt)
@@ -9669,17 +10204,30 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
     rng = rng or random.Random(31 + gi)
     m = Mesh()
     c = g.col
-    if g.kind == "save_head":                       # Helm: Schale, Kuppe und Rand (sitzt über dem Kopf)
+    if g.slot == "head":                            # Helme: Schale, Kuppe und Rand (sitzt über dem Kopf)
         box(m, 0, 0, 0.1, 0.58, 0.54, 0.2, c, rng)
         box(m, 0, 0, 0.24, 0.42, 0.4, 0.08, c, rng)
         box(m, 0, 0.02, 0.0, 0.64, 0.6, 0.04, tuple(v * 0.7 for v in c), rng)
-    elif g.kind == "save_body":                     # Plattenrüstung: Brust- und Rückenplatte, Schulterstücke
+        if g.kind == "hp":                          # Armeehelm: Tarnnetz-Band, tiefer Nackenschutz
+            box(m, 0, 0, 0.14, 0.6, 0.56, 0.05, (0.30, 0.32, 0.22), rng)
+            box(m, 0, -0.26, 0.02, 0.5, 0.08, 0.16, c, rng)
+        elif g.kind == "shield":                    # Schild-Helm: leuchtendes Visier
+            box(m, 0, 0.28, 0.06, 0.46, 0.04, 0.1, (0.45, 0.85, 1.0))
+        elif g.kind == "dash":                      # Hermes-Helm: Flügel
+            for sx in (-1, 1):
+                box(m, sx * 0.33, -0.04, 0.2, 0.04, 0.22, 0.16, (1.0, 1.0, 0.95), rng)
+    elif g.slot == "torso" and g.kind == "dash":    # Hermes-Weste: goldene Weste mit Flügelchen am Rücken
+        box(m, 0, 0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
+        box(m, 0, -0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
+        for sx in (-1, 1):
+            box(m, sx * 0.14, -0.27, 0.12, 0.05, 0.08, 0.3, (1.0, 1.0, 0.95), rng)
+    elif g.slot == "torso" and g.kind == "hp":      # Plattenrüstung: Brust- und Rückenplatte, Schulterstücke
         dk = tuple(v * 0.75 for v in c)
         box(m, 0, 0.2, 0.04, 0.56, 0.06, 0.56, c, rng)
         box(m, 0, -0.2, 0.04, 0.56, 0.06, 0.56, dk, rng)
         for sx in (-1, 1):
             box(m, sx * 0.3, 0.0, 0.3, 0.18, 0.42, 0.06, dk, rng)
-    elif g.kind == "shield":                        # Schildgenerator: Weste mit leuchtendem Kern
+    elif g.kind == "shield" and g.slot == "torso":  # Schildgenerator: Weste mit leuchtendem Kern
         box(m, 0, 0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
         box(m, 0, -0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
         box(m, 0, 0.24, 0.06, 0.18, 0.03, 0.18, c)
@@ -9696,8 +10244,10 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                     box(m, wx, -0.06, 0.1, 0.04, 0.16, 0.12, (1.0, 1.0, 0.95), rng)
             elif g.kind == "spring":                # Springfedern unter der Sohle
                 box(m, x, 0.04, -0.12, 0.12, 0.12, 0.12, (0.6, 0.6, 0.62), rng)
-            else:                                   # Jetpack-Schuhe: Düsen an der Ferse
-                box(m, x, -0.16, -0.02, 0.1, 0.08, 0.08, (0.25, 0.25, 0.27), rng)
+            elif g.kind == "shield":                # Schild-Stiefel: leuchtende Kappe
+                box(m, x, 0.18, 0.04, 0.16, 0.05, 0.08, (0.45, 0.85, 1.0))
+            elif g.kind == "hp":                    # Kampfstiefel: hoher Schaft
+                box(m, x, -0.02, 0.14, 0.18, 0.2, 0.18, c, rng)
     return m
 
 
@@ -11867,7 +12417,7 @@ class HostSession:
             if not finite(x, y, z, h, p):
                 return
             pl.x, pl.y = clampf(x, -5, WORLD + 5), clampf(y, -5, WORLD + 5)
-            pl.z = clampf(z, -20, 60)
+            pl.z = clampf(z, -20, PLAYER_Z_MAX)
             pl.heading, pl.pitch = h, clampf(p, -90, 90)
             pl.moving = bool(m.get("mv"))
             cur = m.get("cur")
@@ -11933,6 +12483,12 @@ class HostSession:
             pl.cur = idx
             note_hand(pl)
             w.add_shot(pl, eye, dirs, wp)
+        elif t == "shock":                        # 7c: Stromstoss (Schild-Set)
+            w.shock(pl)
+        elif t == "atteq":                        # 7b: Aufsatz aus dem Lager aufstecken (Tab-Fenster)
+            wi_, si_, v_ = m.get("w"), m.get("s"), m.get("v")
+            if all(isinstance(q, int) and not isinstance(q, bool) for q in (wi_, si_, v_)) and 0 <= si_ <= ATT_SCOPE:
+                w.equip_att(pl, wi_, si_, v_)
         elif t == "gren":                         # Granate geworfen: der Host simuliert sie
             d, o = m.get("d"), m.get("o")
             if (pl.hp > 0 and pl.grenades > 0 and w.phase == "play" and pl.vehicle < 0
@@ -12007,7 +12563,8 @@ class HostSession:
                 "ro": [[r.rid, r2(r.x), r2(r.y), r2(r.z), r1(r.vx), r1(r.vy), r1(r.vz)] for r in w.rocks],
                 "gr": [[g.gid, r2(g.x), r2(g.y), r2(g.z), r1(g.vx), r1(g.vy), r1(g.vz), r1(g.fuse)]
                        for g in w.grenades],
-                "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee] for d in w.drops],
+                "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee, d.att,
+                        list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope] for d in w.drops],
                 "gd": [[g.gid, g.kind, g.owner, r2(g.x), r2(g.y), r2(g.z), r2(g.nx), r2(g.ny), r2(g.nz), r1(g.yaw),
                         1 if g.arm > 0 else 0] for g in w.gadgets],
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
@@ -12282,7 +12839,12 @@ class ClientSession:
             d = self.drops.get(did)
             if d is None:
                 d = self.drops[did] = Drop(did, x, y, z, wi, row[5] if len(row) > 5 else -1,
-                                           row[6] if len(row) > 6 else -1)
+                                           row[6] if len(row) > 6 else -1, row[7] if len(row) > 7 else -1,
+                                           row[8] if len(row) > 8 and row[8] else None)
+            if len(row) > 10:
+                d.owner, d.lock = row[9], row[10]
+            if len(row) > 11 and isinstance(row[11], int):
+                d.scope = row[11]
             seen.add(did)
         for did in [i for i in self.drops if i not in seen]:
             del self.drops[did]
@@ -12425,6 +12987,14 @@ class ClientSession:
     def send_melee(self, pl, d):
         """World.melee_sink: Nahkampf-Schlag dem Host melden."""
         self.conn.send({"t": "melee", "d": [round(v, 4) for v in d]})
+        self.conn.flush()
+
+    def send_shock(self):
+        self.conn.send({"t": "shock"})
+        self.conn.flush()
+
+    def send_atteq(self, wi, si, v):
+        self.conn.send({"t": "atteq", "w": wi, "s": si, "v": v})
         self.conn.flush()
 
     def send_use(self, alt=False):
@@ -12670,16 +13240,19 @@ class PlayerView:
         for sl, gi in zip(GEAR_SLOTS, key):
             if gi < 0:
                 continue
-            if sl == "head":
+            if sl == "head":                             # 7c: an Sinans Soldaten angepasst (Kopf ca. 0,26 m breit)
                 n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, 0.02, 1.07)
+                n.setPos(0, -0.005, GEAR_FIG_HEAD_Z)
+                n.setScale(GEAR_FIG_SCALE["head"])
             elif sl == "torso":
                 n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, 0, 0.36)
+                n.setPos(0, 0, 0.34)
+                n.setScale(GEAR_FIG_SCALE["torso"])
             else:                                        # je ein Schuh an jedem Bein (läuft mit)
                 for leg in (self.legL, self.legR):
                     n = leg.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
                     n.setPos(0, 0.04, -0.72)
+                    n.setScale(GEAR_FIG_SCALE["feet"])
                     self.gear_nodes.append(n)
                 continue
             self.gear_nodes.append(n)
@@ -130705,6 +131278,7 @@ class Game(ShowBase):
         self.death_picker = None
         self.fx = []                          # Feuerball, Druckwelle, Rauch
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
         self.tur_views = {}
         self.heli_views = {}
@@ -130767,6 +131341,7 @@ class Game(ShowBase):
         self.apply_volume()
         self.accept("v", self.on_alt)
         self.accept("g", self.on_grenade)
+        self.accept(KEYS["ability"], self.on_ability)          # 7c: Set-Fähigkeit (Stromstoss)
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
@@ -131157,6 +131732,9 @@ class Game(ShowBase):
             return
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
+            return
+        if self.mode == "play" and self.quit_box is None and getattr(self, "tab_held", False):
+            self.tab_click(self.mouse_2d())                  # 7b: Tab gehalten - Waffe anklicken = Aufsatz-Fenster
             return
         if self.mode != "menu" and self.quit_box is None:
             return
@@ -132138,6 +132716,7 @@ class Game(ShowBase):
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
         self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
         self.whiz_prev, self.whizzed = {}, set()
@@ -132503,6 +133082,34 @@ class Game(ShowBase):
                 build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
             self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
         self.gear_models = [NodePath(gear_model(gi).node("gear")) for gi in range(len(GEAR))]
+        self.att_drop_models = {}             # 7b: Aufsatz am Boden - das Teil gross, auf einer grünen Plakette
+        for si_ in range(len(ATT_SLOTS)):
+            for v_ in range(1, len(ATTACHMENTS[si_])):
+                am = Mesh()
+                prts = att_parts("Sturmgewehr", si_, v_)
+                if prts:
+                    cx_ = sum(q[0] for q in prts) / len(prts)
+                    cy_ = sum(q[1] for q in prts) / len(prts)
+                    cz_ = sum(q[2] for q in prts) / len(prts)
+                    k_ = 0.42 / max(max(q[3], q[4], q[5]) for q in prts)
+                    k_ = min(k_, 7.0)
+                    for q in prts:
+                        box(am, (q[0] - cx_) * k_, (q[1] - cy_) * k_, 0.12 + (q[2] - cz_) * k_,
+                            max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
+                box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
+                self.att_drop_models[si_ * ATT_CODE + v_] = NodePath(am.node("att_drop"))
+        for v_ in range(1, len(ATT_SCOPE_NAMES)):             # 7b: Visiere am Boden
+            am = Mesh()
+            prts = scope_parts(v_, "Sturmgewehr", rel=True)
+            if prts:
+                k_ = 0.5 / max(max(q[3], q[4], q[5]) for q in prts)
+                cy_ = sum(q[1] for q in prts) / len(prts)
+                cz_ = sum(q[2] for q in prts) / len(prts)
+                for q in prts:
+                    box(am, q[0] * k_, (q[1] - cy_) * k_, 0.15 + (q[2] - cz_) * k_,
+                        max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
+            box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
+            self.att_drop_models[ATT_SCOPE * ATT_CODE + v_] = NodePath(am.node("scope_drop"))
         self.melee_drop_models = []
         for mi in range(len(MELEE)):
             nd = NodePath("melee_drop")
@@ -132813,7 +133420,8 @@ class Game(ShowBase):
         # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
         self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
-                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col)}
+                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
+                              "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
         # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
         mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
@@ -132875,6 +133483,8 @@ class Game(ShowBase):
                                       align=TextNode.ALeft, mayChange=True)
         self.prompt_text = OnscreenText(text="", pos=(0, -0.55), scale=0.055, fg=(1, 0.95, 0.5, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # 7b: Drop ansehen
+                                      shadow=(0, 0, 0, 0.9), mayChange=True)
         self.toast_text = OnscreenText(text="", pos=(0, 0.42), scale=0.052, fg=(1, 0.85, 0.3, 1),
                                        shadow=(0, 0, 0, 0.9), mayChange=True)   # kurzer Hinweis, verschwindet
         self.toast_t = 0.0
@@ -133351,6 +133961,23 @@ class Game(ShowBase):
         if self.mode == "play" and self.quit_box is None:
             self.throw_req = True
 
+    def on_ability(self):
+        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if not set_full(pl, "shield"):
+            self.toast("Stromstoss nur mit komplettem Schild-Set (Helm, Schild, Stiefel)", (0.8, 0.85, 0.95), 1.8)
+            return
+        if getattr(pl, "shock_cd", 0.0) > 0:
+            self.toast(f"Stromstoss lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_shock()
+        else:
+            self.world.shock(pl)
+
     def use_object(self, alt=False):
         """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
         (der Host entscheidet)."""
@@ -133374,7 +134001,8 @@ class Game(ShowBase):
 
     def do_melee(self):
         """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
-        nicht in der Hand, wird sie für den Schlag gezogen und danach wieder weggesteckt."""
+        nicht in der Hand, wird sie gezogen; mit QUICK_MELEE_STAY bleibt sie danach in der Hand (Linke Maus schlägt
+        weiter, 1-3/Mausrad wechselt zurück), sonst wird sie nach dem Schlag wieder weggesteckt."""
         pl = self.player
         if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.melee_cd > 0
                 or self.world.phase != "play"):
@@ -133385,7 +134013,7 @@ class Game(ShowBase):
             pl.switch_to = pl.cur
         if not pl.melee_out:
             pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
-            self.quick_melee = True
+            self.quick_melee = not QUICK_MELEE_STAY        # 7a: bleibt in der Hand (Wechsel mit 1-3/Mausrad)
         m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
         pl.melee_cd = pl.swing_t = m.interval
         hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
@@ -133439,7 +134067,34 @@ class Game(ShowBase):
                 world.heli_rocket(pl)
         self.heli_ads = bool(ads)
 
-    def apply_gain(self, wi, slots, dup):
+    def apply_att_state(self, atts, scopes, store, msg=0, code=-1, wi=-1):
+        """7b: Aufsätze/Visiere/Lager übernehmen (beim Host sind sie schon gesetzt) und kurz Bescheid geben."""
+        pl = self.player
+        if self.net_mode == "client":
+            pl.att = {}
+            for k, v in (atts or {}).items():
+                a = att_valid(v)
+                if a is not None and str(k).isdigit() and int(k) < len(WEAPONS):
+                    pl.att[int(k)] = a
+            pl.scopes = {int(k): v for k, v in (scopes or {}).items()
+                         if str(k).isdigit() and isinstance(v, int) and 0 <= v < len(ATT_SCOPE_NAMES)}
+            pl.att_store = [c for c in (store or []) if isinstance(c, int)]
+            for k in list(pl.att):
+                if k < len(pl.guns):
+                    clamp_ammo(pl, k)
+        if code >= 0 and msg in (1, 2, 3):
+            si, v = divmod(code, ATT_CODE)
+            nm = att_name(si, v)
+            wn = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
+            if msg == 1:
+                self.toast(f"{nm} an {wn} angebracht", (0.55, 1.0, 0.55), 2.0)
+            elif msg == 2:
+                self.toast(f"{nm} ins Aufsatz-Lager (Tab: Klick auf eine Waffe)", (0.75, 0.9, 1.0), 2.4)
+            self.sfx.play("servo", None, 0.6, 1.3)
+        if getattr(self, "att_panel", None) is not None:
+            self.att_panel_key = None                       # Fenster neu aufbauen
+
+    def apply_gain(self, wi, slots, dup, atts=None):
         """Eigene Waffe aus Kiste oder vom Boden erhalten (Ereignis 'loot'/'pickup'). Beim Host und im Einzelspiel
         hat die Welt die Slots schon umgestellt (take_weapon); als Mitspieler übernimmt man die Belegung des Hosts."""
         pl = self.player
@@ -133451,10 +134106,17 @@ class Game(ShowBase):
                 if isinstance(v, int) and 0 <= v < len(WEAPONS):
                     new[i] = v
             pl.slots = new
+            a = att_valid(atts)                      # 7b: Aufsätze der Waffe übernimmt man vom Host
+            if a is not None and a != ATT_NONE:
+                pl.att[wi] = a
+            else:
+                pl.att.pop(wi, None)
+            for k in [k for k in pl.att if k not in pl.slots]:
+                del pl.att[k]
             if dup:
                 stock_ammo(pl, wi)
             else:
-                pl.guns[wi] = GunState(WEAPONS[wi])
+                pl.guns[wi] = GunState(pl.wp(wi))
             if pl.cur not in pl.slots:               # die Waffe in der Hand wurde getauscht
                 pl.cur = pl.switch_to = wi
                 pl.switch_t, pl.reload_t = SWITCH_T * 0.5, 0.0
@@ -133481,7 +134143,15 @@ class Game(ShowBase):
             self.sp_back.kick(2.5)                 # kleiner Ruck der Waffe beim Wurf
             self.sp_pitch.kick(-90)
 
+    def lock_trigger(self):
+        """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
+        INPUT_LOCK_T s (Spielstart, Respawn, Menü/Karte geschlossen, Fenster zurück im Vordergrund)."""
+        self.trig_need_up = True
+        self.trig_lock_t = INPUT_LOCK_T
+
     def set_capture(self, on):
+        if on:
+            self.lock_trigger()
         self.captured = on
         self.mouse_prev = None
         self.warp_ref = None
@@ -133658,9 +134328,144 @@ class Game(ShowBase):
         if self.captured:
             self.set_capture(False)
 
+    # ------------------------------------------------------------ 7b: Aufsatz-Fenster (nur mit Tab)
+    ATT_PANEL_W, ATT_PANEL_Z0, ATT_PANEL_Z1 = 0.86, -0.64, -0.06   # Grösse/Lage des Fensters (aspect2d)
+
+    def tab_click(self, m):
+        """Klick bei gehaltenem Tab: Reiter/Aufsatz im Fenster wählen oder eine Waffe der Waffenleiste öffnen."""
+        if m is None:
+            return
+        mx, mz = m
+        for x0, x1, z0, z1, act in getattr(self, "att_hits", ()):
+            if x0 <= mx <= x1 and z0 <= mz <= z1:
+                self.sfx.ui_click()
+                act()
+                return
+        pl, a2 = self.player, self.aspect2d
+        for i, fr in enumerate(self.slot_frames):
+            wi = pl.slots[i] if i < len(pl.slots) else None
+            p = fr.getPos(a2)
+            if wi is not None and abs(mx - p[0]) <= 0.16 and abs(mz - p[2]) <= 0.085:
+                self.sfx.ui_click()
+                self.open_att_panel(wi)
+                return
+        self.close_att_panel()
+
+    def open_att_panel(self, wi):
+        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
+        if not tabs:
+            self.toast(f"{WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            self.close_att_panel()
+            return
+        self.att_panel_wi, self.att_panel_tabs = wi, tabs
+        if getattr(self, "att_panel_tab", None) not in tabs:
+            self.att_panel_tab = tabs[0]
+        self.att_panel_key = None
+        if getattr(self, "att_panel", None) is None:
+            self.att_panel = self.aspect2d.attachNewNode("aufsatzfenster")
+            self.att_panel.setBin("fixed", 85)
+            self.att_panel.setDepthTest(False)
+            self.att_panel.setDepthWrite(False)
+
+    def close_att_panel(self):
+        if getattr(self, "att_panel", None) is not None:
+            self.att_panel.removeNode()
+        self.att_panel, self.att_hits, self.att_panel_key = None, [], None
+
+    def att_select_tab(self, si):
+        self.att_panel_tab, self.att_panel_key = si, None
+
+    def att_equip(self, wi, si, v):
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_atteq(wi, si, v)
+        else:
+            self.world.equip_att(self.player, wi, si, v)
+
+    def update_att_panel(self):
+        """Fenster neu aufbauen, wenn sich etwas geändert hat (Waffe, Reiter, Aufsätze, Lager)."""
+        root = getattr(self, "att_panel", None)
+        if root is None:
+            return
+        pl, wi = self.player, self.att_panel_wi
+        if wi not in pl.slots or pl.hp <= 0:
+            self.close_att_panel()
+            return
+        si = self.att_panel_tab
+        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+        key = (wi, si, cur, tuple(pl.att.get(wi) or ATT_NONE), pscope(pl, wi), tuple(sorted(pl.att_store)))
+        if key == self.att_panel_key:
+            return
+        self.att_panel_key = key
+        for c in root.getChildren():
+            c.removeNode()
+        hits = []
+        W, Z0, Z1 = self.ATT_PANEL_W, self.ATT_PANEL_Z0, self.ATT_PANEL_Z1
+        cm = CardMaker("attbg")
+        cm.setFrame(-W, W, Z0, Z1)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.02, 0.03, 0.06, 1.0)
+        cm.setFrame(-W, W, Z1 - 0.006, Z1)
+        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        OnscreenText(text=f"Aufsätze: {WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
+                     fg=(1.0, 0.8, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
+        OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, Tab loslassen = zu", parent=root,
+                     pos=(W - 0.04, Z1 - 0.06), scale=0.034, fg=(0.8, 0.85, 0.9, 1), align=TextNode.ARight)
+        x = -W + 0.06                                        # Reiter
+        for s in self.att_panel_tabs:
+            lab = ATT_SLOT_NAMES[s]
+            on = s == si
+            t = OnscreenText(text=lab, parent=root, pos=(x, Z1 - 0.14), scale=0.045,
+                             fg=(1, 0.85, 0.2, 1) if on else (0.85, 0.9, 1.0, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
+            wd = len(lab) * 0.026 + 0.03
+            if on:
+                cm.setFrame(x - 0.01, x + wd - 0.02, Z1 - 0.157, Z1 - 0.151)
+                root.attachNewNode(cm.generate()).setColor(1, 0.85, 0.2, 1)
+            hits.append((x - 0.02, x + wd, Z1 - 0.17, Z1 - 0.1, (lambda s=s: self.att_select_tab(s))))
+            x += wd + 0.06
+        nmax = len(ATT_SCOPE_NAMES) if si == ATT_SCOPE else len(ATTACHMENTS[si])
+        counts = {}
+        for c in pl.att_store:
+            s_, v_ = divmod(c, ATT_CODE)
+            if s_ == si and 0 < v_ < nmax:
+                counts[v_] = counts.get(v_, 0) + 1
+        items = [0] + sorted(set(counts) | ({cur} if cur else set()))
+        cw, ch, gap = 0.37, 0.19, 0.035
+        per_row = 4
+        for k, v in enumerate(items):
+            col, row = k % per_row, k // per_row
+            cx = -W + 0.06 + col * (cw + gap)
+            ztop = Z1 - 0.2 - row * (ch + gap)
+            on = v == cur
+            cm.setFrame(cx, cx + cw, ztop - ch, ztop)
+            card = root.attachNewNode(cm.generate())
+            card.setColor(*((0.35, 0.28, 0.08, 0.95) if on else (0.10, 0.12, 0.16, 0.95)))
+            card.setTransparency(TransparencyAttrib.MAlpha)
+            ic = None
+            if v:
+                ic = scope_icon(v, 0.22, 0.08) if si == ATT_SCOPE else att_icon(wi, si, v, 0.22, 0.07)
+            if ic is not None:
+                ic.reparentTo(root)
+                ic.setPos(cx + cw / 2, 0, ztop - 0.055)
+            nm = att_name(si, v) if v else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
+            n_ = counts.get(v, 0)
+            lab = nm + ("  - dran" if on else (f"   x{n_}" if n_ > 1 else ""))
+            OnscreenText(text=lab, parent=root, pos=(cx + 0.015, ztop - 0.125), scale=0.036 if len(lab) < 18 else 0.029,
+                         fg=(1, 0.88, 0.4, 1) if on else (1, 1, 1, 1), align=TextNode.ALeft, shadow=(0, 0, 0, 0.9))
+            info = att_info(si, v)
+            OnscreenText(text=(info[:44] + "…") if len(info) > 45 else info, parent=root, pos=(cx + 0.015, ztop - 0.165),
+                         scale=0.025, fg=(0.75, 0.8, 0.88, 1), align=TextNode.ALeft)
+            if not on:
+                hits.append((cx, cx + cw, ztop - ch, ztop, (lambda v=v: self.att_equip(wi, si, v))))
+        if len(items) == 1:
+            OnscreenText(text="Keine passenden Aufsätze im Lager - Kisten öffnen!", parent=root,
+                         pos=(-W + 0.06 + cw + gap, Z1 - 0.3), scale=0.036, fg=(0.8, 0.8, 0.85, 1), align=TextNode.ALeft)
+        self.att_hits = hits
+
     def tab_up(self):
         if not self.tab_held:
             return
+        self.close_att_panel()
         self.tab_held = False
         self.tab_root.hide()
         self.tip_root.hide()
@@ -133765,6 +134570,7 @@ class Game(ShowBase):
         ip = getattr(self, "host_ip", None)
         self.set_text(self.tab_ip, f"Host-IP {ip}" if ip and self.net_mode == "host" else "")
         self.update_tooltip()
+        self.update_att_panel()
 
     def hover_targets(self):
         """(Mitte x, Mitte z, halbe Breite, halbe Höhe, Infotext) der HUD-Elemente mit Mausover-Info."""
@@ -133774,12 +134580,13 @@ class Game(ShowBase):
             wi = pl.slots[i] if i < len(pl.slots) else None
             if wi is not None:
                 p = fr.getPos(a2)
-                out.append((p[0], p[2], 0.16, 0.085, weapon_info(wi, pl.guns[wi])))
+                out.append((p[0], p[2], 0.16, 0.085, weapon_info(wi, pl.guns[wi], pl.att.get(wi), pscope(pl, wi))
+                                                        + "\n(Klick: Aufsätze wechseln)"))
         for sl, tl in self.gear_tiles.items():
             gi = pl.gear.get(sl)
             if gi is not None and pl.heli < 0:
                 p = tl["tile"].getPos(a2)
-                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi)))
+                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
         p = self.melee_frame.getPos(a2)
         out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee)))
         b = getattr(pl, "buff", None)
@@ -133792,7 +134599,7 @@ class Game(ShowBase):
             ic = self.ability_icons.get(key)
             if gi is not None and ic is not None:
                 p = ic.root.getPos(a2)
-                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi)))
+                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi, pl)))
         return out
 
     def update_tooltip(self):
@@ -133839,6 +134646,7 @@ class Game(ShowBase):
             return 0, 0
         if not getattr(self, "had_focus", True):      # Fenster hat den Fokus zurück: Maus neu einfangen
             self.had_focus = True
+            self.lock_trigger()                         # 7a: der Klick ins Fenster schiesst nicht
             self.recenter()
             self.mouse_prev = None
             self.warp_frames = 0
@@ -134265,6 +135073,18 @@ class Game(ShowBase):
         trig = down(MouseButton.one())
         edge = trig and not self.prev_trig
         self.prev_trig = trig
+        if self.player is not None:                    # 7a: Wiederbelebt? -> Feuersperre wie nach dem Start
+            alive = self.player.hp > 0
+            if alive and not getattr(self, "lock_alive", True):
+                self.lock_trigger()
+            self.lock_alive = alive
+        lk = getattr(self, "trig_lock_t", 0.0)
+        if lk > 0:
+            self.trig_lock_t = lk - dt
+        if getattr(self, "trig_need_up", False) or lk > 0:
+            if not trig:                               # erst Loslassen, dann zählt ein neuer Druck
+                self.trig_need_up = False
+            trig = edge = False
         if (self.quit_box is not None or getattr(self, "tab_held", False)
                 or getattr(self, "end", None) is not None):       # Abfrage/Tab/Endbildschirm: kein Schuss
             trig = edge = False
@@ -134300,6 +135120,8 @@ class Game(ShowBase):
         """Ein Spielschritt (Logik + Darstellung). Getrennt von der Eingabe,
         damit man ihn auch ohne Fenster testen kann."""
         pl, world = self.player, self.world
+        if self.net_mode == "client" and getattr(pl, "shock_cd", 0.0) > 0:
+            pl.shock_cd = max(0.0, pl.shock_cd - dt)          # 7c: beim Host zählt die Welt
         nsub = max(1, int(math.ceil(dt / 0.034)))
         dead = pl.hp <= 0
         if getattr(pl, "stun_t", 0.0) > 0 and not dead:   # betäubt (Drohne): nicht bewegen, schiessen, steuern;
@@ -134816,7 +135638,7 @@ class Game(ShowBase):
                 wi, slots = e[2], e[3] if len(e) > 3 else None
                 dup = len(e) > 4 and bool(e[4])
                 if e[1] == self.my_id:
-                    self.apply_gain(wi, slots, dup)
+                    self.apply_gain(wi, slots, dup, e[6] if len(e) > 6 else None)
                 wn = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else "?"
                 if kind == "loot":
                     ck = e[5] if len(e) > 5 and isinstance(e[5], int) and 0 <= e[5] < len(CRATE_KINDS) else 0
@@ -134826,6 +135648,23 @@ class Game(ShowBase):
                                    (1, 1, 1), 1.8)
                 elif e[1] == self.my_id and dup:
                     self.toast(f"{wn}: +Munition", (1, 1, 1), 1.5)
+                elif e[1] == self.my_id:
+                    a = att_valid(e[6] if len(e) > 6 else None) or ATT_NONE
+                    names = [att_name(i, v) for i, v in enumerate(a) if v]
+                    self.toast(f"Aufgehoben: {wn}" + (f"  ({', '.join(names)})" if names else ""), (1, 1, 1), 1.8)
+            elif kind == "lootpop":            # 7b: Kistenbeute fliegt aus der Kiste vor den Spieler
+                self.drop_pop[e[2]] = (time.time(), (e[4], e[5], e[6]))
+                self.sfx.play("gren_throw", (e[4], e[5], e[6]), 0.7, 1.35)
+                if e[1] == self.my_id:
+                    ck = e[3] if isinstance(e[3], int) and 0 <= e[3] < len(CRATE_KINDS) else 0
+                    nm = CRATE_NAMES[CRATE_KINDS[ck]]
+                    self.toast(f"{nm[:1].upper()}{nm[1:]} geöffnet - schau es dir an, F nimmt es", (1, 1, 1), 2.0)
+            elif kind == "attstate":           # 7b: Aufsätze, Visiere, Aufsatz-Lager (der Host entscheidet)
+                if e[1] == self.my_id:
+                    self.apply_att_state(*e[2:])
+            elif kind == "droplock":           # 7b: Beute gehört noch kurz dem Öffnenden
+                if e[1] == self.my_id:
+                    self.toast(f"Gehört noch {int(math.ceil(e[3]))} s {self.pname(e[2])}", (0.95, 0.85, 0.6), 1.5)
             elif kind == "venter":
                 if e[1] == self.my_id:
                     v = self.world.vehicle_by_id(e[2])
@@ -134889,6 +135728,19 @@ class Game(ShowBase):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
                     self.sp_cam.kick(10)
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
+            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen
+                cx_, cy_, cz_ = e[2], e[3], e[4] + 1.0
+                for k_ in range(12):
+                    a_ = k_ * math.tau / 12
+                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * SHOCK_R, cy_ + math.sin(a_) * SHOCK_R,
+                                                  cz_ - 0.6 + 0.4 * math.sin(k_ * 1.7)), True)
+                for k_ in range(36):
+                    a_ = k_ * math.tau / 36
+                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * SHOCK_R * 2.2, math.sin(a_) * SHOCK_R * 2.2, 0.6),
+                                      (0.5, 0.85, 1.0), 0.05, 0.45, 0.0)
+                self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
+                if e[1] == self.my_id:
+                    self.player.shock_cd = SHOCK_CD
             elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
                 self.zap_fx(e[1], e[2], bool(e[3]))
             elif kind == "stun":
@@ -135047,8 +135899,8 @@ class Game(ShowBase):
             return "rocket"
         if w.scope:
             return "sniper"                                   # Railgun
-        if w.name in PRIMARY_NAMES and pl.cur == pl.slots[0]:
-            return SIGHT_NAMES[pl.scope]
+        if w.name in SCOPE_MOUNT:                             # 7b: Visier je Waffe (Aufsatz)
+            return SIGHT_NAMES[pscope(pl, pl.cur)]
         return "iron"
 
     def ads_fov(self, pl, w, sight):
@@ -135063,8 +135915,8 @@ class Game(ShowBase):
         return w.ads_fov
 
     def ads_z(self, pl, w):
-        if w.name in PRIMARY_NAMES and pl.cur == pl.slots[0] and w.name in SCOPE_MOUNT:
-            return scope_ads_z(pl.scope, w.name)
+        if w.name in SCOPE_MOUNT:
+            return scope_ads_z(pscope(pl, pl.cur), w.name)
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
     # ------------------------------------------------------------ Darstellung
@@ -135263,9 +136115,9 @@ class Game(ShowBase):
         if pl.cur < len(self.gun_flash):                          # Mündungsfeuer sitzt am Ende des Laufaufsatzes
             self.gun_flash[pl.cur].setY(GUN_PARTS[w.name][1][1] + ATT_MUZZLE_EXT[att_[0]])
         for sc_, nd_ in self.scope_nodes[pl.cur].items():          # montiertes Visier der Primärwaffe zeigen
-            (nd_.show if sc_ == pl.scope and w.name in PRIMARY_NAMES and pl.cur == pl.slots[0] else nd_.hide)()
+            (nd_.show if sc_ == pscope(pl, pl.cur) and w.name in SCOPE_MOUNT else nd_.hide)()
             if sc_ == 0 and w.name == SG_NAME and getattr(self, "sg_front", None) is not None:
-                (self.sg_front.show if sc_ == pl.scope and pl.cur == pl.slots[0] else self.sg_front.hide)()
+                (self.sg_front.show if sc_ == pscope(pl, pl.cur) else self.sg_front.hide)()
         if rsc:
             self.rscope.show()
             self.update_rocket_sight()
@@ -135462,13 +136314,15 @@ class Game(ShowBase):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.melee >= 0:
+                if d.att >= 0 and d.att in self.att_drop_models:
+                    mdl = self.att_drop_models[d.att].copyTo(v)
+                elif d.melee >= 0:
                     mdl = self.melee_drop_models[d.melee].copyTo(v)
                 else:
                     mdl = (self.gear_models[d.gear] if d.gear >= 0 else self.drop_models[d.wi]).copyTo(v)
                     mdl.setScale(1.4 if d.gear < 0 else 1.0)
                 beam = Mesh(lit=False)
-                box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (1.0, 0.9, 0.3))
+                box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (0.4, 1.0, 0.45) if d.att >= 0 else (1.0, 0.9, 0.3))
                 bn = v.attachNewNode(beam.node("beam"))
                 bn.setTransparency(TransparencyAttrib.MAlpha)
                 bn.setColorScale(1, 1, 1, 0.45)
@@ -135476,6 +136330,15 @@ class Game(ShowBase):
                 v.setPythonTag("model", mdl)
                 v.setPythonTag("beam", bn)
             v.setPos(d.x, d.y, d.z)
+            pop = self.drop_pop.get(d.did)
+            if pop is not None:                                # 7b: fliegt im Bogen aus der Kiste
+                u = (now - pop[0]) / LOOT_POP_T
+                if u >= 1.0:
+                    del self.drop_pop[d.did]
+                else:
+                    sx_, sy_, sz_ = pop[1]
+                    v.setPos(sx_ + (d.x - sx_) * u, sy_ + (d.y - sy_) * u,
+                             sz_ + (d.z - sz_) * u + LOOT_POP_H * 4.0 * u * (1.0 - u) - 0.6 * (1.0 - u))
             mdl = v.getPythonTag("model")
             mdl.setPos(0, 0, 0.6 + 0.1 * math.sin(now * 2.2 + d.did))
             mdl.setH(now * 80.0)
@@ -135485,6 +136348,8 @@ class Game(ShowBase):
                 mdl.show()
         for d in [d for d in self.drop_views if d not in cur]:
             self.drop_views.pop(d).removeNode()
+        if len(self.drop_pop) > 40:
+            self.drop_pop.clear()
 
         for v in world.vehicles:
             vv = self.veh_views.get(v)
@@ -135516,24 +136381,51 @@ class Game(ShowBase):
             return f"{mark}{i + 1}. {p.name[:12]}   {int(p.score)} P   {p.kills}/{p.deaths}"
         return f"{mark}{i + 1}. {p.name[:12]}   K/D {p.kills / max(1, p.deaths):.2f}   ({p.kills}/{p.deaths})"
 
-    def set_slot_icon(self, i, wi):
-        """Zeigt in Karte i das Bild der Waffe wi (None = leer). Jede Karte besitzt eigene,
-        unabhängige Bildknoten, gezeigt wird durch Ein-/Aushängen statt hide()/show()."""
+    def look_info(self):
+        """7b: Schaut man auf einen Drop (bis LOOT_LOOK_R m, höchstens LOOT_LOOK_ANG Grad neben der Blickrichtung,
+        freie Sicht), stehen Name und kurze Werte unter dem Fadenkreuz."""
+        pl, world = self.player, self.world
+        if pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or not world.drops:
+            return ""
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        best, bc = None, math.cos(math.radians(LOOT_LOOK_ANG))
+        for d in world.drops:
+            p = (d.x, d.y, d.z + 0.6)
+            v = (p[0] - eye[0], p[1] - eye[1], p[2] - eye[2])
+            dist = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            if dist > LOOT_LOOK_R or dist < 0.05:
+                continue
+            c = (v[0] * f[0] + v[1] * f[1] + v[2] * f[2]) / dist
+            if c > bc and world.los(eye, p):
+                best, bc = d, c
+        return drop_info(best) if best is not None else ""
+
+    def set_slot_icon(self, i, wi, att=None, scope=0):
+        """Zeigt in Karte i das Bild der Waffe wi (None = leer) - mit ihren Aufsätzen (7b). Jede Karte besitzt
+        eigene, unabhängige Bildknoten, gezeigt wird durch Ein-/Aushängen statt hide()/show()."""
         d = self.slot_icons[i]
-        if d["cur"] == wi:
+        att = att_valid(att)
+        key = (("a", wi, att, scope) if ((att is not None and att != ATT_NONE) or scope) and isinstance(wi, int)
+               else wi)
+        if d["cur"] == key:
             return
         if d["cur"] is not None:
             d["nodes"][d["cur"]].detachNode()
-        d["cur"] = wi
+        d["cur"] = key
         if wi is None:
             return
-        nd = d["nodes"].get(wi)
+        nd = d["nodes"].get(key)
         if nd is None:
-            nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
+            if isinstance(key, tuple) and key[0] == "a":
+                nd = weapon_icon(wi, extra=loadout_extra(wi, scope, att), scope=scope)
+            else:
+                nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
             nd.setBin("fixed", 21)
             nd.setDepthTest(False)
             nd.setDepthWrite(False)
-            d["nodes"][wi] = nd
+            d["nodes"][key] = nd
         nd.reparentTo(d["holder"])
 
     def update_hud(self, dt):
@@ -135565,7 +136457,9 @@ class Game(ShowBase):
         car = self.my_vehicle() if pl.hp > 0 else None
         if pl.hp <= 0:
             tur = hc = None
-        self.update_tacho(car)
+        in_veh = car is not None or hc is not None or tur is not None   # 7a: Fahrzeug-HUD
+        tcar = world.vehicle_by_id(tur.vid) if tur is not None and tur.kind == "car" else None
+        self.update_tacho(car if car is not None else tcar)            # Heckschütze sieht Tempo + Wagen-Leben
         self.update_heli_hud(hc)
         # Gadget (Slot 3): Stückzahl
         placed = sum(1 for g in world.gadgets if g.owner == pl.pid and g.kind == pl.gadget)
@@ -135575,8 +136469,8 @@ class Game(ShowBase):
         elif hc is not None:
             self.set_text(self.ammo_text, f"MG {int(hc.mg)}   Raketen {hc.rk}")
             self.set_text(self.name_text, "Helikopter")
-        elif tur is not None:
-            self.set_text(self.ammo_text, "")                      # Hitze zeigt nur der Balken im Visier
+        elif tur is not None:                                      # Munition unbegrenzt: Hitze statt Munition
+            self.set_text(self.ammo_text, "ÜBERHITZT" if tur.over else f"Hitze {int(clampf(tur.heat, 0.0, 1.0) * 100)} %")
             self.set_text(self.name_text, TURRET_NAMES.get(tur.kind, "Geschütz"))
         elif pl.melee_out and not (pl.switch_t > 0 and pl.switch_to != MELEE_SEL):
             self.set_text(self.ammo_text, "")
@@ -135604,7 +136498,8 @@ class Game(ShowBase):
         self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
         for i in range(N_SLOTS):                     # Waffenleiste mit Bildern (Slot 3: Spezialwaffe)
             wi = pl.slots[i]
-            self.set_slot_icon(i, wi)
+            self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
+                               pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
             on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
             active = wi is not None and wi == want and on_foot and not pl.gad_out
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
@@ -135638,7 +136533,7 @@ class Game(ShowBase):
         scoped = self.cur_sight() in ("sniper", "acog") and self.ads_t > 0.85
         scoped = scoped and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
         snip = scoped and self.cur_sight() == "sniper" and pl.hp > 0 and self.melee_t <= 0
-        (self.bar_root.hide if snip else self.bar_root.show)()
+        (self.bar_root.hide if snip or in_veh else self.bar_root.show)()   # 7a: im Fahrzeug keine Waffenleiste
         if getattr(self, "mm_root", None) is not None:
             (self.mm_root.hide if snip else self.mm_root.show)()           # Minimap im Sniper-Visier ausblenden
         if getattr(self, "mm_zoom_text", None) is not None:
@@ -135693,6 +136588,16 @@ class Game(ShowBase):
                 kind, o = use
                 if kind == "crate":
                     prompt = f"F   {CRATE_NAMES.get(o.kind, 'Kiste')[0].upper()}{CRATE_NAMES.get(o.kind, 'Kiste')[1:]} öffnen"
+                elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
+                    si_, v_ = divmod(o.att, ATT_CODE)
+                    nm_ = att_name(si_, v_)
+                    if pl.melee_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
+                        prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - Tab: Klick auf eine Waffe)"
+                    else:
+                        old_ = pscope(pl, pl.cur) if si_ == ATT_SCOPE else (pl.att.get(pl.cur) or ATT_NONE)[si_]
+                        prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
+                        if old_:
+                            prompt += f"   ({att_name(si_, old_)} ins Lager)"
                 elif kind == "drop":
                     if o.melee >= 0:
                         prompt = f"F   Aufheben: {MELEE[o.melee].name}"
@@ -135740,13 +136645,18 @@ class Game(ShowBase):
                         prompt = "F   Tomahawk: Ziel und Countdown wählen"
                 else:
                     prompt = "F   aussteigen"
+                if kind == "drop" and o.lock > 0 and o.owner >= 0 and o.owner != self.my_id:   # 7b
+                    prompt += f"   (gehört noch {int(math.ceil(o.lock))} s {self.pname(o.owner)})"
         if pl.hp > 0 and pl.gad_out and world.phase == "play":
             prompt = {GAD_C4: "Rechtsklick  C4 ankleben      Linksklick  alle zünden",
                       GAD_CLAY: "Rechtsklick  Claymore aufstellen   (nur Boden)",
                       GAD_BEACON: "Rechtsklick  Funkbake aufstellen   (nur Boden)"}[pl.gadget]
         if now - self.gad_msg[1] < 2.0 and self.gad_msg[0] and pl.hp > 0:
             prompt = self.gad_msg[0]
+        if getattr(self, "att_panel", None) is not None:
+            prompt = ""                                       # Aufsatz-Fenster offen: kein Hinweis darüber
         self.set_text(self.prompt_text, prompt)
+        self.set_text(self.look_text, self.look_info() if pl.hp > 0 and world.phase == "play" else "")
         if world.strike == 1 and world.phase == "play":
             left = int(math.ceil(max(0.0, world.strike_t)))
             self.set_text(self.strike_text, f"ACHTUNG: TOMAHAWK-ANGRIFF IN {left} s")      # Ziel bleibt unbekannt
@@ -136114,6 +137024,8 @@ class Game(ShowBase):
             return
         self.bm_open = not self.bm_open
         (self.bm_root.show if self.bm_open else self.bm_root.hide)()
+        if not self.bm_open:
+            self.trig_lock_t = INPUT_LOCK_T             # 7a: kurz nach dem Schliessen der Karte kein Schuss
 
     def bm_xy(self, x, y):
         H = self.BIGMAP_H
@@ -136348,7 +137260,8 @@ class Game(ShowBase):
 
     # ------------------------------------------------------------ Lootkisten
     def build_crates(self):
-        """Vorlagen für die drei Kistenarten (die Kisten selbst kommen und gehen, siehe update_crates):
+        """Vorlagen für die vier Kistenarten (die Kisten selbst kommen und gehen, siehe update_crates).
+        7b: Aufsatz-Kiste = flacher grüner Werkzeugkoffer mit leuchtendem Band, Schwebe-Zahnrad, grüner Lichtsäule.
         gewöhnlich = kleine braune Holzkiste mit blassem Schwebewürfel,
         selten = grössere Metallkiste mit blau leuchtenden Bändern, Leuchtwürfel und blauer Lichtsäule,
         gold = grösste Kiste, golden, mit rotem Rubin vorne, schwebendem Rubin und goldener Lichtsäule."""
@@ -136383,12 +137296,29 @@ class Game(ShowBase):
         box(gglow, 0, 0.6, 0.68, 0.5, 0.05, 0.5, (1.0, 0.85, 0.35))
         box(gmark, 0, 0, 0, 0.42, 0.42, 0.42, (1.0, 0.1, 0.15))
         box(gbeam, 0, 0, 6.0, 0.6, 0.6, 6.0, (1.0, 0.62, 0.15))            # Lichtsäule über dem Rubin
+        # 7b: Aufsatz-Kiste - flacher grüner Werkzeugkoffer mit Griff, grün leuchtendem Band und Schwebe-Zahnrad
+        green, agl, amark, abeam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.18, lit=False)
+        green.mat = "metal"
+        box(green, 0, 0, 0.32, 1.3, 0.75, 0.64, (0.20, 0.42, 0.18), rng)
+        box(green, 0, 0, 0.67, 1.36, 0.8, 0.07, (0.14, 0.30, 0.12))
+        box(green, 0, 0, 0.78, 0.5, 0.08, 0.06, (0.12, 0.12, 0.12))        # Tragegriff
+        for sx in (-0.26, 0.26):
+            box(green, sx, 0, 0.73, 0.06, 0.08, 0.1, (0.12, 0.12, 0.12))
+        for sx in (-0.4, 0.4):                                            # Schnallen
+            box(green, sx, -0.385, 0.5, 0.12, 0.02, 0.12, (0.75, 0.75, 0.72))
+        box(agl, 0, 0, 0.36, 1.32, 0.77, 0.06, (0.35, 1.0, 0.4))
+        for a in range(0, 180, 45):                                       # Zahnrad aus vier Balken
+            box(amark, 0, 0, 0, 0.36 if a % 90 == 0 else 0.07, 0.07, 0.36 if a % 90 else 0.07, (0.4, 1.0, 0.45))
+        box(amark, 0, 0, 0, 0.2, 0.06, 0.2, (0.6, 1.0, 0.6))
+        box(abeam, 0, 0, 3.8, 0.4, 0.4, 3.2, (0.35, 1.0, 0.4))
         self.crate_tpl = {}
         for kind, parts in (("common", ((wood, "body", True), (cmark, "mark", False))),
                             ("rare", ((metal, "body", True), (glow, "glow", False), (rmark, "mark", False),
                                       (beam, "beam", False))),
                             ("gold", ((gold, "body", True), (gglow, "glow", False), (gmark, "mark", False),
-                                      (gbeam, "beam", False)))):
+                                      (gbeam, "beam", False))),
+                            ("att", ((green, "body", True), (agl, "glow", False), (amark, "mark", False),
+                                     (abeam, "beam", False)))):
             tpl = NodePath(f"crate_{kind}")
             for mesh, name, lit in parts:
                 n = tpl.attachNewNode(mesh.node(name))
@@ -136507,16 +137437,36 @@ class Game(ShowBase):
         if alive and wears(pl, "shield"):
             self.shield_bg.show()
             self.shield_fg.show()
-            self.shield_fg.setSx(max(0.55 * pl.shield_hp / SHIELD_HP, 0.0001))
+            self.shield_fg.setSx(max(0.55 * pl.shield_hp / max(1.0, shield_max(pl)), 0.0001))
         else:
             self.shield_bg.hide()
             self.shield_fg.hide()
-        in_heli = alive and pl.heli >= 0                        # im Helikopter: Rüstungsanzeige rechts ausblenden
-        for sl, tl in self.gear_tiles.items():
-            if in_heli:
+        in_veh = alive and (pl.heli >= 0 or pl.vehicle >= 0 or pl.mount >= 0)   # 7a: im Fahrzeug/am Geschütz
+        if in_veh:                                              # Ausrüstung, Dash, Jetpack, Buff ausblenden
+            dash.hide()
+            jet.hide()
+            ic.hide()
+            if self.ability_icons.get("shock") is not None:
+                self.ability_icons["shock"].hide()
+            for tl in self.gear_tiles.values():
                 tl["tile"].hide()
-                continue
+            return
+        full = next((s for s in SETS if alive and set_full(pl, s)), None)   # 7c: komplettes Set: Kacheln leuchten
+        shock = self.ability_icons.get("shock")
+        if shock is not None:
+            if full == "shield":
+                rdy = pl.shock_cd <= 0
+                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, None,
+                          f"{SET_ICON_KEY.upper()}  Stromstoss" if rdy else f"{int(math.ceil(pl.shock_cd))} s")
+            else:
+                shock.hide()
+        for sl, tl in self.gear_tiles.items():
             tl["tile"].show()
+            if full is not None:
+                sc_ = SETS[full][1]
+                tl["bg"].setColor(sc_[0] * 0.45, sc_[1] * 0.45, sc_[2] * 0.45, 0.85)
+            else:
+                tl["bg"].setColor(0.04, 0.05, 0.08, 0.7)
             gi = pl.gear.get(sl) if alive else None
             self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
             if gi is not None:
@@ -136716,7 +137666,7 @@ class Game(ShowBase):
             live[c.cid] = v
             root, mark = v
             if not mark.isEmpty():
-                hz, spin = {"rare": (1.9, 160.0), "gold": (2.3, 120.0)}.get(c.kind, (1.45, 90.0))
+                hz, spin = {"rare": (1.9, 160.0), "gold": (2.3, 120.0), "att": (1.5, 140.0)}.get(c.kind, (1.45, 90.0))
                 mark.setPos(0, 0, hz + 0.2 * math.sin(t * 2.0 + c.cid))
                 mark.setH(t * spin - root.getH())
         for cid, (root, _m) in self.crate_views.items():
