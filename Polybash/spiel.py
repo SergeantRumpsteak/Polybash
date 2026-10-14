@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 41               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 42               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -12063,7 +12063,10 @@ class HostSession:
         w = self.world
         if self.beacon is not None:
             self.beacon.update(dt, len(w.players))
-        clients = [c for c in self.server.conns if c.pid is not None and not c.closed]
+        # Snapshots erst, wenn der Beitretende die Karte geladen hat und seine erste Position meldet ("playing"):
+        # sonst staut sich der Sendepuffer während des Ladens und der Host kappt ihn als "zu langsam"
+        clients = [c for c in self.server.conns
+                   if c.pid is not None and not c.closed and getattr(c, "playing", False)]
         self.snap_t -= dt
         if self.snap_t > 0:
             return
