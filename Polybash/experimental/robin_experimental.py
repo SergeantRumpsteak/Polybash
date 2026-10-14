@@ -88,6 +88,14 @@ Waffen und Kisten (in allen Modi und auf allen Karten):
   Beim Tod fällt die Waffe in der Hand und EIN zufälliges getragenes Ausrüstungsteil auf den Boden (F zum
   Aufheben), alles andere geht verloren.
 
+Ausrüstung 7c (Tabelle GEAR + LOOT_GEAR_TABLES): Kopf Basic-Helm (rettet einmal), Armeehelm, Schild-Helm, Hermes-Helm;
+  Torso Plattenrüstung (+25 HP), Schild, Jetpack (Doppelsprung + Schub; die Jetpack-Schuhe sind entfallen),
+  Hermes-Weste; Füsse Hermes-Schuhe, Springfeder-Schuhe, Kampfstiefel, Schild-Stiefel. Sets (je drei Teile):
+  Rüstung (Armeehelm, Plattenrüstung, Kampfstiefel: je +25 HP, komplett +ARMOR_SET_BONUS), Schild (Schild-Helm,
+  Schild, Schild-Stiefel: Schild-HP addieren sich zu einem Balken, komplett Stromstoss auf Taste B: betäubt alles in
+  SHOCK_R m, Abklingzeit SHOCK_CD), Hermes (jedes Teil gibt den Dash; komplett x1,5 Tempo, doppelt schneller Dash,
+  Shift halten gleitet bis HERMES_GLIDE_MAX m). Komplettes Set: die Ausrüstungskacheln leuchten in der Set-Farbe.
+  Tank-Buff kommt zu den Ausrüstungs-HP dazu. Die folgenden Zeilen beschreiben den älteren Stand:
 Ausrüstung (aus allen Kistenarten, Tabelle GEAR + LOOT_GEAR_TABLES; LOOT_CATEGORIES = Anteil Ausrüstung je Kiste):
   Drei Slots: Kopf, Torso, Füsse - pro Slot ein Teil. Ein neues Teil ersetzt das alte (das alte fällt als Drop),
   ein identisches Teil lässt sich nicht aufheben ("Hast du schon"). Treibstoff und Abklingzeiten gehören dem
@@ -379,7 +387,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 25         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 26         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -802,17 +810,21 @@ LOOT_TABLES = {
     "Raketenwerfer":    ( 2.0,  8.0, 27.0),
     "Scharfschütze":    ( 1.0,  4.0, 12.0),
 }
-# Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). Helm und Platte eher braun,
-# Schild/Jetpack/Schuhe eher blau und gold.
+# Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). 7c: Set-Teile eher blau/gold.
 LOOT_GEAR_TABLES = {
     #  Teil                   braun  blau   gold
-    "Basic-Helm":          (35.0, 10.0,  5.0),
-    "Plattenrüstung":      (30.0, 10.0,  5.0),
-    "Schild":              (10.0, 20.0, 20.0),
-    "Jetpack":             ( 5.0, 15.0, 20.0),
-    "Hermes-Schuhe":       ( 7.0, 15.0, 17.0),
-    "Springfeder-Schuhe":  ( 8.0, 15.0, 15.0),
-    "Jetpack-Schuhe":      ( 5.0, 15.0, 18.0),
+    "Basic-Helm":          (14.0,  6.0,  3.0),
+    "Armeehelm":           (12.0,  8.0,  7.0),     # Rüstungs-Set
+    "Schild-Helm":         ( 5.0,  8.0, 10.0),     # Schild-Set
+    "Hermes-Helm":         ( 3.0,  7.0, 10.0),     # Hermes-Set
+    "Plattenrüstung":      (14.0,  9.0,  8.0),     # Rüstungs-Set
+    "Schild":              ( 9.0, 10.0, 10.0),     # Schild-Set
+    "Jetpack":             ( 8.0, 10.0, 10.0),
+    "Hermes-Weste":        ( 3.0,  7.0, 10.0),     # Hermes-Set
+    "Hermes-Schuhe":       ( 8.0,  9.0,  9.0),     # Hermes-Set
+    "Springfeder-Schuhe":  (10.0,  9.0,  6.0),
+    "Kampfstiefel":        ( 9.0,  9.0,  7.0),     # Rüstungs-Set
+    "Schild-Stiefel":      ( 5.0,  8.0, 10.0),     # Schild-Set
 }
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
 LOOT_MELEE_TABLES = {
@@ -877,21 +889,45 @@ GEAR_SLOT_NAMES = {"head": "Kopf", "torso": "Torso", "feet": "Füsse"}
 class Gear:
     name: str
     slot: str                  # head | torso | feet
-    kind: str                  # Wirkung: save_head | save_body | shield | jetpack | dash | spring | double_jump
+    kind: str                  # Wirkung: save_head | hp | shield | jetpack | dash | spring
     short: str                 # Kürzel für HUD
     col: tuple = (0.8, 0.8, 0.8)
     hud: str = ""              # kurzer Name für die Slot-Übersicht im HUD
+    set: str = ""              # 7c: Set ("armor" | "shield" | "hermes"), sonst ""
+    hp: float = 0.0            # 7c: + max. Lebenspunkte
+    shield: float = 0.0        # 7c: Schild-HP dieses Teils (alle Schild-Teile ergeben EINEN Balken)
 
 
+# 7c: Sets - alle drei Teile desselben Sets = Set-Bonus (Werte unten)
+GEAR_HP_PART = 25.0            # Rüstungs-Set: jedes Teil +25 max. HP
+SHIELD_HP_TORSO, SHIELD_HP_HEAD, SHIELD_HP_FEET = 30.0, 15.0, 15.0   # Schild-HP je Teil
 GEAR = (
     Gear("Basic-Helm", "head", "save_head", "H", (0.55, 0.58, 0.5), "Helm"),
-    Gear("Plattenrüstung", "torso", "save_body", "P", (0.6, 0.62, 0.66), "Platte"),
-    Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild"),
+    Gear("Armeehelm", "head", "hp", "A", (0.40, 0.45, 0.30), "Armeehelm", "armor", GEAR_HP_PART),
+    Gear("Schild-Helm", "head", "shield", "S", (0.3, 0.7, 1.0), "Schildhelm", "shield", 0.0, SHIELD_HP_HEAD),
+    Gear("Hermes-Helm", "head", "dash", "D", (1.0, 0.85, 0.3), "Hermeshelm", "hermes"),
+    Gear("Plattenrüstung", "torso", "hp", "P", (0.6, 0.62, 0.66), "Platte", "armor", GEAR_HP_PART),
+    Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild", "shield", 0.0, SHIELD_HP_TORSO),
     Gear("Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Jetpack"),
-    Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes"),
+    Gear("Hermes-Weste", "torso", "dash", "D", (1.0, 0.85, 0.3), "Hermesweste", "hermes"),
+    Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes", "hermes"),
     Gear("Springfeder-Schuhe", "feet", "spring", "F", (0.6, 1.0, 0.4), "Federn"),
-    Gear("Jetpack-Schuhe", "feet", "double_jump", "2", (1.0, 0.45, 0.2), "Jet-Schuhe"),
+    Gear("Kampfstiefel", "feet", "hp", "K", (0.28, 0.24, 0.20), "Kampfstiefel", "armor", GEAR_HP_PART),
+    Gear("Schild-Stiefel", "feet", "shield", "S", (0.3, 0.7, 1.0), "Schildstiefel", "shield", 0.0, SHIELD_HP_FEET),
 )
+GEAR_FIG_SCALE = {"head": 0.46, "torso": 0.74, "feet": 0.8}   # 7c: Ausrüstung an der Figur (Sinans Soldat ist schmaler)
+GEAR_FIG_HEAD_Z = 0.95         # Höhe des Helms über der Hüfte (Torso-Raum)
+SETS = {"armor": ("Rüstungs-Set", (0.55, 0.62, 0.40)), "shield": ("Schild-Set", (0.35, 0.75, 1.0)),
+        "hermes": ("Hermes-Set", (1.0, 0.85, 0.3))}
+ARMOR_SET_BONUS = 75.0         # Rüstungs-Set komplett: zusätzlich + so viele max. HP (3 x 25 + 75 = +150 -> 250 HP)
+SHIELD_RATE_PART = 0.25        # Schild lädt je weiterem Schild-Teil um so viel schneller (1 Teil x1, 3 Teile x1,5)
+SHOCK_R = 4.0                  # Schild-Set: Stromstoss betäubt alles in diesem Umkreis (m) ...
+SHOCK_STUN_MIN, SHOCK_STUN_MAX = 1.0, 3.0   # ... zufällig so lange (s) ...
+SHOCK_CD = 30.0                # ... Abklingzeit (s)
+HERMES_SET_SPEED = 1.5         # Hermes-Set: dauerhaft so viel schneller
+HERMES_SET_DASH = 2.0          # ... Dash so viel schneller als mit 1-2 Hermes-Teilen ...
+HERMES_GLIDE_MAX = 30.0        # ... und Shift halten gleitet weiter, bis zu so vielen Metern
+SET_ICON_KEY = "b"             # Taste der Set-Fähigkeit (Stromstoss); X/Y sind die Minimap
 GEAR_IDX = {g.name: i for i, g in enumerate(GEAR)}
 SAVE_HP = 10.0            # Helm/Platte: man überlebt den tödlichen Treffer mit so viel HP (Teil ist danach kaputt)
 SHIELD_HP = 30.0          # Schild fängt zuerst so viel Schaden ab
@@ -909,7 +945,8 @@ DOUBLE_JUMP_V = JUMP_V    # Doppelsprung: zweiter Sprung in der Luft
 # Zentrale Tastenzuordnung (Grundlage für ein späteres Menü "Steuerung"). Gelesen werden sie mit
 # Game.key_down(name); die übrigen Tasten (F, R, G, V, Tab, 1-3 ...) sind noch per accept() verdrahtet.
 KEYS = {"forward": "w", "back": "s", "left": "a", "right": "d", "sprint": "shift", "jump": "space",
-        "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g"}
+        "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g",
+        "ability": SET_ICON_KEY}
 # ======================================================================== Ende Loot
 
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
@@ -1168,8 +1205,8 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
-              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"),
-              ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
+              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht/Aufsätze"),
+              ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
 
 INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Karte zu, Fensterwechsel; dazu muss die
@@ -1291,22 +1328,33 @@ def melee_info(mi):
             f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
 
 
-def gear_info(gi):
-    """Mausover-Info eines Ausrüstungsteils - aus GEAR und den Konstanten."""
+SET_BONUS_TEXT = {
+    "armor": f"+{ARMOR_SET_BONUS:.0f} max. HP (zusammen +{3 * GEAR_HP_PART + ARMOR_SET_BONUS:.0f})",
+    "shield": f"Stromstoss (Taste {SET_ICON_KEY.upper()}): betäubt alles in {SHOCK_R:.0f} m für "
+              f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s, alle {SHOCK_CD:.0f} s",
+    "hermes": f"x{HERMES_SET_SPEED:g} Tempo, Dash x{HERMES_SET_DASH:g} so schnell, Shift halten = bis {HERMES_GLIDE_MAX:.0f} m gleiten",
+}
+
+
+def gear_info(gi, pl=None):
+    """Mausover-Info eines Ausrüstungsteils - aus GEAR und den Konstanten (7c: mit Set und Set-Bonus)."""
     g = GEAR[gi]
     desc = {
         "save_head": f"Fängt einen tödlichen Kopftreffer ab (du überlebst mit {SAVE_HP:.0f} HP),\n"
                      "danach zerstört. Nicht gegen Tomahawk, Nahgranate, Sturz.",
-        "save_body": f"Fängt einen tödlichen Körpertreffer ab (du überlebst mit {SAVE_HP:.0f} HP),\n"
-                     "danach zerstört. Nicht gegen Tomahawk, Nahgranate, Sturz.",
-        "shield": f"Schild {SHIELD_HP:.0f} HP fängt Schaden vor den Lebenspunkten ab.\n"
-                  f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf.",
-        "jetpack": f"Leertaste in der Luft halten: Schub.\nTreibstoff {JET_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.",
+        "hp": f"+{g.hp:.0f} max. Lebenspunkte.",
+        "shield": f"Schild {g.shield:.0f} HP (alle Schild-Teile ein Balken) fängt Schaden vor den Lebenspunkten ab.\n"
+                  f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf (je weiteres Teil schneller).",
+        "jetpack": f"Leertaste in der Luft: Doppelsprung, danach halten = Schub.\n"
+                   f"Treibstoff {JET_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.",
         "dash": f"Shift beim Laufen: Dash {DASH_DIST:.0f} m nach vorne in {DASH_TIME:.1f} s,\n{DASH_CD:.0f} s Abklingzeit.",
         "spring": f"Springt deutlich höher (Sprungkraft x{SPRING_JUMP:g}).",
-        "double_jump": "Leertaste in der Luft: Doppelsprung.",
     }.get(g.kind, "")
-    return f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
+    out = f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
+    if g.set:
+        n = set_count(pl, g.set) if pl is not None else 0
+        out += f"\n{SETS[g.set][0]} {n}/3 - Set-Bonus: {SET_BONUS_TEXT[g.set]}"
+    return out
 
 
 def buff_info(kind, pl=None):
@@ -2021,6 +2069,11 @@ class Mob:
             self.z = self.gz + self.hover
             return
         rng = world.mrng
+        if getattr(self, "stun_t", 0.0) > 0:            # 7c: Stromstoss - steht still, greift nicht an
+            self.stun_t -= dt
+            self.speed_now = 0.0
+            self.hurt_t = max(0.0, self.hurt_t - dt)
+            return
         self.hurt_t = max(0.0, self.hurt_t - dt)
         self.alert_t = max(0.0, self.alert_t - dt)
         self.atk_cd = max(0.0, self.atk_cd - dt)
@@ -2395,6 +2448,37 @@ def wears(pl, kind):
         if gi is not None and GEAR[gi].kind == kind:
             return True
     return False
+
+
+def set_count(pl, name):
+    """7c: Wie viele Teile des Sets name trägt der Spieler?"""
+    return sum(1 for gi in getattr(pl, "gear", {}).values() if gi is not None and GEAR[gi].set == name)
+
+
+def set_full(pl, name):
+    return set_count(pl, name) >= 3
+
+
+def gear_hp_bonus(pl):
+    """7c: + max. HP aus der Ausrüstung (Rüstungs-Teile, Set-Bonus)."""
+    b = sum(GEAR[gi].hp for gi in getattr(pl, "gear", {}).values() if gi is not None)
+    return b + (ARMOR_SET_BONUS if set_full(pl, "armor") else 0.0)
+
+
+def shield_max(pl):
+    """7c: Schild-HP aller getragenen Schild-Teile zusammen (ein Balken)."""
+    return sum(GEAR[gi].shield for gi in getattr(pl, "gear", {}).values() if gi is not None)
+
+
+def update_max_hp(pl):
+    """7c: max. HP = 100 + Ausrüstung (+ Set-Bonus) + Tank-Buff; Leben anteilig mitnehmen."""
+    new = PLAYER_HP + gear_hp_bonus(pl) + getattr(pl, "tank_add", 0.0)
+    old = getattr(pl, "max_hp", PLAYER_HP) or PLAYER_HP
+    if abs(new - old) > 1e-6:
+        if pl.hp > 0:
+            pl.hp = max(1.0, min(new, pl.hp * new / old))
+        pl.max_hp = new
+    pl.shield_hp = min(pl.shield_hp, shield_max(pl)) if hasattr(pl, "shield_hp") else 0.0
 
 
 def remember_loot(pl, name):
@@ -4116,7 +4200,7 @@ class World:
                 self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
             if dmg <= 0:
                 return
-        if not instant and dmg >= pl.hp:                 # tödlich: Helm (Kopf) bzw. Platte (Körper) rettet einmal
+        if not instant and dmg >= pl.hp and head:        # tödlich: der Basic-Helm rettet einmal (7c: nur Kopf)
             save = "save_head" if head else "save_body"
             slot = "head" if head else "torso"
             gi = pl.gear.get(slot)
@@ -4189,6 +4273,30 @@ class World:
         """Schadens-Buff des Verursachers (Fluchttier): eigene Treffer machen BUFF_DAMAGE-fachen Schaden."""
         p = self.players.get(owner) if isinstance(owner, int) and owner >= 0 else None
         return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
+
+    def shock(self, pl):
+        """7c: Schild-Set-Fähigkeit "Stromstoss": betäubt alle Spieler und Monster im Umkreis SHOCK_R (nicht einen
+        selbst) zufällig SHOCK_STUN_MIN..MAX s. Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
+        if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "shield") or getattr(pl, "shock_cd", 0.0) > 0
+                or pl.vehicle >= 0 or pl.heli >= 0):
+            return False
+        pl.shock_cd = SHOCK_CD
+        rng = self.mrng
+        for q in self.players.values():
+            if q is pl or q.hp <= 0:
+                continue
+            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R and abs(q.z - pl.z) < 2.5:
+                q.stun_lock = 0.0
+                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
+                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+                m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
+        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
+        return True
 
     def stun_player(self, pl, dur):
         """Betäubung (Drohne): nicht laufen, nicht schiessen, nicht steuern - Umschauen geht."""
@@ -4364,18 +4472,16 @@ class World:
         self.end_buff(pl)
         kind = self.mrng.choice(BUFF_KINDS)
         pl.buff, pl.buff_t = kind, BUFF_T[kind]
-        if kind == "tank":
-            mx = self.mrng.choice(BUFF_TANK_HP)
-            pl.hp = pl.hp * mx / pl.max_hp               # Leben mitskalieren (80/100 -> 160/200)
-            pl.max_hp = mx
+        if kind == "tank":                               # 7c: Tank kommt zu Ausrüstung/Set dazu
+            pl.tank_add = self.mrng.choice(BUFF_TANK_HP) - PLAYER_HP
+            update_max_hp(pl)                            # Leben mitskalieren (80/100 -> 160/200)
         pl.stats["buffs"] += 1
         self.events.append(("buff", pl.pid, kind, BUFF_T[kind], pl.max_hp))
 
     def end_buff(self, pl):
-        if pl.buff == "tank" and pl.max_hp != PLAYER_HP:
-            if pl.hp > 0:
-                pl.hp = max(1.0, pl.hp * PLAYER_HP / pl.max_hp)   # prozentual zurück: 180/200 -> 90/100
-            pl.max_hp = PLAYER_HP
+        if pl.buff == "tank":
+            pl.tank_add = 0.0
+            update_max_hp(pl)                            # prozentual zurück: 180/200 -> 90/100
         pl.buff, pl.buff_t = None, 0.0
 
     def head_mult(self, wi):
@@ -4652,6 +4758,9 @@ class World:
         pl.gear[g.slot] = gi
         if g.kind == "shield" and old != gi:
             pl.shield_t = 0.0                            # Schildstand gehört dem Spieler (kein Zurücksetzen)
+        update_max_hp(pl)                                # 7c: Rüstung/Set/Schild neu verrechnen
+        if g.shield > 0 and old != gi:                   # neues Schild-Teil bringt seine Schild-HP gleich mit
+            pl.shield_hp = min(shield_max(pl), pl.shield_hp + g.shield)
         self.events.append(("gear", pl.pid, gi, gear_list(pl), crate))
         return True
 
@@ -6170,8 +6279,12 @@ class World:
             pl.stun_lock = max(0.0, pl.stun_lock - dt)
             if pl.hp > 0 and wears(pl, "shield"):
                 pl.shield_t += dt
-                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < SHIELD_HP:
-                    pl.shield_hp = min(SHIELD_HP, pl.shield_hp + SHIELD_RATE * dt)
+                smax = shield_max(pl)
+                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < smax:
+                    n_ = sum(1 for gi in pl.gear.values() if gi is not None and GEAR[gi].shield > 0)
+                    rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
+                    pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
+            pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
             if pl.buff is not None:
                 pl.buff_t -= dt
                 if pl.buff_t <= 0:
@@ -6232,7 +6345,10 @@ class Player:
         self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
         self.buff, self.buff_t = None, 0.0   # Buff vom Fluchttier: "speed" | "damage" | "tank", Restzeit
         self.gear = {sl: None for sl in GEAR_SLOTS}   # Ausrüstung je Slot (Index in GEAR)
-        self.shield_hp, self.shield_t = SHIELD_HP, 99.0   # Schild: Stand, s seit dem letzten Schildschaden
+        self.shield_hp, self.shield_t = 0.0, 99.0   # Schild: Stand, s seit dem letzten Schildschaden (7c: Teile laden ihn)
+        self.tank_add = 0.0               # 7c: + max. HP durch den Tank-Buff
+        self.shock_cd = 0.0               # 7c: Abklingzeit Stromstoss (Schild-Set)
+        self.dash_dist = 0.0              # 7c: Hermes-Set: so weit ist der laufende Dash schon geglitten
         self.jet_fuel = JET_FUEL          # Jetpack-Treibstoff (s); gehört dem Spieler, nicht dem Teil
         self.jet_on = False               # Jetpack feuert gerade (Anzeige, auch für andere)
         self.dash_cd, self.dash_t = 0.0, 0.0   # Hermes: Abklingzeit, laufender Dash (s)
@@ -6377,12 +6493,18 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.dash_cd = max(0.0, pl.dash_cd - dt)
         if (pl.run_edge and pl.moving and pl.dash_cd <= 0 and pl.dash_t <= 0 and pl.crouch < 0.3
                 and wears(pl, "dash")):                             # Hermes: Shift drücken = Dash nach vorn
-            pl.dash_t, pl.dash_cd = DASH_TIME, DASH_CD
+            hs = set_full(pl, "hermes")
+            pl.dash_t, pl.dash_cd = DASH_TIME / (HERMES_SET_DASH if hs else 1.0), DASH_CD
             pl.dash_dir = (dx / l, dy / l)
+            pl.dash_dist = 0.0
         pl.run_edge = False
     if gear is not None and pl.dash_t > 0:
+        hs = set_full(pl, "hermes")
+        sp = DASH_DIST / DASH_TIME * (HERMES_SET_DASH if hs else 1.0)
         pl.dash_t -= dt
-        sp = DASH_DIST / DASH_TIME
+        pl.dash_dist += sp * dt
+        if hs and run and pl.dash_dist < HERMES_GLIDE_MAX:     # 7c: Shift halten = weitergleiten (bis 30 m)
+            pl.dash_t = max(pl.dash_t, dt * 1.5)
         pl.x += pl.dash_dir[0] * sp * dt
         pl.y += pl.dash_dir[1] * sp * dt
         pl.moving = True
@@ -6393,6 +6515,8 @@ def step(pl, forward, strafe, run, jump, dt, world):
         speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
         if getattr(pl, "buff", None) == "speed" and pl.buff_t > 0:
             speed *= BUFF_SPEED
+        if gear is not None and set_full(pl, "hermes"):
+            speed *= HERMES_SET_SPEED                              # 7c: Hermes-Set
         pl.x += dx / l * speed * dt
         pl.y += dy / l * speed * dt
         if pl.on_ground:
@@ -6425,12 +6549,12 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.on_ground = False
         pl.air_jump = False
         jedge = False                                # dieser Druck war der normale Sprung
-    elif jedge and not pl.on_ground and not pl.air_jump and wears(pl, "double_jump"):
+    elif jedge and not pl.on_ground and not pl.air_jump and (wears(pl, "double_jump") or wears(pl, "jetpack")):
         pl.vz = max(pl.vz, DOUBLE_JUMP_V)            # Jetpack-Schuhe: zweiter Sprung in der Luft
         pl.air_jump = True
         jedge = False
     jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
-           and pl.jet_fuel > 0 and (pl.air_jump or not wears(pl, "double_jump")))
+           and pl.jet_fuel > 0 and pl.air_jump)               # 7c: Jetpack = erst Doppelsprung, dann Schub
     pl.jet_on = jet                                  # Jetpack: Leertaste in der Luft halten
     if jet:
         pl.jet_fuel = max(0.0, pl.jet_fuel - dt)
@@ -10080,17 +10204,30 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
     rng = rng or random.Random(31 + gi)
     m = Mesh()
     c = g.col
-    if g.kind == "save_head":                       # Helm: Schale, Kuppe und Rand (sitzt über dem Kopf)
+    if g.slot == "head":                            # Helme: Schale, Kuppe und Rand (sitzt über dem Kopf)
         box(m, 0, 0, 0.1, 0.58, 0.54, 0.2, c, rng)
         box(m, 0, 0, 0.24, 0.42, 0.4, 0.08, c, rng)
         box(m, 0, 0.02, 0.0, 0.64, 0.6, 0.04, tuple(v * 0.7 for v in c), rng)
-    elif g.kind == "save_body":                     # Plattenrüstung: Brust- und Rückenplatte, Schulterstücke
+        if g.kind == "hp":                          # Armeehelm: Tarnnetz-Band, tiefer Nackenschutz
+            box(m, 0, 0, 0.14, 0.6, 0.56, 0.05, (0.30, 0.32, 0.22), rng)
+            box(m, 0, -0.26, 0.02, 0.5, 0.08, 0.16, c, rng)
+        elif g.kind == "shield":                    # Schild-Helm: leuchtendes Visier
+            box(m, 0, 0.28, 0.06, 0.46, 0.04, 0.1, (0.45, 0.85, 1.0))
+        elif g.kind == "dash":                      # Hermes-Helm: Flügel
+            for sx in (-1, 1):
+                box(m, sx * 0.33, -0.04, 0.2, 0.04, 0.22, 0.16, (1.0, 1.0, 0.95), rng)
+    elif g.slot == "torso" and g.kind == "dash":    # Hermes-Weste: goldene Weste mit Flügelchen am Rücken
+        box(m, 0, 0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
+        box(m, 0, -0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
+        for sx in (-1, 1):
+            box(m, sx * 0.14, -0.27, 0.12, 0.05, 0.08, 0.3, (1.0, 1.0, 0.95), rng)
+    elif g.slot == "torso" and g.kind == "hp":      # Plattenrüstung: Brust- und Rückenplatte, Schulterstücke
         dk = tuple(v * 0.75 for v in c)
         box(m, 0, 0.2, 0.04, 0.56, 0.06, 0.56, c, rng)
         box(m, 0, -0.2, 0.04, 0.56, 0.06, 0.56, dk, rng)
         for sx in (-1, 1):
             box(m, sx * 0.3, 0.0, 0.3, 0.18, 0.42, 0.06, dk, rng)
-    elif g.kind == "shield":                        # Schildgenerator: Weste mit leuchtendem Kern
+    elif g.kind == "shield" and g.slot == "torso":  # Schildgenerator: Weste mit leuchtendem Kern
         box(m, 0, 0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
         box(m, 0, -0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
         box(m, 0, 0.24, 0.06, 0.18, 0.03, 0.18, c)
@@ -10107,8 +10244,10 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                     box(m, wx, -0.06, 0.1, 0.04, 0.16, 0.12, (1.0, 1.0, 0.95), rng)
             elif g.kind == "spring":                # Springfedern unter der Sohle
                 box(m, x, 0.04, -0.12, 0.12, 0.12, 0.12, (0.6, 0.6, 0.62), rng)
-            else:                                   # Jetpack-Schuhe: Düsen an der Ferse
-                box(m, x, -0.16, -0.02, 0.1, 0.08, 0.08, (0.25, 0.25, 0.27), rng)
+            elif g.kind == "shield":                # Schild-Stiefel: leuchtende Kappe
+                box(m, x, 0.18, 0.04, 0.16, 0.05, 0.08, (0.45, 0.85, 1.0))
+            elif g.kind == "hp":                    # Kampfstiefel: hoher Schaft
+                box(m, x, -0.02, 0.14, 0.18, 0.2, 0.18, c, rng)
     return m
 
 
@@ -12344,6 +12483,8 @@ class HostSession:
             pl.cur = idx
             note_hand(pl)
             w.add_shot(pl, eye, dirs, wp)
+        elif t == "shock":                        # 7c: Stromstoss (Schild-Set)
+            w.shock(pl)
         elif t == "atteq":                        # 7b: Aufsatz aus dem Lager aufstecken (Tab-Fenster)
             wi_, si_, v_ = m.get("w"), m.get("s"), m.get("v")
             if all(isinstance(q, int) and not isinstance(q, bool) for q in (wi_, si_, v_)) and 0 <= si_ <= ATT_SCOPE:
@@ -12848,6 +12989,10 @@ class ClientSession:
         self.conn.send({"t": "melee", "d": [round(v, 4) for v in d]})
         self.conn.flush()
 
+    def send_shock(self):
+        self.conn.send({"t": "shock"})
+        self.conn.flush()
+
     def send_atteq(self, wi, si, v):
         self.conn.send({"t": "atteq", "w": wi, "s": si, "v": v})
         self.conn.flush()
@@ -13095,16 +13240,19 @@ class PlayerView:
         for sl, gi in zip(GEAR_SLOTS, key):
             if gi < 0:
                 continue
-            if sl == "head":
+            if sl == "head":                             # 7c: an Sinans Soldaten angepasst (Kopf ca. 0,26 m breit)
                 n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, 0.02, 1.07)
+                n.setPos(0, -0.005, GEAR_FIG_HEAD_Z)
+                n.setScale(GEAR_FIG_SCALE["head"])
             elif sl == "torso":
                 n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, 0, 0.36)
+                n.setPos(0, 0, 0.34)
+                n.setScale(GEAR_FIG_SCALE["torso"])
             else:                                        # je ein Schuh an jedem Bein (läuft mit)
                 for leg in (self.legL, self.legR):
                     n = leg.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
                     n.setPos(0, 0.04, -0.72)
+                    n.setScale(GEAR_FIG_SCALE["feet"])
                     self.gear_nodes.append(n)
                 continue
             self.gear_nodes.append(n)
@@ -131193,6 +131341,7 @@ class Game(ShowBase):
         self.apply_volume()
         self.accept("v", self.on_alt)
         self.accept("g", self.on_grenade)
+        self.accept(KEYS["ability"], self.on_ability)          # 7c: Set-Fähigkeit (Stromstoss)
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
@@ -133271,7 +133420,8 @@ class Game(ShowBase):
         # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
         self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
-                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col)}
+                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
+                              "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
         # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
         mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
@@ -133810,6 +133960,23 @@ class Game(ShowBase):
     def on_grenade(self):
         if self.mode == "play" and self.quit_box is None:
             self.throw_req = True
+
+    def on_ability(self):
+        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if not set_full(pl, "shield"):
+            self.toast("Stromstoss nur mit komplettem Schild-Set (Helm, Schild, Stiefel)", (0.8, 0.85, 0.95), 1.8)
+            return
+        if getattr(pl, "shock_cd", 0.0) > 0:
+            self.toast(f"Stromstoss lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_shock()
+        else:
+            self.world.shock(pl)
 
     def use_object(self, alt=False):
         """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
@@ -134419,7 +134586,7 @@ class Game(ShowBase):
             gi = pl.gear.get(sl)
             if gi is not None and pl.heli < 0:
                 p = tl["tile"].getPos(a2)
-                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi)))
+                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
         p = self.melee_frame.getPos(a2)
         out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee)))
         b = getattr(pl, "buff", None)
@@ -134432,7 +134599,7 @@ class Game(ShowBase):
             ic = self.ability_icons.get(key)
             if gi is not None and ic is not None:
                 p = ic.root.getPos(a2)
-                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi)))
+                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi, pl)))
         return out
 
     def update_tooltip(self):
@@ -134953,6 +135120,8 @@ class Game(ShowBase):
         """Ein Spielschritt (Logik + Darstellung). Getrennt von der Eingabe,
         damit man ihn auch ohne Fenster testen kann."""
         pl, world = self.player, self.world
+        if self.net_mode == "client" and getattr(pl, "shock_cd", 0.0) > 0:
+            pl.shock_cd = max(0.0, pl.shock_cd - dt)          # 7c: beim Host zählt die Welt
         nsub = max(1, int(math.ceil(dt / 0.034)))
         dead = pl.hp <= 0
         if getattr(pl, "stun_t", 0.0) > 0 and not dead:   # betäubt (Drohne): nicht bewegen, schiessen, steuern;
@@ -135559,6 +135728,19 @@ class Game(ShowBase):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
                     self.sp_cam.kick(10)
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
+            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen
+                cx_, cy_, cz_ = e[2], e[3], e[4] + 1.0
+                for k_ in range(12):
+                    a_ = k_ * math.tau / 12
+                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * SHOCK_R, cy_ + math.sin(a_) * SHOCK_R,
+                                                  cz_ - 0.6 + 0.4 * math.sin(k_ * 1.7)), True)
+                for k_ in range(36):
+                    a_ = k_ * math.tau / 36
+                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * SHOCK_R * 2.2, math.sin(a_) * SHOCK_R * 2.2, 0.6),
+                                      (0.5, 0.85, 1.0), 0.05, 0.45, 0.0)
+                self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
+                if e[1] == self.my_id:
+                    self.player.shock_cd = SHOCK_CD
             elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
                 self.zap_fx(e[1], e[2], bool(e[3]))
             elif kind == "stun":
@@ -137255,7 +137437,7 @@ class Game(ShowBase):
         if alive and wears(pl, "shield"):
             self.shield_bg.show()
             self.shield_fg.show()
-            self.shield_fg.setSx(max(0.55 * pl.shield_hp / SHIELD_HP, 0.0001))
+            self.shield_fg.setSx(max(0.55 * pl.shield_hp / max(1.0, shield_max(pl)), 0.0001))
         else:
             self.shield_bg.hide()
             self.shield_fg.hide()
@@ -137264,11 +137446,27 @@ class Game(ShowBase):
             dash.hide()
             jet.hide()
             ic.hide()
+            if self.ability_icons.get("shock") is not None:
+                self.ability_icons["shock"].hide()
             for tl in self.gear_tiles.values():
                 tl["tile"].hide()
             return
+        full = next((s for s in SETS if alive and set_full(pl, s)), None)   # 7c: komplettes Set: Kacheln leuchten
+        shock = self.ability_icons.get("shock")
+        if shock is not None:
+            if full == "shield":
+                rdy = pl.shock_cd <= 0
+                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, None,
+                          f"{SET_ICON_KEY.upper()}  Stromstoss" if rdy else f"{int(math.ceil(pl.shock_cd))} s")
+            else:
+                shock.hide()
         for sl, tl in self.gear_tiles.items():
             tl["tile"].show()
+            if full is not None:
+                sc_ = SETS[full][1]
+                tl["bg"].setColor(sc_[0] * 0.45, sc_[1] * 0.45, sc_[2] * 0.45, 0.85)
+            else:
+                tl["bg"].setColor(0.04, 0.05, 0.08, 0.7)
             gi = pl.gear.get(sl) if alive else None
             self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
             if gi is not None:
