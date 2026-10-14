@@ -8,7 +8,7 @@ Low-Poly-Partybox für lustige Abende (Panda3D, LAN-Multiplayer).
 Polybash/
 ├── spiel.py                          Hauptspiel (Sinan)
 ├── experimental/
-│   └── spiel_experimental.py         Modus "Experimental" = Robins Spielversion
+│   └── robin_experimental.py         Modus "Experimental" = Robins Spielversion
 ├── maps/                             Karten (.json, .mcmap)
 └── installer/                        Windows-Installer (Inno Setup)
 .github/workflows/build-installer.yml baut den Installer auf GitHub (Actions)
@@ -17,9 +17,12 @@ Polybash/
 ## Wer ändert was
 
 - **Sinan** ändert `Polybash/spiel.py` auf seinem Zweig.
-- **Robin** ändert nur `Polybash/experimental/spiel_experimental.py` auf seinem Zweig.
-  Das ist ein eigenständiges Spiel: Im Menü wählt man den Modus "Experimental", dann startet `spiel.py`
-  diese Datei als eigenen Prozess. Die anderen Modi sind davon nicht betroffen.
+- **Robin** ändert nur `Polybash/experimental/robin_experimental.py` auf seinem Zweig.
+  Im Start-Menü steht "Experimental" gleichberechtigt neben King of the Hill und Deathmatch; `spiel.py`
+  startet diese Datei dann als eigenen Prozess. Die anderen Modi sind davon nicht betroffen.
+  Regel in Experimental: Alle starten und respawnen nur mit der Pistole, alle anderen Waffen kommen aus Kisten.
+  Das Ausrüstungsmenü (Aufsätze, Visier, Gadget), Sounds und Spielmechaniken stammen aus `spiel.py`
+  (Stand: v0.8, zusammengeführt) - bei Änderungen im Hauptspiel bitte gelegentlich in Robins Datei übernehmen.
 - `main` ist der Stand für alle Freunde. Zusammengeführt wird per Pull Request.
 
 ## Starten
@@ -29,9 +32,11 @@ Polybash/
 
 ## Hinweise für Robins Datei
 
-- Sie darf auch allein gestartet werden: `python3 Polybash/experimental/spiel_experimental.py`
+- Sie darf auch allein gestartet werden: `python3 Polybash/experimental/robin_experimental.py`
   (aus dem Ordner `Polybash` starten, damit `maps` gefunden wird).
 - Einstellungen und Fehlerprotokoll liegen getrennt vom Hauptspiel
   (`spiel_einstellungen_experimental.json`, `spiel_fehler_experimental.log`).
 - Beim Start aus `spiel.py` übergibt das Hauptspiel Name, Karte und Zeitlimit über die Umgebungsvariable
   `POLYBASH_EXP_SPEC`; ausgewertet wird sie in `_exp_autostart` am Dateiende. Diese Funktion bitte nicht entfernen.
+
+- Tasten in Experimental: 1-3 Waffen (3 = Spezialwaffe), 4 Nahkampf, 5 Gadget, Mausrad wechselt durch alles.

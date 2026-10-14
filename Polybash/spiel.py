@@ -110,12 +110,12 @@ Rückstoss: Das Waffenmodell hängt an gedämpften Federn
   x'' = -k x - c x'   (Impuls beim Schuss -> Ausschwingen), ebenso die Kamera.
 """
 # ===== Experimental: Robins Spielversion ===========================================================
-# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/spiel_experimental.py als
+# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/robin_experimental.py als
 # eigener Prozess (eigene Einstellungsdatei spiel_einstellungen_experimental.json). Alle anderen Modi bleiben
 # davon völlig unberührt. Das Hauptprogramm unten wird in diesem Fall gar nicht erst geladen.
 import os as _os
 import sys as _sys
-EXP_FILE = _os.path.join("experimental", "spiel_experimental.py")
+EXP_FILE = _os.path.join("experimental", "robin_experimental.py")
 
 
 def _exp_path():
@@ -128091,9 +128091,8 @@ class Game(ShowBase):
     def start_experimental(self):
         """Start im Modus Experimental: Robins Spielversion mit den hier gewählten Einstellungen."""
         c, mc = self.cfg, self.cfg_is_mc()
-        cfg = {"mode": "dm" if mc else "koth", "limit": int(c["limit"]), "mobs": (not mc) and bool(c.get("mobs")),
-               "map": c.get("map")}
-        for k in ("cd", "regen", "resp"):
+        cfg = {"mode": "dm" if mc else "koth", "limit": int(c["limit"]), "map": c.get("map")}
+        for k in ("mobs", "tomahawk", "cd", "regen", "resp"):
             if isinstance(c.get(k), (int, float)):
                 cfg[k] = c[k]
         self.launch_experimental({"do": "host", "cfg": cfg})
