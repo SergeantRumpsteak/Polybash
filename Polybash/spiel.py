@@ -7047,6 +7047,480 @@ MAG_PARTS = {
     "Railgun": (0, 0.05, -0.17, 0.05, 0.08, 0.09, (0.20, 0.70, 0.90)),
 }
 
+# ------------------------------------------------------------------ Detaillierte Waffenmodelle
+# Jede Waffe besteht aus Formen (Waffenkoordinaten wie GUN_PARTS: +y vorwärts, +x rechts, z oben). Aus denselben
+# Formen entstehen das 3D-Modell (Ego-Ansicht, Bodenmodell) und das 2D-Symbol (Seitenansicht).
+#   ("p", cx, Breite, [(y, z), ...], Farbe)            Seitenprofil, in x-Richtung aufgedickt (abgeschrägte Kanten)
+#   ("t", [(x, y, z), ...], [r, ...], Farbe, Seiten)   runde Röhre entlang eines Pfads; r = Radius oder (rx, rz)
+#   ("b", cx, cy, cz, sx, sy, sz, Farbe)                Quader
+#   ("e", cx, cy, cz, rx, ry, rz, Farbe)                Ellipsoid
+def _gs_line(cx, w, p0, p1, t, col):
+    """Dünner Balken (Profil) von p0 nach p1 im y/z-Schnitt, Dicke t (Abzugsbügel, Drähte)."""
+    dy, dz = p1[0] - p0[0], p1[1] - p0[1]
+    ln = math.hypot(dy, dz) or 1e-6
+    ny, nz = -dz / ln * t / 2, dy / ln * t / 2
+    return ("p", cx, w, [(p0[0] + ny, p0[1] + nz), (p1[0] + ny, p1[1] + nz), (p1[0] - ny, p1[1] - nz),
+                         (p0[0] - ny, p0[1] - nz)], col)
+
+
+def _gs_loop(cx, w, pts, t, col):
+    return [_gs_line(cx, w, pts[i], pts[i + 1], t, col) for i in range(len(pts) - 1)]
+
+
+def _gs_ty(cx, cz, prof, col, sides=12):
+    """Drehkörper um die y-Achse: prof = [(y, r) oder (y, rx, rz)]; gleiche y ergeben eine Stufe."""
+    pts, rs, last = [], [], None
+    for e in prof:
+        y = e[0]
+        if last is not None and y <= last:
+            y = last + 5e-4
+        last = y
+        pts.append((cx, y, cz))
+        rs.append(e[1] if len(e) == 2 else (e[1], e[2]))
+    return ("t", pts, rs, col, sides)
+
+
+def _poly_area(pts):
+    n = len(pts)
+    return 0.5 * sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n))
+
+
+def _earclip(pts):
+    """Dreiecke (Indexe) eines einfachen Polygons mit Umlaufsinn gegen den Uhrzeigersinn."""
+    idx = list(range(len(pts)))
+    out = []
+
+    def cr(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    while len(idx) > 3:
+        m = len(idx)
+        for k in range(m):
+            i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % m]
+            a, b, c = pts[i0], pts[i1], pts[i2]
+            if cr(a, b, c) <= 1e-12:
+                continue
+            if any(cr(a, b, pts[j]) >= 0 and cr(b, c, pts[j]) >= 0 and cr(c, a, pts[j]) >= 0
+                   for j in idx if j not in (i0, i1, i2)):
+                continue
+            out.append((i0, i1, i2))
+            idx.pop(k)
+            break
+        else:
+            break
+    for k in range(1, len(idx) - 1):
+        out.append((idx[0], idx[k], idx[k + 1]))
+    return out
+
+
+def _gs_ext(m, cx, w, pts, col, rng, off, bev=0.0035):
+    """Seitenprofil -> Körper: grosse Seitenflächen, schmale Fase, Ober-/Unterkanten."""
+    pts = [(p[0] + off[1], p[1] + off[2]) for p in pts]
+    cx += off[0]
+    if _poly_area(pts) < 0:
+        pts = pts[::-1]
+    n = len(pts)
+    ys, zs = [p[0] for p in pts], [p[1] for p in pts]
+    y0, y1, z0, z1 = min(ys), max(ys), min(zs), max(zs)
+    gy, gz = (y0 + y1) / 2, (z0 + z1) / 2
+    ly, lz = max(y1 - y0, 1e-3), max(z1 - z0, 1e-3)
+    ky, kz = max(0.3, 1 - 2 * bev / ly), max(0.3, 1 - 2 * bev / lz)
+    cap = [(gy + (p[0] - gy) * ky, gz + (p[1] - gz) * kz) for p in pts]
+    hw = w / 2
+    xw = max(hw - bev, hw * 0.5)
+
+    def vk(z):
+        return 0.74 + 0.26 * (z - z0) / lz
+
+    cc = jc(col, rng, 0.02)
+    for sg in (-1, 1):
+        for a, b, c in _earclip(cap):
+            P = [(cx + sg * hw, cap[i][0], cap[i][1]) for i in (a, b, c)]
+            m.tri(P[0], P[1], P[2], cc, ref=(cx, gy, gz), vk=[vk(cap[i][1]) for i in (a, b, c)])
+    for i in range(n):
+        j = (i + 1) % n
+        ey, ez = pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]
+        ln = math.hypot(ey, ez)
+        if ln < 1e-7:
+            continue
+        oy, oz = ez / ln, -ey / ln                                   # Aussenrichtung (Polygon gegen den Uhrzeigersinn)
+        my, mz = (pts[i][0] + pts[j][0]) / 2, (pts[i][1] + pts[j][1]) / 2
+        c1 = jc(col, rng, 0.02)
+        for sg in (-1, 1):
+            q = [(cx + sg * hw, cap[i][0], cap[i][1]), (cx + sg * hw, cap[j][0], cap[j][1]),
+                 (cx + sg * xw, pts[j][0], pts[j][1]), (cx + sg * xw, pts[i][0], pts[i][1])]
+            ref = (cx + sg * (hw + xw) / 2 - sg * 0.6, my - oy, mz - oz)
+            kk = [vk(cap[i][1]), vk(cap[j][1]), vk(pts[j][1]), vk(pts[i][1])]
+            m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(kk[0], kk[1], kk[2]))
+            m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(kk[0], kk[2], kk[3]))
+        q = [(cx - xw, pts[i][0], pts[i][1]), (cx + xw, pts[i][0], pts[i][1]),
+             (cx + xw, pts[j][0], pts[j][1]), (cx - xw, pts[j][0], pts[j][1])]
+        ref = (cx, my - oy, mz - oz)
+        k0, k1 = vk(pts[i][1]), vk(pts[j][1])
+        top = 1.0 + 0.0 * oz
+        m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(k0 * top, k0 * top, k1 * top))
+        m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(k0 * top, k1 * top, k1 * top))
+
+
+def build_shapes(m, shapes, rng, off=(0.0, 0.0, 0.0)):
+    """Baut die Formen einer Waffe in das Mesh m; off verschiebt alles (Bodenmodell, Magazin)."""
+    ox, oy, oz = off
+    for s in shapes:
+        k = s[0]
+        if k == "p":
+            _gs_ext(m, s[1], s[2], s[3], s[4], rng, off)
+        elif k == "t":
+            rx = [r if not isinstance(r, tuple) else r[0] for r in s[2]]
+            rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+            loft(m, [(x + ox, y + oy, z + oz) for x, y, z in s[1]], rx, rz, s[3], rng, None, None, (True, True), 0.02, s[4])
+        elif k == "b":
+            box(m, s[1] + ox, s[2] + oy, s[3] + oz, s[4], s[5], s[6], s[7], rng)
+        else:
+            ell(m, (s[1] + ox, s[2] + oy, s[3] + oz), s[4], s[5], s[6], s[7], rng, rings=5)
+
+
+def shape_polys(s, off=(0.0, 0.0, 0.0)):
+    """Seitenansicht (y/z) einer Form als [(Punkte, Farbe)]."""
+    oy, oz = off[1], off[2]
+    k = s[0]
+    if k == "p":
+        return [([(y + oy, z + oz) for y, z in s[3]], s[4])]
+    if k == "b":
+        y0, y1, z0, z1 = s[2] - s[5] / 2 + oy, s[2] + s[5] / 2 + oy, s[3] - s[6] / 2 + oz, s[3] + s[6] / 2 + oz
+        return [([(y0, z0), (y1, z0), (y1, z1), (y0, z1)], s[7])]
+    if k == "e":
+        return [([(s[2] + oy + math.cos(a) * s[5], s[3] + oz + math.sin(a) * s[6])
+                  for a in [2 * math.pi * i / 14 for i in range(14)]], s[7])]
+    pts = [(y + oy, z + oz) for _x, y, z in s[1]]
+    rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+    left, right = [], []
+    for i, (y, z) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        dy, dz = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dy, dz)
+        if ln < 1e-9:
+            continue
+        ny, nz = -dz / ln * rz[i], dy / ln * rz[i]
+        left.append((y + ny, z + nz))
+        right.append((y - ny, z - nz))
+    if len(left) < 2:
+        return []
+    return [(left + right[::-1], s[3])]
+
+
+_C_DK = (0.08, 0.08, 0.09)
+
+
+def _gs_mk():
+    """Alle Waffenformen. Rückgabe: Name -> {body, barrel (nur Schrotflinte), mag (relativ zur Magazinmitte), iron}."""
+    G = {}
+    P = GUN_PARTS
+
+    # ---------------- Pistole
+    slide, frame, grip, dk = (0.22, 0.22, 0.25), (0.15, 0.15, 0.17), (0.30, 0.20, 0.12), (0.06, 0.06, 0.07)
+    body = [("p", 0, 0.046, [(-0.012, 0.006), (-0.014, 0.050), (-0.005, 0.0575), (0.236, 0.0575), (0.252, 0.049),
+                             (0.254, 0.008), (0.236, 0.0025), (0.0, 0.0025)], slide),
+            ("p", 0, 0.040, [(-0.03, 0.0025), (0.19, 0.0025), (0.19, -0.018), (0.15, -0.021), (0.11, -0.028),
+                             (0.035, -0.028), (-0.03, -0.012)], frame),
+            ("p", 0, 0.042, [(-0.03, -0.003), (0.040, -0.003), (0.038, -0.028), (0.032, -0.135), (-0.034, -0.135),
+                             (-0.038, -0.07)], grip)]
+    body += [("b", 0.0235, 0.095, 0.0375, 0.002, 0.06, 0.022, dk)]
+    body += [("b", 0, 0.012 + 0.0095 * k, 0.030, 0.0475, 0.0028, 0.034, dk) for k in range(5)]
+    body += [("b", 0, 0.0, -0.04 - 0.015 * k, 0.0435, 0.062, 0.0035, (0.18, 0.12, 0.07)) for k in range(5)]
+    body += [("t", [(0, 0.248, 0.0345), (0, 0.264, 0.0345)], [0.0095, 0.0095], (0.10, 0.10, 0.12), 10),
+             ("t", [(0, 0.2636, 0.0345), (0, 0.2641, 0.0345)], [0.0062, 0.0062], (0.01, 0.01, 0.02), 10),
+             ("p", 0, 0.010, [(-0.014, 0.052), (-0.034, 0.062), (-0.036, 0.052), (-0.02, 0.040)], dk),
+             ("p", 0, 0.006, [(0.06, -0.028), (0.068, -0.028), (0.064, -0.05), (0.057, -0.048)], (0.10, 0.10, 0.12))]
+    body += _gs_loop(0, 0.012, [(0.035, -0.028), (0.04, -0.052), (0.075, -0.058), (0.108, -0.044), (0.11, -0.026)], 0.007, frame)
+    body += [("b",) + tuple(t) for t in P["Pistole"][0][3:]]                 # Kimme und Korn
+    G["Pistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.026, 0.046), (0.026, 0.046), (0.026, -0.044), (-0.026, -0.044)], (0.10, 0.10, 0.12)),
+        ("b", 0, 0.0, -0.047, 0.040, 0.062, 0.010, (0.05, 0.05, 0.06)),
+        ("b", 0, 0.0, 0.047, 0.030, 0.040, 0.004, (0.8, 0.6, 0.2))])
+
+    # ---------------- Sturmgewehr
+    up, lo, hg, stk, grp, blk = (0.20, 0.22, 0.20), (0.17, 0.19, 0.17), (0.18, 0.20, 0.18), (0.30, 0.33, 0.22), (0.30, 0.20, 0.12), (0.10, 0.10, 0.10)
+    body = [("p", 0, 0.052, [(-0.03, -0.004), (-0.03, 0.030), (-0.018, 0.0375), (0.285, 0.0375), (0.285, -0.004)], up),
+            ("p", 0, 0.050, [(-0.03, -0.004), (0.285, -0.004), (0.285, -0.030), (0.235, -0.040), (0.125, -0.040),
+                             (0.100, -0.036), (0.04, -0.036), (-0.03, -0.040)], lo),
+            ("p", 0, 0.040, [(0.035, -0.034), (0.092, -0.034), (0.078, -0.150), (0.022, -0.150)], grp),
+            ("t", [(0, -0.03, 0.012), (0, -0.19, 0.012)], [0.0155, 0.0155], (0.15, 0.16, 0.14), 12),
+            ("p", 0, 0.048, [(-0.185, 0.028), (-0.29, 0.034), (-0.294, -0.058), (-0.21, -0.050), (-0.16, -0.020), (-0.16, 0.0)], stk),
+            ("b", 0, -0.293, -0.012, 0.05, 0.008, 0.092, _C_DK),
+            _gs_ty(0, 0.0, [(0.28, 0.0335), (0.535, 0.0335)], hg, 14),
+            _gs_ty(0, 0.0, [(0.28, 0.036), (0.292, 0.036)], _C_DK, 14),
+            ("b", 0, 0.41, 0.0345, 0.02, 0.25, 0.006, (0.12, 0.12, 0.13)),
+            _gs_ty(0, 0.02, [(0.53, 0.0115), (0.62, 0.0105), (0.70, 0.0105)], blk, 10),
+            _gs_ty(0, 0.02, [(0.695, 0.0145), (0.74, 0.0145)], (0.07, 0.07, 0.08), 10),
+            _gs_ty(0, 0.02, [(0.715, 0.0152), (0.722, 0.0152)], (0.02, 0.02, 0.03), 10),
+            ("b", 0.0265, 0.135, 0.018, 0.004, 0.075, 0.026, _C_DK),
+            ("b", 0, -0.02, 0.0415, 0.024, 0.045, 0.008, (0.10, 0.10, 0.11)),
+            ("b", 0.027, 0.155, -0.025, 0.004, 0.015, 0.012, blk),
+            ("b", 0, 0.123, -0.050, 0.006, 0.008, 0.022, _C_DK)]
+    body += [("b", sg * 0.0325, y, 0.0, 0.004, 0.035, 0.028, (0.05, 0.05, 0.06)) for y in (0.34, 0.40, 0.46) for sg in (-1, 1)]
+    body += _gs_loop(0, 0.008, [(0.100, -0.040), (0.108, -0.062), (0.142, -0.062), (0.150, -0.040)], 0.006, lo)
+    G["Sturmgewehr"] = dict(body=body, barrel=[], iron=[("b",) + tuple(t) for t in P["Sturmgewehr"][0][-8:]], mag=[
+        ("p", 0, 0.036, [(-0.040, 0.080), (0.040, 0.080), (0.044, 0.02), (0.062, -0.081), (0.010, -0.083), (-0.030, -0.01)], (0.12, 0.12, 0.12)),
+        ("p", 0, 0.040, [(0.004, -0.078), (0.070, -0.078), (0.064, -0.087), (0.002, -0.088)], _C_DK)])
+
+    # ---------------- Schrotflinte (Kipplauf: "barrel" hängt am Scharnier y = 0.175)
+    wood, stl = (0.40, 0.26, 0.14), (0.25, 0.25, 0.28)
+    body = [("p", 0, 0.058, [(-0.075, 0.040), (-0.06, 0.0425), (0.175, 0.0425), (0.178, 0.0), (0.176, -0.030),
+                             (0.17, -0.0425), (0.0, -0.0425), (-0.075, -0.03)], stl),
+            ("p", 0, 0.050, [(-0.07, 0.022), (-0.20, 0.018), (-0.32, 0.005), (-0.395, -0.010), (-0.398, -0.088),
+                             (-0.33, -0.082), (-0.22, -0.058), (-0.10, -0.040), (-0.07, -0.032)], wood),
+            ("b", 0, -0.399, -0.049, 0.052, 0.010, 0.080, (0.08, 0.08, 0.09)),
+            ("b", 0.0295, 0.08, 0.02, 0.004, 0.09, 0.02, _C_DK),
+            ("p", 0, 0.006, [(0.01, -0.043), (0.018, -0.043), (0.014, -0.066), (0.008, -0.064)], _C_DK)]
+    body += _gs_loop(0, 0.008, [(-0.03, -0.043), (-0.02, -0.068), (0.04, -0.07), (0.07, -0.043)], 0.007, stl)
+    barrel = [("t", [(0, 0.175, 0.03), (0, 0.76, 0.03), (0, 0.80, 0.03)], [0.0205, 0.0205, 0.0215], (0.15, 0.15, 0.18), 14),
+              _gs_ty(0, 0.03, [(0.77, 0.0235), (0.80, 0.0235)], (0.10, 0.10, 0.12), 14),
+              _gs_ty(0, 0.03, [(0.7995, 0.0150), (0.8, 0.0150)], (0.01, 0.01, 0.02), 14),
+              ("b", 0, 0.48, 0.0525, 0.008, 0.62, 0.006, (0.12, 0.12, 0.14)),
+              _gs_ty(0, -0.015, [(0.175, 0.0175), (0.68, 0.0175)], (0.17, 0.17, 0.20), 12),
+              _gs_ty(0, -0.015, [(0.675, 0.0195), (0.70, 0.0195)], (0.10, 0.10, 0.12), 12),
+              _gs_ty(0, -0.04, [(0.25, 0.020, 0.018), (0.262, 0.030, 0.026), (0.45, 0.030, 0.026)], wood, 12)]
+    barrel += [_gs_ty(0, -0.04, [(y, 0.0312, 0.0272), (y + 0.008, 0.0312, 0.0272)], (0.22, 0.13, 0.07), 12)
+               for y in (0.29, 0.32, 0.35, 0.38, 0.41)]
+    shells = []
+    for sx_, sz_ in ((-0.013, 0.0), (0.013, 0.0), (0.0, 0.02)):
+        shells.append(("t", [(sx_, -0.05, sz_), (sx_, 0.045, sz_)], [0.0105, 0.0105], (0.75, 0.15, 0.10), 10))
+        shells.append(("t", [(sx_, -0.06, sz_), (sx_, -0.045, sz_)], [0.0112, 0.0112], (0.8, 0.65, 0.25), 10))
+    G["Schrotflinte"] = dict(body=body, barrel=barrel, iron=[], mag=shells)
+
+    # ---------------- Scharfschütze
+    gry = (0.30, 0.30, 0.28)
+    body = [("t", [(0, -0.13, 0.005), (0, 0.30, 0.005)], [0.029, 0.029], (0.20, 0.25, 0.22), 14),
+            _gs_ty(0, 0.005, [(0.29, 0.0315), (0.31, 0.0315)], _C_DK, 14),
+            ("b", 0.0285, 0.06, 0.012, 0.004, 0.10, 0.022, _C_DK),
+            ("b", 0.036, -0.04, 0.012, 0.024, 0.012, 0.012, (0.35, 0.35, 0.38)),
+            ("e", 0.052, -0.04, 0.006, 0.012, 0.012, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.15, 0.0325, 0.022, 0.30, 0.005, (0.12, 0.12, 0.14)),
+            ("p", 0, 0.046, [(-0.475, 0.032), (-0.40, 0.034), (-0.30, 0.018), (-0.22, 0.004), (-0.13, 0.0), (-0.13, -0.03),
+                             (-0.10, -0.035), (-0.065, -0.125), (-0.115, -0.128), (-0.15, -0.075), (-0.22, -0.075),
+                             (-0.30, -0.072), (-0.475, -0.070)], gry),
+            ("b", 0, -0.478, -0.019, 0.048, 0.012, 0.102, _C_DK),
+            ("p", 0, 0.040, [(-0.02, -0.02), (0.0, -0.040), (0.38, -0.040), (0.42, -0.034), (0.42, 0.006), (0.30, 0.006),
+                             (0.30, -0.018)], (0.28, 0.27, 0.24)),
+            ("t", [(0, 0.30, 0.02), (0, 0.38, 0.02), (0, 0.55, 0.02), (0, 0.88, 0.02), (0, 0.905, 0.02)],
+             [0.016, 0.015, 0.0135, 0.0125, 0.0125], (0.10, 0.10, 0.11), 12),
+            ("t", [(0, 0.895, 0.02), (0, 0.905, 0.02), (0, 0.95, 0.02)], [0.0125, 0.0205, 0.0205], (0.12, 0.12, 0.13), 12),
+            _gs_ty(0, 0.02, [(0.915, 0.0212), (0.922, 0.0212)], (0.02, 0.02, 0.03), 12),
+            _gs_ty(0, 0.02, [(0.933, 0.0212), (0.940, 0.0212)], (0.02, 0.02, 0.03), 12),
+            ("t", [(0.02, 0.36, -0.04), (0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("t", [(-0.02, 0.36, -0.04), (-0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("p", 0, 0.012, [(-0.115, -0.035), (-0.05, -0.035), (-0.05, -0.052), (-0.115, -0.052)], _C_DK)]
+    G["Scharfschütze"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.032, [(-0.036, 0.04), (0.036, 0.04), (0.038, -0.04), (-0.038, -0.04)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.043, 0.036, 0.084, 0.008, _C_DK)])
+
+    # ---------------- Revolver
+    stl, wd = (0.30, 0.30, 0.33), (0.35, 0.22, 0.12)
+    body = [("p", 0, 0.040, [(-0.045, 0.052), (-0.030, 0.062), (0.125, 0.062), (0.128, 0.012), (0.125, -0.028),
+                             (0.02, -0.032), (-0.035, -0.012)], stl),
+            _gs_ty(0, 0.0, [(0.012, 0.0405), (0.11, 0.0405)], (0.25, 0.25, 0.28), 16),
+            ("t", [(0, 0.11, 0.035), (0, 0.30, 0.035)], [(0.0215, 0.0255), (0.0165, 0.0215)], stl, 8),
+            _gs_ty(0, 0.035, [(0.285, 0.019, 0.023), (0.30, 0.019, 0.023)], _C_DK, 8),
+            ("b", 0, 0.205, 0.0615, 0.012, 0.18, 0.004, _C_DK),
+            ("t", [(0.0, 0.12, 0.0), (0, 0.27, 0.0)], [0.0075, 0.0075], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.255, 0.013), (0.285, 0.013)], stl, 8),
+            ("p", 0, 0.040, [(0.018, -0.004), (-0.040, 0.0), (-0.056, -0.03), (-0.064, -0.10), (-0.080, -0.138),
+                             (-0.026, -0.140), (0.0, -0.10), (0.012, -0.04)], wd),
+            ("p", 0, 0.010, [(-0.032, 0.058), (-0.058, 0.074), (-0.066, 0.068), (-0.040, 0.046)], _C_DK),
+            ("b", 0, 0.06, -0.04, 0.006, 0.008, 0.022, _C_DK)]
+    for k in range(6):
+        a = math.pi / 6 + k * math.pi / 3
+        body.append(("t", [(0.039 * math.cos(a), 0.03, 0.039 * math.sin(a)), (0.039 * math.cos(a), 0.095, 0.039 * math.sin(a))],
+                     [0.0065, 0.0065], (0.08, 0.08, 0.09), 6))
+    body += _gs_loop(0, 0.012, [(0.02, -0.032), (0.03, -0.055), (0.09, -0.058), (0.11, -0.03)], 0.007, stl)
+    body += [("b",) + tuple(t) for t in P["Revolver"][0][3:]]
+    bul = [("t", [(0.017 * math.cos(k * math.pi / 3), -0.027, 0.017 * math.sin(k * math.pi / 3)),
+                  (0.017 * math.cos(k * math.pi / 3), 0.027, 0.017 * math.sin(k * math.pi / 3))],
+            [0.0058, 0.0058], (0.75, 0.6, 0.25), 8) for k in range(6)]
+    bul.append(_gs_ty(0, 0.0, [(-0.03, 0.026), (-0.024, 0.026)], _C_DK, 10))
+    G["Revolver"] = dict(body=body, barrel=[], iron=[], mag=bul)
+
+    # ---------------- Maschinenpistole
+    smg, gp = (0.18, 0.18, 0.20), (0.25, 0.18, 0.12)
+    body = [("p", 0, 0.050, [(-0.032, 0.030), (-0.022, 0.036), (0.262, 0.036), (0.272, 0.028), (0.272, -0.030),
+                             (0.22, -0.036), (0.0, -0.036), (-0.032, -0.030)], smg),
+            ("p", 0, 0.040, [(0.012, -0.034), (-0.052, -0.034), (-0.060, -0.108), (-0.012, -0.110), (0.004, -0.060)], gp),
+            _gs_ty(0, 0.01, [(0.26, 0.0235), (0.355, 0.0235)], (0.13, 0.13, 0.15), 12),
+            ("t", [(0, 0.35, 0.01), (0, 0.40, 0.01)], [0.0125, 0.0125], (0.08, 0.08, 0.09), 10),
+            _gs_ty(0, 0.01, [(0.385, 0.0150), (0.40, 0.0150)], _C_DK, 10),
+            ("b", 0.0255, 0.17, 0.012, 0.004, 0.06, 0.02, _C_DK),
+            ("b", -0.03, 0.19, 0.03, 0.012, 0.035, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.035, -0.046, 0.006, 0.008, 0.022, _C_DK),
+            ("b", 0, -0.203, -0.015, 0.044, 0.008, 0.07, _C_DK)]
+    body += [("b", sg * 0.0235, y, 0.012, 0.004, 0.012, 0.014, _C_DK) for y in (0.28, 0.30, 0.32, 0.34) for sg in (-1, 1)]
+    body += _gs_loop(0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(0, 0.01, [(0.015, -0.036), (0.022, -0.060), (0.05, -0.062), (0.06, -0.036)], 0.007, smg)
+    body += [("b",) + tuple(t) for t in P["Maschinenpistole"][0][4:]]
+    G["Maschinenpistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.030, 0.070), (0.030, 0.070), (0.030, -0.070), (-0.028, -0.070)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.074, 0.040, 0.064, 0.008, _C_DK)]
+        + [("b", 0, 0, z, 0.0365, 0.062, 0.004, (0.06, 0.06, 0.07)) for z in (0.04, 0.01, -0.02, -0.05)])
+
+    # ---------------- Raketenwerfer
+    olv, dk2 = (0.25, 0.30, 0.22), (0.15, 0.15, 0.15)
+    body = [_gs_ty(0, 0.02, [(-0.225, 0.07), (0.725, 0.07)], olv, 22),
+            _gs_ty(0, 0.02, [(-0.26, 0.088), (-0.20, 0.085), (-0.14, 0.072)], dk2, 22),
+            _gs_ty(0, 0.02, [(-0.2625, 0.06), (-0.2585, 0.06)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.70, 0.072), (0.745, 0.085), (0.84, 0.092)], dk2, 22),
+            _gs_ty(0, 0.02, [(0.8395, 0.07), (0.842, 0.07)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.62, 0.0715), (0.64, 0.0715)], (0.85, 0.7, 0.1), 22),
+            ("t", [(0, 0.25, 0.115), (0, 0.45, 0.115)], [0.018, 0.018], (0.10, 0.10, 0.10), 12),
+            ("t", [(0, 0.44, 0.115), (0, 0.465, 0.115)], [0.018, 0.026], _C_DK, 12),
+            ("t", [(0, 0.23, 0.115), (0, 0.25, 0.115)], [0.026, 0.018], _C_DK, 12),
+            ("b", 0, 0.30, 0.096, 0.02, 0.03, 0.04, _C_DK), ("b", 0, 0.40, 0.096, 0.02, 0.03, 0.04, _C_DK),
+            ("p", 0, 0.040, [(0.06, -0.045), (0.12, -0.045), (0.105, -0.17), (0.05, -0.17)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.036, [(0.34, -0.05), (0.38, -0.05), (0.375, -0.14), (0.335, -0.14)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.05, [(-0.14, -0.05), (-0.05, -0.05), (-0.05, -0.085), (-0.14, -0.085)], _C_DK),
+            ("b", 0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15)),
+            ("b", -0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15))]
+    body += [_gs_ty(0, 0.02, [(y, 0.0725), (y + 0.04, 0.0725)], (0.18, 0.2, 0.16), 22) for y in (0.0, 0.35)]
+    body += _gs_loop(0, 0.008, [(0.12, -0.045), (0.14, -0.07), (0.19, -0.07), (0.19, -0.045)], 0.007, (0.12, 0.12, 0.12))
+    G["Raketenwerfer"] = dict(body=body, barrel=[], iron=[], mag=[])
+
+    # ---------------- Minigun
+    stl2 = (0.35, 0.35, 0.38)
+    body = [_gs_ty(0, 0.0, [(-0.20, 0.05), (-0.15, 0.07), (0.0, 0.075), (0.12, 0.068)], (0.20, 0.20, 0.22), 18),
+            _gs_ty(0, 0.0, [(0.10, 0.07), (0.14, 0.07)], (0.15, 0.15, 0.17), 18),
+            _gs_ty(0, 0.0, [(0.12, 0.018), (0.80, 0.018)], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.78, 0.064), (0.81, 0.064)], (0.22, 0.22, 0.25), 16),
+            ("p", 0, 0.045, [(-0.03, -0.065), (0.04, -0.065), (0.035, -0.19), (-0.025, -0.19)], (0.12, 0.12, 0.12)),
+            ("b", 0, 0.045, -0.12, 0.012, 0.014, 0.03, _C_DK)]
+    for k in range(6):
+        a = k * math.pi / 3
+        body.append(("t", [(0.048 * math.cos(a), 0.14, 0.048 * math.sin(a)), (0.048 * math.cos(a), 0.82, 0.048 * math.sin(a))],
+                     [0.0125, 0.0125], stl2, 8))
+    body += [_gs_ty(0, 0.0, [(y, 0.066), (y + 0.03, 0.066)], (0.22, 0.22, 0.25), 16) for y in (0.28, 0.58)]
+    body += _gs_loop(0, 0.012, [(-0.07, 0.07), (-0.06, 0.12), (0.05, 0.12), (0.06, 0.07)], 0.014, (0.2, 0.2, 0.22))
+    G["Minigun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.09, [(-0.06, 0.045), (0.06, 0.045), (0.06, -0.045), (-0.06, -0.045)], (0.25, 0.32, 0.18)),
+        ("b", 0, 0.0, 0.049, 0.04, 0.05, 0.008, (0.15, 0.2, 0.1)),
+        ("t", [(0, 0.0, 0.045), (0, 0.02, 0.115)], [0.012, 0.012], (0.8, 0.65, 0.25), 8)])
+
+    # ---------------- Railgun
+    rb, rc = (0.15, 0.20, 0.30), (0.20, 0.70, 0.90)
+    body = [("t", [(0, -0.12, 0.0), (0, 0.78, 0.0)], [0.03, 0.03], (0.10, 0.13, 0.2), 12),
+            ("p", 0, 0.070, [(-0.25, 0.04), (-0.14, 0.042), (0.05, 0.045), (0.05, -0.075), (-0.12, -0.075), (-0.25, -0.04)], (0.10, 0.12, 0.18)),
+            ("b", 0, -0.252, -0.0, 0.062, 0.01, 0.1, _C_DK),
+            ("p", 0, 0.026, [(-0.05, 0.045), (0.0, 0.07), (0.60, 0.07), (0.66, 0.05), (0.66, 0.045)], rc),
+            ("t", [(0, 0.7, 0.0), (0, 0.74, 0.0), (0, 0.78, 0.0)], [0.04, 0.045, 0.032], (0.10, 0.12, 0.18), 14),
+            ("t", [(0, 0.779, 0.0), (0, 0.781, 0.0)], [0.02, 0.02], (0.5, 0.95, 1.0), 12),
+            ("t", [(0.05, -0.1, 0.0), (0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("t", [(-0.05, -0.1, 0.0), (-0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("p", 0, 0.040, [(0.0, -0.05), (0.09, -0.05), (0.08, -0.165), (0.02, -0.165)], (0.10, 0.10, 0.10))]
+    for sg in (-1, 1):
+        body.append(("b", sg * 0.036, 0.35, 0.0, 0.014, 0.85, 0.03, (0.18, 0.24, 0.34)))
+        body.append(("b", sg * 0.029, 0.36, 0.0, 0.004, 0.78, 0.014, (0.2, 0.8, 1.0)))
+    for k in range(7):
+        y = 0.05 + 0.1 * k
+        body.append(_gs_ty(0, 0.0, [(y, 0.052), (y + 0.04, 0.052)], (0.12, 0.16, 0.26), 14))
+        body.append(_gs_ty(0, 0.0, [(y + 0.04, 0.054), (y + 0.048, 0.054)], (0.2, 0.8, 1.0), 14))
+    body += _gs_loop(0, 0.008, [(0.09, -0.05), (0.1, -0.08), (0.15, -0.08), (0.15, -0.05)], 0.007, (0.10, 0.10, 0.10))
+    G["Railgun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("t", [(0, 0, -0.04), (0, 0, 0.04)], [0.032, 0.032], rc, 12),
+        ("t", [(0, 0, -0.045), (0, 0, -0.038)], [0.036, 0.036], _C_DK, 12),
+        ("t", [(0, 0, 0.038), (0, 0, 0.045)], [0.036, 0.036], _C_DK, 12)])
+    return G
+
+
+GUN_SHAPES = _gs_mk()
+_POLY_CACHE = {}
+
+
+def weapon_polys(wname, iron=True):
+    """Seitenansicht (y/z) einer ganzen Waffe: [(Punkte, Farbe)] in Zeichenreihenfolge."""
+    key = (wname, iron)
+    if key in _POLY_CACHE:
+        return _POLY_CACHE[key]
+    sh = GUN_SHAPES[wname]
+    out = []
+    for s in sh["body"] + sh["barrel"]:
+        out += shape_polys(s)
+    mp = MAG_PARTS.get(wname)
+    if mp is not None:
+        for s in sh["mag"]:
+            out += shape_polys(s, (mp[0], mp[1], mp[2]))
+    if iron:
+        for s in sh["iron"]:
+            out += shape_polys(s)
+    _POLY_CACHE[key] = out
+    return out
+
+
+def weapon_frame(wname):
+    """Umgebendes Rechteck (y0, y1, z0, z1) der Seitenansicht einer Waffe (Bezug für Symbole und Ankerpunkte)."""
+    pts = [p for poly, _c in weapon_polys(wname) for p in poly]
+    return min(p[0] for p in pts), max(p[0] for p in pts), min(p[1] for p in pts), max(p[1] for p in pts)
+
+
+def _offset_poly(pts, d):
+    """Polygon um d nach aussen versetzt (Gehrung, begrenzt)."""
+    n = len(pts)
+    sg = 1.0 if _poly_area(pts) > 0 else -1.0
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e1, e2 = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+        l1, l2 = math.hypot(*e1) or 1e-9, math.hypot(*e2) or 1e-9
+        n1, n2 = (e1[1] / l1 * sg, -e1[0] / l1 * sg), (e2[1] / l2 * sg, -e2[0] / l2 * sg)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]
+        bl = math.hypot(bx, by)
+        if bl < 1e-6:
+            bx, by, bl = n1[0], n1[1], 1.0
+        k = d / max(0.5, (bx * n1[0] + by * n1[1]) / bl)
+        out.append((b[0] + bx / bl * k, b[1] + by / bl * k))
+    return out
+
+
+def polys_icon(polys, width, height, name, bounds=None, pad=0.03, edge=0.0045):
+    """Flaches Symbol aus Polygonen [(Punkte (a, b), Farbe)] in der x/z-Ebene, Mitte im Ursprung. Jedes Teil bekommt
+    einen dunklen Rand und einen Farbverlauf (oben heller); gezeichnet wird in der Reihenfolge der Liste."""
+    allp = [p for pts, _c in polys for p in pts]
+    a0, a1, b0, b1 = bounds if bounds else (min(p[0] for p in allp), max(p[0] for p in allp),
+                                            min(p[1] for p in allp), max(p[1] for p in allp))
+    k = min(width / (a1 - a0 + 2 * pad), height / (b1 - b0 + 2 * pad))
+    ma, mb = (a0 + a1) / 2, (b0 + b1) / 2
+    m = Mesh(lit=False)
+    o = edge / k
+
+    def P(p):
+        return ((p[0] - ma) * k, 0.0, (p[1] - mb) * k)
+
+    for pts, col in polys:
+        if len(pts) < 3 or abs(_poly_area(pts)) < 1e-9:
+            continue
+        pts = list(pts) if _poly_area(pts) > 0 else list(pts)[::-1]
+        outl = _offset_poly(pts, o)
+        for a, b, c in _earclip(outl):
+            m.tri(P(outl[a]), P(outl[b]), P(outl[c]), (0.02, 0.02, 0.03))
+        lo, hi = min(p[1] for p in pts), max(p[1] for p in pts)
+        base = tuple(min(1.0, v * 1.5 + 0.28) for v in col)
+
+        def shade(p):
+            f = 0.80 + 0.34 * (p[1] - lo) / max(hi - lo, 1e-6)
+            return tuple(min(1.0, v * f) for v in base)
+
+        for a, b, c in _earclip(pts):
+            m.tri(P(pts[a]), P(pts[b]), P(pts[c]), [shade(pts[a]), shade(pts[b]), shade(pts[c])])
+    nd = NodePath(m.node(name))
+    nd.setTwoSided(True)
+    return nd
+
+
+def rect_polys(prts, off=(0.0, 0.0)):
+    """Quader (cx,cy,cz,sx,sy,sz,Farbe) als Seitenansicht-Polygone."""
+    return [([(cy - sy / 2 + off[0], cz - sz / 2 + off[1]), (cy + sy / 2 + off[0], cz - sz / 2 + off[1]),
+              (cy + sy / 2 + off[0], cz + sz / 2 + off[1]), (cy - sy / 2 + off[0], cz + sz / 2 + off[1])], col)
+            for _cx, cy, cz, _sx, sy, sz, col in prts]
+
+
 # Rennhaltung (BF3-artig): (dx, dy, dz, heading, pitch, roll). Pistolen: Lauf nach oben vor der Brust;
 # grosse Waffen: quer vor dem Körper.
 SPRINT_POSE = {
@@ -7123,34 +7597,12 @@ def weapon_icon(wi, width=0.42, height=0.2, extra=None, scope=None):
     """Seitenansicht einer Waffe als flaches Bild (x/z-Ebene, Mitte im Ursprung), gezeichnet
     aus denselben Quadern wie das 3D-Modell: erst dunkler Rand, dann die Teile in Farbe.
     extra: zusätzliche Quader (Visier, Aufsätze); scope: Visier statt der Kimme und Korn des Sturmgewehrs."""
-    parts, _muzzle = GUN_PARTS[WEAPONS[wi].name]
-    base = list(parts)
-    if scope is not None and scope != SC_IRON and WEAPONS[wi].name == "Sturmgewehr":
-        base = base[:-8]
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col)
-             for _cx, cy, cz, _sx, sy, sz, col in parts]
-    y0, y1 = min(r[0] for r in rects), max(r[1] for r in rects)
-    z0, z1 = min(r[2] for r in rects), max(r[3] for r in rects)
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col)
-             for _cx, cy, cz, _sx, sy, sz, col in base + list(extra or [])]
-    pad = 0.03
-    k = min(width / (y1 - y0 + 2 * pad), height / (z1 - z0 + 2 * pad))
-    my, mz = (y0 + y1) / 2, (z0 + z1) / 2
-    m = Mesh(lit=False)
-
-    def quad(a0, a1, b0, b1, col):
-        p = [((a - my) * k, 0.0, (b - mz) * k) for a, b in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))]
-        m.tri(p[0], p[1], p[2], col)
-        m.tri(p[0], p[2], p[3], col)
-
-    o = 0.014
-    for a0, a1, b0, b1, _c in rects:
-        quad(a0 - o, a1 + o, b0 - o, b1 + o, (0.02, 0.02, 0.03))
-    for a0, a1, b0, b1, c in rects:
-        quad(a0, a1, b0, b1, tuple(min(1.0, v * 1.5 + 0.28) for v in c))
-    np = NodePath(m.node("icon_" + WEAPONS[wi].name))
-    np.setTwoSided(True)
-    return np
+    name = WEAPONS[wi].name
+    iron = not (scope is not None and scope != SC_IRON and name == "Sturmgewehr")
+    polys = list(weapon_polys(name, iron))
+    if extra:
+        polys += rect_polys(extra)
+    return polys_icon(polys, width, height, "icon_" + name, bounds=weapon_frame(name))
 
 
 def gadget_icon(kind, width=0.42, height=0.2):
@@ -7826,9 +8278,11 @@ def att_icon(wi, si, v, width=0.26, height=0.08):
     mp = MAG_PARTS.get(w.name)
     if si == 1 and mp is not None:
         prts = [(cx, cy + mp[1], cz + mp[2], sx, sy, sz, c) for cx, cy, cz, sx, sy, sz, c in prts]
-        prts.append(tuple(mp))                       # das Magazin selbst dazu
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col) for _cx, cy, cz, _sx, sy, sz, col in prts]
-    return parts_icon(rects, width, height, "atticon%d_%d_%d" % (wi, si, v))
+        polys = []                                   # das Magazin selbst dazu, der Aufsatz darüber
+        for sh_ in GUN_SHAPES[w.name]["mag"]:
+            polys += shape_polys(sh_, (mp[0], mp[1], mp[2]))
+        return polys_icon(polys + rect_polys(prts), width, height, "atticon%d_%d_%d" % (wi, si, v), pad=0.02, edge=0.0035)
+    return polys_icon(rect_polys(prts), width, height, "atticon%d_%d_%d" % (wi, si, v), pad=0.02, edge=0.0035)
 
 
 def scope_icon(sc, width=0.3, height=0.14):
@@ -8030,10 +8484,8 @@ def tip_attachment(si, v):
 def weapon_anchors(wi, width=0.42, height=0.2):
     """Ankerpunkte (x, z) im Symbol einer Waffe (wie weapon_icon): Visier, Lauf (Mündung), Magazin."""
     w = WEAPONS[wi]
-    parts, muzzle = GUN_PARTS[w.name]
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2) for _cx, cy, cz, _sx, sy, sz, _c in parts]
-    y0, y1 = min(r[0] for r in rects), max(r[1] for r in rects)
-    z0, z1 = min(r[2] for r in rects), max(r[3] for r in rects)
+    muzzle = GUN_PARTS[w.name][1]
+    y0, y1, z0, z1 = weapon_frame(w.name)
     pad = 0.03
     k = min(width / (y1 - y0 + 2 * pad), height / (z1 - z0 + 2 * pad))
     my, mz = (y0 + y1) / 2, (z0 + z1) / 2
@@ -129890,8 +130342,11 @@ class Game(ShowBase):
         rng = random.Random(9)
         for w in WEAPONS:
             gm = Mesh()
-            for cx, cy, cz, sx, sy, sz, col in GUN_PARTS[w.name][0]:
-                box(gm, cx, cy - 0.2, cz, sx, sy, sz, col, rng)
+            sh = GUN_SHAPES[w.name]
+            build_shapes(gm, sh["body"] + sh["barrel"] + sh["iron"], rng, (0.0, -0.2, 0.0))
+            mp_ = MAG_PARTS.get(w.name)
+            if mp_ is not None:
+                build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
             self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
         m = Mesh(lit=False)                   # Granaten-Symbol im HUD
         for i in range(14):
@@ -129935,30 +130390,15 @@ class Game(ShowBase):
         self.att_nodes = []                                   # je Waffe: {(Platz, Aufsatz): [Knoten]}
         rng = random.Random(7)
         for w in WEAPONS:
-            parts, muzzle = GUN_PARTS[w.name]
+            muzzle = GUN_PARTS[w.name][1]
+            sh = GUN_SHAPES[w.name]
             gm = Mesh()
             magp = MAG_PARTS.get(w.name)
-            if w.kind == "primary" and w.name == "Sturmgewehr":
-                parts = parts[:-8]                          # Kimme/Korn: eigener Knoten (nur mit Visier "Kimme und Korn")
             sg_h = sg_a = None
+            build_shapes(gm, sh["body"], rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
             if w.name == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
                 gb = Mesh()
-                for part in parts:
-                    cx, cy, cz, sx, sy, sz, col = part
-                    if cy - sy / 2 < 0.15 and sy > 0.4:      # Lauf/Röhre: erst ab der Verschlussfront
-                        y0 = SG_PIV[1]
-                        cy, sy = (y0 + cy + sy / 2) / 2, (cy + sy / 2) - y0
-                        box(gb, cx, cy, cz, sx, sy, sz, col, rng)
-                    elif cy > 0.3 and sy < 0.3:              # Vorderschaft
-                        box(gb, cx, cy, cz, sx, sy, sz, col, rng)
-                    else:
-                        box(gm, cx, cy, cz, sx, sy, sz, col, rng)
-            else:
-                for part in parts:
-                    if magp is not None and tuple(part) == tuple(magp):
-                        continue                            # wird als bewegliches Magazin gebaut
-                    cx, cy, cz, sx, sy, sz, col = part
-                    box(gm, cx, cy, cz, sx, sy, sz, col, rng)
+                build_shapes(gb, sh["barrel"], rng)
             model = self.gun_pivot.attachNewNode(w.name)
             model.attachNewNode(gm.node("g"))
             if w.name == SG_NAME:
@@ -129972,7 +130412,7 @@ class Game(ShowBase):
             if magp is not None:
                 for k in range(2):                          # k=0: Magazin an der Waffe, k=1: ausgeworfenes
                     mm_ = Mesh()
-                    box(mm_, 0, 0, 0, magp[3], magp[4], magp[5], magp[6], rng)
+                    build_shapes(mm_, sh["mag"], rng)
                     nd = (model if k == 0 else self.gun_pivot).attachNewNode(mm_.node("mag"))
                     nd.setPos(magp[0], magp[1], magp[2])
                     if k == 1:
