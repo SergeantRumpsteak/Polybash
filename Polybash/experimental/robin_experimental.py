@@ -8888,6 +8888,89 @@ class AbilityIcon:
         self.root.hide()
 
 
+class SliderSpec:
+    """Beschreibung eines Schiebereglers (Menü oder Pause): Text, Bereich, Schrittweite, lesen/setzen, Anzeige."""
+    def __init__(self, label, lo, hi, step, get, set_, fmt=str, enabled=True):
+        self.label, self.lo, self.hi, self.step = label, lo, hi, step
+        self.get, self.set_, self.fmt, self.enabled = get, set_, fmt, enabled
+
+
+class UiSlider:
+    """Waagerechter Schieberegler: Beschriftung links, Wert rechts, darunter Schiene mit Knopf.
+    Gezogen wird mit der linken Maustaste (Game.ui_slider_press / slider_follow)."""
+    def __init__(self, parent, spec, x0, x1, z):
+        self.sp, self.x0, self.x1, self.z, self.on = spec, x0, x1, z, False
+        self.zt = z - 0.065
+        self.root = parent.attachNewNode("uislider")
+
+        def lay(n, sort):
+            n.setTransparency(TransparencyAttrib.MAlpha)
+            n.setBin("fixed", sort)
+            n.setDepthTest(False)
+            n.setDepthWrite(False)
+            return n
+
+        def card(a, b, c, d, sort):
+            cm = CardMaker("uis")
+            cm.setFrame(a, b, c, d)
+            return lay(self.root.attachNewNode(cm.generate()), sort)
+
+        zt = self.zt
+        self.lab = OnscreenText(text=spec.label, pos=(x0, z), scale=0.05, parent=self.root,
+                                fg=(0.86, 0.92, 1.0, 1) if spec.enabled else (0.5, 0.52, 0.55, 1),
+                                shadow=(0, 0, 0, 0.9), align=TextNode.ALeft, mayChange=False)
+        self.val = OnscreenText(text="", pos=(x1, z), scale=0.05, parent=self.root, fg=(1.0, 0.85, 0.2, 1),
+                                shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
+        self.lab.setBin("fixed", 95)
+        self.val.setBin("fixed", 95)
+        self.track = card(x0, x1, zt - 0.007, zt + 0.007, 92)
+        self.track.setColor(0.16, 0.22, 0.30, 1)
+        self.fill = card(0.0, 1.0, zt - 0.007, zt + 0.007, 93)
+        self.fill.setPos(x0, 0, 0)
+        self.knob = card(-0.022, 0.022, -0.022, 0.022, 94)
+        self.knob.setR(45.0)
+        self.refresh()
+
+    def value(self):
+        return self.sp.get()
+
+    def refresh(self):
+        sp = self.sp
+        v = max(sp.lo, min(sp.hi, self.value()))
+        x = self.x0 + (v - sp.lo) / float(sp.hi - sp.lo) * (self.x1 - self.x0)
+        self.fill.setSx(max(0.001, x - self.x0))
+        self.knob.setPos(x, 0, self.zt)
+        self.val.setText(sp.fmt(v))
+        if sp.enabled:
+            self.fill.setColor(1.0, 0.62, 0.14, 1)
+            self.knob.setColor(*((1.0, 1.0, 0.78, 1) if self.on else (1.0, 0.85, 0.4, 1)))
+        else:
+            self.fill.setColor(0.35, 0.37, 0.40, 1)
+            self.knob.setColor(0.5, 0.52, 0.55, 1)
+
+    def hit(self, ax, az):
+        return self.sp.enabled and self.x0 - 0.05 <= ax <= self.x1 + 0.05 and self.zt - 0.055 <= az <= self.z + 0.06
+
+    def set_hot(self, on):
+        if on != self.on:
+            self.on = on
+            self.refresh()
+
+    def follow(self, mx):
+        sp = self.sp
+        t = max(0.0, min(1.0, (mx - self.x0) / (self.x1 - self.x0)))
+        v = round((sp.lo + t * (sp.hi - sp.lo)) / sp.step) * sp.step
+        v = int(v) if isinstance(sp.step, int) else round(v, 4)
+        if v != sp.get():
+            sp.set_(v)
+        self.refresh()
+
+    def destroy(self):
+        self.lab.destroy()
+        self.val.destroy()
+        self.root.removeNode()
+
+
 def over_or_driving(game):
     pl = game.player
     return pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0
@@ -129238,9 +129321,12 @@ class Game(ShowBase):
         self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
         st = load_settings()
         self.gfx = st.get("gfx") if st.get("gfx") in GFX_MODES else "standard"
-        self.sens_mult = st.get("sens") if st.get("sens") in SENS_CHOICES else 1.0
-        self.vol_music = st.get("vm") if st.get("vm") in VOL_CHOICES else 100      # Hintergrundmusik in %
-        self.vol_sfx = st.get("vs") if st.get("vs") in VOL_CHOICES else 100        # Soundeffekte in %
+        sv = st.get("sens")
+        self.sens_mult = float(sv) if isinstance(sv, (int, float)) and not isinstance(sv, bool) and 0.5 <= sv <= 2.0 else 1.0
+        vm = st.get("vm")
+        self.vol_music = int(vm) if isinstance(vm, (int, float)) and not isinstance(vm, bool) and 0 <= vm <= 100 else 100      # Hintergrundmusik in %
+        vs_ = st.get("vs")
+        self.vol_sfx = int(vs_) if isinstance(vs_, (int, float)) and not isinstance(vs_, bool) and 0 <= vs_ <= 100 else 100        # Soundeffekte in %
         self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
         self.apply_fps()
         self.overlay_kind = self.overlay_yes = None
@@ -129282,6 +129368,8 @@ class Game(ShowBase):
         self.setup_for = "single"
         self.map_page = 0                     # Seite der Kartenauswahl
         self.slider_drag = False              # Zeitlimit-Slider wird gezogen
+        self.ui_sliders = []                  # Regler (UiSlider) im Menü bzw. Pause-Overlay
+        self.prefs_dirty = False              # Regler verändert: beim Loslassen speichern
         self.setup_page = None                # SetupPage (Menü 'setup')
         self.prev_mode = None                 # Modus vor der Wahl einer Minecraft-Karte
         self._prev_tex = {}
@@ -129466,6 +129554,7 @@ class Game(ShowBase):
         self.menu_last = None
         self.setup_page = None
         self.slider_drag = False
+        self.ui_sliders_clear()
 
     def menu_background(self, title=True):
         """Verlauf, ein paar Low-Poly-Rauten und der Titel."""
@@ -129585,9 +129674,7 @@ class Game(ShowBase):
             spec = [("Einstellungen", None), (f"1   Name:  {self.my_name}", dig(1)),
                     (f"2   Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
                     (f"3   Bildrate:  {fps_label(self.fps_limit)}", dig(3)),
-                    (f"4   Mausempfindlichkeit:  {int(round(self.sens_mult * 100))} %", dig(4)),
-                    (f"5   Musik-Lautstärke:  {self.vol_music} %", dig(5)),
-                    (f"6   Effekt-Lautstärke:  {self.vol_sfx} %", dig(6)),
+                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),     # Platz für 3 Regler
                     ("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
@@ -129666,6 +129753,7 @@ class Game(ShowBase):
             big = self.menu_state in ("main", "multi")
             step, scale = (0.16, 0.078) if big else (0.105, 0.06)
             z = -0.6 if self.menu_state == "loadout" else 0.36
+            blank_z = []
             for i, it in enumerate(spec):
                 label, action = it[0], it[1]
                 head = i == 0 and action is None and self.menu_state != "main"
@@ -129673,6 +129761,7 @@ class Game(ShowBase):
                 z -= step * (1.25 if head else 1.0)
                 sc = 0.085 if head else scale
                 if not label:
+                    blank_z.append(zz)
                     continue
                 card = None
                 if action is not None:
@@ -129689,6 +129778,10 @@ class Game(ShowBase):
                 if card is not None:
                     hot.x0, hot.x1 = -0.78, 0.78
                     self.menu_cards.append((hot, card))
+            self.ui_sliders_clear()
+            if self.menu_state == "settings":
+                for k, sp in enumerate(self.personal_sliders()):
+                    self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k]))
 
     # ------------------------------------------------------------ Maus im Menü
     def mouse_2d(self):
@@ -129730,6 +129823,8 @@ class Game(ShowBase):
                 self.sfx.ui_click()
             if self.menu_picker is not None:
                 self.menu_picker.update(self.loadout, card)
+        for sl in self.ui_sliders:
+            sl.set_hot(m is not None and (sl.hit(m[0], m[1]) or self.slider_drag == ("ui", self.ui_sliders.index(sl))))
         self.tip_show(card, m)
         return hit, card
 
@@ -129746,7 +129841,9 @@ class Game(ShowBase):
             return
         if self.mode != "menu" and self.quit_box is None:
             return
-        hit, _card = self.update_hover()
+        hit, card = self.update_hover()
+        if hit is None and self.ui_sliders and self.ui_slider_press(self.mouse_2d()):
+            return
         if hit is None and self.quit_box is not None and self.overlay_kind == "strike":
             self.strike_pick(self.mouse_2d())
         elif hit is not None:
@@ -129900,6 +129997,10 @@ class Game(ShowBase):
 
     def slider_follow(self):
         m = self.mouse_2d()
+        if isinstance(self.slider_drag, tuple):               # Regler im Menü / Pause-Overlay
+            if m is not None and self.slider_drag[1] < len(self.ui_sliders):
+                self.ui_sliders[self.slider_drag[1]].follow(m[0])
+            return
         if m is None or self.setup_page is None:
             return
         p = self.setup_page
@@ -129910,6 +130011,15 @@ class Game(ShowBase):
         self.set_limit(LIMIT_MIN + max(0.0, min(1.0, t)) * (LIMIT_MAX - LIMIT_MIN))
 
     def on_mouse_up(self):
+        if isinstance(self.slider_drag, tuple):
+            self.slider_drag = False
+            for sl in self.ui_sliders:
+                sl.set_hot(False)
+            if self.prefs_dirty:
+                self.prefs_dirty = False
+                self.save_prefs()
+                self.sfx.ui_click()                                # Hörprobe in der neuen Lautstärke
+            return
         if self.slider_drag:
             self.slider_drag = False
             self.menu_refresh()
@@ -129998,17 +130108,6 @@ class Game(ShowBase):
                     self.fps_limit = FPS_CHOICES[(FPS_CHOICES.index(self.fps_limit) + 1) % len(FPS_CHOICES)]
                     self.apply_fps()
                     self.save_prefs()
-                    self.menu_refresh()
-                elif d == 4:
-                    i = SENS_CHOICES.index(self.sens_mult) if self.sens_mult in SENS_CHOICES else 0
-                    self.sens_mult = SENS_CHOICES[(i + 1) % len(SENS_CHOICES)]
-                    self.save_prefs()
-                    self.menu_refresh()
-                elif d == 5:
-                    self.cycle_volume("music")
-                    self.menu_refresh()
-                elif d == 6:
-                    self.cycle_volume("sfx")
                     self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
@@ -130103,7 +130202,7 @@ class Game(ShowBase):
             self.close_loadscreen()
             return
         if self.quit_box is not None:
-            if self.mode == "play" and self.overlay_kind in ("settings_gfx", "settings_game"):
+            if self.mode == "play" and self.overlay_kind in ("settings_gfx", "settings_game", "settings_round"):
                 self.show_pause("settings")        # Esc geht eine Ebene zurück
             elif self.mode == "play" and self.overlay_kind in ("settings", "leave"):
                 self.show_pause("main")
@@ -130175,6 +130274,7 @@ class Game(ShowBase):
             return
         bg, txt, hots = self.quit_box
         self.quit_box = None
+        self.ui_sliders_clear()
         self.overlay_kind = self.overlay_yes = None
         bg.removeNode()
         txt.destroy()
@@ -130191,7 +130291,7 @@ class Game(ShowBase):
             else:
                 self.on_escape()
             return
-        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "strike"):
+        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "settings_round", "strike"):
             return
         if self.overlay_kind == "leave":
             if yes:
@@ -130209,8 +130309,16 @@ class Game(ShowBase):
         items: (Text, Aktion oder None). Das Spiel läuft weiter, die Eingaben ruhen, die Maus ist frei."""
         self.close_quit_box(recapture=False)
         n = len(items)
-        z_title = 0.1 + 0.055 * n
-        last = z_title - 0.17 - 0.11 * (n - 1)
+        hs = [0.19 if isinstance(it, SliderSpec) else 0.11 for it in items]     # Reglerzeilen sind höher
+        zs = []
+        zc = 0.0
+        for h_ in hs:
+            zs.append(zc)
+            zc -= h_
+        span = 0.31 + (-zs[-1] if zs else 0.0) + (0.2 if hint else 0.12)
+        z_title = span / 2 - 0.06
+        zs = [z_title - 0.17 + z_ for z_ in zs]
+        last = zs[-1] if zs else z_title - 0.17
         bottom = last - (0.2 if hint else 0.12)
         cm = CardMaker("overlaybg")
         cm.setFrame(-width, width, bottom, z_title + 0.14)
@@ -130224,8 +130332,12 @@ class Game(ShowBase):
                            shadow=(0, 0, 0, 0.9), mayChange=False)
         txt.setBin("fixed", 95)
         hots = []
-        for i, (label, action) in enumerate(items):
-            z = z_title - 0.17 - 0.11 * i
+        for i, it in enumerate(items):
+            z = zs[i]
+            if isinstance(it, SliderSpec):
+                self.ui_sliders.append(UiSlider(self.aspect2d, it, -(width - 0.45), width - 0.45, z))
+                continue
+            label, action = it
             t = OnscreenText(text=label, pos=(0, z), scale=0.062, fg=Hot.BASE if action else Hot.PLAIN,
                              shadow=(0, 0, 0, 0.9), mayChange=True)
             t.setBin("fixed", 95)
@@ -130443,8 +130555,9 @@ class Game(ShowBase):
             self.open_overlay("settings", "Einstellungen", [
                 ("Grafikeinstellungen", lambda: self.show_pause("settings_gfx")),
                 ("Spieleinstellungen", lambda: self.show_pause("settings_game")),
+                ("Rundeneinstellungen", lambda: self.show_pause("settings_round")),
                 ("Zurück   (Esc)", lambda: self.show_pause("main"))], "")
-        else:                                      # settings_gfx / settings_game
+        else:                                      # settings_gfx / settings_game / settings_round
             w = self.world
             host_side = net != "client" and w is not None
 
@@ -130460,10 +130573,6 @@ class Game(ShowBase):
             def set_gfx():
                 self.set_gfx(cyc(GFX_MODES, self.gfx))
 
-            def set_sens():
-                self.sens_mult = cyc(SENS_CHOICES, self.sens_mult)
-                self.save_prefs()
-
             def set_fps():
                 self.fps_limit = cyc(FPS_CHOICES, self.fps_limit)
                 self.apply_fps()
@@ -130475,20 +130584,27 @@ class Game(ShowBase):
                     (f"Bildrate:  {fps_label(self.fps_limit)}", do(set_fps)),
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
-            items = [(f"Mausempfindlichkeit:  {int(round(self.sens_mult * 100))} %", do(set_sens)),
-                     (f"Musik-Lautstärke:  {self.vol_music} %", do(lambda: self.cycle_volume("music"))),
-                     (f"Effekt-Lautstärke:  {self.vol_sfx} %", do(lambda: self.cycle_volume("sfx")))]
+            if kind == "settings_game":                 # persönliche Einstellungen: Maus und Lautstärke
+                items = list(self.personal_sliders())
+                items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
+                self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
+                return
+            # settings_round: alles, was die laufende Runde betrifft
+            info = (f"Modus:  {MODE_NAMES.get(w.mode, w.mode)}      Zeitlimit:  {int(w.limit // 60)} min", None)
             if host_side:
-                def set_cd():
-                    cd = cyc(STRIKE_CD_CHOICES, int(w.strike_cd))
-                    w.strike_cd = float(cd)
-                    if cd > 0:
-                        w.strike_wait = min(w.strike_wait, float(cd))
-                    self.cfg["cd"] = cd
+                def set_cd(v):
+                    w.strike_cd = float(v)
+                    if v > 0:
+                        w.strike_wait = min(w.strike_wait, float(v))
+                    self.cfg["cd"] = int(v)
 
-                def set_regen():
-                    w.regen_rate = float(cyc(REGEN_CHOICES, w.regen_rate))
+                def set_regen(v):
+                    w.regen_rate = float(v)
                     self.cfg["regen"] = w.regen_rate
+
+                def set_resp(v):
+                    w.respawn_delay = float(v)
+                    self.cfg["resp"] = int(v)
 
                 def set_mobs():
                     w.mob_level = (w.mob_level + 1) % len(MOB_LEVELS)
@@ -130503,21 +130619,18 @@ class Game(ShowBase):
                     w.tomahawk_on = not w.tomahawk_on
                     self.cfg["tomahawk"] = w.tomahawk_on
 
-                def set_resp():
-                    w.respawn_delay = float(cyc(RESPAWN_CHOICES, int(w.respawn_delay)))
-                    self.cfg["resp"] = int(w.respawn_delay)
-
-                items += [(f"Respawn-Zeit:  {respawn_label(w.respawn_delay)}", do(set_resp)),
-                          (f"Monster:  {MOB_LEVELS[w.mob_level][0]}", do(set_mobs)),
-                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
-                          (f"Tomahawk-Abklingzeit:  {strike_cd_label(int(w.strike_cd))}", do(set_cd)),
-                          (f"Gesundheit regeneriert:  {regen_label(w.regen_rate)}", do(set_regen))]
+                items = [info,
+                         (f"Monster:  {MOB_LEVELS[w.mob_level][0]}", do(set_mobs)),
+                         (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
+                         SliderSpec("Tomahawk-Abklingzeit", 0, 600, 10, lambda: int(w.strike_cd), set_cd,
+                                    strike_cd_label, enabled=w.tomahawk_on),
+                         SliderSpec("Respawn-Zeit", 0, 30, 1, lambda: int(w.respawn_delay), set_resp, respawn_label),
+                         SliderSpec("Gesundheit regeneriert", 0.0, 10.0, 0.5, lambda: w.regen_rate, set_regen, regen_label)]
             else:
-                items.append(("Monster, Tomahawk und Regeneration bestimmt der Host", None))
-            items.append(("Zurück   (Esc)", lambda: self.show_pause("main")))
-            items[-1] = ("Zurück   (Esc)", lambda: self.show_pause("settings"))
-            self.open_overlay("settings_game", "Spieleinstellungen", items,
-                              "Modus und Zeitlimit gelten für die ganze Runde", width=1.45)
+                items = [info, ("Monster, Tomahawk, Respawn und Regeneration bestimmt der Host", None)]
+            items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
+            self.open_overlay("settings_round", "Rundeneinstellungen", items,
+                              "Diese Einstellungen gelten für die ganze Runde", width=1.45)
 
     def pause_quit(self):
         self.close_quit_box(recapture=False)
@@ -130535,15 +130648,37 @@ class Game(ShowBase):
         except Exception:
             pass
 
-    def cycle_volume(self, which):
-        """which: "music" oder "sfx": nächste Stufe (0, 10, ... 100 %, dann wieder 0)."""
-        attr = "vol_music" if which == "music" else "vol_sfx"
-        cur = getattr(self, attr)
-        i = VOL_CHOICES.index(cur) if cur in VOL_CHOICES else len(VOL_CHOICES) - 1
-        setattr(self, attr, VOL_CHOICES[(i + 1) % len(VOL_CHOICES)])
+    def set_sens_value(self, v):
+        self.sens_mult = float(v)
+        self.prefs_dirty = True
+
+    def set_vol(self, which, v):
+        setattr(self, "vol_music" if which == "music" else "vol_sfx", int(v))
         self.apply_volume()
-        self.save_prefs()
-        self.sfx.ui_click()                                # Hörprobe in der neuen Lautstärke
+        self.prefs_dirty = True
+
+    def personal_sliders(self):
+        """Regler, die nur dich betreffen (Hauptmenü- und Spiel-Einstellungen)."""
+        pct = lambda v: f"{int(round(v * 100 if isinstance(v, float) else v))} %"          # noqa: E731
+        return [SliderSpec("Mausempfindlichkeit", 0.5, 2.0, 0.05, lambda: self.sens_mult, self.set_sens_value, pct),
+                SliderSpec("Musik-Lautstärke", 0, 100, 5, lambda: self.vol_music, lambda v: self.set_vol("music", v), pct),
+                SliderSpec("Effekt-Lautstärke", 0, 100, 5, lambda: self.vol_sfx, lambda v: self.set_vol("sfx", v), pct)]
+
+    def ui_sliders_clear(self):
+        for s in self.ui_sliders:
+            s.destroy()
+        self.ui_sliders = []
+
+    def ui_slider_press(self, m):
+        """Klick auf einen Regler: Ziehen beginnen. -> True, wenn einer getroffen wurde."""
+        if m is None:
+            return False
+        for i, s in enumerate(self.ui_sliders):
+            if s.hit(m[0], m[1]):
+                self.slider_drag = ("ui", i)
+                s.follow(m[0])
+                return True
+        return False
 
     def apply_fps(self):
         """Bildraten-Grenze setzen (ohne V-Sync; 0 = unbegrenzt)."""
@@ -132723,6 +132858,8 @@ class Game(ShowBase):
             return task.cont
         if self.quit_box is not None:
             self.update_hover()
+            if self.slider_drag:
+                self.slider_follow()
 
         def down(btn):
             return mw.is_button_down(btn)
@@ -135435,8 +135572,6 @@ def _log_path():
     return os.path.join(base, "spiel_fehler_experimental.log")
 
 
-VOL_CHOICES = (0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)       # Lautstärke in Prozent (Musik, Effekte)
-SENS_CHOICES = (0.5, 0.75, 1.0, 1.5, 2.0)         # Mausempfindlichkeit (Faktor)
 FPS_CHOICES = (60, 90, 120, 144, 165, 240, 0)      # Bildraten-Grenze (0 = unbegrenzt)
 
 
