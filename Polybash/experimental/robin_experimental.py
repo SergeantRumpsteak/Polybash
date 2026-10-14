@@ -45,7 +45,17 @@ Werte dort ergänzen) und schickt die Statistik am Rundenende an alle; danach Co
 HUD: oben Mitte Modus und Rundenzeit, oben links der Killfeed (nur Spieler-Kills und Wichtiges), unten links
 Leben/Schild, Minimap und Fähigkeits-/Buff-Symbole, unten Mitte die Waffen-Slots, unten rechts die Munition,
 rechts die Ausrüstung. Kurze Hinweise (Buff, Tomahawk wieder da, Helm zerstört ...) erscheinen dezent in der
-Mitte und verschwinden wieder.
+Mitte und verschwinden wieder. In Wagen, Heli und am Geschütz (7a) sind Waffenleiste, Nahkampf, Ausrüstung und
+Buff-Kacheln aus; zu sehen sind Tempo/Höhe, Fahrzeug-Leben, Fahrzeug-Munition (Geschütz: Hitze), eigenes Leben
+und die Minimap mit dem Lärmkreis des Fahrzeugs (NOISE_VEHICLE / NOISE_HELI; der Heckschütze sieht den Tacho).
+7a: Schieben und Monster-Schläge nur bei überlappender Höhe (Monster z .. z + height, Spieler z .. z + body_h;
+MOB_Z_TOL, MOB_HIT_UP/DOWN) - auf Dach, Turm oder Brücke über den Monstern schiebt einen keiner mehr, Monster
+untereinander ebenso. F-Schnellschlag: die Nahkampfwaffe bleibt in der Hand (QUICK_MELEE_STAY). Nach Spielstart,
+Respawn, Menü/Karte zu und Fensterwechsel zählt die Maus erst nach Loslassen + neuem Drücken und INPUT_LOCK_T.
+Monster-Tempo: Jägerin MOB_SPEED_HUNTRESS, Grunt MOB_SPEED_GRUNT, Brute MOB_SPEED_BRUTE. Der Titan läuft durch
+Bäume und Felsen (TITAN_PASS_PROPS); Titan und Koloss erkennen, wenn sie festhängen (MOB_STUCK_T) und nehmen einen
+Umweg (MOB_DETOUR_*). Drohnen fliegen je DRONE_FLY_MIN..MAX m hoch und steigen/sinken zu ihrem Ziel (bis
+DRONE_FLY_TOP, also auch zum Heli).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -495,7 +505,7 @@ WI_ROCK = -11            # Steinbrocken des Titans
 
 # --- Gebirge am Rand der Standardkarte
 MTN_BAND = 46.0          # so breit ist der Gebirgsgürtel (m, schwankt)
-MTN_H = 36.0             # Höhe am Kartenrand (dahinter steigt es weiter)
+MTN_H = 46.0             # Höhe am Kartenrand (dahinter steigt es weiter; 7a: von 36 auf 46 m erhöht)
 MTN_CLIMB = True         # True: Spieler UND Monster können das Gebirge hochlaufen (Sniper-Posten oben);
                          # False: alter Zustand - Felswände steiler als MTN_SLOPE sperren, jetzt auch für Monster
 MTN_SLOPE = 0.95         # (nur bei MTN_CLIMB = False) steiler als das (ca. 43 Grad) kommt man nicht hoch
@@ -987,12 +997,39 @@ def regen_label(r):
 
 TURRET_NAMES = {"mg": "MG-Geschütz", "flak": "Flak", "car": "Wagen-Geschütz"}
 
+# --- 7a: Monster-Tempo. Die Jägerin ist die schnelle, gefährliche Gegnerin; normale Monster "latschen" zu.
+MOB_SPEED_HUNTRESS = 4.6   # Jägerin (früher 6,4; entspricht dem alten Grunt-Tempo)
+MOB_SPEED_GRUNT = 3.2      # Grunt (früher 4,6) - ca. 70 % der Jägerin
+MOB_SPEED_BRUTE = 2.1      # Brute (früher 3,0) - ca. 46 % der Jägerin
+# --- 7a: Höhe der Trefferzylinder. Schieben (Spieler/Monster, Monster/Monster) und Monster-Nahkampf nur, wenn sich
+# die Höhenbereiche überlappen (Monster z .. z + height, Spieler z .. z + body_h) - keine "unendliche Säule" mehr.
+MOB_Z_TOL = 0.1            # m: so viel Überlappung muss mindestens sein (Stehen auf dem Kopf zählt nicht)
+MOB_HIT_UP = 0.3           # m: Monster-Schlag reicht so weit über den eigenen Kopf hinaus ...
+MOB_HIT_DOWN = 0.5         # m: ... und so weit unter die eigenen Füsse (Spieler in einer Mulde)
+# --- 7a: Titan (und Koloss) bleiben nicht mehr hängen
+TITAN_PASS_PROPS = ("tree", "rock")   # durch diese Hindernisse läuft der Titan einfach durch (Gebäude/Mauern nicht)
+MOB_STUCK_KINDS = ("titan", "colossus")   # diese Arten erkennen, wenn sie festhängen ...
+MOB_STUCK_T = 2.5          # s ohne Fortschritt -> festgefahren ...
+MOB_DETOUR_T = 2.2         # ... dann so lange schräg zur Seite (Umweg) ...
+MOB_DETOUR_ANGS = (75.0, -75.0, 140.0, -140.0, 180.0)   # ... nacheinander um diese Winkel (Grad) neben die
+                           # eigentliche Richtung (erst seitlich, dann schräg zurück, dann ganz zurück aus einer Ecke)
+MOB_DETOUR_GROW = 5        # hängt er wieder fest, wird der Umweg länger (bis zum 5-Fachen, gleiche Seite)
+MOB_DETOUR_FORGET = 10.0   # s frei gelaufen: Umweg-Zähler zurücksetzen
+# --- 7a: Drohnen fliegen unterschiedlich hoch und steigen zu höheren Zielen
+DRONE_FLY_MIN, DRONE_FLY_MAX = 2.5, 6.0   # m: Grundhöhe jeder Drohne (zufällig dazwischen, schwankt leicht)
+DRONE_FLY_SWAY = 0.6       # m: so weit schwankt die Grundhöhe langsam auf und ab
+DRONE_FLY_TOP = 80.0       # m über Grund: höchste Flughöhe (der Heli ist bis HELI_CEIL erreichbar)
+DRONE_FLY_LOW = 2.0        # m: tiefer geht sie auch für ein tiefes Ziel nicht
+DRONE_TARGET_DZ = 1.0      # m: auf diese Höhe über den Füssen des Ziels geht sie (etwa Brusthöhe)
+DRONE_CLIMB = 4.5          # m/s: so schnell steigt/sinkt sie
+PLAYER_Z_MAX = 95.0        # m: Host nimmt Spielerhöhen bis hierher an (Heli-Pilot bis HELI_CEIL + 20)
+
 MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
-    "grunt": dict(hp=60.0, speed=4.6, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
+    "grunt": dict(hp=60.0, speed=MOB_SPEED_GRUNT, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
                   aggro=24.0, scale=1.0, hear=1.0),
-    "brute": dict(hp=220.0, speed=3.0, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
+    "brute": dict(hp=220.0, speed=MOB_SPEED_BRUTE, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
                   aggro=18.0, scale=1.55, hear=0.8),                # schwerhörig
-    "huntress": dict(hp=45.0, speed=6.4, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
+    "huntress": dict(hp=45.0, speed=MOB_SPEED_HUNTRESS, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
                      aggro=30.0, scale=0.96, hear=1.3),             # flink, zerbrechlich, gute Ohren
     # Koloss: 3x so gross, 780 HP (3,5x Brute). Leichter Schlag: holt 1,2 s sichtbar aus, 85 Schaden (fast
     # One-Hit). Bodenschlag: holt 2,4 s aus, Flächenschaden im Umkreis slam_r - im Zentrum (slam_kill) tödlich,
@@ -1008,7 +1045,7 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
                   aggro=45.0, scale=7.0, hear=0.8, slam_windup=3.2, slam_r=11.0, slam_dmg=150.0,
                   slam_kill=4.5, slam_chance=0.3, slam_crowd=12.0,
                   rock_min=20.0, rock_max=70.0, rock_windup=2.4, rock_recover=1.4),
-    # Elektro-Drohne: schwebt in fly m Höhe, schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
+    # Elektro-Drohne: schwebt in fly m Höhe (7a: je Drohne DRONE_FLY_MIN..MAX, steigt zu höheren Zielen), schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
     # betäubt für STUN_MIN..STUN_MAX s. Wenig HP, aber klein (hit_r/hit_h) und in der Luft.
     "drone": dict(hp=35.0, speed=5.5, wander=2.0, dmg=0.0, cooldown=7.0, windup=0.6, recover=0.3,
                   aggro=30.0, scale=1.0, hear=1.1, fly=3.6, range=20.0, hit_r=0.42, hit_h=0.5),
@@ -1050,6 +1087,10 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"),
               ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
+
+INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Karte zu, Fensterwechsel; dazu muss die
+                         # Maustaste erst losgelassen und neu gedrückt werden (der Klick auf "Spiel starten" schiesst nicht)
+QUICK_MELEE_STAY = True  # 7a: nach F (Schnellschlag) bleibt die Nahkampfwaffe in der Hand, bis man mit 1-3/Mausrad wechselt
 
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "colossus": "Koloss", "drone": "Drohne",
              "critter": "Hase", "titan": "Titan"}
@@ -1714,6 +1755,11 @@ class Mob:
         self.kind = kind
         self.x, self.y = x, y
         self.hover = k.get("fly", 0.0)                 # Flughöhe (Drohne), sonst 0
+        self.fly_base = 0.0
+        if self.hover > 0:                             # 7a: jede Drohne fliegt anders hoch
+            self.fly_base = self.hover = rng.uniform(DRONE_FLY_MIN, DRONE_FLY_MAX)
+        self.stuck_t = self.detour_t = self.calm_t = 0.0   # 7a: Festgefahren-Erkennung (MOB_STUCK_KINDS)
+        self.detour_side, self.stuck_n, self.detour_grow = 1.0, 0, 0
         self.gz = world.height(x, y)                   # Bodenhöhe unter dem Monster
         self.z = self.gz + self.hover
         self.scale = k["scale"]
@@ -1824,7 +1870,10 @@ class Mob:
         for p in players:
             if p.hp <= 0:
                 continue
-            if (abs(p.z - self.gz) > max(3.5, self.height * 0.6)
+            if self.hover > 0:                             # 7a: Drohne steigt bis DRONE_FLY_TOP - erreicht fast alle
+                if p.z - self.gz > DRONE_FLY_TOP + DRONE_TARGET_DZ:
+                    continue
+            elif (abs(p.z - self.gz) > max(3.5, self.height * 0.6)
                     and not (on_terrain and abs(p.z - world.height(p.x, p.y)) < 0.6)):
                 continue
             d2 = (p.x - self.x) ** 2 + (p.y - self.y) ** 2
@@ -1880,8 +1929,9 @@ class Mob:
                     world.colossus_slam(self)
                 elif ranged:
                     world.drone_zap(self, pl)
-                elif pl is not None and d <= reach * 1.25 and abs(pl.z - self.gz) < 2.5 + self.height * 0.15:
-                    world.mob_damage(pl, k["dmg"])
+                elif (pl is not None and d <= reach * 1.25
+                      and z_overlap(pl.z, pl.z + body_h(pl), self.z - MOB_HIT_DOWN, self.z + self.height + MOB_HIT_UP)):
+                    world.mob_damage(pl, k["dmg"])         # 7a: nur bei überlappender Höhe
             if self.atk_t >= self.windup() + self.recover():
                 self.state = "chase"
                 self.atk_cd = k["cooldown"]
@@ -1970,13 +2020,20 @@ class Mob:
                 self.turn_toward(tdx, tdy, dt, 200.0)
                 speed = k["wander"]
                 ux, uy = tdx / td, tdy / td
+        stuck_kind = self.kind in MOB_STUCK_KINDS
+        if stuck_kind and self.detour_t > 0 and speed > 0:   # 7a: Umweg nach dem Festfahren
+            self.detour_t -= dt
+            a = math.radians(MOB_DETOUR_ANGS[(self.stuck_n - 1) % len(MOB_DETOUR_ANGS)]) * self.detour_side
+            ux, uy = ux * math.cos(a) - uy * math.sin(a), ux * math.sin(a) + uy * math.cos(a)
+            self.turn_toward(ux, uy, dt, 200.0)
         ox, oy = self.x, self.y
         self.x += (ux * speed + self.kx) * dt
         self.y += (uy * speed + self.ky) * dt
         self.kx *= decay
         self.ky *= decay
         if self.hover <= 0:                          # Fliegende stossen nicht an niedrige Hindernisse
-            self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz)
+            self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz,
+                                      skip=TITAN_PASS_PROPS if self.kind == "titan" else ())
         lo = edge_margin(world)
         self.x = clampf(self.x, lo, WORLD - lo)
         self.y = clampf(self.y, lo, WORLD - lo)
@@ -1992,13 +2049,35 @@ class Mob:
                 self.x, self.y = ox, oy
         if self.hover > 0:
             self.gz = world.height(self.x, self.y)
-            self.hover = k.get("fly", 0.0)
+            want = self.fly_base + DRONE_FLY_SWAY * math.sin(self.phase * 0.13 + self.id * 1.7)
+            if pl is not None and self.state in ("chase", "attack") and self.noise_at is None:
+                want = clampf(pl.z + DRONE_TARGET_DZ - self.gz, DRONE_FLY_LOW, DRONE_FLY_TOP)   # auf Zielhöhe
+            self.hover += clampf(want - self.hover, -DRONE_CLIMB * dt, DRONE_CLIMB * dt)
+            self.hover = max(0.3, self.hover)
             self.z = self.gz + self.hover + 0.25 * math.sin(self.phase * 0.7 + self.id)
         else:
             self.gz = world.floor_at(self.x, self.y, self.gz)
             self.z = self.gz
         if speed > 0 and ux * ux + uy * uy > 0 and math.hypot(self.x - ox, self.y - oy) < speed * dt * 0.3:
             self.leg_left = 0.0                      # festgefahren: Fluchttier schlägt neuen Haken
+            if stuck_kind:
+                self.stuck_t += dt
+                if self.stuck_t >= MOB_STUCK_T:      # 7a: 2-3 s kein Fortschritt -> Umweg (jedes Mal länger)
+                    self.stuck_t = 0.0
+                    if self.stuck_n == 0:
+                        self.detour_side = rng.choice((-1.0, 1.0))
+                    if self.detour_t > 0:            # auch der Umweg hängt: nächster Winkel (andere Seite, zurück)
+                        self.stuck_n += 1
+                    else:                            # wieder an derselben Wand: gleicher Winkel, aber länger
+                        self.stuck_n = max(1, self.stuck_n)
+                        self.detour_grow = min(MOB_DETOUR_GROW, self.detour_grow + 1)
+                    self.detour_t = MOB_DETOUR_T * max(1, self.detour_grow)
+                    self.calm_t = 0.0
+        elif stuck_kind:
+            self.stuck_t = max(0.0, self.stuck_t - dt * 0.5)
+            self.calm_t += dt
+            if self.calm_t > MOB_DETOUR_FORGET:      # lange frei gelaufen: Umweg-Zähler vergessen
+                self.stuck_n = self.detour_grow = 0
         self.speed_now = speed
         self.phase += (speed if speed > 0 else (1.5 if self.hover > 0 else 0.0)) * dt * 2.0
 
@@ -2202,12 +2281,20 @@ def remember_loot(pl, name):
 PUSH_H = (STEP_H + 0.4, PLAYER_H - 0.4)       # Höhen (über den Füssen) der Kugeln, die Wände aus dem Netz schieben
 
 
-def push_out(x, y, r, world, z=None, veh=-1):
+def z_overlap(a0, a1, b0, b1, tol=MOB_Z_TOL):
+    """Überlappen sich die Höhenbereiche a0..a1 und b0..b1 um mehr als tol?"""
+    return min(a1, b1) - max(a0, b0) > tol
+
+
+def push_out(x, y, r, world, z=None, veh=-1, skip=()):
     """Kreis (x,y,r) aus allen festen Objekten (Bäume, Felsen, Teiche, Gebäude,
     Fahrzeuge) schieben. z = Fusshöhe: Quader, über deren Oberkante man steht
     (abzüglich STEP_H), und Quader über dem Kopf blockieren nicht.
-    veh = ID eines Fahrzeugs, das ignoriert wird (das eigene)."""
+    veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
+    (Titan: TITAN_PASS_PROPS)."""
     for p in world.props:
+        if skip and p.kind in skip:
+            continue
         ddx, ddy = x - p.x, y - p.y
         min_d = p.solid_r + r
         if abs(ddx) > min_d or abs(ddy) > min_d:
@@ -3846,7 +3933,11 @@ class World:
         if pl.vehicle >= 0:
             v = self.vehicle_by_id(pl.vehicle)
             return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
-        if pl.mount >= 0 or not pl.moving:
+        if pl.mount >= 0:                                  # Heckschütze: fährt der Wagen, ist er so laut wie dieser
+            t = self.turrets[pl.mount] if 0 <= pl.mount < len(self.turrets) else None
+            v = self.vehicle_by_id(t.vid) if t is not None and t.kind == "car" else None
+            return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
+        if not pl.moving:
             return 0.0
         if pl.crouch > 0.5:
             return NOISE_CROUCH
@@ -5625,13 +5716,16 @@ class World:
                 m.on_shot(self, d, False)
 
     def separate_mobs(self):
-        """Monster schieben sich gegenseitig auseinander."""
+        """Monster schieben sich gegenseitig auseinander - nur, wenn sie auch in der Höhe aneinanderstossen
+        (Drohne über einem Grunt schiebt nicht)."""
         ms = [m for m in self.mobs if m.state != "dead"]
         for i, a in enumerate(ms):
             for b in ms[i + 1:]:
                 dx, dy = b.x - a.x, b.y - a.y
                 md = a.radius + b.radius
                 if abs(dx) > md or abs(dy) > md:
+                    continue
+                if not z_overlap(a.z, a.z + a.height, b.z, b.z + b.height):
                     continue
                 d = math.hypot(dx, dy) or 0.01
                 if d < md:
@@ -5642,15 +5736,20 @@ class World:
                     b.y += dy / d * push
 
     def push_player(self, pl):
-        """Spieler aus lebenden Monstern herausschieben."""
+        """Spieler aus lebenden Monstern herausschieben - nur bei überlappendem Höhenbereich (Monster z .. z +
+        height, Spieler z .. z + body_h). Wer auf einem Dach/Turm/Obergeschoss über den Monstern steht, wird
+        nicht mehr geschoben (früher: "unendliche Säule")."""
         if pl.hp <= 0:
             return
+        bh = body_h(pl)
         for a in self.mobs:
             if a.state == "dead":
                 continue
             dx, dy = pl.x - a.x, pl.y - a.y
             md = a.radius + PLAYER_R
             if abs(dx) > md or abs(dy) > md:
+                continue
+            if not z_overlap(pl.z, pl.z + bh, a.z, a.z + a.height):
                 continue
             d = math.hypot(dx, dy)
             if d < md:
@@ -11867,7 +11966,7 @@ class HostSession:
             if not finite(x, y, z, h, p):
                 return
             pl.x, pl.y = clampf(x, -5, WORLD + 5), clampf(y, -5, WORLD + 5)
-            pl.z = clampf(z, -20, 60)
+            pl.z = clampf(z, -20, PLAYER_Z_MAX)
             pl.heading, pl.pitch = h, clampf(p, -90, 90)
             pl.moving = bool(m.get("mv"))
             cur = m.get("cur")
@@ -133374,7 +133473,8 @@ class Game(ShowBase):
 
     def do_melee(self):
         """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
-        nicht in der Hand, wird sie für den Schlag gezogen und danach wieder weggesteckt."""
+        nicht in der Hand, wird sie gezogen; mit QUICK_MELEE_STAY bleibt sie danach in der Hand (Linke Maus schlägt
+        weiter, 1-3/Mausrad wechselt zurück), sonst wird sie nach dem Schlag wieder weggesteckt."""
         pl = self.player
         if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.melee_cd > 0
                 or self.world.phase != "play"):
@@ -133385,7 +133485,7 @@ class Game(ShowBase):
             pl.switch_to = pl.cur
         if not pl.melee_out:
             pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
-            self.quick_melee = True
+            self.quick_melee = not QUICK_MELEE_STAY        # 7a: bleibt in der Hand (Wechsel mit 1-3/Mausrad)
         m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
         pl.melee_cd = pl.swing_t = m.interval
         hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
@@ -133481,7 +133581,15 @@ class Game(ShowBase):
             self.sp_back.kick(2.5)                 # kleiner Ruck der Waffe beim Wurf
             self.sp_pitch.kick(-90)
 
+    def lock_trigger(self):
+        """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
+        INPUT_LOCK_T s (Spielstart, Respawn, Menü/Karte geschlossen, Fenster zurück im Vordergrund)."""
+        self.trig_need_up = True
+        self.trig_lock_t = INPUT_LOCK_T
+
     def set_capture(self, on):
+        if on:
+            self.lock_trigger()
         self.captured = on
         self.mouse_prev = None
         self.warp_ref = None
@@ -133839,6 +133947,7 @@ class Game(ShowBase):
             return 0, 0
         if not getattr(self, "had_focus", True):      # Fenster hat den Fokus zurück: Maus neu einfangen
             self.had_focus = True
+            self.lock_trigger()                         # 7a: der Klick ins Fenster schiesst nicht
             self.recenter()
             self.mouse_prev = None
             self.warp_frames = 0
@@ -134265,6 +134374,18 @@ class Game(ShowBase):
         trig = down(MouseButton.one())
         edge = trig and not self.prev_trig
         self.prev_trig = trig
+        if self.player is not None:                    # 7a: Wiederbelebt? -> Feuersperre wie nach dem Start
+            alive = self.player.hp > 0
+            if alive and not getattr(self, "lock_alive", True):
+                self.lock_trigger()
+            self.lock_alive = alive
+        lk = getattr(self, "trig_lock_t", 0.0)
+        if lk > 0:
+            self.trig_lock_t = lk - dt
+        if getattr(self, "trig_need_up", False) or lk > 0:
+            if not trig:                               # erst Loslassen, dann zählt ein neuer Druck
+                self.trig_need_up = False
+            trig = edge = False
         if (self.quit_box is not None or getattr(self, "tab_held", False)
                 or getattr(self, "end", None) is not None):       # Abfrage/Tab/Endbildschirm: kein Schuss
             trig = edge = False
@@ -135565,7 +135686,9 @@ class Game(ShowBase):
         car = self.my_vehicle() if pl.hp > 0 else None
         if pl.hp <= 0:
             tur = hc = None
-        self.update_tacho(car)
+        in_veh = car is not None or hc is not None or tur is not None   # 7a: Fahrzeug-HUD
+        tcar = world.vehicle_by_id(tur.vid) if tur is not None and tur.kind == "car" else None
+        self.update_tacho(car if car is not None else tcar)            # Heckschütze sieht Tempo + Wagen-Leben
         self.update_heli_hud(hc)
         # Gadget (Slot 3): Stückzahl
         placed = sum(1 for g in world.gadgets if g.owner == pl.pid and g.kind == pl.gadget)
@@ -135575,8 +135698,8 @@ class Game(ShowBase):
         elif hc is not None:
             self.set_text(self.ammo_text, f"MG {int(hc.mg)}   Raketen {hc.rk}")
             self.set_text(self.name_text, "Helikopter")
-        elif tur is not None:
-            self.set_text(self.ammo_text, "")                      # Hitze zeigt nur der Balken im Visier
+        elif tur is not None:                                      # Munition unbegrenzt: Hitze statt Munition
+            self.set_text(self.ammo_text, "ÜBERHITZT" if tur.over else f"Hitze {int(clampf(tur.heat, 0.0, 1.0) * 100)} %")
             self.set_text(self.name_text, TURRET_NAMES.get(tur.kind, "Geschütz"))
         elif pl.melee_out and not (pl.switch_t > 0 and pl.switch_to != MELEE_SEL):
             self.set_text(self.ammo_text, "")
@@ -135638,7 +135761,7 @@ class Game(ShowBase):
         scoped = self.cur_sight() in ("sniper", "acog") and self.ads_t > 0.85
         scoped = scoped and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
         snip = scoped and self.cur_sight() == "sniper" and pl.hp > 0 and self.melee_t <= 0
-        (self.bar_root.hide if snip else self.bar_root.show)()
+        (self.bar_root.hide if snip or in_veh else self.bar_root.show)()   # 7a: im Fahrzeug keine Waffenleiste
         if getattr(self, "mm_root", None) is not None:
             (self.mm_root.hide if snip else self.mm_root.show)()           # Minimap im Sniper-Visier ausblenden
         if getattr(self, "mm_zoom_text", None) is not None:
@@ -136114,6 +136237,8 @@ class Game(ShowBase):
             return
         self.bm_open = not self.bm_open
         (self.bm_root.show if self.bm_open else self.bm_root.hide)()
+        if not self.bm_open:
+            self.trig_lock_t = INPUT_LOCK_T             # 7a: kurz nach dem Schliessen der Karte kein Schuss
 
     def bm_xy(self, x, y):
         H = self.BIGMAP_H
@@ -136511,11 +136636,15 @@ class Game(ShowBase):
         else:
             self.shield_bg.hide()
             self.shield_fg.hide()
-        in_heli = alive and pl.heli >= 0                        # im Helikopter: Rüstungsanzeige rechts ausblenden
-        for sl, tl in self.gear_tiles.items():
-            if in_heli:
+        in_veh = alive and (pl.heli >= 0 or pl.vehicle >= 0 or pl.mount >= 0)   # 7a: im Fahrzeug/am Geschütz
+        if in_veh:                                              # Ausrüstung, Dash, Jetpack, Buff ausblenden
+            dash.hide()
+            jet.hide()
+            ic.hide()
+            for tl in self.gear_tiles.values():
                 tl["tile"].hide()
-                continue
+            return
+        for sl, tl in self.gear_tiles.items():
             tl["tile"].show()
             gi = pl.gear.get(sl) if alive else None
             self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
