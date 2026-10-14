@@ -6573,15 +6573,20 @@ def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
     loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
 
 
-def glove(m, wr, d, s, col, rng, curl=1.0):
+def glove(m, wr, d, s, col, rng, curl=1.0, dn=None):
     """Handschuh: Handteller, vier gebogene Finger und Daumen. wr = Handgelenk, d = Richtung zu den Fingern,
     s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu)."""
-    ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
-    k = dot(ref, d)
-    u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
-    v = cross(d, u)
-    if v[2] > 0:
-        v = (-v[0], -v[1], -v[2])                                  # v zeigt nach unten: dorthin krümmen sich die Finger
+    if dn is not None:                                             # Krümmrichtung vorgegeben (z. B. quer um einen Griff)
+        k = dot(dn, d)
+        v = norm((dn[0] - d[0] * k, dn[1] - d[1] * k, dn[2] - d[2] * k))
+        u = cross(v, d)
+    else:
+        ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+        k = dot(ref, d)
+        u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+        v = cross(d, u)
+        if v[2] > 0:
+            v = (-v[0], -v[1], -v[2])                              # v zeigt nach unten: dorthin krümmen sich die Finger
 
     def at(base, a, b, c):
         return (base[0] + d[0] * a + u[0] * b + v[0] * c, base[1] + d[1] * a + u[1] * b + v[1] * c,
@@ -6602,6 +6607,21 @@ def glove(m, wr, d, s, col, rng, curl=1.0):
     t2 = at(t1, 0.025, s * 0.004, 0.011 * curl)
     loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
          (False, True), 0.03, 6)                                   # Daumen
+
+
+def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10)):
+    """Rechte Hand, die einen senkrechten Pistolengriff umfasst (Ego-Ansicht). Ursprung: Mitte des Griffs, 0.033 hinter
+    seiner Vorderseite. Handballen liegt seitlich am Griff, die vier Finger laufen quer um die Vorderseite, der Daumen
+    liegt oben an der Seite, der Unterarm läuft nach hinten."""
+    xc, kn_y = 0.040 * s, 0.015
+    wr = (xc, kn_y - 0.085, 0.0)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.0, dn=(-s, 0.0, 0.0))
+    cs = [(xc, wr[1] - 0.005, 0.0), (xc + 0.010 * s, wr[1] - 0.13, -0.030), (xc + 0.025 * s, wr[1] - 0.27, -0.085),
+          (xc + 0.040 * s, wr[1] - 0.50, -0.17)]
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
+         lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
+    loft(m, [(xc, wr[1] + 0.008, 0.0), (xc, wr[1] - 0.028, -0.001)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
+         rng, None, None, (False, False), 0.02)                    # Manschette
 
 
 def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10)):
@@ -7033,8 +7053,8 @@ GUN_PARTS = {
 
 # Wechselmagazin je Waffe (für die Nachladeanimation der Ego-Ansicht). Gleiche Tupel wie in GUN_PARTS
 # werden dort im Ego-Modell weggelassen (das Magazin ist dann ein eigenes, bewegliches Teil).
-RHAND_GRIP = {"Pistole": (0.045, -0.005, -0.035), "Revolver": (0.045, -0.02, -0.035),
-              "Maschinenpistole": (0.045, -0.02, -0.03)}      # rechte Hand am Griff (Waffenraum)
+RHAND_GRIP = {"Pistole": (0.0, 0.003, -0.07, -3.0), "Revolver": (0.0, -0.027, -0.07, -14.0),
+              "Maschinenpistole": (0.0, -0.033, -0.06, -15.0)}      # rechte Hand am Griff (Waffenraum): Position, Neigung des Griffs
 MAG_PARTS = {
     "Pistole": (0, 0.0, -0.12, 0.04, 0.06, 0.09, (0.10, 0.10, 0.12)),
     "Sturmgewehr": (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
@@ -129873,7 +129893,10 @@ class Game(ShowBase):
                                                  (self.gad_arms[1], 0.5, -0.06, 0.0, 0.35, 1),
                                                  (self.gren_arm, 0.5, -0.06, 0.0, 0.5, 1)):
             m = Mesh()
-            fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
+            if nd is self.vm_rhand:
+                fp_grip_arm_mesh(m, rng, 1, L["pal"], L["glove"])
+            else:
+                fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
             gn, new = nd.node(), m.node("arm")
             gn.removeAllGeoms()
             for gi in range(new.getNumGeoms()):
@@ -130530,10 +130553,9 @@ class Game(ShowBase):
         self.vm_hand.setP(18)
         # rechte Hand (Haut + Ärmel): hält beim Nachladen der Kleinwaffen den Griff, während die linke das Magazin wechselt
         rm = Mesh()
-        fp_arm_mesh(rm, rng, 0.55, -0.16, 0.01, 1.0, 1)
+        fp_grip_arm_mesh(rm, rng, 1)
         self.vm_rhand = self.gun_pivot.attachNewNode(rm.node("rhand"))
         self.vm_rhand.hide()
-        self.vm_rhand.setP(10)
         shm = Mesh()
         box(shm, 0, 0, 0, 0.03, 0.07, 0.03, (0.80, 0.12, 0.08), rng)
         box(shm, 0, -0.04, 0, 0.032, 0.016, 0.032, (0.85, 0.68, 0.25), rng)
@@ -132765,7 +132787,8 @@ class Game(ShowBase):
             (m.show if i == pl.cur and not hidden and pl.hp > 0 and not driving else m.hide)()
         rh = RHAND_GRIP.get(w.name) if (w.kind == "secondary" and pl.reload_t > 0 and pl.switch_t <= 0) else None
         if rh is not None and self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
-            self.vm_rhand.setPos(*rh)               # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
+            self.vm_rhand.setPos(*rh[:3])           # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
+            self.vm_rhand.setP(rh[3])
             self.vm_rhand.show()
         else:
             self.vm_rhand.hide()
