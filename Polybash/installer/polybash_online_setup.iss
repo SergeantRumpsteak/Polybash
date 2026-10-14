@@ -38,6 +38,7 @@ Name: "desktopicon"; Description: "Verknuepfung auf dem Desktop anlegen"; GroupD
 
 [Files]
 Source: "..\spiel.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\experimental\*"; DestDir: "{app}\experimental"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "..\maps\*"; DestDir: "{app}\maps"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "..\sounds\*"; DestDir: "{app}\sounds"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 

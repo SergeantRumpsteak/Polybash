@@ -109,6 +109,32 @@ Ballistik: Jede Kugel ist ein Massepunkt mit Startgeschwindigkeit v0 und
 Rückstoss: Das Waffenmodell hängt an gedämpften Federn
   x'' = -k x - c x'   (Impuls beim Schuss -> Ausschwingen), ebenso die Kamera.
 """
+# ===== Experimental: Robins Spielversion ===========================================================
+# Im Menü den Modus "Experimental" wählen und starten: dann läuft experimental/spiel_experimental.py als
+# eigener Prozess (eigene Einstellungsdatei spiel_einstellungen_experimental.json). Alle anderen Modi bleiben
+# davon völlig unberührt. Das Hauptprogramm unten wird in diesem Fall gar nicht erst geladen.
+import os as _os
+import sys as _sys
+EXP_FILE = _os.path.join("experimental", "spiel_experimental.py")
+
+
+def _exp_path():
+    for _b in (_os.path.dirname(_os.path.abspath(__file__)), getattr(_sys, "_MEIPASS", None)):
+        if _b and _os.path.isfile(_os.path.join(_b, EXP_FILE)):
+            return _os.path.join(_b, EXP_FILE)
+    return None
+
+
+if __name__ == "__main__" and _os.environ.get("POLYBASH_EXPERIMENTAL") == "1":
+    _p = _exp_path()
+    if _p is None:
+        raise SystemExit("Experimental: Datei " + EXP_FILE + " fehlt")
+    with open(_p, encoding="utf-8") as _f:
+        _src = _f.read()
+    _ns = {"__name__": "__main__", "__file__": _os.path.abspath(__file__), "__builtins__": __builtins__}
+    exec(compile(_src, _p, "exec"), _ns)
+    _sys.exit(0)
+# ====================================================================================================
 import base64
 import json
 import math
@@ -239,8 +265,9 @@ PLAYER_HIT_R = 0.45      # Trefferradius der Spieler
 PROTECT_T = 3.0          # Spawnschutz in s (endet beim Schiessen)
 OVER_T = 15.0            # so lange bleibt die Rangliste nach Rundenende stehen
 
-MODES = ("koth", "dm")
-MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch"}
+MODES = ("koth", "dm", "experimental")
+MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch", "experimental": "Experimental"}
+MC_MODES = ("dm", "experimental")   # Modi, die auf Minecraft-Karten erlaubt sind
 LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Minuten
 STD_MAP_NAME = "Polytown"                # Name der eingebauten Standardkarte
 MAP_ALIASES = {"9d7c83d12b8832f1": "Minecraft Insel"}    # Anzeigename einer .mcmap-Karte nach ihrer Kennung
@@ -7762,7 +7789,7 @@ class SetupPage:
         return next((i for i, e in enumerate(self.ents) if e[1] == p), 0)
 
     def mode_off(self, k):
-        return self.g.cfg_is_mc() and MODES[k] != "dm"
+        return self.g.cfg_is_mc() and MODES[k] not in MC_MODES
 
     def vx(self, v):
         return self.SL0 + (v - LIMIT_MIN) / float(LIMIT_MAX - LIMIT_MIN) * (self.SL1 - self.SL0)
@@ -7840,11 +7867,14 @@ class SetupPage:
                          lambda a=act: g.setup_turn(a))
         # --- Modus
         self.text(None, "MODUS", X0, -0.205, 0.034, self.GREY, "l")
+        n_m, gap_m = len(MODES), 0.04
+        wm = (X1 - X0 - gap_m * (n_m - 1)) / n_m
         for k, mode in enumerate(MODES):
-            x0, x1 = (X0, -0.02) if k == 0 else (0.02, X1)
+            x0 = X0 + k * (wm + gap_m)
+            x1 = x0 + wm
             self.rect(f"mf{k}", x0 - 0.008, x1 + 0.008, -0.343, -0.237)
             self.rect(f"mb{k}", x0, x1, -0.335, -0.245)
-            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.055)
+            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.045)
             self.hit(f"mode{k}", x0, x1, -0.335, -0.245, lambda m=mode: g.setup_mode(m))
         # --- Zeitlimit-Slider
         v = int(g.cfg["limit"])
@@ -7864,6 +7894,9 @@ class SetupPage:
         self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.start_game(g.setup_for))
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
+        elif g.cfg["mode"] == "experimental":
+            self.text(None, "Experimental startet Robins Spielversion - dort gelten ihre eigenen Regeln",
+                      0, -0.885, 0.03, self.YELLOW)
         else:
             self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    Enter = Start",
                       0, -0.885, 0.028, self.GREY)
@@ -126627,6 +126660,7 @@ class Game(ShowBase):
         self.host = None            # HostSession (nur beim Host)
         self.client = None          # ClientSession (nur beim Mitspieler)
         self.listener = None        # Host-Suche im Menü
+        self.exp_proc = None        # laufender Experimental-Prozess (Robins Spielversion)
         self.attempt = None         # laufender Verbindungsversuch
         self.menu_items = []
         self.menu_lines = []                  # anklickbare Menüzeilen (Hot)
@@ -126936,7 +126970,7 @@ class Game(ShowBase):
             spec = []
         elif st == "multi":
             spec = [("Spielen", None), ("1   Spiel hosten", dig(1)), ("2   Spiel beitreten", dig(2)),
-                    ("Zurück   (Esc)", back)]
+                    ("3   Experimental beitreten", dig(3)), ("Zurück   (Esc)", back)]
         elif st == "settings":
             spec = [("Einstellungen", None), (f"1   Name:  {self.my_name}", dig(1)),
                     (f"2   Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
@@ -127222,15 +127256,16 @@ class Game(ShowBase):
         if self.cfg_is_mc():
             if not was_mc:
                 self.prev_mode = self.cfg["mode"]
-            self.cfg["mode"] = "dm"
-        elif was_mc and self.prev_mode in MODES:
+            if self.cfg["mode"] not in MC_MODES:
+                self.cfg["mode"] = "dm"
+        elif was_mc and self.prev_mode in MODES and self.cfg["mode"] == "dm":
             self.cfg["mode"] = self.prev_mode
         self.menu_msg = ""
         self.menu_refresh()
 
     def setup_mode(self, mode):
-        if self.cfg_is_mc() or mode not in MODES:
-            return                                    # Minecraft-Karten kennen nur Deathmatch
+        if (self.cfg_is_mc() and mode not in MC_MODES) or mode not in MODES:
+            return                                    # Minecraft-Karten kennen nur Deathmatch (und Experimental)
         self.cfg["mode"] = mode
         self.menu_refresh()
 
@@ -127281,8 +127316,10 @@ class Game(ShowBase):
             return
         if dx:
             self.set_limit(self.cfg["limit"] + dx)
-        elif dy and not self.cfg_is_mc():
-            self.setup_mode(MODES[(MODES.index(self.cfg["mode"]) + 1) % len(MODES)])
+        elif dy:
+            ok = [m for m in MODES if not (self.cfg_is_mc() and m not in MC_MODES)]
+            cur = self.cfg["mode"]
+            self.setup_mode(ok[(ok.index(cur) + 1) % len(ok)] if cur in ok else ok[0])
 
     def preview_texture(self, key):
         if key in self._prev_tex:
@@ -127334,6 +127371,8 @@ class Game(ShowBase):
                 elif d == 2:
                     self.ip_text, self.ip_edited = "", False
                     self.show_menu("join")
+                elif d == 3:
+                    self.launch_experimental({"do": "join"})
             elif st == "settings":
                 if d == 1:
                     self.name_back = "settings"
@@ -128048,8 +128087,77 @@ class Game(ShowBase):
                 pass
         self.load_nodes = []
 
+    # ------------------------------------------------------------ Experimental (Robins Spielversion)
+    def start_experimental(self):
+        """Start im Modus Experimental: Robins Spielversion mit den hier gewählten Einstellungen."""
+        c, mc = self.cfg, self.cfg_is_mc()
+        cfg = {"mode": "dm" if mc else "koth", "limit": int(c["limit"]), "mobs": (not mc) and bool(c.get("mobs")),
+               "map": c.get("map")}
+        for k in ("cd", "regen", "resp"):
+            if isinstance(c.get(k), (int, float)):
+                cfg[k] = c[k]
+        self.launch_experimental({"do": "host", "cfg": cfg})
+
+    def launch_experimental(self, spec):
+        """Startet Robins eingebettete Version als eigenen Prozess; dieses Fenster wartet solange im Hintergrund."""
+        if self.exp_proc is not None:
+            return
+        if _exp_path() is None:
+            self.menu_msg = "Experimental fehlt: Datei " + EXP_FILE + " nicht gefunden"
+            self.menu_refresh()
+            return
+        import subprocess
+        spec = dict(spec, name=self.my_name, gfx=self.gfx, sens=self.sens_mult, fps=self.fps_limit)
+        env = dict(os.environ, POLYBASH_EXPERIMENTAL="1", POLYBASH_EXP_SPEC=json.dumps(spec))
+        frozen = getattr(sys, "frozen", False)
+        cmd = [sys.executable] if frozen else [sys.executable, os.path.abspath(__file__)]
+        if self.listener is not None:
+            try:
+                self.listener.close()
+            except Exception:
+                pass
+            self.listener = None
+        try:
+            self.save_prefs()
+            self.exp_proc = subprocess.Popen(cmd, env=env, cwd=os.path.dirname(os.path.abspath(
+                sys.executable if frozen else __file__)))
+        except OSError as e:
+            self.menu_msg = f"Experimental konnte nicht gestartet werden: {e}"
+            self.menu_refresh()
+            return
+        try:
+            props = WindowProperties()
+            props.setMinimized(True)
+            self.win.requestProperties(props)
+            from panda3d.core import ClockObject
+            clock = ClockObject.getGlobalClock()
+            clock.setMode(ClockObject.MLimited)
+            clock.setFrameRate(5.0)                        # im Hintergrund kaum Rechenleistung verbrauchen
+        except Exception:
+            pass
+
+    def exp_watch(self, task, dt):
+        """Wartet auf das Ende von Experimental und holt dann das Hauptmenü zurück."""
+        self.sfx.menu_music(dt, False)
+        rc = self.exp_proc.poll()
+        if rc is None:
+            return task.cont
+        self.exp_proc = None
+        try:
+            props = WindowProperties()
+            props.setMinimized(False)
+            self.win.requestProperties(props)
+        except Exception:
+            pass
+        self.apply_fps()
+        self.show_menu("main", "" if rc == 0 else "Experimental wurde mit einem Fehler beendet (spiel_fehler_experimental.log)")
+        return task.cont
+
     def start_game(self, mode, attempt=None):
         """mode: 'single' (allein), 'host' (Spiel eröffnen) oder 'client' (beitreten)."""
+        if mode in ("single", "host") and self.cfg.get("mode") == "experimental":
+            self.start_experimental()
+            return
         self.show_loading(mode, attempt)         # erscheint sofort, noch vor dem Laden der Karte
         try:
             self._start_game(mode, attempt)
@@ -129606,6 +129714,8 @@ class Game(ShowBase):
 
     def update_task(self, task):
         dt = min(globalClock.getDt(), 0.1)  # noqa: F821  (von Panda3D bereitgestellt)
+        if self.exp_proc is not None:                      # Experimental läuft in einem eigenen Fenster
+            return self.exp_watch(task, dt)
         self.sfx.menu_music(dt, self.mode == "menu")
         if self.mode == "menu":
             self.menu_task(dt)
