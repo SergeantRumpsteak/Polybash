@@ -129331,6 +129331,9 @@ class Game(ShowBase):
         self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
         st = load_settings()
         self.gfx = st.get("gfx") if st.get("gfx") in GFX_MODES else "standard"
+        vd = st.get("vd")
+        self.view_pct = int(vd) if isinstance(vd, (int, float)) and not isinstance(vd, bool) and 25 <= vd <= 300 else 100   # Sichtweite in %
+        self.fog, self.fog_dens, self.far_base = None, 0.012, 450.0
         sv = st.get("sens")
         self.sens_mult = float(sv) if isinstance(sv, (int, float)) and not isinstance(sv, bool) and 0.5 <= sv <= 2.0 else 1.0
         vm = st.get("vm")
@@ -129683,7 +129686,8 @@ class Game(ShowBase):
         elif st == "settings":
             spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
                     (f"Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
-                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),     # Platz für 4 Regler
+                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),
+                    ("", None), ("", None),     # Platz für 5 Regler
                     ("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
@@ -129761,13 +129765,13 @@ class Game(ShowBase):
             self.menu_cards = []
             big = self.menu_state in ("main", "multi")
             step, scale = (0.16, 0.078) if big else (0.105, 0.06)
-            z = -0.6 if self.menu_state == "loadout" else 0.36
+            z = -0.6 if self.menu_state == "loadout" else (0.46 if self.menu_state == "settings" else 0.36)
             blank_z = []
             for i, it in enumerate(spec):
                 label, action = it[0], it[1]
                 head = i == 0 and action is None and self.menu_state != "main"
                 zz = z
-                z -= step * (1.25 if head else 1.0)
+                z -= step * (1.25 if head else (0.72 if (not label and self.menu_state == "settings") else 1.0))
                 sc = 0.085 if head else scale
                 if not label:
                     blank_z.append(zz)
@@ -129789,7 +129793,7 @@ class Game(ShowBase):
                     self.menu_cards.append((hot, card))
             self.ui_sliders_clear()
             if self.menu_state == "settings":
-                for k, sp in enumerate([self.fps_slider()] + self.personal_sliders()):
+                for k, sp in enumerate([self.fps_slider(), self.view_slider()] + self.personal_sliders()):
                     self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
 
     # ------------------------------------------------------------ Maus im Menü
@@ -130598,6 +130602,7 @@ class Game(ShowBase):
                 self.open_overlay("settings_gfx", "Grafikeinstellungen", [
                     (f"Grafik:  {GFX_NAMES[self.gfx]}", do(set_gfx)),
                     self.fps_slider(),
+                    self.view_slider(),
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
             if kind == "settings_game":                 # persönliche Einstellungen: Maus und Lautstärke
@@ -130653,7 +130658,7 @@ class Game(ShowBase):
 
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
-                       "vm": self.vol_music, "vs": self.vol_sfx})
+                       "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct})
 
     def apply_volume(self):
         """Lautstärke übernehmen: Effekte über den Audio-Manager, Musik als Faktor der Menümusik."""
@@ -130671,6 +130676,23 @@ class Game(ShowBase):
         setattr(self, "vol_music" if which == "music" else "vol_sfx", int(v))
         self.apply_volume()
         self.prefs_dirty = True
+
+    def apply_view(self):
+        """Sichtweite: Nebeldichte durch den Faktor teilen; über 100 % rückt auch die Weitenbegrenzung der Kamera nach."""
+        if self.fog is None:
+            return
+        f = self.view_pct / 100.0
+        self.fog.setExpDensity(self.fog_dens / f)
+        self.camLens.setNearFar(0.1, self.far_base * max(1.0, f))
+
+    def set_view_pct(self, v):
+        self.view_pct = int(v)
+        self.apply_view()
+        self.prefs_dirty = True
+
+    def view_slider(self):
+        return SliderSpec("Sichtweite", 25, 300, 25, lambda: self.view_pct, self.set_view_pct,
+                          lambda v: f"{int(v)} %" + ("  (normal)" if int(v) == 100 else ""))
 
     def set_fps_index(self, i):
         self.fps_limit = FPS_CHOICES[max(0, min(len(FPS_CHOICES) - 1, int(i)))]
@@ -130759,6 +130781,7 @@ class Game(ShowBase):
             self.render.clearFog()
         except Exception:
             pass
+        self.fog = None
         for v in (self.fx, self.parts):
             v.clear()
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
@@ -131044,7 +131067,8 @@ class Game(ShowBase):
         fog.setColor(*SKY)
         fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 and not world.mtn else 0.012))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
-        self.camLens.setNearFar(0.1, max(450.0, WORLD * 1.5))     # grosse Karten: weiter sehen
+        self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
+        self.apply_view()                                          # Sichtweite aus den Einstellungen
         self.build_vignette()
         self.apply_gfx()
 
@@ -135653,8 +135677,8 @@ def _exp_autostart(g):
     if not os.path.exists(_settings_path()):          # erster Start: Grafik, Empfindlichkeit, Bildrate übernehmen
         if spec.get("gfx") in GFX_MODES:
             g.gfx = spec["gfx"]
-        if spec.get("sens") in SENS_CHOICES:
-            g.sens_mult = spec["sens"]
+        if isinstance(spec.get("sens"), (int, float)) and 0.5 <= spec["sens"] <= 2.0:
+            g.sens_mult = float(spec["sens"])
         if spec.get("fps") in FPS_CHOICES:
             g.fps_limit = spec["fps"]
         g.apply_fps()
