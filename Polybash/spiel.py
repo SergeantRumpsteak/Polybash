@@ -1271,6 +1271,72 @@ class Box:
         self.mm = mm              # auf der Minimap zeichnen?
 
 
+HUD_TEXT = 0.042                      # Schriftgrösse für Killfeed, Legende, Tooltips
+TAB_COLS = ((-0.88, "l"), (-0.78, "l"), (-0.05, "r"), (0.15, "r"), (0.33, "r"), (0.56, "r"), (0.8, "r"))
+TAB_W = 0.95                          # halbe Breite der Tab-Übersicht (passt auch bei 4:3 zwischen die HUD-Ränder)
+SB_EVERY = 15                         # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot
+KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen (Sniper: Luft anhalten)"), ("Leertaste", "springen"),
+              ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
+              ("1 2", "Waffe wählen"), ("3", "Gadget"), ("Mausrad", "Waffe / Gadget wechseln"), ("G", "Granate"),
+              ("F", "benutzen / Schlag"), ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"),
+              ("X / Y", "Minimap zoomen"), ("Tab", "Übersicht"), ("M", "Ton an/aus"), ("F3", "Bildrate"),
+              ("Esc", "Menü"))
+MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin"}
+
+
+def end_tabs(koth):
+    """Reiter des Endbildschirms: (Titel, [(Spaltenkopf, Wert(e) -> Zahl/Text, hervorheben?)],
+    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier."""
+    kd = lambda e: e["kills"] / max(1, e["deaths"])                                       # noqa: E731
+    st = lambda e, k: e["stats"].get(k, 0)                                                  # noqa: E731
+    mob = lambda e, k: e["stats"].get("mob", {}).get(k, 0)                                  # noqa: E731
+    tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
+             + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
+                ("K/D", lambda e: round(kd(e), 2), True)]
+             + ([("Zeit in der Burg", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
+                  False)] if koth else []),
+             "Sieger", None),
+            ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
+             + [("Gesamt", lambda e: sum(e["stats"].get("mob", {}).values()), True)],
+             "Meister-Jäger", lambda e: sum(e["stats"].get("mob", {}).values())),
+            ("Looten", [("Kisten", lambda e: st(e, "crates"), True)],
+             "Schatzsucher", lambda e: st(e, "crates")),
+            ("Tomahawk", [("Ausgelöst", lambda e: st(e, "toma_fired"), True),
+                          ("Tomahawk-Kills", lambda e: st(e, "toma_kills"), True)],
+             "Raketen-Profi", lambda e: st(e, "toma_kills") * 100 + st(e, "toma_fired")),
+            ("Special Shots", [("Nahkampf-Kills", lambda e: st(e, "melee_kills"), True),
+                               ("Weitester Kill", lambda e: f"{st(e, 'longest'):.0f} m" if st(e, "longest") else "-", False),
+                               ("mit", lambda e: weapon_name(st(e, "longest_w")) if st(e, "longest_w") >= 0 else "-", False),
+                               ("Kopfschüsse", lambda e: st(e, "heads"), True),
+                               ("Treffer", lambda e: st(e, "hits"), True),
+                               ("Kopf-Quote", lambda e: f"{100 * st(e, 'heads') / max(1, st(e, 'hits')):.0f} %", False)],
+             "Scharfschütze", lambda e: st(e, "longest")),
+            ("Bewegung", [("Zu Fuss", lambda e: f"{st(e, 'walk'):.0f} m", False),
+                          ("Im Wagen", lambda e: f"{st(e, 'drive'):.0f} m", False),
+                          ("Fahrten", lambda e: st(e, "drives"), True),
+                          ("Im Heli", lambda e: f"{st(e, 'fly'):.0f} m", False),
+                          ("Flüge", lambda e: st(e, "flights"), True)],
+             "Weltenbummler", lambda e: st(e, "walk") + st(e, "drive") + st(e, "fly"))]
+    return tabs
+
+
+def new_stats():
+    """Statistik eines Spielers für die laufende Runde (nur der Host zählt). Neue Werte einfach hier ergänzen
+    und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus end_tabs."""
+    return {"mob": {k: 0 for k in KINDS}, "crates": 0, "melee_kills": 0, "toma_fired": 0, "toma_kills": 0,
+            "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0, "walk": 0.0, "drive": 0.0, "drives": 0,
+            "fly": 0.0, "flights": 0, "zone_t": 0.0}
+
+
+def stat_summary(p):
+    """(Monster-Kills, geöffnete Kisten) für das Tab-Scoreboard: beim Host aus pl.stats, beim
+    Mitspieler aus dem Snapshot (pl.sb)."""
+    st = getattr(p, "stats", None)
+    if st is not None and getattr(p, "sb", None) is None:
+        return sum(st["mob"].values()), st["crates"]
+    return getattr(p, "sb", None) or (0, 0)
+
+
 class Crate:
     """Lootkiste. content = Index der Spezialwaffe darin, -1 = leer."""
 
@@ -2879,6 +2945,14 @@ class World:
         k = self.players.get(attacker)
         if k is not None and k is not pl:
             k.kills += 1
+            if wi == WI_TOMAHAWK:
+                k.stats["toma_kills"] += 1
+            elif wi == WI_MELEE:
+                k.stats["melee_kills"] += 1
+            elif 0 <= wi < len(WEAPONS):                 # weitester Kill-Schuss
+                dist = math.hypot(pl.x - k.x, pl.y - k.y)
+                if dist > k.stats["longest"]:
+                    k.stats["longest"], k.stats["longest_w"] = round(dist, 1), wi
             if self.mode == "koth":                      # in der Zone zählt ein Kill doppelt
                 k.score += KILL_PTS * (2.0 if k.hp > 0 and self.in_zone(k) else 1.0)
             self.events.append(("reward", k.pid))        # Munition für den Schützen
@@ -2896,7 +2970,17 @@ class World:
     def hit_player(self, pl, dmg, pos, d, head, owner, wi):
         pct = round(min(dmg, max(pl.hp, 0.0)) / PLAYER_HP * 100.0)
         self.events.append(("pl_hit", pos, d, dmg, head, owner, pct))
+        self.note_hit(owner, head, wi)
         self.damage_player(pl, dmg, owner, wi)
+
+    def note_hit(self, owner, head, wi=-1):
+        """Statistik des Schützen: Treffer und Kopfschüsse (nur mit Waffen)."""
+        p = self.players.get(owner) if isinstance(owner, int) else None
+        if p is None or not (0 <= wi < len(WEAPONS)):
+            return
+        p.stats["hits"] += 1
+        if head:
+            p.stats["heads"] += 1
 
     def hurt_mob(self, m, dmg, pos, d, head, owner=0):
         pct = round(min(dmg, max(m.hp, 0.0)) / m.max_hp * 100.0)
@@ -2907,9 +2991,16 @@ class World:
         m.kx = clampf(m.kx + d[0] * imp, -6, 6)
         m.ky = clampf(m.ky + d[1] * imp, -6, 6)
         self.events.append(("mob_hit", pos, d, dmg, head, owner, pct))
+        if owner is not None and head is not None:
+            sh = self.players.get(owner) if isinstance(owner, int) else None
+            if sh is not None and head is True:
+                sh.stats["heads"] += 1
         if m.hp <= 0 and m.state != "dead":
             m.state, m.dead_t = "dead", 0.0
             self.kills += 1
+            killer = self.players.get(owner) if isinstance(owner, int) else None
+            if killer is not None:
+                killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
             self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
             self.events.append(("reward", owner))        # Munition für den Schützen
 
@@ -2980,6 +3071,7 @@ class World:
 
     def use_crate(self, pl, c):
         """Kiste öffnen; eine getragene Spezialwaffe wird gegen den Inhalt getauscht."""
+        pl.stats["crates"] += 1
         new = c.content
         c.content = pl.loot if pl.loot >= 0 else -1
         pl.loot = new
@@ -3067,6 +3159,7 @@ class World:
         elif kind == "heli":
             o.driver, o.speed, o.vx, o.vy, o.vz = pl.pid, 0.0, 0.0, 0.0, 0.0
             pl.heli, pl.ads, pl.trig = o.id, False, False
+            pl.stats["flights"] += 1
             self.events.append(("henter", pl.pid, o.id))
         elif kind == "exit_heli":
             if o.ground and o.speed < 4.0:
@@ -3075,6 +3168,7 @@ class World:
             if o.driver < 0:
                 o.driver, o.speed = pl.pid, 0.0
                 pl.vehicle, pl.ads = o.id, False
+                pl.stats["drives"] += 1
                 self.events.append(("venter", pl.pid, o.id))
             else:
                 t = self.car_turret(o)
@@ -3516,6 +3610,7 @@ class World:
             tx, ty = CENTER, CENTER
         self.strike_x, self.strike_y = clampf(float(tx), 4.0, WORLD - 4.0), clampf(float(ty), 4.0, WORLD - 4.0)
         self.strike, self.strike_t, self.strike_by = 1, self.strike_dur, pl.pid
+        pl.stats["toma_fired"] += 1
         self.events.append(("strike", pl.pid))
         return True
 
@@ -4017,6 +4112,17 @@ class World:
         self.bullets, self.grenades = [], []
         self.clear_gadgets()
         self.events.append(("matchend",))
+        self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
+
+    def match_stats(self):
+        """Rundenstatistik aller Spieler (Reihenfolge = Rangliste) - geht einmal am Rundenende an alle."""
+        out = []
+        for p in self.ranking():
+            st = p.stats
+            out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
+                        "score": round(p.score, 1), "mode": self.mode,
+                        "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
+        return out
 
     def new_match(self):
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
@@ -4041,6 +4147,7 @@ class World:
             pl.score = 0.0
             pl.loot = -1
             pl.death_pos = None
+            pl.stats = new_stats()
         for pl in list(self.players.values()):
             self.respawn_player(pl)
         self.events.append(("newmatch",))
@@ -4049,6 +4156,20 @@ class World:
         """Simulation der Welt (Monster, Kugeln, Schaden, Punkte) - läuft nur beim Host
         bzw. im Einzelspiel. Die Gegenseite sind alle Spieler in self.players."""
         players = list(self.players.values())
+        for pl in players:                               # Strecken für die Statistik
+            last = getattr(pl, "stat_pos", None)
+            pl.stat_pos = (pl.x, pl.y, pl.z)
+            if last is None or pl.hp <= 0:
+                continue
+            d = math.hypot(pl.x - last[0], pl.y - last[1])
+            if d > 12.0:                                 # Respawn / Sprung: nicht zählen
+                continue
+            if pl.heli >= 0:
+                pl.stats["fly"] += d
+            elif pl.vehicle >= 0:
+                pl.stats["drive"] += d
+            elif pl.mount < 0:
+                pl.stats["walk"] += d
         self.update_bullets(dt)
         self.update_grenades(dt)
         self.update_vehicles(dt)
@@ -4088,6 +4209,7 @@ class World:
                 for pl in players:
                     if pl.hp > 0 and self.in_zone(pl):
                         pl.score += ZONE_PTS * dt
+                        pl.stats["zone_t"] += dt
             if self.time_left <= 0:
                 self.end_match()
         else:
@@ -4111,6 +4233,8 @@ class Player:
         self.score = 0.0                  # King of the Hill: Punkte
         self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
         self.dead_age = 0.0               # Sekunden seit dem Tod (Wartezeit bis zum Respawn)
+        self.stats = new_stats()          # Rundenstatistik (Host)
+        self.sb = None                    # Mitspieler: (Monster, Kisten) aus dem Snapshot
         self.respawn(world, x, y, DEFAULT_LOADOUT)
 
     def wp(self, wi):
@@ -8625,6 +8749,7 @@ class HostSession:
         if not clients:
             self.events.clear()
             return
+        self.snap_n = getattr(self, 'snap_n', 0) + 1
         snap = {"t": "snap", "rd": w.respawn_delay,
                 "pl": [[p.pid, r2(p.x), r2(p.y), r2(p.z), r1(p.heading), r1(p.pitch), r1(p.hp),
                         p.cur, 1 if p.moving else 0, p.name, p.kills, p.deaths, r1(p.score),
@@ -8650,6 +8775,8 @@ class HostSession:
                         1 if q.firing else 0] for q in w.helis],
                 "tm": [w.strike, r1(w.strike_t), w.strike_by, w.strike_dur, r1(w.strike_wait)],
                 "k": w.kills, "ev": self.events}
+        if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
+            snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
         line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
         self.events = []
         for c in clients:
@@ -8767,6 +8894,10 @@ class ClientSession:
             seen.add(pid)
         for pid in [pid for pid in w.players if pid != self.my_id and pid not in seen]:
             del w.players[pid]
+        for row in m.get("sb", ()):                      # Tab-Scoreboard: Monster, Kisten
+            q = w.players.get(row[0])
+            if q is not None and len(row) >= 3:
+                q.sb = tuple(int(v) for v in row[1:3])
 
         seen = set()
         for mid, ki, x, y, z, hd, si, hp, spd, atk, hurt, dead in m["mb"]:
@@ -126697,6 +126828,8 @@ class Game(ShowBase):
         self._txt = {}
         self.quit_box = None                  # Sicherheitsabfrage beim Beenden (Text + Hintergrund)
         self.menu_picker = None               # Waffenwahl mit Bildern im Menü
+        self.end = None                       # Endbildschirm nach Rundenende
+        self.tab_held = False
         self.loadscreen = None                # "Loadout konfigurieren" (Menü und Todesbildschirm)
         self.tipbox = None                    # Hover-Hinweis (Stats) neben der Maus
         self.dead_free = False                # Maus ist auf dem Todesbildschirm freigegeben
@@ -126754,6 +126887,8 @@ class Game(ShowBase):
             self.accept(_k, self.on_arrow, [_dx, _dy])
             self.accept(_k + "-repeat", self.on_arrow, [_dx, _dy])
         self.accept("escape", self.on_escape)
+        self.accept("tab", self.tab_down)
+        self.accept("tab-up", self.tab_up)
         self.accept("q", self.on_q)          # im Spiel lehnt Q (wird per Tastenabfrage gelesen)
         self.accept("f", self.on_use)
         self.accept("f3", self.toggle_fps)
@@ -127123,6 +127258,9 @@ class Game(ShowBase):
 
     def on_click(self):
         """Linke Maustaste: Menüpunkt, Waffenkarte oder Schaltfläche der Beenden-Abfrage."""
+        if getattr(self, "end", None) is not None and self.quit_box is None:
+            self.end_click()
+            return
         if self.quit_box is None and self.loadscreen is not None:
             self.loadscreen.click(self.mouse_2d())
             return
@@ -127312,6 +127450,10 @@ class Game(ShowBase):
             self.setup_more()
 
     def on_arrow(self, dx, dy):
+        if getattr(self, "end", None) is not None:          # Endbildschirm: Pfeile blättern durch die Reiter
+            if dx:
+                self.end_key(dx)
+            return
         if self.mode != "menu" or self.menu_state != "setup" or self.quit_box is not None:
             return
         if dx:
@@ -127351,6 +127493,9 @@ class Game(ShowBase):
 
     def on_digit(self, d):
         if self.quit_box is not None:
+            return
+        if getattr(self, "end", None) is not None:      # Endbildschirm: Ziffern wählen den Reiter
+            self.show_end_tab(d - 1)
             return
         if self.mode == "menu":
             st = self.menu_state
@@ -127932,6 +128077,7 @@ class Game(ShowBase):
         for v in (self.fx, self.parts):
             v.clear()
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
+        self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
         self.gad_views = {}
         self.tur_views, self.heli_views, self.crate_views = {}, {}, []
@@ -128782,6 +128928,241 @@ class Game(ShowBase):
         self.fps_text.hide()
         self.build_turret_sight()
         self.build_minimap()
+        self.build_tab_overlay()
+
+    def open_end_screen(self, data):
+        """Nach Rundenende: eigener Bildschirm im Stil des Hauptmenüs - Siegerpodest, Reiter mit Statistik
+        (Maus oder Pfeiltasten / 1-6), Countdown bis zur nächsten Runde. Das Spiel steht so lange still."""
+        self.close_end_screen()
+        if self.tab_held:
+            self.tab_up()
+        if not isinstance(data, list):
+            return
+        a2 = self.aspect2d
+        hidden = [c for c in a2.getChildren() if not c.isHidden()]
+        for c in hidden:                                  # HUD aus
+            c.hide()
+        root = a2.attachNewNode("endscreen")
+        root.setBin("gui-popup", 0)                       # über allem, was das HUD noch einblendet
+        koth = bool(data) and data[0].get("mode") == "koth"
+        cm = CardMaker("endbg")
+        cm.setFrame(-3, 3, -1, 1)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.05, 0.07, 0.11, 1.0)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        OnscreenText(text="RUNDE VORBEI", parent=root, pos=(0, 0.86), scale=0.09, fg=(1.0, 0.62, 0.14, 1),
+                     shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
+        cm.setFrame(-0.62, 0.62, 0.83, 0.838)
+        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        # Siegerpodest: 2. links, 1. Mitte, 3. rechts
+        for place, x, h, col in ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
+                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25))):
+            if place > len(data):
+                continue
+            e = data[place - 1]
+            cm.setFrame(x - 0.21, x + 0.21, 0.3, 0.3 + h)
+            blk = root.attachNewNode(cm.generate())
+            blk.setColor(col[0] * 0.55, col[1] * 0.55, col[2] * 0.55, 1)
+            OnscreenText(text=str(place), parent=root, pos=(x, 0.3 + h * 0.35), scale=0.09, fg=col + (1,),
+                         shadow=(0, 0, 0, 0.9), mayChange=False)
+            val = f"{int(e['score'])} Punkte" if koth else f"K/D {e['kills'] / max(1, e['deaths']):.2f}"
+            OnscreenText(text=e["name"][:14], parent=root, pos=(x, 0.3 + h + 0.07), scale=0.06 if place == 1 else 0.05,
+                         fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
+            OnscreenText(text=val, parent=root, pos=(x, 0.3 + h + 0.025), scale=0.035, fg=col + (1,),
+                         mayChange=False)
+        tabs = end_tabs(koth)
+        self.end = {"root": root, "data": data, "tabs": tabs, "tab": 0, "cells": [], "hidden": hidden,
+                    "koth": koth, "rects": []}
+        labels = [f"{i + 1} {t[0]}" for i, t in enumerate(tabs)]
+        widths = [len(lb) * 0.042 * 0.52 + 0.09 for lb in labels]   # Reiter nebeneinander, nach Textlänge
+        x = -sum(widths) / 2
+        for lb, wd in zip(labels, widths):
+            cx = x + wd / 2
+            t = OnscreenText(text=lb, parent=root, pos=(cx, 0.19), scale=0.042, fg=Hot.BASE, mayChange=True)
+            self.end["rects"].append((x, x + wd, 0.16, 0.24, t))
+            x += wd
+        self.end["best"] = OnscreenText(text="", parent=root, pos=(0, -0.76), scale=0.05, fg=(1.0, 0.8, 0.3, 1),
+                                        shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.9), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
+                                         mayChange=True)
+        self.show_end_tab(0)
+        self.set_capture(False)
+
+    def show_end_tab(self, i):
+        e = self.end
+        if e is None:
+            return
+        i %= len(e["tabs"])
+        e["tab"] = i
+        for x0, x1, z0, z1, t in e["rects"]:
+            t.setFg(Hot.ON if t is e["rects"][i][4] else Hot.BASE)
+        for c in e["cells"]:
+            c.destroy()
+        e["cells"] = []
+        title, cols, best_name, best_f = e["tabs"][i]
+        data = e["data"][:8]
+        root = e["root"]
+        heads = ["Spieler"] + [c[0] for c in cols]
+        n = len(cols)
+        xs = [-0.95] + [-0.3 + (j + 0.5) * (1.3 / max(1, n)) for j in range(n)]
+        z = 0.07
+        for j, h in enumerate(heads):
+            e["cells"].append(OnscreenText(text=h, parent=root, pos=(xs[j], z), scale=0.038, fg=(0.7, 0.8, 0.9, 1),
+                                           align=TextNode.ALeft if j == 0 else TextNode.ACenter, mayChange=False))
+        vals = [[c[1](row) for c in cols] for row in data]
+        bests = []
+        for j, c in enumerate(cols):                      # bester Wert je Spalte wird gold hervorgehoben
+            nums = [v[j] for v in vals if isinstance(v[j], (int, float))]
+            bests.append(max(nums) if c[2] and nums and max(nums) > 0 else None)
+        for r, row in enumerate(data):
+            z = -0.02 - r * 0.075
+            me = row["pid"] == self.my_id
+            e["cells"].append(OnscreenText(text=f"{r + 1}. {row['name'][:14]}" + ("  (du)" if me else ""), parent=root,
+                                           pos=(xs[0], z), scale=0.042, fg=(1, 0.95, 0.75, 1) if me else (1, 1, 1, 1),
+                                           align=TextNode.ALeft, mayChange=False))
+            for j, v in enumerate(vals[r]):
+                gold = bests[j] is not None and v == bests[j]
+                e["cells"].append(OnscreenText(text=str(v), parent=root, pos=(xs[j + 1], z), scale=0.042,
+                                               fg=(1.0, 0.78, 0.2, 1) if gold else (0.92, 0.94, 1, 1),
+                                               mayChange=False))
+        if best_f is None:                                # Übersicht: Sieger
+            txt = f"Sieger: {data[0]['name']}" if data else ""
+        else:
+            top = max(data, key=best_f) if data else None
+            txt = f"{best_name}: {top['name']}" if top is not None and best_f(top) > 0 else f"{best_name}: -"
+        self.set_text(e["best"], txt)
+
+    def end_click(self):
+        p = self.mouse_2d()
+        if p is None or self.end is None:
+            return
+        for i, (x0, x1, z0, z1, _t) in enumerate(self.end["rects"]):
+            if x0 <= p[0] <= x1 and z0 <= p[1] <= z1:
+                self.show_end_tab(i)
+                return
+
+    def end_key(self, d):
+        if self.end is not None:
+            self.show_end_tab(self.end["tab"] + d)
+
+    def update_end_screen(self):
+        e, world = self.end, self.world
+        if e is None:
+            return
+        if world.phase == "play":                         # neue Runde hat begonnen
+            self.close_end_screen()
+            return
+        left = int(math.ceil(max(0.0, world.over_t)))
+        self.set_text(e["count"], f"Nächste Runde in {left} s" + ("   (Esc: Menü)" if left > 0 else ""))
+        p = self.mouse_2d()
+        for i, (x0, x1, z0, z1, t) in enumerate(e["rects"]):   # Hover wie im Hauptmenü
+            if i != e["tab"]:
+                on = p is not None and x0 <= p[0] <= x1 and z0 <= p[1] <= z1
+                t.setFg(Hot.ON if on else Hot.BASE)
+
+    def close_end_screen(self):
+        e = getattr(self, "end", None)
+        self.end = None
+        if e is None:
+            return
+        for c in e["cells"]:
+            c.destroy()
+        e["root"].removeNode()
+        for c in e["hidden"]:
+            if not c.isEmpty():
+                c.show()
+        if self.mode == "play" and self.quit_box is None:
+            self.set_capture(True)
+
+    def tab_down(self):
+        if getattr(self, "end", None) is not None:      # Endbildschirm: Tab blättert durch die Reiter
+            self.end_key(1)
+            return
+        """Tab gedrückt halten: Scoreboard + Tasten-Legende; die Maus ist frei (Kamera steht), Mausover über
+        Waffen, Ausrüstung und Buff zeigt Infos. Loslassen: weg, Maus wieder eingefangen."""
+        if self.mode != "play" or self.quit_box is not None or self.tab_held:
+            return
+        self.tab_held = True
+        self.tab_root.show()
+        self.update_tab_overlay()
+        if self.captured:
+            self.set_capture(False)
+
+    def tab_up(self):
+        if not self.tab_held:
+            return
+        self.tab_held = False
+        self.tab_root.hide()
+        if self.mode == "play" and self.quit_box is None:
+            self.set_capture(True)
+
+    def build_tab_overlay(self):
+        self.tab_held = False
+        root = self.aspect2d.attachNewNode("tab")
+        root.setBin("fixed", 70)
+        root.setDepthTest(False)
+        root.setDepthWrite(False)
+        cm = CardMaker("tabbg")
+        cm.setFrame(-TAB_W, TAB_W, -0.62, 0.78)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.03, 0.04, 0.07, 0.82)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm.setFrame(-TAB_W, TAB_W, 0.776, 0.784)
+        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        self.tab_title = OnscreenText(text="", parent=root, pos=(0, 0.69), scale=0.06, fg=(1.0, 0.75, 0.3, 1),
+                                      shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.tab_cols = []                       # Spalten: (Kopf, Zeilen) - je Spalte ein Text, sauber ausgerichtet
+        for x, al in TAB_COLS:
+            a = TextNode.ALeft if al == "l" else TextNode.ARight
+            hd = OnscreenText(text="", parent=root, pos=(x, 0.6), scale=HUD_TEXT, fg=(0.7, 0.8, 0.9, 1),
+                              align=a, mayChange=True)
+            rw = OnscreenText(text="", parent=root, pos=(x, 0.52), scale=HUD_TEXT, fg=(1, 1, 1, 1),
+                              shadow=(0, 0, 0, 0.8), align=a, mayChange=True)
+            self.tab_cols.append((hd, rw))
+        self.tab_ip = OnscreenText(text="", parent=root, pos=(TAB_W - 0.05, 0.69), scale=0.03, fg=(0.6, 0.9, 0.6, 1),
+                                   align=TextNode.ARight, mayChange=True)
+        cm.setFrame(-TAB_W + 0.04, TAB_W - 0.04, 0.0, 0.004)
+        sep = root.attachNewNode(cm.generate())
+        sep.setColor(1, 1, 1, 0.25)
+        sep.setTransparency(TransparencyAttrib.MAlpha)
+        sep.setZ(0.06)
+        OnscreenText(text="Steuerung", parent=root, pos=(0, -0.01), scale=0.048, fg=(1.0, 0.75, 0.3, 1),
+                     shadow=(0, 0, 0, 0.9), mayChange=False)
+        n3 = (len(KEY_LEGEND) + 2) // 3
+        for c in range(3):
+            part = KEY_LEGEND[c * n3:(c + 1) * n3]
+            x0 = -TAB_W + 0.08 + c * (2 * TAB_W - 0.1) / 3
+            OnscreenText(text="\n".join(k for k, _w in part), parent=root, pos=(x0, -0.1), scale=0.036,
+                         fg=(1.0, 0.8, 0.4, 1), align=TextNode.ALeft, mayChange=False)
+            OnscreenText(text="\n".join(w for _k, w in part), parent=root, pos=(x0 + 0.2, -0.1), scale=0.036,
+                         fg=(0.88, 0.9, 0.95, 1), align=TextNode.ALeft, mayChange=False)
+        root.hide()
+        self.tab_root = root
+
+    def update_tab_overlay(self):
+        mw = self.mouseWatcherNode                   # Tab-Loslassen verpasst (Fenster gewechselt)? dann zu
+        if mw is not None and hasattr(mw, "is_button_down") and not getattr(self, "tab_test", False):
+            if not mw.is_button_down(KeyboardButton.tab()):
+                self.tab_up()
+                return
+        world = self.world
+        t = max(0.0, world.time_left)
+        self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}")
+        koth = world.mode == "koth"
+        heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten"]
+        cols = [[] for _ in heads]
+        for i, p in enumerate(world.ranking()[:8]):
+            mk, cr = stat_summary(p)
+            val = f"{int(p.score)}" if koth else f"{p.kills / max(1, p.deaths):.2f}"
+            for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")), val,
+                                   p.kills, p.deaths, mk, cr)):
+                cols[c].append(str(v))
+        for (hd, rw), h, vals in zip(self.tab_cols, heads, cols):
+            self.set_text(hd, h)
+            self.set_text(rw, "\n".join(vals))
+        ip = getattr(self, "host_ip", None)
+        self.set_text(self.tab_ip, f"Host-IP {ip}" if ip and self.net_mode == "host" else "")
+        pass
 
     def damage_popup(self, pct, head):
         """Zahl '+NN%' neben dem Treffermarker: Schaden in Prozent der Lebenspunkte des Ziels."""
@@ -130263,9 +130644,12 @@ class Game(ShowBase):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
                     self.sp_cam.kick(10)
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
+            elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
+                self.open_end_screen(e[1])
             elif kind == "newmatch":
                 self.feed.clear()
                 self.pings.clear()
+                self.close_end_screen()
         self.world.events.clear()
 
     def reload_pose(self, u, magp, mag, ej):
@@ -130818,6 +131202,8 @@ class Game(ShowBase):
             txt = ""                                                # Tempo und Zustand stehen im Tacho
         self.set_text(self.speed_text, txt)
         (self.reload_text.show if pl.reload_t > 0 else self.reload_text.hide)()
+        if self.tab_held:
+            self.update_tab_overlay()
         alive = sum(1 for m in world.mobs if m.state != "dead")
         info = f"Monster {alive}   erlegt {world.kills}" if world.mobs_on or self.net_mode == "client" else ""
         self.set_text(self.kill_text, info)
@@ -130974,15 +131360,8 @@ class Game(ShowBase):
             self.set_text(self.prompt_text, "")
         if dead_screen and self.loadscreen is not None:
             self.loadscreen.hover(mpos)
-        if world.phase == "over":
-            lines = ["SPIELENDE", ""]
-            if rank:
-                lines += [f"Sieger: {rank[0].name}", ""]
-            lines += [self.rank_line(i, p) for i, p in enumerate(rank)]
-            lines += ["", f"Neue Runde in {int(math.ceil(max(0.0, world.over_t)))} s"]
-            self.set_text(self.over_text, "\n".join(lines))
-        else:
-            self.set_text(self.over_text, "")
+        self.set_text(self.over_text, "")             # (Banner ersetzt durch den Endbildschirm)
+        self.update_end_screen()
         self.update_minimap()
         self.update_strike_map()
         if self.quit_box is not None and self.overlay_kind == "strike" and (world.strike != 0 or pl.hp <= 0):

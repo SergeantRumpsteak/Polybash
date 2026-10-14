@@ -12,7 +12,7 @@ Steuerung:
   Q / E          nach links / rechts um die Ecke lehnen
   G              Granate werfen (2 zum Start, 2,5 s Zündzeit)
   F              benutzen: Lootkiste öffnen, am Boden liegende Waffe aufheben,
-                 Fahrzeug ein-/aussteigen; ist nichts Benutzbares in der Nähe: Nahkampfwaffe ziehen
+                 Fahrzeug ein-/aussteigen; ist nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
   4              Nahkampfwaffe (zurück zu den Schusswaffen mit 1-3 / Mausrad); Linke Maus = zuschlagen
   Tab (halten)   Übersicht: Scoreboard (Punkte, Kills, Tode, Monster, Kisten, Buffs) und Tasten-Legende;
                  die Maus ist solange frei - Mausover über Waffen, Ausrüstung und Buff zeigt die Werte
@@ -1041,7 +1041,7 @@ TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schad
 
 KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / Jetpack"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
-              ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Nahkampf"),
+              ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"),
               ("M", "Ton an/aus"), ("F3", "Bildrate"), ("Esc", "Menü"))
@@ -131813,9 +131813,8 @@ class Game(ShowBase):
         pl, world = self.player, self.world
         if not alt and pl.hp > 0 and world.phase == "play":
             r = world.nearest_use(pl)
-            if r is None:                                   # nichts Benutzbares in der Nähe: Nahkampfwaffe ziehen
-                if pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and not pl.melee_out:
-                    self.sel_req = MELEE_SEL
+            if r is None:                                   # nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
+                self.do_melee()
                 return
         if not alt and pl.hp > 0 and world.phase == "play" and world.strike == 0:
             r = world.nearest_use(pl)
@@ -131828,6 +131827,22 @@ class Game(ShowBase):
                 self.client.send_use(alt)
         else:
             self.world.use_object(self.player, alt)
+
+    def do_melee(self):
+        """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
+        nicht in der Hand, wird sie für den Schlag gezogen und danach wieder weggesteckt."""
+        pl = self.player
+        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.gad_out or pl.switch_t > 0
+                or pl.melee_cd > 0 or self.world.phase != "play"):
+            return
+        if not pl.melee_out:
+            pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
+            self.quick_melee = True
+        m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
+        pl.melee_cd = pl.swing_t = m.interval
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        self.world.melee_swing(pl, d)
 
     @staticmethod
     def is_rocket(b):
@@ -132825,6 +132840,10 @@ class Game(ShowBase):
                 update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select)
                 if getattr(inp, "throw", False) and not over:
                     self.throw_grenade()
+            if getattr(self, "quick_melee", False) and pl.swing_t <= 0:   # Schnellschlag (F) vorbei: wieder wegstecken
+                self.quick_melee = False
+                if pl.melee_out and pl.switch_t <= 0:
+                    pl.melee_out = False
             if pl.swing_t > getattr(self, "prev_swing", 0.0) + 0.01:     # eigener Schlag: Ton
                 self.sfx.melee(self.my_id, False, 0.85 if pl.melee >= 3 else 1.0)
                 self.noise_wave(pl.x, pl.y, NOISE_MELEE)
