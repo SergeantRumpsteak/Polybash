@@ -128258,7 +128258,6 @@ class Game(ShowBase):
                 self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
                 return
             # settings_round: alles, was die laufende Runde betrifft
-            info = (f"Modus:  {MODE_NAMES.get(w.mode, w.mode)}      Zeitlimit:  {int(w.limit // 60)} min", None)
             if host_side:
                 def set_cd(v):
                     w.strike_cd = float(v)
@@ -128287,8 +128286,7 @@ class Game(ShowBase):
                     w.tomahawk_on = not w.tomahawk_on
                     self.cfg["tomahawk"] = w.tomahawk_on
 
-                items = [info,
-                         RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
+                items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
                                  lambda k: (set_mobs(k), self.show_pause(kind))),
                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
                          SliderSpec("Tomahawk-Abklingzeit", 0, 600, 10, lambda: int(w.strike_cd), set_cd,
@@ -128296,7 +128294,7 @@ class Game(ShowBase):
                          SliderSpec("Respawn-Zeit", 0, 30, 1, lambda: int(w.respawn_delay), set_resp, respawn_label),
                          SliderSpec("Gesundheit regeneriert", 0.0, 10.0, 0.5, lambda: w.regen_rate, set_regen, regen_label)]
             else:
-                items = [info, ("Monster, Tomahawk, Respawn und Regeneration bestimmt der Host", None)]
+                items = [("Monster, Tomahawk, Respawn und Regeneration bestimmt der Host", None)]
             items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
             self.open_overlay("settings_round", "Rundeneinstellungen", items,
                               "Diese Einstellungen gelten für die ganze Runde", width=1.45)
