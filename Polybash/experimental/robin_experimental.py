@@ -131264,7 +131264,7 @@ class Game(ShowBase):
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col)}
         # Nahkampf-Slot (eigener Slot: Taste 5 oder F ohne etwas Benutzbares in der Nähe)
-        mx_ = ((N_SLOTS + 1) / 2) * 0.34 + 0.01
+        mx_ = (N_SLOTS - N_SLOTS / 2) * 0.34 + 0.31      # rechts neben der Gadget-Karte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
         self.melee_holder = self.a2dBottomCenter.attachNewNode("melee_holder")
