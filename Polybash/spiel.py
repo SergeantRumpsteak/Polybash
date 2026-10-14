@@ -10536,6 +10536,39 @@ SOLDIER_THROW_L = ((0.00, SOLDIER_HAND[0]), (0.20, (-0.30, 0.10, 0.28)), (0.80, 
                    (1.00, SOLDIER_HAND[0]))                                                  # linker Arm schwingt locker mit
 
 
+# Gehaltene Waffe der Mitspieler: (Massstab, rechter Griff (y, z), linke Hand (y, z)) im Waffenraum. Die rechte Hand
+# sitzt immer am Griff (SOLDIER_HAND[1]), die linke am Handschutz bzw. unter dem Griff.
+HELD_GUN = {"Pistole": (0.90, (0.0, -0.05), (0.02, -0.12)), "Revolver": (0.90, (-0.03, -0.05), (-0.02, -0.12)),
+            "Maschinenpistole": (0.80, (-0.02, -0.05), (0.08, -0.10)), "Sturmgewehr": (0.68, (0.06, -0.09), (0.42, -0.035)),
+            "Schrotflinte": (0.62, (-0.03, -0.04), (0.35, -0.065)), "Scharfschütze": (0.56, (-0.09, -0.07), (0.35, -0.04)),
+            "Raketenwerfer": (0.50, (0.10, -0.10), (0.36, -0.10)), "Minigun": (0.50, (0.0, -0.12), (0.05, 0.12)),
+            "Railgun": (0.62, (0.05, -0.10), (0.35, 0.0))}
+_HELD_CACHE = {}
+
+
+def held_gun_geom(wi):
+    """Detailliertes Waffenmodell für die Ansicht von aussen (ein GeomNode je Waffe, von allen Figuren geteilt)."""
+    g = _HELD_CACHE.get(wi)
+    if g is None:
+        w = WEAPONS[wi]
+        sh = GUN_SHAPES[w.name]
+        m = Mesh()
+        rng = random.Random(11 + wi)
+        build_shapes(m, sh["body"] + sh["barrel"] + sh["iron"], rng)
+        mp = MAG_PARTS.get(w.name)
+        if mp is not None:
+            build_shapes(m, sh["mag"], rng, (mp[0], mp[1], mp[2]))
+        g = _HELD_CACHE[wi] = m.node("held_" + w.name)
+    return g
+
+
+def held_hands(name):
+    """(Massstab, Ruheposition der linken Hand im Torso-Raum) für die gehaltene Waffe."""
+    s_, rg, lg = HELD_GUN[name]
+    hr = SOLDIER_HAND[1]
+    return s_, (hr[0], hr[1] + s_ * (lg[0] - rg[0]), hr[2] + s_ * (lg[1] - rg[1]))
+
+
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
@@ -10543,17 +10576,12 @@ class PlayerView:
         look = soldier_look(getattr(p, "look", ""), p.pid)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
          self.armL, self.armR) = build_soldier(look)
-        gm = Mesh()
-        gc, gl = (0.13, 0.13, 0.15), (0.22, 0.22, 0.25)                  # Waffe in beiden Händen
-        box(gm, 0.10, 0.32, 0.40, 0.06, 0.50, 0.09, gc)                    # Gehäuse
-        box(gm, 0.10, 0.66, 0.41, 0.026, 0.20, 0.026, gl)                  # Lauf
-        box(gm, 0.10, 0.12, 0.34, 0.04, 0.08, 0.10, gc)                    # Griff
-        box(gm, 0.10, 0.30, 0.31, 0.04, 0.07, 0.13, gc)                    # Magazin
-        box(gm, 0.10, 0.00, 0.41, 0.05, 0.16, 0.12, (0.16, 0.14, 0.12))    # Schulterstütze
-        box(gm, 0.10, 0.40, 0.46, 0.02, 0.05, 0.02, gl)                    # Visier
+        gc = (0.13, 0.13, 0.15)
         sr = SOLDIER_SH[1]
-        self.gun = self.armR.attachNewNode(gm.node("gun"))                # die Waffe hängt am rechten Arm
+        self.gun = self.armR.attachNewNode("gun")                         # Halter am rechten Arm; darin die gehaltene Waffe
         self.gun.setPos(-sr[0], -sr[1], -sr[2])
+        self.held, self.held_cur = {}, -1
+        self.hl = SOLDIER_HAND[0]                                         # Ruheposition der linken Hand (je Waffe)
         mm = Mesh()
         box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
         self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
@@ -10578,6 +10606,23 @@ class PlayerView:
         self.phase = 0.0
         self.dead_t = 0.0
 
+    def show_held(self, wi):
+        """Die Waffe in der Hand wechseln (Modell je Waffe einmal pro Figur angehängt)."""
+        if wi == self.held_cur or not (0 <= wi < len(WEAPONS)):
+            return
+        self.held_cur = wi
+        name = WEAPONS[wi].name
+        if wi not in self.held:
+            s_, rg, _lg = HELD_GUN[name]
+            hr = SOLDIER_HAND[1]
+            nd = self.gun.attachNewNode(held_gun_geom(wi))
+            nd.setScale(s_)
+            nd.setPos(hr[0], hr[1] - s_ * rg[0], hr[2] - s_ * rg[1])
+            self.held[wi] = nd
+        for k, nd in self.held.items():
+            (nd.show if k == wi else nd.hide)()
+        self.hl = held_hands(name)[1]
+
     def start_reload(self, wi):
         if not (0 <= wi < len(WEAPONS)) or self.th_t > 0:
             return
@@ -10594,7 +10639,7 @@ class PlayerView:
         """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
         (rechter Arm holt aus, Waffe hängt am Gurt) und Schlag (Waffe mit beiden Armen)."""
         SL, SR = SOLDIER_SH
-        HL, HR = SOLDIER_HAND
+        HL, HR = self.hl, SOLDIER_HAND[1]
         v0L, v0R = sub(HL, SL), sub(HR, SR)
         tl, tr = HL, HR
         tilt = 0.0
@@ -10617,6 +10662,8 @@ class PlayerView:
                 tilt = 12.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
             else:
                 tl = kf_pos(SOLDIER_RELOAD_L, u)
+                away = smoothstep(0.0, 0.18, u) * (1.0 - smoothstep(0.88, 1.0, u))      # Ruheposition je Waffe vorn/hinten
+                tl = add(tl, tuple(c * (1.0 - away) for c in sub(HL, SOLDIER_HAND[0])))
                 mag = (0.18 <= u < 0.38) or (0.58 <= u < 0.88)        # altes Magazin raus, neues in der Hand
         elif self.swing > 0:                                          # Schlag: Waffe hoch, dann nach unten
             self.swing = max(0.0, self.swing - dt)
@@ -10665,6 +10712,7 @@ class PlayerView:
             self.pose_arms(0.0)
             return
         self.dead_t = 0.0
+        self.show_held(getattr(p, "cur", 0))
         r.clearColorScale()
         r.setHpr(self.h, 0, 0)
         r.setSz(1.0 - (1.0 - CROUCH_H / PLAYER_H) * p.crouch)               # geduckt
