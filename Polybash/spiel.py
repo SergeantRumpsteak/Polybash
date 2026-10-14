@@ -6835,6 +6835,10 @@ class Deco:
         self.np.removeNode()
 
 
+START_BTN = (0.12, 0.45, 0.18, 0.92)        # grüner Knopf "Spiel starten"
+START_BTN_HOT = (0.20, 0.62, 0.28, 0.98)
+
+
 class Hot:
     """Anklickbarer Text: Rechteck für die Maus; beim Überfahren wird er gelb hervorgehoben."""
     BASE = (0.86, 0.92, 1.0, 1.0)
@@ -127198,7 +127202,7 @@ class Game(ShowBase):
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
-            self.menu_items.append(OnscreenText(text="Polybash Alpha v0.8", pos=(1.2, -0.94), scale=0.045,
+            self.menu_items.append(OnscreenText(text="Polybash Alpha", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
 
@@ -127222,7 +127226,7 @@ class Game(ShowBase):
         elif st == "loadout":
             spec = [("Loadout konfigurieren", lambda: self.show_menu("loadconf"))]
             if self.pending_start is not None:             # Ausrüstung vor dem Start einer Runde: dann spawnen
-                spec.append(("Spawnen   (Enter)", self.menu_enter))
+                spec.append(("Spiel starten   (Enter)", self.menu_enter))
             spec.append(("Zurück   (Esc)", back))
         elif st == "loadconf":
             spec = []
@@ -127325,7 +127329,7 @@ class Game(ShowBase):
                     cm = CardMaker("btn")
                     cm.setFrame(-0.78, 0.78, zz - 0.3 * sc - 0.012, zz + 0.95 * sc + 0.012)
                     card = self.aspect2d.attachNewNode(cm.generate())
-                    card.setColor(0.10, 0.17, 0.26, 0.85)
+                    card.setColor(*(START_BTN if label.startswith("Spiel starten") else (0.10, 0.17, 0.26, 0.85)))
                     card.setTransparency(TransparencyAttrib.MAlpha)
                 t = OnscreenText(text=label, pos=(0, zz), scale=sc,
                                  fg=Hot.BASE if action else ((1.0, 0.78, 0.3, 1) if head else (0.82, 0.88, 0.95, 1)),
@@ -127362,7 +127366,10 @@ class Game(ShowBase):
         for h in self.menu_lines:
             h.set(h is hit)
         for h, nd in self.menu_cards:
-            nd.setColor(*((0.22, 0.30, 0.42, 0.95) if h is hit else (0.10, 0.17, 0.26, 0.85)))
+            if h.label.startswith("Spiel starten"):               # grüner Startknopf (Ausrüstungsmenü vor der Runde)
+                nd.setColor(*(START_BTN_HOT if h is hit else START_BTN))
+            else:
+                nd.setColor(*((0.22, 0.30, 0.42, 0.95) if h is hit else (0.10, 0.17, 0.26, 0.85)))
         if self.quit_box is not None:
             for h in self.quit_box[2]:
                 h.set(h is hit)
@@ -127408,7 +127415,7 @@ class Game(ShowBase):
         self.attempt = JoinAttempt(ip, port, self.my_name)
 
     def ask_loadout(self, then, back):
-        """Vor dem Start einer Runde (KOTH/DM): Ausrüstung wählen, mit 'Spawnen' geht es los."""
+        """Vor dem Start einer Runde (KOTH/DM): Ausrüstung wählen, mit 'Spiel starten' geht es los."""
         self.pending_start = (then, back)
         self.show_menu("loadout")
 
