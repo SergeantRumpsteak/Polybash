@@ -130007,7 +130007,7 @@ class Game(ShowBase):
                     self.set_cfg("mobs", d - 1)
         elif self.mode == "play":
             if self.player.hp <= 0:
-                self.pick_loadout(d)               # tot: Ausrüstung für den nächsten Spawn wählen
+                pass                               # tot: keine Ausrüstungswahl (Robins Regel: Start mit Pistole)
             elif 1 <= d <= N_SLOTS:
                 self.request_weapon(d - 1)
             elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
@@ -134214,11 +134214,8 @@ class Game(ShowBase):
         else:
             self.dead_since = None
             hint = ""
-        # Maus auf dem Todesbildschirm freigeben (Klick auf Karten und Knopf), beim Respawn wieder einfangen
-        if dead_screen and not self.dead_free and self.quit_box is None:
-            self.dead_free = True
-            self.set_capture(False)
-        elif not dead_screen and self.dead_free:
+        # Kein Ausrüstungsmenü beim Respawn (Robins Regel: man startet immer mit der Pistole): Maus bleibt gefangen
+        if not dead_screen and self.dead_free:
             self.dead_free = False
             if self.loadscreen is not None and self.mode == "play":
                 self.close_loadscreen()
@@ -134226,23 +134223,9 @@ class Game(ShowBase):
                 self.set_capture(True)
         show_dead = dead_screen and self.loadscreen is None
         self.set_text(self.dead_hint, hint if show_dead else "")
-        self.set_text(self.dead_text, "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.\nAusrüstung für den nächsten Spawn wählen:" if show_dead else "")
+        self.set_text(self.dead_text, "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole." if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        if show_dead:
-            card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
-            self.death_picker.update(self.loadout, card)
-            self.death_picker.show()
-            self.tip_show(card, mpos)
-            b = self.DEAD_BTN
-            hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
-            self.dead_btn.setColor(*((0.22, 0.30, 0.42, 0.95) if hov else (0.10, 0.17, 0.26, 0.9)))
-            self.dead_btn.show()
-            self.dead_btn_text.show()
-        else:
-            self.tip_hide()
-            self.death_picker.hide()
-            self.dead_btn.hide()
-            self.dead_btn_text.hide()
+        self.tip_hide()
         if dead_screen != self.hud_dead_hidden:           # Todesbildschirm: kein Spieler-HUD (Minimap, Slots, Munition ...)
             self.hud_dead_hidden = dead_screen
             for nm in ("a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter", "a2dBottomLeft",
