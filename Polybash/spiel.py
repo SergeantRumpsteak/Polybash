@@ -6537,8 +6537,10 @@ def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True)
         rings.append((pts, nds, c, d))
 
     def pick(a, b, c3):
-        cc = colfn(((a[0] + b[0] + c3[0]) / 3, (a[1] + b[1] + c3[1]) / 3, (a[2] + b[2] + c3[2]) / 3)) if colfn else col
-        return jc(cc, rng, jit) if rng else cc
+        if colfn:                                   # Farbe je Ecke: die Tarnflecken laufen weich ineinander
+            f = 1 + rng.uniform(-jit, jit) if rng else 1.0
+            return [tuple(x * f for x in colfn(q)) for q in (a, b, c3)]
+        return jc(col, rng, jit) if rng else col
 
     S = len(tab)
     for r in range(n - 1):
@@ -6610,7 +6612,7 @@ def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0
     y1 = -(length + 0.07)
     cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
           (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
-    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, "cloth",
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
          lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
     loft(m, [(0.0, -0.082, -0.0135), (0.0, -0.118, -0.0145)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
          rng, None, None, (False, False), 0.02)                    # Manschette
@@ -6638,12 +6640,12 @@ def _soldier_meshes(L):
     rxs = [0.200, 0.215, 0.210, 0.185, 0.190, 0.210, 0.225, 0.225, 0.170, 0.080]
     rys = [0.120, 0.130, 0.125, 0.110, 0.115, 0.130, 0.140, 0.125, 0.100, 0.075]
     cys = [0.0, -0.010, -0.015, 0.0, 0.005, 0.010, 0.015, 0.0, -0.010, 0.0]
-    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, "cloth", camo)
+    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, None, camo)
     # ---- Hals mit Kragen
     loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
          skin, rng, None, None, (False, False), 0.015)
     loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
-         tuple(c * 0.8 for c in pal[1]), rng, "cloth", None, (False, False))
+         tuple(c * 0.8 for c in pal[1]), rng, None, None, (False, False))
     # ---- Koppel mit Schnalle und Taschen
     loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
     box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
@@ -6654,23 +6656,23 @@ def _soldier_meshes(L):
     if L["weste"] == 0:
         vz = [0.30, 0.40, 0.50, 0.578]
         loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
-             [0.130, 0.146, 0.156, 0.140], OLV, rng, "cloth", None, (True, False), 0.04)
+             [0.130, 0.146, 0.156, 0.140], OLV, rng, None, None, (True, False), 0.04)
         for sx in (-1, 1):
-            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat="cloth")       # Schulterriemen
+            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
         for x in (-0.09, 0.0, 0.09):
-            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat="cloth")           # Magazintaschen
-            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat="cloth")             # Klappe
+            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
+            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
         box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
         box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
-        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat="cloth")               # Brusttasche
+        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
     # ---- Rucksack
     if L["pack"] == 0:                                                                       # gross mit Schlafrolle
-        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat="cloth")
-        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat="cloth")
-        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, "cloth")
+        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
+        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
+        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
     elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
-        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat="cloth")
-        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat="cloth")
+        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
+        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
 
     # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
     #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
@@ -6680,12 +6682,12 @@ def _soldier_meshes(L):
         S = (0.0, 0.0, 0.0)
         mid = _lerp3(S, E, 0.5)
         up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
-        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, "cloth", lambda p: camo(p, 11.0, s * 0.3))
-        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, "cloth", None, (False, False))
-        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, "cloth")
+        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, None, lambda p: camo(p, 11.0, s * 0.3))
+        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
+        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, None)
         d = norm(sub(H, E))
         wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
-        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, "cloth",
+        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
              lambda p: camo(p, 11.0, s * 0.3), (False, False))
         loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
              (False, False), 0.02)                                 # Manschette
@@ -6722,9 +6724,9 @@ def _soldier_meshes(L):
         tm.tri(a, b, c3, DK if mask else skin, (0, 0.09, 0.9))
     if mask:                                                                                    # Sturmhaube: Untergesicht + Hals
         loft(tm, [(0, cy, z) for cy, z in zip(hcy[:5], hz[:5])], [r * 1.04 + 0.002 for r in hrx[:5]],
-             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, "cloth", None, (True, False), 0.03)
+             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, None, None, (True, False), 0.03)
         loft(tm, [(0, 0.01, 0.675), (0, 0.012, 0.74), (0, 0.015, 0.79)], [0.066, 0.061, 0.060], [0.066, 0.063, 0.063],
-             DK, rng, "cloth", None, (False, False))
+             DK, rng, None, None, (False, False))
     else:
         box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
         box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
@@ -6754,29 +6756,29 @@ def _soldier_meshes(L):
         loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
                                                (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
              [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
-             None, rng, "cloth", lambda p: camo(p, 17.0, 0.7), (True, True))
+             None, rng, None, lambda p: camo(p, 17.0, 0.7), (True, True))
         loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
-        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, "cloth", None, (False, False))
-        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat="cloth")                      # Nackenschutz
+        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
+        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
         for sx in (-1, 1):
             box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
     elif kopf == 1:                                                                             # Buschhut mit Krempe
         loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
-             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, "cloth",
+             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, None,
              lambda p: camo(p, 15.0, 0.4), (False, True))
-        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, "cloth",
+        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
              lambda p: camo(p, 13.0, 0.9), (True, True))
-        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, "cloth", None, (False, False))
+        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
     elif kopf == 2:                                                                             # Barett
-        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, "cloth", None, 5)
+        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
         box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
         loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
     elif kopf == 3:                                                                             # Feldmütze mit Schirm
         loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
-             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, "cloth",
+             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, None,
              lambda p: camo(p, 15.0, 0.2), (True, True))
-        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat="cloth")                    # Schirm
-        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, "cloth", None, (False, False))
+        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
+        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
     # ---- Brille
     if brille == 1:                                                                             # Schutzbrille
         box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
@@ -6793,8 +6795,8 @@ def _soldier_meshes(L):
     # ---- Zubehör
     if extra == 1:                                                                              # Halstuch
         loft(tm, [(0, 0.008, 0.655), (0, 0.012, 0.69), (0, 0.016, 0.725)], [0.088, 0.075, 0.066], [0.085, 0.072, 0.064],
-             acc, rng, "cloth", None, (False, False), 0.04)
-        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat="cloth")
+             acc, rng, None, None, (False, False), 0.04)
+        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat=None)
     elif extra == 2:                                                                            # Headset
         for sx in (-1, 1):
             ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
@@ -6819,10 +6821,10 @@ def _soldier_meshes(L):
         lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
         lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
         lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
-        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, "cloth", lambda p, o=off: camo(p, 11.0, o))
-        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat="cloth")          # Beintasche
-        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat="cloth")           # Klappe
-        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat="cloth")                  # Knieschoner
+        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, None, lambda p, o=off: camo(p, 11.0, o))
+        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
+        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
         # Stiefel: Schaft, Fuss, Sohle, Schnürung
         loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
              LEATH, rng, None, None, (False, False), 0.03)
@@ -8855,8 +8857,8 @@ class SetupPage:
 
 
 class CharPreview:
-    """3D-Vorschau des Charakters im Menü: eigene Kamera und eigener Anzeigebereich (über dem 2D-Menü);
-    die Figur dreht sich auf der Stelle und wird bei jeder Änderung neu aufgebaut."""
+    """3D-Vorschau des Charakters im Menü: eigene Kamera und eigener Anzeigebereich (über dem 2D-Menü).
+    Die Figur steht still und lässt sich mit gedrückter linker Maustaste drehen; sie wird bei jeder Änderung neu aufgebaut."""
 
     def __init__(self, game, x0, x1, z0, z1):
         self.g = game
@@ -8868,7 +8870,7 @@ class CharPreview:
         cam.setLens(self.lens)
         self.cam = self.root.attachNewNode(cam)
         cam.setScene(self.root)
-        self.cam.setPos(0, -3.5, 0.98)
+        self.cam.setPos(0, 3.5, 0.98)                # Kamera vor der Figur (sie blickt nach +y)
         self.cam.lookAt(0, 0, 0.93)
         self.dr = game.win.makeDisplayRegion()
         self.dr.setSort(30)                       # über dem 2D-Menü
@@ -8889,7 +8891,10 @@ class CharPreview:
         self.root.attachNewNode(m.node("podest")).setTwoSided(True)
         self.view = None
         self.key = None
-        self.ang = 30.0
+        self.ang = 20.0                              # leicht seitlich: Gewehr und Rucksack sind sichtbar
+        self.drag = False
+        self.lastx = 0.0
+        self.pivot.setH(self.ang)
         self.place()
 
     def place(self):
@@ -8922,8 +8927,21 @@ class CharPreview:
     def tick(self, dt):
         if abs(self.asp - float(self.g.getAspectRatio())) > 1e-3:
             self.place()
-        self.ang = (self.ang + 38.0 * dt) % 360.0
-        self.pivot.setH(self.ang)
+        down, m = False, self.g.mouse_2d()
+        try:
+            down = bool(self.g.mouseWatcherNode.is_button_down(MouseButton.one()))
+        except Exception:
+            pass
+        x0, x1, z0, z1 = self.box
+        if down and m is not None:
+            if not self.drag and x0 <= m[0] <= x1 and z0 <= m[1] <= z1:
+                self.drag, self.lastx = True, m[0]               # Ziehen beginnt nur im Vorschaufeld
+            elif self.drag:
+                self.ang = (self.ang + (m[0] - self.lastx) * 260.0) % 360.0
+                self.lastx = m[0]
+                self.pivot.setH(self.ang)
+        if not down:
+            self.drag = False
         if self.view is not None:
             self.view.update(self.fake, dt)
 
@@ -8985,7 +9003,7 @@ class CharPage(SetupPage):
         self.text("title", "Charakter personalisieren", 0, 0.84, 0.075, (1.0, 0.78, 0.3, 1.0))
         self.rect(None, -1.20, -0.24, -0.83, 0.75, (0.05, 0.08, 0.12, 0.92))               # Hintergrund der Vorschau
         self.rect(None, -1.20, -0.24, 0.744, 0.75, (1.0, 0.62, 0.14, 1.0))
-        self.text(None, "Dein Soldat", -0.72, -0.80, 0.036, self.GREY)
+        self.text(None, "Mit gedrückter Maustaste drehen", -0.72, -0.80, 0.034, self.GREY)
         for k, (key, label, vals) in enumerate(LOOK_OPTS):
             c, r = divmod(k, self.PER_COL)
             x0, x1 = self.COLS[c]
@@ -128326,8 +128344,8 @@ class Game(ShowBase):
             if self.name_back == "main":
                 spec.append(("Beenden   (Esc)", self.open_quit_box))
         elif st == "main":
-            spec = [("Spielen", dig(1)), ("Charakter personalisieren", dig(2)), ("Einstellungen", dig(3)),
-                    ("Beenden   (Esc)", self.open_quit_box)]
+            spec = [("Spiel hosten", dig(1)), ("Spiel beitreten", dig(2)), ("Charakter personalisieren", dig(3)),
+                    ("Einstellungen", dig(4)), ("Beenden   (Esc)", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
                     ("Nein, weiterspielen   (N / Esc)", back)]
@@ -128784,10 +128802,13 @@ class Game(ShowBase):
             st = self.menu_state
             if st == "main":
                 if d == 1:
-                    self.show_menu("multi")
+                    self.open_setup("host")
                 elif d == 2:
-                    self.show_menu("char")
+                    self.ip_text, self.ip_edited = "", False
+                    self.show_menu("join")
                 elif d == 3:
+                    self.show_menu("char")
+                elif d == 4:
                     self.show_menu("settings")
             elif st == "loadout":
                 self.pick_loadout(d)
@@ -128918,7 +128939,7 @@ class Game(ShowBase):
         elif self.mode == "menu" and self.menu_state == "setup2":
             self.show_menu("setup")
         elif self.mode == "menu" and self.menu_state == "setup":
-            self.show_menu("main" if self.setup_for == "single" else "multi")
+            self.show_menu("main")
         elif self.mode == "menu" and self.menu_state == "loadout" and self.pending_start is not None:
             self.show_menu(self.pending_start[1])
         elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout", "char"):
@@ -128929,7 +128950,7 @@ class Game(ShowBase):
         elif self.mode == "menu" and self.menu_state in ("join", "connecting"):
             if self.attempt is not None:
                 self.attempt.close()
-            self.show_menu("multi")
+            self.show_menu("main")
         elif self.mode == "play":
             self.show_pause("main")
         else:
