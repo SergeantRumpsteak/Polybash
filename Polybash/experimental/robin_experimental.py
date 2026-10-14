@@ -112805,6 +112805,14 @@ class Game(ShowBase):
 
     def place_camera(self):
         pl = self.player
+        if getattr(pl, "prespawn", False) and pl.hp <= 0:       # Ausrüstungsmenü vor dem Spawn: Blick von vorne über die Karte
+            cx, cy = CENTER, CENTER - WORLD * 0.46
+            gz = max(self.world.height(cx, cy), self.world.height(CENTER, CENTER))
+            cz = gz + WORLD * 0.16 + 12.0
+            pit = -math.degrees(math.atan2(cz - gz - 6.0, WORLD * 0.46))
+            self.camera.setPos(cx, cy, cz)
+            self.camera.setHpr(0.0, pit, 0.0)
+            return
         bob = math.sin(pl.phase) * 0.045 if pl.moving and pl.on_ground else 0.0
         t = self.death_t if hasattr(self, "death_t") else 0.0
         eye = pl.z + (eye_h(pl) + bob) * (1 - t) + 0.35 * t

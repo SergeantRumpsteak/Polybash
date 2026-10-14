@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 26    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 60               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 61               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -111729,6 +111729,14 @@ class Game(ShowBase):
 
     def place_camera(self):
         pl = self.player
+        if getattr(pl, "prespawn", False) and pl.hp <= 0:       # Ausrüstungsmenü vor dem Spawn: Blick von vorne über die Karte
+            cx, cy = CENTER, CENTER - WORLD * 0.46
+            gz = max(self.world.height(cx, cy), self.world.height(CENTER, CENTER))
+            cz = gz + WORLD * 0.16 + 12.0
+            pit = -math.degrees(math.atan2(cz - gz - 6.0, WORLD * 0.46))
+            self.camera.setPos(cx, cy, cz)
+            self.camera.setHpr(0.0, pit, 0.0)
+            return
         bob = math.sin(pl.phase) * 0.045 if pl.moving and pl.on_ground else 0.0
         t = self.death_t if hasattr(self, "death_t") else 0.0
         eye = pl.z + (eye_h(pl) + bob) * (1 - t) + 0.35 * t
