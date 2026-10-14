@@ -13,8 +13,8 @@ Steuerung:
                  Fahrzeug ein-/aussteigen
   Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
   Menüs          auch mit der Maus bedienbar (Hover = gelb, Klick = wählen)
-  3              Gadget in die Hand (dritter Slot, zusätzlich zu Haupt- und Kleinwaffe; Wahl im Hauptmenü "Ausrüstung"
-                 oder auf dem Todesbildschirm mit 7-9): C4 (Rechtsklick kleben, Linksklick alle zünden),
+  3              Gadget in die Hand (dritter Slot, zusätzlich zu Haupt- und Kleinwaffe; Wahl vor dem Rundenstart im
+                 Ausrüstungsmenü oder auf dem Todesbildschirm mit 7-9): C4 (Rechtsklick kleben, Linksklick alle zünden),
                  Claymore (Rechtsklick aufstellen, wer drüberläuft ist tot), Funkbake (Rechtsklick aufstellen:
                  zeigt Spieler im Umkreis auf der Minimap). 3 Stück pro Leben; mit dem Tod verschwinden sie.
                  Aufgehobene Waffen und Kistenwaffen ersetzen die Waffe in der Hand.
@@ -8008,7 +8008,7 @@ class SetupPage:
         # --- Knöpfe
         self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
-        self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.start_game(g.setup_for))
+        self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.begin_game(g.setup_for))
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         elif g.cfg["mode"] == "experimental":
@@ -126948,6 +126948,7 @@ class Game(ShowBase):
         self.end = None                       # Endbildschirm nach Rundenende
         self.tab_held = False
         self.loadscreen = None                # "Loadout konfigurieren" (Menü und Todesbildschirm)
+        self.pending_start = None             # (Start-Aktion, Zurück-Menü): Ausrüstung vor dem Rundenstart
         self.tipbox = None                    # Hover-Hinweis (Stats) neben der Maus
         self.dead_free = False                # Maus ist auf dem Todesbildschirm freigegeben
         self.death_picker = None
@@ -127179,6 +127180,8 @@ class Game(ShowBase):
             nd.setScale(1.0 + 0.06 * math.sin(self.bg_t * 0.4 + ph * 1.7))
 
     def show_menu(self, state="name", msg=""):
+        if state not in ("loadout", "loadconf"):
+            self.pending_start = None
         self.clear_menu()
         self.mode, self.menu_state, self.menu_msg = "menu", state, msg
         self.attempt = None
@@ -127212,12 +127215,15 @@ class Game(ShowBase):
                 spec.append(("Beenden   (Esc)", self.open_quit_box))
         elif st == "main":
             spec = [("1   Spielen", dig(1)), ("2   Einstellungen", dig(2)),
-                    ("3   Ausrüstung", dig(3)), ("Beenden   (Esc)", self.open_quit_box)]
+                    ("Beenden   (Esc)", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
                     ("Nein, weiterspielen   (N / Esc)", back)]
         elif st == "loadout":
-            spec = [("Loadout konfigurieren", lambda: self.show_menu("loadconf")), ("Zurück   (Esc)", back)]
+            spec = [("Loadout konfigurieren", lambda: self.show_menu("loadconf"))]
+            if self.pending_start is not None:             # Ausrüstung vor dem Start einer Runde: dann spawnen
+                spec.append(("Spawnen   (Enter)", self.menu_enter))
+            spec.append(("Zurück   (Esc)", back))
         elif st == "loadconf":
             spec = []
         elif st == "multi":
@@ -127396,6 +127402,21 @@ class Game(ShowBase):
             if self.menu_picker is not None:
                 self.menu_picker.update(self.loadout, card)
             self.menu_refresh()
+
+    def connect_now(self, ip, port):
+        self.show_menu("connecting")
+        self.attempt = JoinAttempt(ip, port, self.my_name)
+
+    def ask_loadout(self, then, back):
+        """Vor dem Start einer Runde (KOTH/DM): Ausrüstung wählen, mit 'Spawnen' geht es los."""
+        self.pending_start = (then, back)
+        self.show_menu("loadout")
+
+    def begin_game(self, mode):
+        if self.cfg.get("mode") == "experimental":        # Experimental: kein Ausrüstungsmenü (Start mit Pistole)
+            self.start_game(mode)
+        else:
+            self.ask_loadout(lambda: self.start_game(mode), "setup")
 
     def connect_to(self, ip):
         self.ip_text, self.ip_edited = ip, True
@@ -127621,8 +127642,6 @@ class Game(ShowBase):
                     self.show_menu("multi")
                 elif d == 2:
                     self.show_menu("settings")
-                elif d == 3:
-                    self.show_menu("loadout")
             elif st == "loadout":
                 self.pick_loadout(d)
                 if self.menu_picker is not None:
@@ -127709,8 +127728,13 @@ class Game(ShowBase):
                 self.show_menu(back)
             else:
                 self.menu_msg = "Bitte einen Namen eingeben."
+        elif st == "loadout":
+            if self.pending_start is not None:
+                then, _back = self.pending_start
+                self.pending_start = None
+                then()
         elif st == "setup":
-            self.start_game(self.setup_for)
+            self.begin_game(self.setup_for)
         elif st == "setup2":
             self.show_menu("setup")
         elif st == "join":
@@ -127723,8 +127747,7 @@ class Game(ShowBase):
             if found and found.get("exp"):                 # Experimental-Host: im selben Fenster in Robins Version wechseln
                 self.launch_experimental({"do": "connect", "ip": ip, "port": port})
                 return
-            self.show_menu("connecting")
-            self.attempt = JoinAttempt(ip, port, self.my_name)
+            self.ask_loadout(lambda: self.connect_now(ip, port), "join")
 
     def dead_screen_now(self):
         return self.player.hp <= 0 and self.world.phase == "play"
@@ -127759,6 +127782,8 @@ class Game(ShowBase):
             self.show_menu("setup")
         elif self.mode == "menu" and self.menu_state == "setup":
             self.show_menu("main" if self.setup_for == "single" else "multi")
+        elif self.mode == "menu" and self.menu_state == "loadout" and self.pending_start is not None:
+            self.show_menu(self.pending_start[1])
         elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout"):
             self.show_menu("main")
         elif self.mode == "menu" and self.menu_state == "name" and self.name_back != "main":
