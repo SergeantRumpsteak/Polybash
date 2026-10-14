@@ -45,4 +45,4 @@ Polybash/
 - Beim Start aus `spiel.py` übergibt das Hauptspiel Name, Karte und Zeitlimit über die Umgebungsvariable
   `POLYBASH_EXP_SPEC`; ausgewertet wird sie in `_exp_autostart` am Dateiende. Diese Funktion bitte nicht entfernen.
 
-- Tasten in Experimental (Reihenfolge der Leiste): 1 Primär, 2 Sekundär, 3 Spezialwaffe (Kiste), 4 Gadget, 5 Nahkampf, G Granate; Mausrad wechselt in dieser Reihenfolge. F schlägt immer mit der Nahkampfwaffe (Messer), nie mit der Schusswaffe.
+- Tasten in Experimental (Reihenfolge der Leiste): 1 Primär, 2 Sekundär, 3 Spezialwaffe (Kiste), 4 Nahkampf, G Granate; kein Gadget-Slot (am Start gibt es kein Gadget). Mausrad wechselt in dieser Reihenfolge. F schlägt immer mit der Nahkampfwaffe (Messer), nie mit der Schusswaffe.
