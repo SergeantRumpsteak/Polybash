@@ -246,7 +246,7 @@ RESPAWN_T = 12.0
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 22    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
-NET_VERSION = 11         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 12         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -4416,6 +4416,7 @@ class GunState:
 class Player:
     def __init__(self, x, y, world, pid=0, name=""):
         self.pid, self.name = pid, name
+        self.look = ""                    # Aussehen (Look-Code), vom Spieler gewählt
         self.kills = self.deaths = 0
         self.score = 0.0                  # King of the Hill: Punkte
         self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
@@ -6429,9 +6430,70 @@ def build_mob(kind, look=None):
 
 # ------------------------------------------------------- Modell: Soldat (Spieler)
 SOLDIER_SKINS = [(0.89, 0.72, 0.58), (0.80, 0.60, 0.45), (0.62, 0.44, 0.32), (0.45, 0.31, 0.22), (0.93, 0.78, 0.66)]
-SOLDIER_HAIR = [(0.10, 0.07, 0.05), (0.28, 0.17, 0.08), (0.52, 0.38, 0.18), (0.05, 0.05, 0.06), (0.35, 0.12, 0.06)]
+SOLDIER_HAIR = [(0.07, 0.06, 0.05), (0.28, 0.17, 0.08), (0.70, 0.55, 0.28), (0.50, 0.18, 0.07), (0.55, 0.55, 0.55),
+                (0.86, 0.86, 0.84)]
 SOLDIER_EYES = [(0.25, 0.38, 0.55), (0.30, 0.20, 0.10), (0.25, 0.42, 0.28), (0.18, 0.15, 0.12)]
 CAMO_PAL = [(0.17, 0.20, 0.11), (0.29, 0.33, 0.19), (0.44, 0.41, 0.27), (0.28, 0.21, 0.13)]   # Waldtarn: dunkel, oliv, sand, braun
+CAMO_SETS = [CAMO_PAL,
+             [(0.50, 0.42, 0.28), (0.66, 0.57, 0.38), (0.78, 0.70, 0.50), (0.45, 0.33, 0.20)],        # Wüste
+             [(0.62, 0.66, 0.70), (0.80, 0.83, 0.86), (0.92, 0.94, 0.96), (0.45, 0.50, 0.56)],        # Schnee
+             [(0.18, 0.19, 0.21), (0.30, 0.32, 0.35), (0.46, 0.48, 0.51), (0.24, 0.26, 0.30)],        # Stadt
+             [(0.05, 0.05, 0.06), (0.09, 0.10, 0.11), (0.15, 0.16, 0.17), (0.07, 0.08, 0.10)],        # Nacht
+             [(0.12, 0.26, 0.10), (0.22, 0.42, 0.16), (0.38, 0.55, 0.24), (0.30, 0.24, 0.12)]]        # Dschungel
+SOLDIER_GLOVES = [(0.11, 0.11, 0.10), (0.30, 0.20, 0.12), (0.22, 0.26, 0.15), None]
+SOLDIER_BOOTS = [(0.16, 0.12, 0.08), (0.07, 0.07, 0.08), (0.52, 0.44, 0.30)]
+# Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Ziffernfolge
+# (eine Ziffer je Eintrag) - klein genug, um ihn im Netzwerk mitzuschicken.
+LOOK_OPTS = (
+    ("tarn", "Tarnmuster", ("Wald", "Wüste", "Schnee", "Stadt", "Nacht", "Dschungel")),
+    ("haut", "Hautton", ("Hell", "Mittel", "Gebräunt", "Dunkel", "Sehr hell")),
+    ("augen", "Augenfarbe", ("Blau", "Braun", "Grün", "Dunkel")),
+    ("haar", "Haarfarbe", ("Schwarz", "Braun", "Blond", "Rot", "Grau", "Weiß")),
+    ("frisur", "Frisur", ("Kurz", "Glatze", "Lang")),
+    ("kopf", "Kopfbedeckung", ("Gefechtshelm", "Buschhut", "Barett", "Mütze", "Keine")),
+    ("brille", "Brille", ("Keine", "Schutzbrille", "Sonnenbrille")),
+    ("gesicht", "Gesicht", ("Normal", "Bart", "Tarnbemalung", "Sturmhaube")),
+    ("extra", "Zubehör", ("Keins", "Halstuch", "Headset", "Nachtsichtgerät")),
+    ("weste", "Weste", ("Plattenträger", "Keine")),
+    ("pack", "Rucksack", ("Groß", "Klein", "Keiner")),
+    ("handschuh", "Handschuhe", ("Schwarz", "Braun", "Oliv", "Keine")),
+    ("stiefel", "Stiefel", ("Dunkelbraun", "Schwarz", "Sand")),
+    ("akzent", "Teamfarbe", ("Spielerfarbe", "Blau", "Rot", "Grün", "Gelb", "Violett", "Türkis", "Orange", "Weiß")),
+)
+
+
+def look_valid(code):
+    return (isinstance(code, str) and len(code) == len(LOOK_OPTS)
+            and all(c.isdigit() and int(c) < len(o[2]) for c, o in zip(code, LOOK_OPTS)))
+
+
+def look_default(seed=0):
+    """Ein zufälliger, aber stabiler Standard-Charakter (Hautton, Augen, Haare nach seed)."""
+    r = random.Random(seed * 7919 + 13)
+    v = [0] * len(LOOK_OPTS)
+    for k, (key, _l, vals) in enumerate(LOOK_OPTS):
+        if key in ("haut", "augen", "haar"):
+            v[k] = r.randrange(len(vals))
+    return "".join(str(i) for i in v)
+
+
+def look_random(rng):
+    return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
+
+
+def soldier_look(code, pid=0):
+    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer)."""
+    if not look_valid(code):
+        code = look_default(pid)
+    v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
+    ak = v["akzent"]
+    acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
+    skin = SOLDIER_SKINS[v["haut"]]
+    glove = SOLDIER_GLOVES[v["handschuh"]] or skin
+    return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
+                pal=CAMO_SETS[v["tarn"]], kopf=v["kopf"], brille=v["brille"], gesicht=v["gesicht"], extra=v["extra"],
+                frisur=v["frisur"], weste=v["weste"], pack=v["pack"], glove=glove, boots=SOLDIER_BOOTS[v["stiefel"]],
+                key=(code, acc))
 _SIDES = 16
 _CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
 _SOLDIER_CACHE = {}
@@ -6439,12 +6501,13 @@ SOLDIER_SH = ((-0.245, 0.0, 0.55), (0.245, 0.0, 0.55))        # Schultergelenke 
 SOLDIER_HAND = ((0.10, 0.36, 0.40), (0.10, 0.14, 0.375))      # Hände am Gewehr: links Handschutz, rechts Griff
 
 
-def _camo_col(p, f=11.0, off=0.0):
+def _camo_col(p, f=11.0, off=0.0, pal=None):
     """Tarnmuster: fleckige Farbwahl aus drei überlagerten Sinuswellen (je Dreieck, stabil auf allen Rechnern)."""
+    pal = pal or CAMO_PAL
     x = p[0] + off
     v = math.sin(x * f + p[2] * f * 0.7) + math.sin(p[1] * f * 1.3 - p[2] * f * 1.1 + 1.7) \
         + math.sin((x + p[1]) * f * 0.8 + p[2] * f * 0.5 + 3.1)
-    return CAMO_PAL[0] if v < -0.9 else CAMO_PAL[1] if v < 0.5 else CAMO_PAL[2] if v < 1.5 else CAMO_PAL[3]
+    return pal[0] if v < -0.9 else pal[1] if v < 0.5 else pal[2] if v < 1.5 else pal[3]
 
 
 def _lerp3(a, b, t):
@@ -6539,31 +6602,35 @@ def glove(m, wr, d, s, col, rng, curl=1.0):
          (False, True), 0.03, 6)                                   # Daumen
 
 
-def fp_arm_mesh(m, rng, length, endz, xoff, curl, s):
+def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10)):
     """Arm in der Ego-Ansicht (Hand im Ursprung, Unterarm läuft nach hinten -y und etwas nach unten):
     Handschuh mit Fingern, Manschette und Tarnärmel wie beim Soldaten."""
     wr = (0.0, -0.09, -0.012)
-    glove(m, wr, (0.0, 1.0, 0.0), s, (0.11, 0.11, 0.10), rng, curl)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, curl)
     y1 = -(length + 0.07)
     cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
           (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
     loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, "cloth",
-         lambda p: _camo_col(p, 11.0, s * 0.3), (False, True))
+         lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
     loft(m, [(0.0, -0.082, -0.0135), (0.0, -0.118, -0.0145)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
          rng, None, None, (False, False), 0.02)                    # Manschette
 
 
 def _soldier_meshes(L):
-    """Baut die Teile des Soldaten: Oberkörper samt Kopf und Armen (Mesh in torso-Koordinaten, Hüfte = Ursprung,
-    Blick +y) und je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75)."""
-    rng = random.Random(1234 + int(L["skin"][0] * 1000) + int(L["hair"][0] * 100))
-    skin, hair, eye, acc = L["skin"], L["hair"], L["eye"], L["acc"]
+    """Baut die Teile des Soldaten: Oberkörper samt Kopf (Mesh in torso-Koordinaten, Hüfte = Ursprung, Blick +y),
+    je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75) und je einen Arm (Schulter = Ursprung).
+    L = Aussehen aus soldier_look(): Tarnmuster, Hautton, Kopfbedeckung, Brille, Gesicht, Ausrüstung ..."""
+    rng = random.Random(1234 + int(L["key"][0]))
+    skin, hair, eye, acc, pal = L["skin"], L["hair"], L["eye"], L["acc"], L["pal"]
     skin_d = tuple(c * 0.84 for c in skin)
-    camo = _camo_col
-    OLV = (0.21, 0.23, 0.15)          # Weste
+    camo = lambda p, f=11.0, off=0.0: _camo_col(p, f, off, pal)          # noqa: E731
+    OLV = tuple(c * 0.66 for c in pal[1])                                # Weste, Taschen
+    POUCH, FLAP = tuple(c * 0.8 for c in OLV), tuple(c * 1.15 for c in OLV)
     DK = (0.11, 0.11, 0.10)           # schwarzes Leder / Gummi
-    LEATH = (0.16, 0.12, 0.08)
+    LEATH = L["boots"]
     METAL = (0.50, 0.46, 0.34)
+    GL = L["glove"]
+    GLASS = (0.12, 0.18, 0.26)
     tm = Mesh()
 
     # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
@@ -6576,7 +6643,7 @@ def _soldier_meshes(L):
     loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
          skin, rng, None, None, (False, False), 0.015)
     loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
-         tuple(c * 0.8 for c in CAMO_PAL[1]), rng, "cloth", None, (False, False))
+         tuple(c * 0.8 for c in pal[1]), rng, "cloth", None, (False, False))
     # ---- Koppel mit Schnalle und Taschen
     loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
     box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
@@ -6584,23 +6651,28 @@ def _soldier_meshes(L):
         box(tm, sx * 0.165, 0.05, 0.19, 0.055, 0.075, 0.09, LEATH, rng)                  # Gürteltaschen
         box(tm, sx * 0.165, 0.05, 0.236, 0.058, 0.078, 0.02, tuple(c * 1.15 for c in LEATH), rng)
     # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
-    vz = [0.30, 0.40, 0.50, 0.578]
-    loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
-         [0.130, 0.146, 0.156, 0.140], OLV, rng, "cloth", None, (True, False), 0.04)
-    for sx in (-1, 1):
-        box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat="cloth")       # Schulterriemen
-    for x in (-0.09, 0.0, 0.09):
-        box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, (0.15, 0.16, 0.11), rng, mat="cloth")   # Magazintaschen
-        box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, (0.19, 0.20, 0.14), rng, mat="cloth")    # Klappe
-    box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                                 # Funkgerät
-    box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                         # Antenne
-    box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, (0.18, 0.19, 0.13), rng, mat="cloth")      # Brusttasche
-    # ---- Rucksack mit Schlafrolle
-    box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, (0.22, 0.23, 0.15), rng, mat="cloth")
-    box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, (0.17, 0.18, 0.12), rng, mat="cloth")
-    ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, "cloth")
+    if L["weste"] == 0:
+        vz = [0.30, 0.40, 0.50, 0.578]
+        loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
+             [0.130, 0.146, 0.156, 0.140], OLV, rng, "cloth", None, (True, False), 0.04)
+        for sx in (-1, 1):
+            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat="cloth")       # Schulterriemen
+        for x in (-0.09, 0.0, 0.09):
+            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat="cloth")           # Magazintaschen
+            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat="cloth")             # Klappe
+        box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
+        box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
+        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat="cloth")               # Brusttasche
+    # ---- Rucksack
+    if L["pack"] == 0:                                                                       # gross mit Schlafrolle
+        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat="cloth")
+        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat="cloth")
+        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, "cloth")
+    elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
+        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat="cloth")
+        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat="cloth")
 
-    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Spielerfarbe); eigene Teile mit Schulter als
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
     #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
     def arm(S, E, H, s):
         am = Mesh()
@@ -6610,14 +6682,14 @@ def _soldier_meshes(L):
         up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
         loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, "cloth", lambda p: camo(p, 11.0, s * 0.3))
         loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, "cloth", None, (False, False))
-        ell(am, E, 0.047, 0.047, 0.047, CAMO_PAL[1], rng, "cloth")
+        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, "cloth")
         d = norm(sub(H, E))
         wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
         loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, "cloth",
              lambda p: camo(p, 11.0, s * 0.3), (False, False))
-        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], (0.12, 0.12, 0.10), rng, None, None,
+        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
              (False, False), 0.02)                                 # Manschette
-        glove(am, wr, d, s, (0.11, 0.11, 0.10), rng, 1.0)
+        glove(am, wr, d, s, GL, rng, 1.0)
         return am
 
     arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
@@ -6628,38 +6700,115 @@ def _soldier_meshes(L):
     hrx = [0.035, 0.070, 0.080, 0.084, 0.086, 0.086, 0.080, 0.060, 0.020]
     hry = [0.050, 0.075, 0.090, 0.103, 0.110, 0.112, 0.108, 0.090, 0.040]
     hcy = [0.060, 0.050, 0.040, 0.028, 0.018, 0.010, 0.005, 0.0, 0.0]
+    kopf, gesicht, brille, extra, frisur = L["kopf"], L["gesicht"], L["brille"], L["extra"], L["frisur"]
+    mask = gesicht == 3
     loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
-    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, skin, rng)                                  # Kinn
+    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else skin, rng)                  # Kinn
     for sx in (-1, 1):
         ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
-        ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                      # Wangenknochen
+        if not mask:
+            ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                  # Wangenknochen
         box(tm, sx * 0.037, 0.1245, 0.915, 0.036, 0.012, 0.019, (0.93, 0.93, 0.90))             # Augapfel
         box(tm, sx * 0.037, 0.1315, 0.915, 0.019, 0.006, 0.019, eye)                            # Iris
         box(tm, sx * 0.037, 0.1345, 0.915, 0.009, 0.004, 0.009, (0.02, 0.02, 0.03))             # Pupille
         box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
         box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
-        box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                          # Koteletten
+        if frisur != 1:
+            box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten
     for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
                      ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
                      ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
                      ((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0.019, 0.134, 0.872))):
-        tm.tri(a, b, c3, skin, (0, 0.09, 0.9))
-    box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                           # Oberlippe
-    box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                           # Unterlippe
-    box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                            # Mundspalt
-    box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                       # Haar im Nacken
-    # ---- Gefechtshelm mit Tarnbezug, Spielerband, Schutzbrille, Kinnriemen
-    loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
-                                           (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
-         [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
-         None, rng, "cloth", lambda p: camo(p, 17.0, 0.7), (True, True))
-    loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
-    loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, "cloth", None, (False, False))
-    box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, CAMO_PAL[1], rng, mat="cloth")                    # Nackenschutz
-    box(tm, 0, 0.137, 0.995, 0.13, 0.016, 0.042, DK)                                              # Brillenrahmen
-    for sx in (-1, 1):
-        box(tm, sx * 0.032, 0.145, 0.995, 0.050, 0.010, 0.034, (0.12, 0.18, 0.26))              # Gläser
-        box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                                 # Kinnriemen
+        tm.tri(a, b, c3, DK if mask else skin, (0, 0.09, 0.9))
+    if mask:                                                                                    # Sturmhaube: Untergesicht + Hals
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:5], hz[:5])], [r * 1.04 + 0.002 for r in hrx[:5]],
+             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, "cloth", None, (True, False), 0.03)
+        loft(tm, [(0, 0.01, 0.675), (0, 0.012, 0.74), (0, 0.015, 0.79)], [0.066, 0.061, 0.060], [0.066, 0.063, 0.063],
+             DK, rng, "cloth", None, (False, False))
+    else:
+        box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
+        box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
+        box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                        # Mundspalt
+    if gesicht == 1:                                                                            # Kinnbart + Schnurrbart
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.03 + 0.003 for r in hrx[:3]],
+             [r * 1.03 + 0.003 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
+        box(tm, 0, 0.1345, 0.8585, 0.070, 0.014, 0.012, hair, rng)
+    if gesicht == 2:                                                                            # Tarnbemalung
+        g1, g2 = (0.10, 0.15, 0.07), (0.38, 0.33, 0.18)
+        for sx in (-1, 1):
+            for k, zz in enumerate((0.885, 0.862, 0.84)):
+                box(tm, sx * 0.058, 0.1285 - 0.001 * k, zz, 0.052, 0.006, 0.011, g1 if k % 2 == 0 else g2)
+        box(tm, 0, 0.1235, 0.953, 0.10, 0.006, 0.012, g1)
+        box(tm, 0, 0.157, 0.9, 0.02, 0.004, 0.034, g1)
+    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare
+    if frisur != 1:
+        box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                   # Haar im Nacken
+        if kopf in (2, 3, 4):
+            loft(tm, [(0, cy, z) for cy, z in zip((0.003, 0.002, 0.0, 0.0), (0.955, 0.985, 1.015, 1.04))],
+                 [0.090, 0.092, 0.075, 0.030], [0.117, 0.118, 0.098, 0.045], hair, rng, None, None, (False, True), 0.04)
+    if frisur == 2:
+        loft(tm, [(0, -0.100, 0.96), (0, -0.118, 0.90), (0, -0.128, 0.80), (0, -0.120, 0.69)],
+             [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
+    # ---- Kopfbedeckung
+    if kopf == 0:                                                                               # Gefechtshelm mit Tarnbezug
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
+                                               (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
+             [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
+             None, rng, "cloth", lambda p: camo(p, 17.0, 0.7), (True, True))
+        loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
+        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, "cloth", None, (False, False))
+        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat="cloth")                      # Nackenschutz
+        for sx in (-1, 1):
+            box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
+    elif kopf == 1:                                                                             # Buschhut mit Krempe
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
+             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, "cloth",
+             lambda p: camo(p, 15.0, 0.4), (False, True))
+        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, "cloth",
+             lambda p: camo(p, 13.0, 0.9), (True, True))
+        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, "cloth", None, (False, False))
+    elif kopf == 2:                                                                             # Barett
+        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, "cloth", None, 5)
+        box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
+        loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
+    elif kopf == 3:                                                                             # Feldmütze mit Schirm
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
+             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, "cloth",
+             lambda p: camo(p, 15.0, 0.2), (True, True))
+        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat="cloth")                    # Schirm
+        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, "cloth", None, (False, False))
+    # ---- Brille
+    if brille == 1:                                                                             # Schutzbrille
+        box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
+        for sx in (-1, 1):
+            box(tm, sx * 0.034, 0.145, 0.915, 0.052, 0.010, 0.036, GLASS)
+        loft(tm, [(0, 0.014, 0.905), (0, 0.014, 0.927)], [0.092, 0.092], [0.119, 0.119], DK, rng, None, None,
+             (False, False), 0.02)
+    elif brille == 2:                                                                           # Sonnenbrille
+        for sx in (-1, 1):
+            box(tm, sx * 0.037, 0.140, 0.915, 0.050, 0.008, 0.028, (0.03, 0.03, 0.04))
+            box(tm, sx * 0.087, 0.07, 0.918, 0.006, 0.13, 0.008, DK)
+        box(tm, 0, 0.138, 0.92, 0.024, 0.008, 0.008, DK)
+        box(tm, 0, 0.139, 0.931, 0.14, 0.008, 0.008, DK)
+    # ---- Zubehör
+    if extra == 1:                                                                              # Halstuch
+        loft(tm, [(0, 0.008, 0.655), (0, 0.012, 0.69), (0, 0.016, 0.725)], [0.088, 0.075, 0.066], [0.085, 0.072, 0.064],
+             acc, rng, "cloth", None, (False, False), 0.04)
+        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat="cloth")
+    elif extra == 2:                                                                            # Headset
+        for sx in (-1, 1):
+            ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
+        box(tm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
+        box(tm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
+        ell(tm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+    elif extra == 3:                                                                            # Nachtsichtgerät
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+        box(tm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
+        box(tm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
+        box(tm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
 
     legs = []
     for sx in (-1, 1):
@@ -6671,9 +6820,9 @@ def _soldier_meshes(L):
         lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
         lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
         loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, "cloth", lambda p, o=off: camo(p, 11.0, o))
-        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, CAMO_PAL[0], rng, mat="cloth")     # Beintasche
-        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, CAMO_PAL[3], rng, mat="cloth")      # Klappe
-        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, (0.15, 0.16, 0.11), rng, mat="cloth")     # Knieschoner
+        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat="cloth")          # Beintasche
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat="cloth")           # Klappe
+        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat="cloth")                  # Knieschoner
         # Stiefel: Schaft, Fuss, Sohle, Schnürung
         loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
              LEATH, rng, None, None, (False, False), 0.03)
@@ -6688,7 +6837,7 @@ def _soldier_meshes(L):
 def build_soldier(look):
     """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
     (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
-    key = (look["skin"], look["hair"], look["eye"], look["acc"])
+    key = look["key"]
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
         tm, lms, ams = _soldier_meshes(look)
@@ -8705,6 +8854,181 @@ class SetupPage:
 
 
 
+class CharPreview:
+    """3D-Vorschau des Charakters im Menü: eigene Kamera und eigener Anzeigebereich (über dem 2D-Menü);
+    die Figur dreht sich auf der Stelle und wird bei jeder Änderung neu aufgebaut."""
+
+    def __init__(self, game, x0, x1, z0, z1):
+        self.g = game
+        self.box = (x0, x1, z0, z1)
+        self.root = NodePath("char_prev")
+        self.lens = PerspectiveLens()
+        self.lens.setNearFar(0.3, 30.0)
+        cam = Camera("char_cam")
+        cam.setLens(self.lens)
+        self.cam = self.root.attachNewNode(cam)
+        cam.setScene(self.root)
+        self.cam.setPos(0, -3.5, 0.98)
+        self.cam.lookAt(0, 0, 0.93)
+        self.dr = game.win.makeDisplayRegion()
+        self.dr.setSort(30)                       # über dem 2D-Menü
+        self.dr.setClearDepthActive(True)
+        self.dr.setCamera(self.cam)
+        self.pivot = self.root.attachNewNode("pivot")
+        m = Mesh(lit=False)                       # Podest
+        n = 28
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            c = (0.17, 0.24, 0.34) if i % 2 else (0.14, 0.20, 0.30)
+            m.tri((0, 0, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.02),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), c, ref=(0, 0, -1.0))
+            m.tri((math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.08),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), (0.10, 0.14, 0.2), ref=(0, 0, 0.5))
+            m.tri((math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.08),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.08), (0.10, 0.14, 0.2), ref=(0, 0, 0.5))
+        self.root.attachNewNode(m.node("podest")).setTwoSided(True)
+        self.view = None
+        self.key = None
+        self.ang = 30.0
+        self.place()
+
+    def place(self):
+        """Anzeigebereich passend zur Fenstergrösse (die Menü-Koordinaten laufen bei breiten Fenstern über +-Seitenverhältnis)."""
+        a = max(0.2, float(self.g.getAspectRatio()))
+        xr, zr = max(1.0, a), max(1.0, 1.0 / a)
+        x0, x1, z0, z1 = self.box
+        l, r = (x0 + xr) / (2 * xr), (x1 + xr) / (2 * xr)
+        b, t = (z0 + zr) / (2 * zr), (z1 + zr) / (2 * zr)
+        self.dr.setDimensions(l, r, b, t)
+        asp = (r - l) / max(1e-4, (t - b)) * a
+        vf = 36.0
+        hf = math.degrees(2 * math.atan(math.tan(math.radians(vf / 2)) * asp))
+        self.lens.setFov(hf, vf)
+        self.asp = a
+
+    def set_look(self, code):
+        key = (code, self.g.my_id if getattr(self.g, "my_id", None) is not None else 0)
+        if key == self.key:
+            return
+        self.key = key
+        if self.view is not None:
+            self.view.root.removeNode()
+        p = SimpleNamespace(pid=key[1], look=code, x=0.0, y=0.0, z=0.0, heading=0.0, heli=-1, hp=100.0, crouch=0.0,
+                            moving=False, lean=0.0)
+        self.view = PlayerView(p)
+        self.view.root.reparentTo(self.pivot)
+        self.fake = p
+
+    def tick(self, dt):
+        if abs(self.asp - float(self.g.getAspectRatio())) > 1e-3:
+            self.place()
+        self.ang = (self.ang + 38.0 * dt) % 360.0
+        self.pivot.setH(self.ang)
+        if self.view is not None:
+            self.view.update(self.fake, dt)
+
+    def destroy(self):
+        try:
+            self.g.win.removeDisplayRegion(self.dr)
+        except Exception:
+            pass
+        self.root.removeNode()
+
+
+class CharPage(SetupPage):
+    """Hauptmenü 'Charakter personalisieren': links die sich drehende Figur, rechts je Eigenschaft ein Auswahlfeld
+    mit Pfeilen. Das Aussehen wird gespeichert, ist im Spiel für dich sichtbar (Hände, Ärmel) und wird an alle
+    Mitspieler geschickt."""
+    COLS = ((-0.17, 0.47), (0.53, 1.17))
+    PER_COL = 7
+
+    def __init__(self, game):
+        self.g = game
+        self.hover = None
+        self.key = None
+        self.nodes = {}
+        self.txts = set()
+        self.prev = CharPreview(game, -1.17, -0.27, -0.80, 0.72)
+        self.layout()
+        self.update(True)
+
+    def destroy(self):
+        self.prev.destroy()
+
+    def tick(self, dt):
+        self.prev.tick(dt)
+
+    def vals(self, k):
+        return LOOK_OPTS[k][2]
+
+    def cur(self, k):
+        return int(self.g.look_code[k])
+
+    def style(self, i):
+        hov = self.hover
+        tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
+        if tag in ("lb", "rb"):
+            return self.BTN_H if hov == ("L" if tag == "lb" else "R") + num else self.BTN
+        if tag == "vb":
+            return (0.20, 0.30, 0.45, 0.95) if hov == "V" + num else (0.11, 0.18, 0.28, 0.92)
+        if tag in ("lt", "rt"):
+            return Hot.ON if hov == ("L" if tag == "lt" else "R") + num else Hot.BASE
+        if tag == "vt":
+            return self.YELLOW if hov == "V" + num else self.WHITE
+        if i.startswith(("b_", "t_")):
+            h = hov == "btn_" + i[2:]
+            return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
+        return self.WHITE
+
+    def layout(self):
+        g = self.g
+        self.text("title", "Charakter personalisieren", 0, 0.84, 0.075, (1.0, 0.78, 0.3, 1.0))
+        self.rect(None, -1.20, -0.24, -0.83, 0.75, (0.05, 0.08, 0.12, 0.92))               # Hintergrund der Vorschau
+        self.rect(None, -1.20, -0.24, 0.744, 0.75, (1.0, 0.62, 0.14, 1.0))
+        self.text(None, "Dein Soldat", -0.72, -0.80, 0.036, self.GREY)
+        for k, (key, label, vals) in enumerate(LOOK_OPTS):
+            c, r = divmod(k, self.PER_COL)
+            x0, x1 = self.COLS[c]
+            zl = 0.64 - 0.145 * r
+            z1, z0 = zl - 0.018, zl - 0.092
+            self.text(None, label.upper(), x0, zl, 0.032, self.GREY, "l")
+            self.rect(f"lb{k}", x0, x0 + 0.09, z0, z1)
+            self.rect(f"rb{k}", x1 - 0.09, x1, z0, z1)
+            self.rect(f"vb{k}", x0 + 0.1, x1 - 0.1, z0, z1)
+            self.text(f"lt{k}", "<", x0 + 0.045, z0 + 0.018, 0.058)
+            self.text(f"rt{k}", ">", x1 - 0.045, z0 + 0.018, 0.058)
+            self.text(f"vt{k}", vals[self.cur(k)], (x0 + x1) / 2, z0 + 0.02, 0.048)
+            self.hit(f"L{k}", x0, x0 + 0.09, z0, z1, lambda k=k: g.look_step(k, -1))
+            self.hit(f"R{k}", x1 - 0.09, x1, z0, z1, lambda k=k: g.look_step(k, 1))
+            self.hit(f"V{k}", x0 + 0.1, x1 - 0.1, z0, z1, lambda k=k: g.look_step(k, 1))
+        a, b = self.COLS[0][0], self.COLS[1][1]
+        mid = (a + b) / 2
+        self.button("rand", a, mid - 0.02, -0.455, -0.37, "Zufällig", 0.05, g.look_randomize)
+        self.button("reset", mid + 0.02, b, -0.455, -0.37, "Zurücksetzen", 0.05, g.look_reset)
+        self.button("done", a, b, -0.575, -0.49, "Fertig   (Esc)", 0.052, g.on_escape)
+        self.text(None, "Dein Aussehen wird gespeichert und im Spiel allen Mitspielern angezeigt", mid, -0.70, 0.03, self.GREY)
+
+    def update(self, force=False):
+        key = (self.g.look_code, self.hover)
+        if force or key != self.key:
+            self.key = key
+            self.sync()
+            self.prev.set_look(self.g.look_code)
+
+    def sync(self):
+        for i, nd in self.nodes.items():
+            if i == "title":
+                continue
+            if i.startswith("vt"):
+                k = int(i[2:])
+                nd.setText(self.vals(k)[self.cur(k)])
+            col = self.style(i)
+            if i in self.txts:
+                nd.setFg(col)
+            else:
+                nd.setColor(*col)
+
+
 class MorePage(SetupPage):
     """Weitere Einstellungen einer Runde: Monsterdichte (5 Stufen), Tomahawk an/aus und Schieberegler für die Zahlen."""
     SLIDERS = (("cd", "TOMAHAWK-ABKLINGZEIT", 0, 600, 10, (0, 120, 240, 360, 480, 600), strike_cd_label, 0.14),
@@ -8977,8 +9301,8 @@ class Connector(threading.Thread):
 class JoinAttempt:
     """Verbinden + 'hello' senden + auf 'welcome' des Hosts warten."""
 
-    def __init__(self, host, port, name):
-        self.host, self.name = host, name
+    def __init__(self, host, port, name, look=""):
+        self.host, self.name, self.look = host, name, look
         self.thread = Connector(host, port)
         self.conn = None
         self.state = "connecting"      # connecting | waiting | ready | failed
@@ -9000,7 +9324,7 @@ class JoinAttempt:
                 self.state, self.msg = "failed", "Verbindung fehlgeschlagen: " + self.thread.error
             else:
                 self.conn = self.thread.conn
-                self.conn.send({"t": "hello", "v": NET_VERSION, "name": self.name})
+                self.conn.send({"t": "hello", "v": NET_VERSION, "name": self.name, "look": self.look})
                 self.state, self.t0 = "waiting", time.time()
         if self.state in ("waiting", "ready"):
             self.conn.flush()
@@ -9219,6 +9543,8 @@ class HostSession:
             name = str(m.get("name") or f"Spieler{pid}")[:16]
             x, y = w.first_spawn(pid)
             w.players[pid] = Player(x, y, w, pid, name)
+            lk = m.get("look")
+            w.players[pid].look = lk if look_valid(lk) else ""
             c.pid = pid
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
@@ -9342,7 +9668,7 @@ class HostSession:
         snap = {"t": "snap", "rd": w.respawn_delay,
                 "pl": [[p.pid, r2(p.x), r2(p.y), r2(p.z), r1(p.heading), r1(p.pitch), r1(p.hp),
                         p.cur, 1 if p.moving else 0, p.name, p.kills, p.deaths, r1(p.score),
-                        r1(p.protect), r2(p.lean), r2(p.crouch)] for p in w.players.values()],
+                        r1(p.protect), r2(p.lean), r2(p.crouch), p.look] for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
                         r2(m.hurt_t), r2(m.dead_t)] for m in w.mobs],
@@ -9467,7 +9793,9 @@ class ClientSession:
         except (TypeError, ValueError):
             pass
         seen = set()
-        for pid, x, y, z, h, p, hp, cur, mv, name, kl, de, sc, prot, ln, cr in m["pl"]:
+        for row in m["pl"]:
+            pid, x, y, z, h, p, hp, cur, mv, name, kl, de, sc, prot, ln, cr = row[:16]
+            lk = row[16] if len(row) > 16 else ""
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
                 me = w.players.get(pid)
@@ -9480,6 +9808,7 @@ class ClientSession:
             pl.x, pl.y, pl.z, pl.heading, pl.pitch = x, y, z, h, p
             pl.hp, pl.cur, pl.moving, pl.lean = hp, cur, bool(mv), ln
             pl.crouch = cr
+            pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
             seen.add(pid)
         for pid in [pid for pid in w.players if pid != self.my_id and pid not in seen]:
@@ -9741,9 +10070,7 @@ class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
     def __init__(self, p):
-        k = p.pid
-        look = dict(skin=SOLDIER_SKINS[k % len(SOLDIER_SKINS)], hair=SOLDIER_HAIR[(k * 3 + 1) % len(SOLDIER_HAIR)],
-                    eye=SOLDIER_EYES[(k * 2 + 1) % len(SOLDIER_EYES)], acc=PLAYER_COLORS[k % len(PLAYER_COLORS)])
+        look = soldier_look(getattr(p, "look", ""), p.pid)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
          self.armL, self.armR) = build_soldier(look)
         gm = Mesh()
@@ -127664,6 +127991,8 @@ class Game(ShowBase):
         vs_ = st.get("vs")
         self.vol_sfx = int(vs_) if isinstance(vs_, (int, float)) and not isinstance(vs_, bool) and 0 <= vs_ <= 100 else 100        # Soundeffekte in %
         self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
+        lk = st.get("look")
+        self.look_code = lk if look_valid(lk) else look_default(random.randrange(100000))     # Aussehen des Charakters
         self.apply_fps()
         self.overlay_kind = self.overlay_yes = None
         self.amb_np = None
@@ -127887,6 +128216,8 @@ class Game(ShowBase):
         self.menu_cards = []
         self.card_hover = None
         self.menu_last = None
+        if self.setup_page is not None and hasattr(self.setup_page, "destroy"):
+            self.setup_page.destroy()
         self.setup_page = None
         self.slider_drag = False
         self.ui_sliders_clear()
@@ -127975,7 +128306,7 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "char"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
@@ -127995,7 +128326,7 @@ class Game(ShowBase):
             if self.name_back == "main":
                 spec.append(("Beenden   (Esc)", self.open_quit_box))
         elif st == "main":
-            spec = [("Spielen", dig(1)), ("Einstellungen", dig(2)),
+            spec = [("Spielen", dig(1)), ("Charakter personalisieren", dig(2)), ("Einstellungen", dig(3)),
                     ("Beenden   (Esc)", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
@@ -128058,6 +128389,13 @@ class Game(ShowBase):
             if self.setup_page is None or self.menu_last is None:
                 self.menu_last = ("setup2", self.menu_msg)
                 self.setup_page = MorePage(self)
+            else:
+                self.setup_page.update()
+            return
+        if self.menu_state == "char":                     # Charakter personalisieren: Vorschau + Auswahlfelder
+            if self.setup_page is None or self.menu_last is None:
+                self.menu_last = ("char", "")
+                self.setup_page = CharPage(self)
             else:
                 self.setup_page.update()
             return
@@ -128199,7 +128537,7 @@ class Game(ShowBase):
 
     def connect_now(self, ip, port):
         self.show_menu("connecting")
-        self.attempt = JoinAttempt(ip, port, self.my_name)
+        self.attempt = JoinAttempt(ip, port, self.my_name, self.look_code)
 
     def ask_loadout(self, then, back):
         """Vor dem Start einer Runde (KOTH/DM): Ausrüstung wählen, mit 'Spiel starten' geht es los."""
@@ -128448,6 +128786,8 @@ class Game(ShowBase):
                 if d == 1:
                     self.show_menu("multi")
                 elif d == 2:
+                    self.show_menu("char")
+                elif d == 3:
                     self.show_menu("settings")
             elif st == "loadout":
                 self.pick_loadout(d)
@@ -128581,7 +128921,7 @@ class Game(ShowBase):
             self.show_menu("main" if self.setup_for == "single" else "multi")
         elif self.mode == "menu" and self.menu_state == "loadout" and self.pending_start is not None:
             self.show_menu(self.pending_start[1])
-        elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout"):
+        elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout", "char"):
             self.show_menu("main")
         elif self.mode == "menu" and self.menu_state == "name" and self.name_back != "main":
             self.name_back = "main"
@@ -128981,13 +129321,50 @@ class Game(ShowBase):
             self.open_overlay("settings_round", "Rundeneinstellungen", items,
                               "Diese Einstellungen gelten für die ganze Runde", width=1.45)
 
+    def look_step(self, k, d):
+        """Eigenschaft k des Charakters eine Auswahl weiter (d = +1) oder zurück (d = -1)."""
+        n = len(LOOK_OPTS[k][2])
+        v = (int(self.look_code[k]) + d) % n
+        self.look_code = self.look_code[:k] + str(v) + self.look_code[k + 1:]
+        self.save_prefs()
+        self.menu_refresh()
+
+    def look_randomize(self):
+        self.look_code = look_random(self.prng)
+        self.save_prefs()
+        self.menu_refresh()
+
+    def look_reset(self):
+        self.look_code = look_default(0)
+        self.save_prefs()
+        self.menu_refresh()
+
+    def refresh_fp_arms(self):
+        """Hände und Ärmel in der Ego-Ansicht im gewählten Aussehen (Tarnmuster, Handschuhe) neu aufbauen."""
+        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0)
+        if getattr(self, "fp_key", None) == L["key"]:
+            return
+        self.fp_key = L["key"]
+        rng = random.Random(7)
+        for nd, length, endz, xoff, curl, s_ in ((self.vm_hand, 0.55, -0.17, -0.01, 1.0, -1),
+                                                 (self.vm_rhand, 0.55, -0.16, 0.01, 1.0, 1),
+                                                 (self.gad_arms[0], 0.5, -0.06, 0.0, 0.8, -1),
+                                                 (self.gad_arms[1], 0.5, -0.06, 0.0, 0.35, 1),
+                                                 (self.gren_arm, 0.5, -0.06, 0.0, 0.5, 1)):
+            m = Mesh()
+            fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
+            gn, new = nd.node(), m.node("arm")
+            gn.removeAllGeoms()
+            for gi in range(new.getNumGeoms()):
+                gn.addGeom(new.getGeom(gi), new.getGeomState(gi))
+
     def pause_quit(self):
         self.close_quit_box(recapture=False)
         self.open_quit_box()
 
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
-                       "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct})
+                       "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code})
 
     def apply_volume(self):
         """Lautstärke übernehmen: Effekte über den Audio-Manager, Musik als Faktor der Menümusik."""
@@ -129156,6 +129533,8 @@ class Game(ShowBase):
 
     def menu_task(self, dt):
         self.animate_menu_bg(dt)
+        if self.setup_page is not None and hasattr(self.setup_page, "tick"):
+            self.setup_page.tick(dt)
         if self.slider_drag:
             self.slider_follow()
         self.update_hover()
@@ -129181,6 +129560,7 @@ class Game(ShowBase):
     def spawn_player(self):
         x, y = self.world.first_spawn(self.my_id)
         pl = Player(x, y, self.world, self.my_id, self.my_name)
+        pl.look = self.look_code
         pl.respawn(self.world, x, y, self.loadout)
         self.world.players[self.my_id] = pl
         return pl
@@ -129364,6 +129744,7 @@ class Game(ShowBase):
         self.world, self.host = world, host
         self.my_id = attempt.my_id if mode == "client" else 0
         self.player = self.spawn_player()
+        self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
