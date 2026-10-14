@@ -247,12 +247,13 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 44               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 45               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
-NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
+NET_TIMEOUT = 30.0       # so lange ohne Daten, dann gilt die Verbindung als tot (Hamachi/WLAN stocken auch mal 10 s)
+NET_STALE_BUF = 64000    # Host: liegt so viel ungesendet bei einem Mitspieler, werden Snapshots ausgelassen (nur der neueste zählt)
 MAX_PLAYERS = 8
 
 STEP_H = 0.6             # so viel darf man ohne Sprung hochsteigen (Treppenstufe)
@@ -12138,6 +12139,15 @@ class HostSession:
         line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
         self.events = []
         for c in clients:
+            if len(c.wbuf) > NET_STALE_BUF:           # Leitung staut: keine veralteten Snapshots anhäufen
+                if not getattr(c, "stalled", False):
+                    c.stalled = True
+                    netlog(f"Host: Leitung zu pid {c.pid} staut ({len(c.wbuf)} B ungesendet) - Snapshots ausgelassen")
+                c.flush()
+                continue
+            if getattr(c, "stalled", False) and len(c.wbuf) < 4000:
+                c.stalled = False
+                netlog(f"Host: Leitung zu pid {c.pid} frei, Snapshots laufen wieder")
             c.send_line(line)
             c.flush()
         if self.snap_n % 150 == 1 and clients:       # alle ~5 s: wie viel hängt ungesendet in der Leitung?
@@ -12206,6 +12216,7 @@ class ClientSession:
         self.send_t = 0.0
         self.fresh = True            # erster Frame nach dem Kartenbau: Zeitmessung "Host schweigt" beginnt erst dann
         self.got_snap = False
+        self.stall_t0 = time.time()
         netlog(f"Client: Sitzung angelegt (id {my_id}), {len(list(backlog))} Nachrichten im Rückstau")
         for m in backlog:
             self.handle(m)
@@ -12220,7 +12231,20 @@ class ClientSession:
             self.fresh = False
             self.conn.last_rx = time.time()
             netlog("Client: Karte fertig, erster Frame - sende Positionen")
-        for m in self.conn.recv():
+        now = time.time()
+        self.max_dt = max(getattr(self, "max_dt", 0.0), dt)
+        gap = now - self.conn.last_rx
+        if gap > 2.0 and not getattr(self, "stall_log", False):
+            self.stall_log = True
+            netlog(f"Client: Daten vom Host stocken seit {gap:.1f}s (größter Frame-dt {self.max_dt:.2f}s)")
+        msgs = self.conn.recv()
+        if msgs and getattr(self, "stall_log", False):
+            self.stall_log = False
+            netlog(f"Client: Daten wieder da nach {now - self.stall_t0:.1f}s")
+        if not getattr(self, "stall_log", False):
+            self.stall_t0 = now
+            self.max_dt = 0.0
+        for m in msgs:
             self.handle(m)
         if not self.conn.closed and time.time() - self.conn.last_rx > NET_TIMEOUT:
             netlog(f"Client: {NET_TIMEOUT:.0f}s keine Daten vom Host (Snapshot je erhalten: {self.got_snap})")
