@@ -245,7 +245,7 @@ from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, Colo
                           CullFaceAttrib, DepthOffsetAttrib, DirectionalLight, Fog, Geom, GeomNode, GeomTriangles, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, KeyboardButton, LineSegs, MouseButton,
                           NodePath, PerspectiveLens, PNMImage, Point2, Point3, RenderState, Texture,
-                          TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3,
+                          TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3, Quat,
                           WindowProperties, loadPrcFileData)
 
 # Konfiguration muss VOR dem Erzeugen des Fensters passieren
@@ -358,7 +358,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 22         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 23         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -5802,6 +5802,7 @@ class GunState:
 class Player:
     def __init__(self, x, y, world, pid=0, name=""):
         self.pid, self.name = pid, name
+        self.look = ""                    # Aussehen (Look-Code), vom Spieler gewählt
         self.kills = self.deaths = 0
         self.score = 0.0                  # King of the Hill: Punkte
         self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
@@ -8063,6 +8064,457 @@ def build_mob(kind, look=None):
     return root, torso, legs[0], legs[1], bar, fg
 
 
+# ------------------------------------------------------- Modell: Soldat (Spieler)
+SOLDIER_SKINS = [(0.89, 0.72, 0.58), (0.80, 0.60, 0.45), (0.62, 0.44, 0.32), (0.45, 0.31, 0.22), (0.93, 0.78, 0.66)]
+SOLDIER_HAIR = [(0.07, 0.06, 0.05), (0.28, 0.17, 0.08), (0.70, 0.55, 0.28), (0.50, 0.18, 0.07), (0.55, 0.55, 0.55),
+                (0.86, 0.86, 0.84)]
+SOLDIER_EYES = [(0.25, 0.38, 0.55), (0.30, 0.20, 0.10), (0.25, 0.42, 0.28), (0.18, 0.15, 0.12)]
+CAMO_PAL = [(0.17, 0.20, 0.11), (0.29, 0.33, 0.19), (0.44, 0.41, 0.27), (0.28, 0.21, 0.13)]   # Waldtarn: dunkel, oliv, sand, braun
+CAMO_SETS = [CAMO_PAL,
+             [(0.50, 0.42, 0.28), (0.66, 0.57, 0.38), (0.78, 0.70, 0.50), (0.45, 0.33, 0.20)],        # Wüste
+             [(0.62, 0.66, 0.70), (0.80, 0.83, 0.86), (0.92, 0.94, 0.96), (0.45, 0.50, 0.56)],        # Schnee
+             [(0.18, 0.19, 0.21), (0.30, 0.32, 0.35), (0.46, 0.48, 0.51), (0.24, 0.26, 0.30)],        # Stadt
+             [(0.05, 0.05, 0.06), (0.09, 0.10, 0.11), (0.15, 0.16, 0.17), (0.07, 0.08, 0.10)],        # Nacht
+             [(0.12, 0.26, 0.10), (0.22, 0.42, 0.16), (0.38, 0.55, 0.24), (0.30, 0.24, 0.12)]]        # Dschungel
+SOLDIER_GLOVES = [(0.11, 0.11, 0.10), (0.30, 0.20, 0.12), (0.22, 0.26, 0.15), None]
+SOLDIER_BOOTS = [(0.16, 0.12, 0.08), (0.07, 0.07, 0.08), (0.52, 0.44, 0.30)]
+# Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Ziffernfolge
+# (eine Ziffer je Eintrag) - klein genug, um ihn im Netzwerk mitzuschicken.
+LOOK_OPTS = (
+    ("tarn", "Tarnmuster", ("Wald", "Wüste", "Schnee", "Stadt", "Nacht", "Dschungel")),
+    ("haut", "Hautton", ("Hell", "Mittel", "Gebräunt", "Dunkel", "Sehr hell")),
+    ("augen", "Augenfarbe", ("Blau", "Braun", "Grün", "Dunkel")),
+    ("haar", "Haarfarbe", ("Schwarz", "Braun", "Blond", "Rot", "Grau", "Weiß")),
+    ("frisur", "Frisur", ("Kurz", "Glatze", "Lang")),
+    ("kopf", "Kopfbedeckung", ("Gefechtshelm", "Buschhut", "Barett", "Mütze", "Keine")),
+    ("brille", "Brille", ("Keine", "Schutzbrille", "Sonnenbrille")),
+    ("gesicht", "Gesicht", ("Normal", "Bart", "Tarnbemalung", "Sturmhaube")),
+    ("extra", "Zubehör", ("Keins", "Halstuch", "Headset", "Nachtsichtgerät")),
+    ("weste", "Weste", ("Plattenträger", "Keine")),
+    ("pack", "Rucksack", ("Groß", "Klein", "Keiner")),
+    ("handschuh", "Handschuhe", ("Schwarz", "Braun", "Oliv", "Keine")),
+    ("stiefel", "Stiefel", ("Dunkelbraun", "Schwarz", "Sand")),
+    ("akzent", "Teamfarbe", ("Spielerfarbe", "Blau", "Rot", "Grün", "Gelb", "Violett", "Türkis", "Orange", "Weiß")),
+)
+
+
+def look_valid(code):
+    return (isinstance(code, str) and len(code) == len(LOOK_OPTS)
+            and all(c.isdigit() and int(c) < len(o[2]) for c, o in zip(code, LOOK_OPTS)))
+
+
+def look_default(seed=0):
+    """Ein zufälliger, aber stabiler Standard-Charakter (Hautton, Augen, Haare nach seed)."""
+    r = random.Random(seed * 7919 + 13)
+    v = [0] * len(LOOK_OPTS)
+    for k, (key, _l, vals) in enumerate(LOOK_OPTS):
+        if key in ("haut", "augen", "haar"):
+            v[k] = r.randrange(len(vals))
+    return "".join(str(i) for i in v)
+
+
+def look_random(rng):
+    return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
+
+
+def soldier_look(code, pid=0):
+    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer)."""
+    if not look_valid(code):
+        code = look_default(pid)
+    v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
+    ak = v["akzent"]
+    acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
+    skin = SOLDIER_SKINS[v["haut"]]
+    glove = SOLDIER_GLOVES[v["handschuh"]] or skin
+    return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
+                pal=CAMO_SETS[v["tarn"]], kopf=v["kopf"], brille=v["brille"], gesicht=v["gesicht"], extra=v["extra"],
+                frisur=v["frisur"], weste=v["weste"], pack=v["pack"], glove=glove, boots=SOLDIER_BOOTS[v["stiefel"]],
+                key=(code, acc))
+_SIDES = 16
+_CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
+_SOLDIER_CACHE = {}
+SOLDIER_SH = ((-0.245, 0.0, 0.55), (0.245, 0.0, 0.55))        # Schultergelenke links / rechts (Torso-Raum)
+SOLDIER_HAND = ((0.10, 0.36, 0.40), (0.10, 0.14, 0.375))      # Hände am Gewehr: links Handschutz, rechts Griff
+
+
+def _camo_col(p, f=11.0, off=0.0, pal=None):
+    """Tarnmuster: fleckige Farbwahl aus drei überlagerten Sinuswellen (je Dreieck, stabil auf allen Rechnern)."""
+    pal = pal or CAMO_PAL
+    x = p[0] + off
+    v = math.sin(x * f + p[2] * f * 0.7) + math.sin(p[1] * f * 1.3 - p[2] * f * 1.1 + 1.7) \
+        + math.sin((x + p[1]) * f * 0.8 + p[2] * f * 0.5 + 3.1)
+    return pal[0] if v < -0.9 else pal[1] if v < 0.5 else pal[2] if v < 1.5 else pal[3]
+
+
+def _lerp3(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+
+
+def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True), jit=0.03, sides=None):
+    """Gelenkte Röhre durch die Mittelpunkte cs mit elliptischen Querschnitten (rx, ry je Punkt), weich beleuchtet.
+    So entstehen Körperformen (Brust, Taille, Waden ...) aus vielen kleinen Dreiecken. colfn(Punkt) -> Farbe (Tarnmuster)."""
+    n = len(cs)
+    rings = []
+    tab = _CS if sides is None else [(math.cos(2 * math.pi * i / sides), math.sin(2 * math.pi * i / sides)) for i in range(sides)]
+    for i, c in enumerate(cs):
+        d = norm(sub(cs[min(n - 1, i + 1)], cs[max(0, i - 1)]))
+        ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+        k = dot(ref, d)
+        u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+        v = cross(d, u)
+        rx, ry = rxs[i], rys[i]
+        pts, nds = [], []
+        for co, si in tab:
+            pts.append((c[0] + u[0] * co * rx + v[0] * si * ry, c[1] + u[1] * co * rx + v[1] * si * ry,
+                        c[2] + u[2] * co * rx + v[2] * si * ry))
+            a, b = co / max(rx, 1e-3), si / max(ry, 1e-3)
+            nn = norm((u[0] * a + v[0] * b, u[1] * a + v[1] * b, u[2] * a + v[2] * b))
+            nds.append(max(0.0, dot(nn, SUN)))
+        rings.append((pts, nds, c, d))
+
+    def pick(a, b, c3):
+        if colfn:                                   # Farbe je Ecke: die Tarnflecken laufen weich ineinander
+            f = 1 + rng.uniform(-jit, jit) if rng else 1.0
+            return [tuple(x * f for x in colfn(q)) for q in (a, b, c3)]
+        return jc(col, rng, jit) if rng else col
+
+    S = len(tab)
+    for r in range(n - 1):
+        A, B = rings[r], rings[r + 1]
+        ref = _lerp3(A[2], B[2], 0.5)
+        for i in range(S):
+            j = (i + 1) % S
+            p0, p1, p2, p3 = A[0][i], A[0][j], B[0][j], B[0][i]
+            m.tri(p0, p1, p2, pick(p0, p1, p2), ref, mat=mat, nd=(A[1][i], A[1][j], B[1][j]))
+            m.tri(p0, p2, p3, pick(p0, p2, p3), ref, mat=mat, nd=(A[1][i], B[1][j], B[1][i]))
+    for k, (idx, sgn) in enumerate(((0, -1.0), (n - 1, 1.0))):
+        if not caps[k] or n < 2:
+            continue
+        pts, _nds, c, d = rings[idx]
+        other = rings[1 if idx == 0 else n - 2][2]
+        nd = max(0.0, dot((d[0] * sgn, d[1] * sgn, d[2] * sgn), SUN))
+        for i in range(S):
+            j = (i + 1) % S
+            m.tri(c, pts[i], pts[j], pick(c, pts[i], pts[j]), other, mat=mat, nd=(nd, nd, nd))
+
+
+def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
+    """Weiches Ellipsoid (Gelenke, Ohren, Hände, Kinn)."""
+    cs, rxs, rys = [], [], []
+    for k in range(rings + 1):
+        a = -math.pi / 2 + math.pi * k / rings
+        cs.append((c[0], c[1], c[2] + rz * math.sin(a)))
+        rxs.append(rx * math.cos(a))
+        rys.append(ry * math.cos(a))
+    loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
+
+
+def glove(m, wr, d, s, col, rng, curl=1.0):
+    """Handschuh: Handteller, vier gebogene Finger und Daumen. wr = Handgelenk, d = Richtung zu den Fingern,
+    s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu)."""
+    ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+    k = dot(ref, d)
+    u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+    v = cross(d, u)
+    if v[2] > 0:
+        v = (-v[0], -v[1], -v[2])                                  # v zeigt nach unten: dorthin krümmen sich die Finger
+
+    def at(base, a, b, c):
+        return (base[0] + d[0] * a + u[0] * b + v[0] * c, base[1] + d[1] * a + u[1] * b + v[1] * c,
+                base[2] + d[2] * a + u[2] * b + v[2] * c)
+
+    kn = at(wr, 0.085, 0, 0)
+    loft(m, [wr, at(wr, 0.04, 0, 0), kn], [0.032, 0.043, 0.045], [0.022, 0.027, 0.026], col, rng, None, None,
+         (True, True), 0.03, 10)                                   # Handteller
+    for i, (off, ln) in enumerate(((-1.5, 0.9), (-0.5, 1.0), (0.5, 0.95), (1.5, 0.8))):
+        b0 = at(kn, 0, off * 0.0225, 0)
+        p1 = at(b0, 0.028 * ln, 0, 0.012 * curl)
+        p2 = at(p1, 0.022 * ln * (1 - 0.55 * curl), 0, 0.026 * curl * ln)
+        p3 = at(p2, 0.010 * (1 - 0.8 * curl), 0, 0.020 * curl)
+        loft(m, [b0, p1, p2, p3], [0.0105, 0.0095, 0.0085, 0.0070], [0.0105, 0.0095, 0.0085, 0.0070], col, rng,
+             None, None, (False, True), 0.03, 6)                   # Finger
+    t0 = at(wr, 0.03, -s * 0.034, -0.004)
+    t1 = at(t0, 0.030, -s * 0.010, 0.005 * curl)
+    t2 = at(t1, 0.025, s * 0.004, 0.011 * curl)
+    loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
+         (False, True), 0.03, 6)                                   # Daumen
+
+
+def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10)):
+    """Arm in der Ego-Ansicht (Hand im Ursprung, Unterarm läuft nach hinten -y und etwas nach unten):
+    Handschuh mit Fingern, Manschette und Tarnärmel wie beim Soldaten."""
+    wr = (0.0, -0.09, -0.012)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, curl)
+    y1 = -(length + 0.07)
+    cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
+          (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
+         lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
+    loft(m, [(0.0, -0.082, -0.0135), (0.0, -0.118, -0.0145)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
+         rng, None, None, (False, False), 0.02)                    # Manschette
+
+
+def _soldier_meshes(L):
+    """Baut die Teile des Soldaten: Oberkörper samt Kopf (Mesh in torso-Koordinaten, Hüfte = Ursprung, Blick +y),
+    je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75) und je einen Arm (Schulter = Ursprung).
+    L = Aussehen aus soldier_look(): Tarnmuster, Hautton, Kopfbedeckung, Brille, Gesicht, Ausrüstung ..."""
+    rng = random.Random(1234 + int(L["key"][0]))
+    skin, hair, eye, acc, pal = L["skin"], L["hair"], L["eye"], L["acc"], L["pal"]
+    skin_d = tuple(c * 0.84 for c in skin)
+    camo = lambda p, f=11.0, off=0.0: _camo_col(p, f, off, pal)          # noqa: E731
+    OLV = tuple(c * 0.66 for c in pal[1])                                # Weste, Taschen
+    POUCH, FLAP = tuple(c * 0.8 for c in OLV), tuple(c * 1.15 for c in OLV)
+    DK = (0.11, 0.11, 0.10)           # schwarzes Leder / Gummi
+    LEATH = L["boots"]
+    METAL = (0.50, 0.46, 0.34)
+    GL = L["glove"]
+    GLASS = (0.12, 0.18, 0.26)
+    tm = Mesh()
+
+    # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
+    zs = [-0.07, 0.0, 0.10, 0.20, 0.30, 0.42, 0.52, 0.585, 0.635, 0.668]
+    rxs = [0.200, 0.215, 0.210, 0.185, 0.190, 0.210, 0.225, 0.225, 0.170, 0.080]
+    rys = [0.120, 0.130, 0.125, 0.110, 0.115, 0.130, 0.140, 0.125, 0.100, 0.075]
+    cys = [0.0, -0.010, -0.015, 0.0, 0.005, 0.010, 0.015, 0.0, -0.010, 0.0]
+    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, None, camo)
+    # ---- Hals mit Kragen
+    loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
+         skin, rng, None, None, (False, False), 0.015)
+    loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
+         tuple(c * 0.8 for c in pal[1]), rng, None, None, (False, False))
+    # ---- Koppel mit Schnalle und Taschen
+    loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
+    box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
+    for sx in (-1, 1):
+        box(tm, sx * 0.165, 0.05, 0.19, 0.055, 0.075, 0.09, LEATH, rng)                  # Gürteltaschen
+        box(tm, sx * 0.165, 0.05, 0.236, 0.058, 0.078, 0.02, tuple(c * 1.15 for c in LEATH), rng)
+    # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
+    if L["weste"] == 0:
+        vz = [0.30, 0.40, 0.50, 0.578]
+        loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
+             [0.130, 0.146, 0.156, 0.140], OLV, rng, None, None, (True, False), 0.04)
+        for sx in (-1, 1):
+            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
+        for x in (-0.09, 0.0, 0.09):
+            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
+            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
+        box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
+        box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
+        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
+    # ---- Rucksack
+    if L["pack"] == 0:                                                                       # gross mit Schlafrolle
+        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
+        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
+        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
+    elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
+        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
+        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
+
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
+    #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
+    def arm(S, E, H, s):
+        am = Mesh()
+        E, H = sub(E, S), sub(H, S)
+        S = (0.0, 0.0, 0.0)
+        mid = _lerp3(S, E, 0.5)
+        up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
+        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, None, lambda p: camo(p, 11.0, s * 0.3))
+        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
+        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, None)
+        d = norm(sub(H, E))
+        wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
+        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
+             lambda p: camo(p, 11.0, s * 0.3), (False, False))
+        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
+             (False, False), 0.02)                                 # Manschette
+        glove(am, wr, d, s, GL, rng, 1.0)
+        return am
+
+    arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
+            arm(SOLDIER_SH[1], (0.285, -0.02, 0.31), SOLDIER_HAND[1], 1)]     # rechte Hand am Griff
+
+    # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
+    hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
+    hrx = [0.035, 0.070, 0.080, 0.084, 0.086, 0.086, 0.080, 0.060, 0.020]
+    hry = [0.050, 0.075, 0.090, 0.103, 0.110, 0.112, 0.108, 0.090, 0.040]
+    hcy = [0.060, 0.050, 0.040, 0.028, 0.018, 0.010, 0.005, 0.0, 0.0]
+    kopf, gesicht, brille, extra, frisur = L["kopf"], L["gesicht"], L["brille"], L["extra"], L["frisur"]
+    mask = gesicht == 3
+    loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
+    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else skin, rng)                  # Kinn
+    for sx in (-1, 1):
+        ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
+        if not mask:
+            ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                  # Wangenknochen
+        box(tm, sx * 0.037, 0.1245, 0.915, 0.036, 0.012, 0.019, (0.93, 0.93, 0.90))             # Augapfel
+        box(tm, sx * 0.037, 0.1315, 0.915, 0.019, 0.006, 0.019, eye)                            # Iris
+        box(tm, sx * 0.037, 0.1345, 0.915, 0.009, 0.004, 0.009, (0.02, 0.02, 0.03))             # Pupille
+        box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
+        box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
+        if frisur != 1:
+            box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten
+    for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
+                     ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
+                     ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
+                     ((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0.019, 0.134, 0.872))):
+        tm.tri(a, b, c3, DK if mask else skin, (0, 0.09, 0.9))
+    if mask:                                                                                    # Sturmhaube: Untergesicht + Hals
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:5], hz[:5])], [r * 1.04 + 0.002 for r in hrx[:5]],
+             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, None, None, (True, False), 0.03)
+        loft(tm, [(0, 0.01, 0.675), (0, 0.012, 0.74), (0, 0.015, 0.79)], [0.066, 0.061, 0.060], [0.066, 0.063, 0.063],
+             DK, rng, None, None, (False, False))
+    else:
+        box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
+        box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
+        box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                        # Mundspalt
+    if gesicht == 1:                                                                            # Kinnbart + Schnurrbart
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.03 + 0.003 for r in hrx[:3]],
+             [r * 1.03 + 0.003 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
+        box(tm, 0, 0.1345, 0.8585, 0.070, 0.014, 0.012, hair, rng)
+    if gesicht == 2:                                                                            # Tarnbemalung
+        g1, g2 = (0.10, 0.15, 0.07), (0.38, 0.33, 0.18)
+        for sx in (-1, 1):
+            for k, zz in enumerate((0.885, 0.862, 0.84)):
+                box(tm, sx * 0.058, 0.1285 - 0.001 * k, zz, 0.052, 0.006, 0.011, g1 if k % 2 == 0 else g2)
+        box(tm, 0, 0.1235, 0.953, 0.10, 0.006, 0.012, g1)
+        box(tm, 0, 0.157, 0.9, 0.02, 0.004, 0.034, g1)
+    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare
+    if frisur != 1:
+        box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                   # Haar im Nacken
+        if kopf in (2, 3, 4):
+            loft(tm, [(0, cy, z) for cy, z in zip((0.003, 0.002, 0.0, 0.0), (0.955, 0.985, 1.015, 1.04))],
+                 [0.090, 0.092, 0.075, 0.030], [0.117, 0.118, 0.098, 0.045], hair, rng, None, None, (False, True), 0.04)
+    if frisur == 2:
+        loft(tm, [(0, -0.100, 0.96), (0, -0.118, 0.90), (0, -0.128, 0.80), (0, -0.120, 0.69)],
+             [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
+    # ---- Kopfbedeckung
+    if kopf == 0:                                                                               # Gefechtshelm mit Tarnbezug
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
+                                               (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
+             [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
+             None, rng, None, lambda p: camo(p, 17.0, 0.7), (True, True))
+        loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
+        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
+        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
+        for sx in (-1, 1):
+            box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
+    elif kopf == 1:                                                                             # Buschhut mit Krempe
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
+             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, None,
+             lambda p: camo(p, 15.0, 0.4), (False, True))
+        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
+             lambda p: camo(p, 13.0, 0.9), (True, True))
+        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
+    elif kopf == 2:                                                                             # Barett
+        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
+        box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
+        loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
+    elif kopf == 3:                                                                             # Feldmütze mit Schirm
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
+             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, None,
+             lambda p: camo(p, 15.0, 0.2), (True, True))
+        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
+        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
+    # ---- Brille
+    if brille == 1:                                                                             # Schutzbrille
+        box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
+        for sx in (-1, 1):
+            box(tm, sx * 0.034, 0.145, 0.915, 0.052, 0.010, 0.036, GLASS)
+        loft(tm, [(0, 0.014, 0.905), (0, 0.014, 0.927)], [0.092, 0.092], [0.119, 0.119], DK, rng, None, None,
+             (False, False), 0.02)
+    elif brille == 2:                                                                           # Sonnenbrille
+        for sx in (-1, 1):
+            box(tm, sx * 0.037, 0.140, 0.915, 0.050, 0.008, 0.028, (0.03, 0.03, 0.04))
+            box(tm, sx * 0.087, 0.07, 0.918, 0.006, 0.13, 0.008, DK)
+        box(tm, 0, 0.138, 0.92, 0.024, 0.008, 0.008, DK)
+        box(tm, 0, 0.139, 0.931, 0.14, 0.008, 0.008, DK)
+    # ---- Zubehör
+    if extra == 1:                                                                              # Halstuch
+        loft(tm, [(0, 0.008, 0.655), (0, 0.012, 0.69), (0, 0.016, 0.725)], [0.088, 0.075, 0.066], [0.085, 0.072, 0.064],
+             acc, rng, None, None, (False, False), 0.04)
+        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat=None)
+    elif extra == 2:                                                                            # Headset
+        for sx in (-1, 1):
+            ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
+        box(tm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
+        box(tm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
+        ell(tm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+    elif extra == 3:                                                                            # Nachtsichtgerät
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+        box(tm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
+        box(tm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
+        box(tm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
+
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        off = sx * 0.4
+        # Hose: Oberschenkel, Knie, Wade, Knöchel
+        lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
+        lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
+        lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
+        lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
+        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, None, lambda p, o=off: camo(p, 11.0, o))
+        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
+        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
+        # Stiefel: Schaft, Fuss, Sohle, Schnürung
+        loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
+             LEATH, rng, None, None, (False, False), 0.03)
+        loft(lm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
+             [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
+        box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
+        box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
+        legs.append(lm)
+    return tm, legs, arms
+
+
+def build_soldier(look):
+    """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
+    (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
+    key = look["key"]
+    parts = _SOLDIER_CACHE.get(key)
+    if parts is None:
+        tm, lms, ams = _soldier_meshes(look)
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams])
+    root = NodePath("soldier")
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.75)
+    torso.attachNewNode(parts[0])
+    legs = []
+    for sx, gn in zip((-1, 1), parts[1]):
+        leg = root.attachNewNode("leg")
+        leg.setPos(sx * 0.115, 0, 0.75)
+        leg.attachNewNode(gn)
+        legs.append(leg)
+    arms = []
+    for sh, gn in zip(SOLDIER_SH, parts[2]):
+        an = torso.attachNewNode("arm")
+        an.setPos(*sh)
+        an.attachNewNode(gn)
+        arms.append(an)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 2.2)
+    bar.setBillboardPointEye()
+    bar.setLightOff()
+    bar.setTwoSided(True)
+    cm = CardMaker("bg")
+    cm.setFrame(-0.5, 0.5, -0.05, 0.05)
+    bg = bar.attachNewNode(cm.generate())
+    bg.setColor(0, 0, 0, 1)
+    cm = CardMaker("fg")
+    cm.setFrame(0, 1, -0.035, 0.035)
+    fg = bar.attachNewNode(cm.generate())
+    fg.setPos(-0.5, -0.01, 0)
+    fg.setColor(0.85, 0.1, 0.1, 1)
+    fg.setDepthOffset(1)
+    bar.hide()
+    return root, torso, legs[0], legs[1], bar, fg, arms[0], arms[1]
+
+
 # Höhe der Visierlinie über dem Waffenursprung beim Zielen (Kimme und Korn liegen auf dieser Höhe)
 ADS_Z = {"Pistole": 0.069, "Sturmgewehr": 0.079, "Revolver": 0.0765, "Maschinenpistole": 0.071}
 ADS_Z_DEFAULT = 0.095
@@ -8231,6 +8683,480 @@ MAG_PARTS = {
     "Railgun": (0, 0.05, -0.17, 0.05, 0.08, 0.09, (0.20, 0.70, 0.90)),
 }
 
+# ------------------------------------------------------------------ Detaillierte Waffenmodelle
+# Jede Waffe besteht aus Formen (Waffenkoordinaten wie GUN_PARTS: +y vorwärts, +x rechts, z oben). Aus denselben
+# Formen entstehen das 3D-Modell (Ego-Ansicht, Bodenmodell) und das 2D-Symbol (Seitenansicht).
+#   ("p", cx, Breite, [(y, z), ...], Farbe)            Seitenprofil, in x-Richtung aufgedickt (abgeschrägte Kanten)
+#   ("t", [(x, y, z), ...], [r, ...], Farbe, Seiten)   runde Röhre entlang eines Pfads; r = Radius oder (rx, rz)
+#   ("b", cx, cy, cz, sx, sy, sz, Farbe)                Quader
+#   ("e", cx, cy, cz, rx, ry, rz, Farbe)                Ellipsoid
+def _gs_line(cx, w, p0, p1, t, col):
+    """Dünner Balken (Profil) von p0 nach p1 im y/z-Schnitt, Dicke t (Abzugsbügel, Drähte)."""
+    dy, dz = p1[0] - p0[0], p1[1] - p0[1]
+    ln = math.hypot(dy, dz) or 1e-6
+    ny, nz = -dz / ln * t / 2, dy / ln * t / 2
+    return ("p", cx, w, [(p0[0] + ny, p0[1] + nz), (p1[0] + ny, p1[1] + nz), (p1[0] - ny, p1[1] - nz),
+                         (p0[0] - ny, p0[1] - nz)], col)
+
+
+def _gs_loop(cx, w, pts, t, col):
+    return [_gs_line(cx, w, pts[i], pts[i + 1], t, col) for i in range(len(pts) - 1)]
+
+
+def _gs_ty(cx, cz, prof, col, sides=12):
+    """Drehkörper um die y-Achse: prof = [(y, r) oder (y, rx, rz)]; gleiche y ergeben eine Stufe."""
+    pts, rs, last = [], [], None
+    for e in prof:
+        y = e[0]
+        if last is not None and y <= last:
+            y = last + 5e-4
+        last = y
+        pts.append((cx, y, cz))
+        rs.append(e[1] if len(e) == 2 else (e[1], e[2]))
+    return ("t", pts, rs, col, sides)
+
+
+def _poly_area(pts):
+    n = len(pts)
+    return 0.5 * sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n))
+
+
+def _earclip(pts):
+    """Dreiecke (Indexe) eines einfachen Polygons mit Umlaufsinn gegen den Uhrzeigersinn."""
+    idx = list(range(len(pts)))
+    out = []
+
+    def cr(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    while len(idx) > 3:
+        m = len(idx)
+        for k in range(m):
+            i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % m]
+            a, b, c = pts[i0], pts[i1], pts[i2]
+            if cr(a, b, c) <= 1e-12:
+                continue
+            if any(cr(a, b, pts[j]) >= 0 and cr(b, c, pts[j]) >= 0 and cr(c, a, pts[j]) >= 0
+                   for j in idx if j not in (i0, i1, i2)):
+                continue
+            out.append((i0, i1, i2))
+            idx.pop(k)
+            break
+        else:
+            break
+    for k in range(1, len(idx) - 1):
+        out.append((idx[0], idx[k], idx[k + 1]))
+    return out
+
+
+def _gs_ext(m, cx, w, pts, col, rng, off, bev=0.0035):
+    """Seitenprofil -> Körper: grosse Seitenflächen, schmale Fase, Ober-/Unterkanten."""
+    pts = [(p[0] + off[1], p[1] + off[2]) for p in pts]
+    cx += off[0]
+    if _poly_area(pts) < 0:
+        pts = pts[::-1]
+    n = len(pts)
+    ys, zs = [p[0] for p in pts], [p[1] for p in pts]
+    y0, y1, z0, z1 = min(ys), max(ys), min(zs), max(zs)
+    gy, gz = (y0 + y1) / 2, (z0 + z1) / 2
+    ly, lz = max(y1 - y0, 1e-3), max(z1 - z0, 1e-3)
+    ky, kz = max(0.3, 1 - 2 * bev / ly), max(0.3, 1 - 2 * bev / lz)
+    cap = [(gy + (p[0] - gy) * ky, gz + (p[1] - gz) * kz) for p in pts]
+    hw = w / 2
+    xw = max(hw - bev, hw * 0.5)
+
+    def vk(z):
+        return 0.74 + 0.26 * (z - z0) / lz
+
+    cc = jc(col, rng, 0.02)
+    for sg in (-1, 1):
+        for a, b, c in _earclip(cap):
+            P = [(cx + sg * hw, cap[i][0], cap[i][1]) for i in (a, b, c)]
+            m.tri(P[0], P[1], P[2], cc, ref=(cx, gy, gz), vk=[vk(cap[i][1]) for i in (a, b, c)])
+    for i in range(n):
+        j = (i + 1) % n
+        ey, ez = pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]
+        ln = math.hypot(ey, ez)
+        if ln < 1e-7:
+            continue
+        oy, oz = ez / ln, -ey / ln                                   # Aussenrichtung (Polygon gegen den Uhrzeigersinn)
+        my, mz = (pts[i][0] + pts[j][0]) / 2, (pts[i][1] + pts[j][1]) / 2
+        c1 = jc(col, rng, 0.02)
+        for sg in (-1, 1):
+            q = [(cx + sg * hw, cap[i][0], cap[i][1]), (cx + sg * hw, cap[j][0], cap[j][1]),
+                 (cx + sg * xw, pts[j][0], pts[j][1]), (cx + sg * xw, pts[i][0], pts[i][1])]
+            ref = (cx + sg * (hw + xw) / 2 - sg * 0.6, my - oy, mz - oz)
+            kk = [vk(cap[i][1]), vk(cap[j][1]), vk(pts[j][1]), vk(pts[i][1])]
+            m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(kk[0], kk[1], kk[2]))
+            m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(kk[0], kk[2], kk[3]))
+        q = [(cx - xw, pts[i][0], pts[i][1]), (cx + xw, pts[i][0], pts[i][1]),
+             (cx + xw, pts[j][0], pts[j][1]), (cx - xw, pts[j][0], pts[j][1])]
+        ref = (cx, my - oy, mz - oz)
+        k0, k1 = vk(pts[i][1]), vk(pts[j][1])
+        top = 1.0 + 0.0 * oz
+        m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(k0 * top, k0 * top, k1 * top))
+        m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(k0 * top, k1 * top, k1 * top))
+
+
+def build_shapes(m, shapes, rng, off=(0.0, 0.0, 0.0)):
+    """Baut die Formen einer Waffe in das Mesh m; off verschiebt alles (Bodenmodell, Magazin)."""
+    ox, oy, oz = off
+    for s in shapes:
+        k = s[0]
+        if k == "p":
+            _gs_ext(m, s[1], s[2], s[3], s[4], rng, off)
+        elif k == "t":
+            rx = [r if not isinstance(r, tuple) else r[0] for r in s[2]]
+            rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+            loft(m, [(x + ox, y + oy, z + oz) for x, y, z in s[1]], rx, rz, s[3], rng, None, None, (True, True), 0.02, s[4])
+        elif k == "b":
+            box(m, s[1] + ox, s[2] + oy, s[3] + oz, s[4], s[5], s[6], s[7], rng)
+        else:
+            ell(m, (s[1] + ox, s[2] + oy, s[3] + oz), s[4], s[5], s[6], s[7], rng, rings=5)
+
+
+def shape_polys(s, off=(0.0, 0.0, 0.0)):
+    """Seitenansicht (y/z) einer Form als [(Punkte, Farbe)]."""
+    oy, oz = off[1], off[2]
+    k = s[0]
+    if k == "p":
+        return [([(y + oy, z + oz) for y, z in s[3]], s[4])]
+    if k == "b":
+        y0, y1, z0, z1 = s[2] - s[5] / 2 + oy, s[2] + s[5] / 2 + oy, s[3] - s[6] / 2 + oz, s[3] + s[6] / 2 + oz
+        return [([(y0, z0), (y1, z0), (y1, z1), (y0, z1)], s[7])]
+    if k == "e":
+        return [([(s[2] + oy + math.cos(a) * s[5], s[3] + oz + math.sin(a) * s[6])
+                  for a in [2 * math.pi * i / 14 for i in range(14)]], s[7])]
+    pts = [(y + oy, z + oz) for _x, y, z in s[1]]
+    rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+    left, right = [], []
+    for i, (y, z) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        dy, dz = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dy, dz)
+        if ln < 1e-9:
+            continue
+        ny, nz = -dz / ln * rz[i], dy / ln * rz[i]
+        left.append((y + ny, z + nz))
+        right.append((y - ny, z - nz))
+    if len(left) < 2:
+        return []
+    return [(left + right[::-1], s[3])]
+
+
+_C_DK = (0.08, 0.08, 0.09)
+
+
+def _gs_mk():
+    """Alle Waffenformen. Rückgabe: Name -> {body, barrel (nur Schrotflinte), mag (relativ zur Magazinmitte), iron}."""
+    G = {}
+    P = GUN_PARTS
+
+    # ---------------- Pistole
+    slide, frame, grip, dk = (0.22, 0.22, 0.25), (0.15, 0.15, 0.17), (0.30, 0.20, 0.12), (0.06, 0.06, 0.07)
+    body = [("p", 0, 0.046, [(-0.012, 0.006), (-0.014, 0.050), (-0.005, 0.0575), (0.236, 0.0575), (0.252, 0.049),
+                             (0.254, 0.008), (0.236, 0.0025), (0.0, 0.0025)], slide),
+            ("p", 0, 0.040, [(-0.03, 0.0025), (0.19, 0.0025), (0.19, -0.018), (0.15, -0.021), (0.11, -0.028),
+                             (0.035, -0.028), (-0.03, -0.012)], frame),
+            ("p", 0, 0.042, [(-0.03, -0.003), (0.040, -0.003), (0.038, -0.028), (0.032, -0.135), (-0.034, -0.135),
+                             (-0.038, -0.07)], grip)]
+    body += [("b", 0.0235, 0.095, 0.0375, 0.002, 0.06, 0.022, dk)]
+    body += [("b", 0, 0.012 + 0.0095 * k, 0.030, 0.0475, 0.0028, 0.034, dk) for k in range(5)]
+    body += [("b", 0, 0.0, -0.04 - 0.015 * k, 0.0435, 0.062, 0.0035, (0.18, 0.12, 0.07)) for k in range(5)]
+    body += [("t", [(0, 0.248, 0.0345), (0, 0.264, 0.0345)], [0.0095, 0.0095], (0.10, 0.10, 0.12), 10),
+             ("t", [(0, 0.2636, 0.0345), (0, 0.2641, 0.0345)], [0.0062, 0.0062], (0.01, 0.01, 0.02), 10),
+             ("p", 0, 0.010, [(-0.014, 0.052), (-0.034, 0.062), (-0.036, 0.052), (-0.02, 0.040)], dk),
+             ("p", 0, 0.006, [(0.06, -0.028), (0.068, -0.028), (0.064, -0.05), (0.057, -0.048)], (0.10, 0.10, 0.12))]
+    body += _gs_loop(0, 0.012, [(0.035, -0.028), (0.04, -0.052), (0.075, -0.058), (0.108, -0.044), (0.11, -0.026)], 0.007, frame)
+    body += [("b",) + tuple(t) for t in P["Pistole"][0][3:]]                 # Kimme und Korn
+    G["Pistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.026, 0.046), (0.026, 0.046), (0.026, -0.044), (-0.026, -0.044)], (0.10, 0.10, 0.12)),
+        ("b", 0, 0.0, -0.047, 0.040, 0.062, 0.010, (0.05, 0.05, 0.06)),
+        ("b", 0, 0.0, 0.047, 0.030, 0.040, 0.004, (0.8, 0.6, 0.2))])
+
+    # ---------------- Sturmgewehr
+    up, lo, hg, stk, grp, blk = (0.20, 0.22, 0.20), (0.17, 0.19, 0.17), (0.18, 0.20, 0.18), (0.30, 0.33, 0.22), (0.30, 0.20, 0.12), (0.10, 0.10, 0.10)
+    body = [("p", 0, 0.052, [(-0.03, -0.004), (-0.03, 0.030), (-0.018, 0.0375), (0.285, 0.0375), (0.285, -0.004)], up),
+            ("p", 0, 0.050, [(-0.03, -0.004), (0.285, -0.004), (0.285, -0.030), (0.235, -0.040), (0.125, -0.040),
+                             (0.100, -0.036), (0.04, -0.036), (-0.03, -0.040)], lo),
+            ("p", 0, 0.040, [(0.035, -0.034), (0.092, -0.034), (0.078, -0.150), (0.022, -0.150)], grp),
+            ("t", [(0, -0.03, 0.012), (0, -0.19, 0.012)], [0.0155, 0.0155], (0.15, 0.16, 0.14), 12),
+            ("p", 0, 0.048, [(-0.185, 0.028), (-0.29, 0.034), (-0.294, -0.058), (-0.21, -0.050), (-0.16, -0.020), (-0.16, 0.0)], stk),
+            ("b", 0, -0.293, -0.012, 0.05, 0.008, 0.092, _C_DK),
+            _gs_ty(0, 0.0, [(0.28, 0.0335), (0.535, 0.0335)], hg, 14),
+            _gs_ty(0, 0.0, [(0.28, 0.036), (0.292, 0.036)], _C_DK, 14),
+            ("b", 0, 0.41, 0.0345, 0.02, 0.25, 0.006, (0.12, 0.12, 0.13)),
+            _gs_ty(0, 0.02, [(0.53, 0.0115), (0.62, 0.0105), (0.70, 0.0105)], blk, 10),
+            _gs_ty(0, 0.02, [(0.695, 0.0145), (0.74, 0.0145)], (0.07, 0.07, 0.08), 10),
+            _gs_ty(0, 0.02, [(0.715, 0.0152), (0.722, 0.0152)], (0.02, 0.02, 0.03), 10),
+            ("b", 0.0265, 0.135, 0.018, 0.004, 0.075, 0.026, _C_DK),
+            ("b", 0, -0.02, 0.0415, 0.024, 0.045, 0.008, (0.10, 0.10, 0.11)),
+            ("b", 0.027, 0.155, -0.025, 0.004, 0.015, 0.012, blk),
+            ("b", 0, 0.123, -0.050, 0.006, 0.008, 0.022, _C_DK)]
+    body += [("b", sg * 0.0325, y, 0.0, 0.004, 0.035, 0.028, (0.05, 0.05, 0.06)) for y in (0.34, 0.40, 0.46) for sg in (-1, 1)]
+    body += _gs_loop(0, 0.008, [(0.100, -0.040), (0.108, -0.062), (0.142, -0.062), (0.150, -0.040)], 0.006, lo)
+    G["Sturmgewehr"] = dict(body=body, barrel=[], iron=[("b",) + tuple(t) for t in P["Sturmgewehr"][0][-8:]], mag=[
+        ("p", 0, 0.036, [(-0.040, 0.080), (0.040, 0.080), (0.044, 0.02), (0.062, -0.081), (0.010, -0.083), (-0.030, -0.01)], (0.12, 0.12, 0.12)),
+        ("p", 0, 0.040, [(0.004, -0.078), (0.070, -0.078), (0.064, -0.087), (0.002, -0.088)], _C_DK)])
+
+    # ---------------- Schrotflinte (Kipplauf: "barrel" hängt am Scharnier y = 0.175)
+    wood, stl = (0.40, 0.26, 0.14), (0.25, 0.25, 0.28)
+    body = [("p", 0, 0.058, [(-0.075, 0.040), (-0.06, 0.0425), (0.175, 0.0425), (0.178, 0.0), (0.176, -0.030),
+                             (0.17, -0.0425), (0.0, -0.0425), (-0.075, -0.03)], stl),
+            ("p", 0, 0.050, [(-0.07, 0.022), (-0.20, 0.018), (-0.32, 0.005), (-0.395, -0.010), (-0.398, -0.088),
+                             (-0.33, -0.082), (-0.22, -0.058), (-0.10, -0.040), (-0.07, -0.032)], wood),
+            ("b", 0, -0.399, -0.049, 0.052, 0.010, 0.080, (0.08, 0.08, 0.09)),
+            ("b", 0.0295, 0.08, 0.02, 0.004, 0.09, 0.02, _C_DK),
+            ("p", 0, 0.006, [(0.01, -0.043), (0.018, -0.043), (0.014, -0.066), (0.008, -0.064)], _C_DK)]
+    body += _gs_loop(0, 0.008, [(-0.03, -0.043), (-0.02, -0.068), (0.04, -0.07), (0.07, -0.043)], 0.007, stl)
+    barrel = [("t", [(0, 0.175, 0.03), (0, 0.76, 0.03), (0, 0.80, 0.03)], [0.0205, 0.0205, 0.0215], (0.15, 0.15, 0.18), 14),
+              _gs_ty(0, 0.03, [(0.77, 0.0235), (0.80, 0.0235)], (0.10, 0.10, 0.12), 14),
+              _gs_ty(0, 0.03, [(0.7995, 0.0150), (0.8, 0.0150)], (0.01, 0.01, 0.02), 14),
+              ("b", 0, 0.48, 0.0525, 0.008, 0.62, 0.006, (0.12, 0.12, 0.14)),
+              _gs_ty(0, -0.015, [(0.175, 0.0175), (0.68, 0.0175)], (0.17, 0.17, 0.20), 12),
+              _gs_ty(0, -0.015, [(0.675, 0.0195), (0.70, 0.0195)], (0.10, 0.10, 0.12), 12),
+              _gs_ty(0, -0.04, [(0.25, 0.020, 0.018), (0.262, 0.030, 0.026), (0.45, 0.030, 0.026)], wood, 12)]
+    barrel += [_gs_ty(0, -0.04, [(y, 0.0312, 0.0272), (y + 0.008, 0.0312, 0.0272)], (0.22, 0.13, 0.07), 12)
+               for y in (0.29, 0.32, 0.35, 0.38, 0.41)]
+    shells = []
+    for sx_, sz_ in ((-0.013, 0.0), (0.013, 0.0), (0.0, 0.02)):
+        shells.append(("t", [(sx_, -0.05, sz_), (sx_, 0.045, sz_)], [0.0105, 0.0105], (0.75, 0.15, 0.10), 10))
+        shells.append(("t", [(sx_, -0.06, sz_), (sx_, -0.045, sz_)], [0.0112, 0.0112], (0.8, 0.65, 0.25), 10))
+    G["Schrotflinte"] = dict(body=body, barrel=barrel, iron=[], mag=shells)
+
+    # ---------------- Scharfschütze
+    gry = (0.30, 0.30, 0.28)
+    body = [("t", [(0, -0.13, 0.005), (0, 0.30, 0.005)], [0.029, 0.029], (0.20, 0.25, 0.22), 14),
+            _gs_ty(0, 0.005, [(0.29, 0.0315), (0.31, 0.0315)], _C_DK, 14),
+            ("b", 0.0285, 0.06, 0.012, 0.004, 0.10, 0.022, _C_DK),
+            ("b", 0.036, -0.04, 0.012, 0.024, 0.012, 0.012, (0.35, 0.35, 0.38)),
+            ("e", 0.052, -0.04, 0.006, 0.012, 0.012, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.15, 0.0325, 0.022, 0.30, 0.005, (0.12, 0.12, 0.14)),
+            ("p", 0, 0.046, [(-0.475, 0.032), (-0.40, 0.034), (-0.30, 0.018), (-0.22, 0.004), (-0.13, 0.0), (-0.13, -0.03),
+                             (-0.10, -0.035), (-0.065, -0.125), (-0.115, -0.128), (-0.15, -0.075), (-0.22, -0.075),
+                             (-0.30, -0.072), (-0.475, -0.070)], gry),
+            ("b", 0, -0.478, -0.019, 0.048, 0.012, 0.102, _C_DK),
+            ("p", 0, 0.040, [(-0.02, -0.02), (0.0, -0.040), (0.38, -0.040), (0.42, -0.034), (0.42, 0.006), (0.30, 0.006),
+                             (0.30, -0.018)], (0.28, 0.27, 0.24)),
+            ("t", [(0, 0.30, 0.02), (0, 0.38, 0.02), (0, 0.55, 0.02), (0, 0.88, 0.02), (0, 0.905, 0.02)],
+             [0.016, 0.015, 0.0135, 0.0125, 0.0125], (0.10, 0.10, 0.11), 12),
+            ("t", [(0, 0.895, 0.02), (0, 0.905, 0.02), (0, 0.95, 0.02)], [0.0125, 0.0205, 0.0205], (0.12, 0.12, 0.13), 12),
+            _gs_ty(0, 0.02, [(0.915, 0.0212), (0.922, 0.0212)], (0.02, 0.02, 0.03), 12),
+            _gs_ty(0, 0.02, [(0.933, 0.0212), (0.940, 0.0212)], (0.02, 0.02, 0.03), 12),
+            ("t", [(0.02, 0.36, -0.04), (0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("t", [(-0.02, 0.36, -0.04), (-0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("p", 0, 0.012, [(-0.115, -0.035), (-0.05, -0.035), (-0.05, -0.052), (-0.115, -0.052)], _C_DK)]
+    G["Scharfschütze"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.032, [(-0.036, 0.04), (0.036, 0.04), (0.038, -0.04), (-0.038, -0.04)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.043, 0.036, 0.084, 0.008, _C_DK)])
+
+    # ---------------- Revolver
+    stl, wd = (0.30, 0.30, 0.33), (0.35, 0.22, 0.12)
+    body = [("p", 0, 0.040, [(-0.045, 0.052), (-0.030, 0.062), (0.125, 0.062), (0.128, 0.012), (0.125, -0.028),
+                             (0.02, -0.032), (-0.035, -0.012)], stl),
+            _gs_ty(0, 0.0, [(0.012, 0.0405), (0.11, 0.0405)], (0.25, 0.25, 0.28), 16),
+            ("t", [(0, 0.11, 0.035), (0, 0.30, 0.035)], [(0.0215, 0.0255), (0.0165, 0.0215)], stl, 8),
+            _gs_ty(0, 0.035, [(0.285, 0.019, 0.023), (0.30, 0.019, 0.023)], _C_DK, 8),
+            ("b", 0, 0.205, 0.0615, 0.012, 0.18, 0.004, _C_DK),
+            ("t", [(0.0, 0.12, 0.0), (0, 0.27, 0.0)], [0.0075, 0.0075], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.255, 0.013), (0.285, 0.013)], stl, 8),
+            ("p", 0, 0.040, [(0.018, -0.004), (-0.040, 0.0), (-0.056, -0.03), (-0.064, -0.10), (-0.080, -0.138),
+                             (-0.026, -0.140), (0.0, -0.10), (0.012, -0.04)], wd),
+            ("p", 0, 0.010, [(-0.032, 0.058), (-0.058, 0.074), (-0.066, 0.068), (-0.040, 0.046)], _C_DK),
+            ("b", 0, 0.06, -0.04, 0.006, 0.008, 0.022, _C_DK)]
+    for k in range(6):
+        a = math.pi / 6 + k * math.pi / 3
+        body.append(("t", [(0.039 * math.cos(a), 0.03, 0.039 * math.sin(a)), (0.039 * math.cos(a), 0.095, 0.039 * math.sin(a))],
+                     [0.0065, 0.0065], (0.08, 0.08, 0.09), 6))
+    body += _gs_loop(0, 0.012, [(0.02, -0.032), (0.03, -0.055), (0.09, -0.058), (0.11, -0.03)], 0.007, stl)
+    body += [("b",) + tuple(t) for t in P["Revolver"][0][3:]]
+    bul = [("t", [(0.017 * math.cos(k * math.pi / 3), -0.027, 0.017 * math.sin(k * math.pi / 3)),
+                  (0.017 * math.cos(k * math.pi / 3), 0.027, 0.017 * math.sin(k * math.pi / 3))],
+            [0.0058, 0.0058], (0.75, 0.6, 0.25), 8) for k in range(6)]
+    bul.append(_gs_ty(0, 0.0, [(-0.03, 0.026), (-0.024, 0.026)], _C_DK, 10))
+    G["Revolver"] = dict(body=body, barrel=[], iron=[], mag=bul)
+
+    # ---------------- Maschinenpistole
+    smg, gp = (0.18, 0.18, 0.20), (0.25, 0.18, 0.12)
+    body = [("p", 0, 0.050, [(-0.032, 0.030), (-0.022, 0.036), (0.262, 0.036), (0.272, 0.028), (0.272, -0.030),
+                             (0.22, -0.036), (0.0, -0.036), (-0.032, -0.030)], smg),
+            ("p", 0, 0.040, [(0.012, -0.034), (-0.052, -0.034), (-0.060, -0.108), (-0.012, -0.110), (0.004, -0.060)], gp),
+            _gs_ty(0, 0.01, [(0.26, 0.0235), (0.355, 0.0235)], (0.13, 0.13, 0.15), 12),
+            ("t", [(0, 0.35, 0.01), (0, 0.40, 0.01)], [0.0125, 0.0125], (0.08, 0.08, 0.09), 10),
+            _gs_ty(0, 0.01, [(0.385, 0.0150), (0.40, 0.0150)], _C_DK, 10),
+            ("b", 0.0255, 0.17, 0.012, 0.004, 0.06, 0.02, _C_DK),
+            ("b", -0.03, 0.19, 0.03, 0.012, 0.035, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.035, -0.046, 0.006, 0.008, 0.022, _C_DK),
+            ("b", 0, -0.203, -0.015, 0.044, 0.008, 0.07, _C_DK)]
+    body += [("b", sg * 0.0235, y, 0.012, 0.004, 0.012, 0.014, _C_DK) for y in (0.28, 0.30, 0.32, 0.34) for sg in (-1, 1)]
+    body += _gs_loop(0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(0, 0.01, [(0.015, -0.036), (0.022, -0.060), (0.05, -0.062), (0.06, -0.036)], 0.007, smg)
+    body += [("b",) + tuple(t) for t in P["Maschinenpistole"][0][4:]]
+    G["Maschinenpistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.030, 0.070), (0.030, 0.070), (0.030, -0.070), (-0.028, -0.070)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.074, 0.040, 0.064, 0.008, _C_DK)]
+        + [("b", 0, 0, z, 0.0365, 0.062, 0.004, (0.06, 0.06, 0.07)) for z in (0.04, 0.01, -0.02, -0.05)])
+
+    # ---------------- Raketenwerfer
+    olv, dk2 = (0.25, 0.30, 0.22), (0.15, 0.15, 0.15)
+    body = [_gs_ty(0, 0.02, [(-0.225, 0.07), (0.725, 0.07)], olv, 22),
+            _gs_ty(0, 0.02, [(-0.26, 0.088), (-0.20, 0.085), (-0.14, 0.072)], dk2, 22),
+            _gs_ty(0, 0.02, [(-0.2625, 0.06), (-0.2585, 0.06)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.70, 0.072), (0.745, 0.085), (0.84, 0.092)], dk2, 22),
+            _gs_ty(0, 0.02, [(0.8395, 0.07), (0.842, 0.07)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.62, 0.0715), (0.64, 0.0715)], (0.85, 0.7, 0.1), 22),
+            ("t", [(0, 0.25, 0.115), (0, 0.45, 0.115)], [0.018, 0.018], (0.10, 0.10, 0.10), 12),
+            ("t", [(0, 0.44, 0.115), (0, 0.465, 0.115)], [0.018, 0.026], _C_DK, 12),
+            ("t", [(0, 0.23, 0.115), (0, 0.25, 0.115)], [0.026, 0.018], _C_DK, 12),
+            ("b", 0, 0.30, 0.096, 0.02, 0.03, 0.04, _C_DK), ("b", 0, 0.40, 0.096, 0.02, 0.03, 0.04, _C_DK),
+            ("p", 0, 0.040, [(0.06, -0.045), (0.12, -0.045), (0.105, -0.17), (0.05, -0.17)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.036, [(0.34, -0.05), (0.38, -0.05), (0.375, -0.14), (0.335, -0.14)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.05, [(-0.14, -0.05), (-0.05, -0.05), (-0.05, -0.085), (-0.14, -0.085)], _C_DK),
+            ("b", 0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15)),
+            ("b", -0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15))]
+    body += [_gs_ty(0, 0.02, [(y, 0.0725), (y + 0.04, 0.0725)], (0.18, 0.2, 0.16), 22) for y in (0.0, 0.35)]
+    body += _gs_loop(0, 0.008, [(0.12, -0.045), (0.14, -0.07), (0.19, -0.07), (0.19, -0.045)], 0.007, (0.12, 0.12, 0.12))
+    G["Raketenwerfer"] = dict(body=body, barrel=[], iron=[], mag=[])
+
+    # ---------------- Minigun
+    stl2 = (0.35, 0.35, 0.38)
+    body = [_gs_ty(0, 0.0, [(-0.20, 0.05), (-0.15, 0.07), (0.0, 0.075), (0.12, 0.068)], (0.20, 0.20, 0.22), 18),
+            _gs_ty(0, 0.0, [(0.10, 0.07), (0.14, 0.07)], (0.15, 0.15, 0.17), 18),
+            _gs_ty(0, 0.0, [(0.12, 0.018), (0.80, 0.018)], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.78, 0.064), (0.81, 0.064)], (0.22, 0.22, 0.25), 16),
+            ("p", 0, 0.045, [(-0.03, -0.065), (0.04, -0.065), (0.035, -0.19), (-0.025, -0.19)], (0.12, 0.12, 0.12)),
+            ("b", 0, 0.045, -0.12, 0.012, 0.014, 0.03, _C_DK)]
+    for k in range(6):
+        a = k * math.pi / 3
+        body.append(("t", [(0.048 * math.cos(a), 0.14, 0.048 * math.sin(a)), (0.048 * math.cos(a), 0.82, 0.048 * math.sin(a))],
+                     [0.0125, 0.0125], stl2, 8))
+    body += [_gs_ty(0, 0.0, [(y, 0.066), (y + 0.03, 0.066)], (0.22, 0.22, 0.25), 16) for y in (0.28, 0.58)]
+    body += _gs_loop(0, 0.012, [(-0.07, 0.07), (-0.06, 0.12), (0.05, 0.12), (0.06, 0.07)], 0.014, (0.2, 0.2, 0.22))
+    G["Minigun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.09, [(-0.06, 0.045), (0.06, 0.045), (0.06, -0.045), (-0.06, -0.045)], (0.25, 0.32, 0.18)),
+        ("b", 0, 0.0, 0.049, 0.04, 0.05, 0.008, (0.15, 0.2, 0.1)),
+        ("t", [(0, 0.0, 0.045), (0, 0.02, 0.115)], [0.012, 0.012], (0.8, 0.65, 0.25), 8)])
+
+    # ---------------- Railgun
+    rb, rc = (0.15, 0.20, 0.30), (0.20, 0.70, 0.90)
+    body = [("t", [(0, -0.12, 0.0), (0, 0.78, 0.0)], [0.03, 0.03], (0.10, 0.13, 0.2), 12),
+            ("p", 0, 0.070, [(-0.25, 0.04), (-0.14, 0.042), (0.05, 0.045), (0.05, -0.075), (-0.12, -0.075), (-0.25, -0.04)], (0.10, 0.12, 0.18)),
+            ("b", 0, -0.252, -0.0, 0.062, 0.01, 0.1, _C_DK),
+            ("p", 0, 0.026, [(-0.05, 0.045), (0.0, 0.07), (0.60, 0.07), (0.66, 0.05), (0.66, 0.045)], rc),
+            ("t", [(0, 0.7, 0.0), (0, 0.74, 0.0), (0, 0.78, 0.0)], [0.04, 0.045, 0.032], (0.10, 0.12, 0.18), 14),
+            ("t", [(0, 0.779, 0.0), (0, 0.781, 0.0)], [0.02, 0.02], (0.5, 0.95, 1.0), 12),
+            ("t", [(0.05, -0.1, 0.0), (0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("t", [(-0.05, -0.1, 0.0), (-0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("p", 0, 0.040, [(0.0, -0.05), (0.09, -0.05), (0.08, -0.165), (0.02, -0.165)], (0.10, 0.10, 0.10))]
+    for sg in (-1, 1):
+        body.append(("b", sg * 0.036, 0.35, 0.0, 0.014, 0.85, 0.03, (0.18, 0.24, 0.34)))
+        body.append(("b", sg * 0.029, 0.36, 0.0, 0.004, 0.78, 0.014, (0.2, 0.8, 1.0)))
+    for k in range(7):
+        y = 0.05 + 0.1 * k
+        body.append(_gs_ty(0, 0.0, [(y, 0.052), (y + 0.04, 0.052)], (0.12, 0.16, 0.26), 14))
+        body.append(_gs_ty(0, 0.0, [(y + 0.04, 0.054), (y + 0.048, 0.054)], (0.2, 0.8, 1.0), 14))
+    body += _gs_loop(0, 0.008, [(0.09, -0.05), (0.1, -0.08), (0.15, -0.08), (0.15, -0.05)], 0.007, (0.10, 0.10, 0.10))
+    G["Railgun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("t", [(0, 0, -0.04), (0, 0, 0.04)], [0.032, 0.032], rc, 12),
+        ("t", [(0, 0, -0.045), (0, 0, -0.038)], [0.036, 0.036], _C_DK, 12),
+        ("t", [(0, 0, 0.038), (0, 0, 0.045)], [0.036, 0.036], _C_DK, 12)])
+    return G
+
+
+GUN_SHAPES = _gs_mk()
+_POLY_CACHE = {}
+
+
+def weapon_polys(wname, iron=True):
+    """Seitenansicht (y/z) einer ganzen Waffe: [(Punkte, Farbe)] in Zeichenreihenfolge."""
+    key = (wname, iron)
+    if key in _POLY_CACHE:
+        return _POLY_CACHE[key]
+    sh = GUN_SHAPES[wname]
+    out = []
+    for s in sh["body"] + sh["barrel"]:
+        out += shape_polys(s)
+    mp = MAG_PARTS.get(wname)
+    if mp is not None:
+        for s in sh["mag"]:
+            out += shape_polys(s, (mp[0], mp[1], mp[2]))
+    if iron:
+        for s in sh["iron"]:
+            out += shape_polys(s)
+    _POLY_CACHE[key] = out
+    return out
+
+
+def weapon_frame(wname):
+    """Umgebendes Rechteck (y0, y1, z0, z1) der Seitenansicht einer Waffe (Bezug für Symbole und Ankerpunkte)."""
+    pts = [p for poly, _c in weapon_polys(wname) for p in poly]
+    return min(p[0] for p in pts), max(p[0] for p in pts), min(p[1] for p in pts), max(p[1] for p in pts)
+
+
+def _offset_poly(pts, d):
+    """Polygon um d nach aussen versetzt (Gehrung, begrenzt)."""
+    n = len(pts)
+    sg = 1.0 if _poly_area(pts) > 0 else -1.0
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e1, e2 = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+        l1, l2 = math.hypot(*e1) or 1e-9, math.hypot(*e2) or 1e-9
+        n1, n2 = (e1[1] / l1 * sg, -e1[0] / l1 * sg), (e2[1] / l2 * sg, -e2[0] / l2 * sg)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]
+        bl = math.hypot(bx, by)
+        if bl < 1e-6:
+            bx, by, bl = n1[0], n1[1], 1.0
+        k = d / max(0.5, (bx * n1[0] + by * n1[1]) / bl)
+        out.append((b[0] + bx / bl * k, b[1] + by / bl * k))
+    return out
+
+
+def polys_icon(polys, width, height, name, bounds=None, pad=0.03, edge=0.0045):
+    """Flaches Symbol aus Polygonen [(Punkte (a, b), Farbe)] in der x/z-Ebene, Mitte im Ursprung. Jedes Teil bekommt
+    einen dunklen Rand und einen Farbverlauf (oben heller); gezeichnet wird in der Reihenfolge der Liste."""
+    allp = [p for pts, _c in polys for p in pts]
+    a0, a1, b0, b1 = bounds if bounds else (min(p[0] for p in allp), max(p[0] for p in allp),
+                                            min(p[1] for p in allp), max(p[1] for p in allp))
+    k = min(width / (a1 - a0 + 2 * pad), height / (b1 - b0 + 2 * pad))
+    ma, mb = (a0 + a1) / 2, (b0 + b1) / 2
+    m = Mesh(lit=False)
+    o = edge / k
+
+    def P(p):
+        return ((p[0] - ma) * k, 0.0, (p[1] - mb) * k)
+
+    for pts, col in polys:
+        if len(pts) < 3 or abs(_poly_area(pts)) < 1e-9:
+            continue
+        pts = list(pts) if _poly_area(pts) > 0 else list(pts)[::-1]
+        outl = _offset_poly(pts, o)
+        for a, b, c in _earclip(outl):
+            m.tri(P(outl[a]), P(outl[b]), P(outl[c]), (0.02, 0.02, 0.03))
+        lo, hi = min(p[1] for p in pts), max(p[1] for p in pts)
+        base = tuple(min(1.0, v * 1.5 + 0.28) for v in col)
+
+        def shade(p):
+            f = 0.80 + 0.34 * (p[1] - lo) / max(hi - lo, 1e-6)
+            return tuple(min(1.0, v * f) for v in base)
+
+        for a, b, c in _earclip(pts):
+            m.tri(P(pts[a]), P(pts[b]), P(pts[c]), [shade(pts[a]), shade(pts[b]), shade(pts[c])])
+    nd = NodePath(m.node(name))
+    nd.setTwoSided(True)
+    return nd
+
+
+def rect_polys(prts, off=(0.0, 0.0)):
+    """Quader (cx,cy,cz,sx,sy,sz,Farbe) als Seitenansicht-Polygone."""
+    return [([(cy - sy / 2 + off[0], cz - sz / 2 + off[1]), (cy + sy / 2 + off[0], cz - sz / 2 + off[1]),
+              (cy + sy / 2 + off[0], cz + sz / 2 + off[1]), (cy - sy / 2 + off[0], cz + sz / 2 + off[1])], col)
+            for _cx, cy, cz, _sx, sy, sz, col in prts]
+
+
 # Rennhaltung (BF3-artig): (dx, dy, dz, heading, pitch, roll). Pistolen: Lauf nach oben vor der Brust;
 # grosse Waffen: quer vor dem Körper.
 SPRINT_POSE = {
@@ -8339,38 +9265,17 @@ def loadout_extra(wi, scope, att):
 
 def weapon_icon(wi, width=0.42, height=0.2, parts=None, name=None, extra=None, scope=None):
     """Seitenansicht einer Waffe als flaches Bild (x/z-Ebene, Mitte im Ursprung), gezeichnet
-    aus denselben Quadern wie das 3D-Modell: erst dunkler Rand, dann die Teile in Farbe.
+    aus denselben Formen wie das 3D-Modell: je Teil dunkler Rand und Farbverlauf.
     parts/name: eigene Quader (Nahkampfwaffen); extra: zusätzliche Quader (Visier, Aufsätze);
     scope: Visier statt der Kimme und Korn des Sturmgewehrs."""
-    if parts is None:
-        parts, _muzzle = GUN_PARTS[WEAPONS[wi].name]
-    base = list(parts)
-    if wi is not None and scope is not None and scope != SC_IRON and WEAPONS[wi].name == "Sturmgewehr":
-        base = base[:-8]
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col)
-             for _cx, cy, cz, _sx, sy, sz, col in parts]
-    y0, y1 = min(r[0] for r in rects), max(r[1] for r in rects)
-    z0, z1 = min(r[2] for r in rects), max(r[3] for r in rects)
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col)
-             for _cx, cy, cz, _sx, sy, sz, col in base + list(extra or [])]
-    pad = 0.03
-    k = min(width / (y1 - y0 + 2 * pad), height / (z1 - z0 + 2 * pad))
-    my, mz = (y0 + y1) / 2, (z0 + z1) / 2
-    m = Mesh(lit=False)
-
-    def quad(a0, a1, b0, b1, col):
-        p = [((a - my) * k, 0.0, (b - mz) * k) for a, b in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))]
-        m.tri(p[0], p[1], p[2], col)
-        m.tri(p[0], p[2], p[3], col)
-
-    o = 0.014
-    for a0, a1, b0, b1, _c in rects:
-        quad(a0 - o, a1 + o, b0 - o, b1 + o, (0.02, 0.02, 0.03))
-    for a0, a1, b0, b1, c in rects:
-        quad(a0, a1, b0, b1, tuple(min(1.0, v * 1.5 + 0.28) for v in c))
-    np = NodePath(m.node(name or ("icon_" + WEAPONS[wi].name)))
-    np.setTwoSided(True)
-    return np
+    if parts is not None:
+        return polys_icon(rect_polys(list(parts) + list(extra or [])), width, height, name or "icon_melee")
+    wname = WEAPONS[wi].name
+    iron = not (scope is not None and scope != SC_IRON and wname == "Sturmgewehr")
+    polys = list(weapon_polys(wname, iron))
+    if extra:
+        polys += rect_polys(extra)
+    return polys_icon(polys, width, height, name or ("icon_" + wname), bounds=weapon_frame(wname))
 
 
 def gadget_icon(kind, width=0.42, height=0.2):
@@ -9197,9 +10102,11 @@ def att_icon(wi, si, v, width=0.26, height=0.08):
     mp = MAG_PARTS.get(w.name)
     if si == 1 and mp is not None:
         prts = [(cx, cy + mp[1], cz + mp[2], sx, sy, sz, c) for cx, cy, cz, sx, sy, sz, c in prts]
-        prts.append(tuple(mp))                       # das Magazin selbst dazu
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2, col) for _cx, cy, cz, _sx, sy, sz, col in prts]
-    return parts_icon(rects, width, height, "atticon%d_%d_%d" % (wi, si, v))
+        polys = []                                   # das Magazin selbst dazu, der Aufsatz darüber
+        for sh_ in GUN_SHAPES[w.name]["mag"]:
+            polys += shape_polys(sh_, (mp[0], mp[1], mp[2]))
+        return polys_icon(polys + rect_polys(prts), width, height, "atticon%d_%d_%d" % (wi, si, v), pad=0.02, edge=0.0035)
+    return polys_icon(rect_polys(prts), width, height, "atticon%d_%d_%d" % (wi, si, v), pad=0.02, edge=0.0035)
 
 
 def scope_icon(sc, width=0.3, height=0.14):
@@ -9401,10 +10308,8 @@ def tip_attachment(si, v):
 def weapon_anchors(wi, width=0.42, height=0.2):
     """Ankerpunkte (x, z) im Symbol einer Waffe (wie weapon_icon): Visier, Lauf (Mündung), Magazin."""
     w = WEAPONS[wi]
-    parts, muzzle = GUN_PARTS[w.name]
-    rects = [(cy - sy / 2, cy + sy / 2, cz - sz / 2, cz + sz / 2) for _cx, cy, cz, _sx, sy, sz, _c in parts]
-    y0, y1 = min(r[0] for r in rects), max(r[1] for r in rects)
-    z0, z1 = min(r[2] for r in rects), max(r[3] for r in rects)
+    muzzle = GUN_PARTS[w.name][1]
+    y0, y1, z0, z1 = weapon_frame(w.name)
     pad = 0.03
     k = min(width / (y1 - y0 + 2 * pad), height / (z1 - z0 + 2 * pad))
     my, mz = (y0 + y1) / 2, (z0 + z1) / 2
@@ -10221,6 +11126,197 @@ class SetupPage:
 
 
 
+class CharPreview:
+    """3D-Vorschau des Charakters im Menü: eigene Kamera und eigener Anzeigebereich (über dem 2D-Menü).
+    Die Figur steht still und lässt sich mit gedrückter linker Maustaste drehen; sie wird bei jeder Änderung neu aufgebaut."""
+
+    def __init__(self, game, x0, x1, z0, z1):
+        self.g = game
+        self.box = (x0, x1, z0, z1)
+        self.root = NodePath("char_prev")
+        self.lens = PerspectiveLens()
+        self.lens.setNearFar(0.3, 30.0)
+        cam = Camera("char_cam")
+        cam.setLens(self.lens)
+        self.cam = self.root.attachNewNode(cam)
+        cam.setScene(self.root)
+        self.cam.setPos(0, 3.5, 0.98)                # Kamera vor der Figur (sie blickt nach +y)
+        self.cam.lookAt(0, 0, 0.93)
+        self.dr = game.win.makeDisplayRegion()
+        self.dr.setSort(30)                       # über dem 2D-Menü
+        self.dr.setClearDepthActive(True)
+        self.dr.setCamera(self.cam)
+        self.pivot = self.root.attachNewNode("pivot")
+        m = Mesh(lit=False)                       # Podest
+        n = 28
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            c = (0.17, 0.24, 0.34) if i % 2 else (0.14, 0.20, 0.30)
+            m.tri((0, 0, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.02),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), c, ref=(0, 0, -1.0))
+            m.tri((math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.08),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), (0.10, 0.14, 0.2), ref=(0, 0, 0.5))
+            m.tri((math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.02), (math.cos(a0) * 0.62, math.sin(a0) * 0.62, -0.08),
+                  (math.cos(a1) * 0.62, math.sin(a1) * 0.62, -0.08), (0.10, 0.14, 0.2), ref=(0, 0, 0.5))
+        self.root.attachNewNode(m.node("podest")).setTwoSided(True)
+        self.view = None
+        self.key = None
+        self.ang = 20.0                              # leicht seitlich: Gewehr und Rucksack sind sichtbar
+        self.drag = False
+        self.lastx = 0.0
+        self.pivot.setH(self.ang)
+        self.place()
+
+    def place(self):
+        """Anzeigebereich passend zur Fenstergrösse (die Menü-Koordinaten laufen bei breiten Fenstern über +-Seitenverhältnis)."""
+        a = max(0.2, float(self.g.getAspectRatio()))
+        xr, zr = max(1.0, a), max(1.0, 1.0 / a)
+        x0, x1, z0, z1 = self.box
+        l, r = (x0 + xr) / (2 * xr), (x1 + xr) / (2 * xr)
+        b, t = (z0 + zr) / (2 * zr), (z1 + zr) / (2 * zr)
+        self.dr.setDimensions(l, r, b, t)
+        asp = (r - l) / max(1e-4, (t - b)) * a
+        vf = 36.0
+        hf = math.degrees(2 * math.atan(math.tan(math.radians(vf / 2)) * asp))
+        self.lens.setFov(hf, vf)
+        self.asp = a
+
+    def set_look(self, code):
+        key = (code, self.g.my_id if getattr(self.g, "my_id", None) is not None else 0)
+        if key == self.key:
+            return
+        self.key = key
+        if self.view is not None:
+            self.view.root.removeNode()
+        p = SimpleNamespace(pid=key[1], look=code, x=0.0, y=0.0, z=0.0, heading=0.0, heli=-1, hp=100.0, crouch=0.0,
+                            moving=False, lean=0.0, cur=[i for i, w_ in enumerate(WEAPONS) if w_.name == "Sturmgewehr"][0], gear={}, shield_hp=0.0, jet_on=False, stun_t=0.0, melee_out=False, melee=START_MELEE)
+        self.view = PlayerView(p)
+        self.view.root.reparentTo(self.pivot)
+        self.fake = p
+
+    def tick(self, dt):
+        if abs(self.asp - float(self.g.getAspectRatio())) > 1e-3:
+            self.place()
+        down, m = False, self.g.mouse_2d()
+        try:
+            down = bool(self.g.mouseWatcherNode.is_button_down(MouseButton.one()))
+        except Exception:
+            pass
+        x0, x1, z0, z1 = self.box
+        if down and m is not None:
+            if not self.drag and x0 <= m[0] <= x1 and z0 <= m[1] <= z1:
+                self.drag, self.lastx = True, m[0]               # Ziehen beginnt nur im Vorschaufeld
+            elif self.drag:
+                self.ang = (self.ang + (m[0] - self.lastx) * 260.0) % 360.0
+                self.lastx = m[0]
+                self.pivot.setH(self.ang)
+        if not down:
+            self.drag = False
+        if self.view is not None:
+            self.view.update(self.fake, dt)
+
+    def destroy(self):
+        try:
+            self.g.win.removeDisplayRegion(self.dr)
+        except Exception:
+            pass
+        self.root.removeNode()
+
+
+class CharPage(SetupPage):
+    """Hauptmenü 'Charakter personalisieren': links die sich drehende Figur, rechts je Eigenschaft ein Auswahlfeld
+    mit Pfeilen. Das Aussehen wird gespeichert, ist im Spiel für dich sichtbar (Hände, Ärmel) und wird an alle
+    Mitspieler geschickt."""
+    COLS = ((-0.17, 0.47), (0.53, 1.17))
+    PER_COL = 7
+
+    def __init__(self, game):
+        self.g = game
+        self.hover = None
+        self.key = None
+        self.nodes = {}
+        self.txts = set()
+        self.prev = CharPreview(game, -1.17, -0.27, -0.80, 0.72)
+        self.layout()
+        self.update(True)
+
+    def destroy(self):
+        self.prev.destroy()
+
+    def tick(self, dt):
+        self.prev.tick(dt)
+
+    def vals(self, k):
+        return LOOK_OPTS[k][2]
+
+    def cur(self, k):
+        return int(self.g.look_code[k])
+
+    def style(self, i):
+        hov = self.hover
+        tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
+        if tag in ("lb", "rb"):
+            return self.BTN_H if hov == ("L" if tag == "lb" else "R") + num else self.BTN
+        if tag == "vb":
+            return (0.20, 0.30, 0.45, 0.95) if hov == "V" + num else (0.11, 0.18, 0.28, 0.92)
+        if tag in ("lt", "rt"):
+            return Hot.ON if hov == ("L" if tag == "lt" else "R") + num else Hot.BASE
+        if tag == "vt":
+            return self.YELLOW if hov == "V" + num else self.WHITE
+        if i.startswith(("b_", "t_")):
+            h = hov == "btn_" + i[2:]
+            return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
+        return self.WHITE
+
+    def layout(self):
+        g = self.g
+        self.text("title", "Charakter personalisieren", 0, 0.84, 0.075, (1.0, 0.78, 0.3, 1.0))
+        self.rect(None, -1.20, -0.24, -0.83, 0.75, (0.05, 0.08, 0.12, 0.92))               # Hintergrund der Vorschau
+        self.rect(None, -1.20, -0.24, 0.744, 0.75, (1.0, 0.62, 0.14, 1.0))
+        self.text(None, "Mit gedrückter Maustaste drehen", -0.72, -0.80, 0.034, self.GREY)
+        for k, (key, label, vals) in enumerate(LOOK_OPTS):
+            c, r = divmod(k, self.PER_COL)
+            x0, x1 = self.COLS[c]
+            zl = 0.64 - 0.145 * r
+            z1, z0 = zl - 0.018, zl - 0.092
+            self.text(None, label.upper(), x0, zl, 0.032, self.GREY, "l")
+            self.rect(f"lb{k}", x0, x0 + 0.09, z0, z1)
+            self.rect(f"rb{k}", x1 - 0.09, x1, z0, z1)
+            self.rect(f"vb{k}", x0 + 0.1, x1 - 0.1, z0, z1)
+            self.text(f"lt{k}", "<", x0 + 0.045, z0 + 0.018, 0.058)
+            self.text(f"rt{k}", ">", x1 - 0.045, z0 + 0.018, 0.058)
+            self.text(f"vt{k}", vals[self.cur(k)], (x0 + x1) / 2, z0 + 0.02, 0.048)
+            self.hit(f"L{k}", x0, x0 + 0.09, z0, z1, lambda k=k: g.look_step(k, -1))
+            self.hit(f"R{k}", x1 - 0.09, x1, z0, z1, lambda k=k: g.look_step(k, 1))
+            self.hit(f"V{k}", x0 + 0.1, x1 - 0.1, z0, z1, lambda k=k: g.look_step(k, 1))
+        a, b = self.COLS[0][0], self.COLS[1][1]
+        mid = (a + b) / 2
+        self.button("rand", a, mid - 0.02, -0.455, -0.37, "Zufällig", 0.05, g.look_randomize)
+        self.button("reset", mid + 0.02, b, -0.455, -0.37, "Zurücksetzen", 0.05, g.look_reset)
+        self.button("done", a, b, -0.575, -0.49, "Fertig   (Esc)", 0.052, g.on_escape)
+        self.text(None, "Dein Aussehen wird gespeichert und im Spiel allen Mitspielern angezeigt", mid, -0.70, 0.03, self.GREY)
+
+    def update(self, force=False):
+        key = (self.g.look_code, self.hover)
+        if force or key != self.key:
+            self.key = key
+            self.sync()
+            self.prev.set_look(self.g.look_code)
+
+    def sync(self):
+        for i, nd in self.nodes.items():
+            if i == "title":
+                continue
+            if i.startswith("vt"):
+                k = int(i[2:])
+                nd.setText(self.vals(k)[self.cur(k)])
+            col = self.style(i)
+            if i in self.txts:
+                nd.setFg(col)
+            else:
+                nd.setColor(*col)
+
+
 class MorePage(SetupPage):
     """Weitere Einstellungen einer Runde: Monsterdichte (5 Stufen), Tomahawk an/aus und Schieberegler für die Zahlen."""
     SLIDERS = (("cd", "TOMAHAWK-ABKLINGZEIT", 0, 600, 10, (0, 120, 240, 360, 480, 600), strike_cd_label, 0.14),
@@ -10493,8 +11589,8 @@ class Connector(threading.Thread):
 class JoinAttempt:
     """Verbinden + 'hello' senden + auf 'welcome' des Hosts warten."""
 
-    def __init__(self, host, port, name):
-        self.host, self.name = host, name
+    def __init__(self, host, port, name, look=""):
+        self.host, self.name, self.look = host, name, look
         self.thread = Connector(host, port)
         self.conn = None
         self.state = "connecting"      # connecting | waiting | ready | failed
@@ -10516,7 +11612,7 @@ class JoinAttempt:
                 self.state, self.msg = "failed", "Verbindung fehlgeschlagen: " + self.thread.error
             else:
                 self.conn = self.thread.conn
-                self.conn.send({"t": "hello", "v": NET_VERSION, "name": self.name})
+                self.conn.send({"t": "hello", "v": NET_VERSION, "name": self.name, "look": self.look})
                 self.state, self.t0 = "waiting", time.time()
         if self.state in ("waiting", "ready"):
             self.conn.flush()
@@ -10732,6 +11828,8 @@ class HostSession:
             name = str(m.get("name") or f"Spieler{pid}")[:16]
             x, y = w.first_spawn(pid)
             w.players[pid] = Player(x, y, w, pid, name)
+            lk = m.get("look")
+            w.players[pid].look = lk if look_valid(lk) else ""
             c.pid = pid
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
@@ -10874,7 +11972,7 @@ class HostSession:
                         r1(p.protect), r2(p.lean), r2(p.crouch), r1(p.stun_t),
                         BUFF_KINDS.index(p.buff) if p.buff in BUFF_KINDS else -1, r1(p.buff_t),
                         int(p.max_hp), gear_list(p), r1(p.shield_hp), 1 if p.jet_on else 0,
-                        p.melee, 1 if p.melee_out else 0]
+                        p.melee, 1 if p.melee_out else 0, p.look]
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
@@ -11055,6 +12153,7 @@ class ClientSession:
             jet = bool(row[22]) if len(row) > 22 else False
             mel = row[23] if len(row) > 23 and isinstance(row[23], int) and 0 <= row[23] < len(MELEE) else START_MELEE
             mout = bool(row[24]) if len(row) > 24 else False
+            lk = row[25] if len(row) > 25 else ""
             buff = BUFF_KINDS[bi] if isinstance(bi, int) and 0 <= bi < len(BUFF_KINDS) else None
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
@@ -11073,6 +12172,7 @@ class ClientSession:
             pl.x, pl.y, pl.z, pl.heading, pl.pitch = x, y, z, h, p
             pl.hp, pl.cur, pl.moving, pl.lean = hp, cur, bool(mv), ln
             pl.crouch = cr
+            pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
             pl.stun_t, pl.buff, pl.buff_t, pl.max_hp = st, buff, bt, float(mx)
             pl.gear, pl.shield_hp, pl.jet_on = gear, shp, jet
@@ -11332,16 +12432,109 @@ def melee_pitch(u):
     return 55.0 * wind - 60.0 * hit
 
 
+def kf_pos(kf, u):
+    """Hand-Zielposition zwischen Schlüsselpunkten ((u, (x, y, z)), ...) mit weichen Übergängen."""
+    for i in range(len(kf) - 1):
+        if u <= kf[i + 1][0]:
+            t = smoothstep(kf[i][0], kf[i + 1][0], u)
+            return _lerp3(kf[i][1], kf[i + 1][1], t)
+    return kf[-1][1]
+
+
+def aim_arm(node, v0, tgt):
+    """Dreht einen Arm um die Schulter (Ursprung des Knotens) so, dass der Vektor zur Hand von v0 nach tgt zeigt
+    (kleinste Drehung, Armlänge bleibt gleich). So lassen sich Hände einfach an Zielpunkte führen."""
+    a, b = norm(v0), norm(tgt)
+    c = clampf(dot(a, b), -1.0, 1.0)
+    ax = cross(a, b)
+    if dot(ax, ax) < 1e-9:
+        if c > 0:
+            node.setQuat(Quat.identQuat())
+            return
+        ax = (1.0, 0.0, 0.0)
+    q = Quat()
+    q.setFromAxisAngle(math.degrees(math.acos(c)), Vec3(*norm(ax)))
+    node.setQuat(q)
+
+
+def rot_x(v, deg):
+    c, sn = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return (v[0], v[1] * c - v[2] * sn, v[1] * sn + v[2] * c)
+
+
+# Hand-Zielpunkte (Torso-Raum) der Soldaten-Animationen
+_MAG_SLOT = (0.10, 0.30, 0.27)           # Magazinschacht unter der Waffe
+SOLDIER_RELOAD_L = ((0.00, SOLDIER_HAND[0]), (0.18, _MAG_SLOT), (0.38, (0.08, 0.28, 0.10)), (0.58, (0.0, 0.20, 0.36)),
+                    (0.66, (0.0, 0.20, 0.36)), (0.88, _MAG_SLOT), (1.00, SOLDIER_HAND[0]))   # Magazin raus, aus der Weste, rein
+SOLDIER_THROW_R = ((0.00, SOLDIER_HAND[1]), (0.15, (0.32, -0.30, 0.80)), (0.32, (0.20, 0.45, 0.75)),
+                   (0.48, (0.15, 0.30, 0.12)), (1.00, SOLDIER_HAND[1]))                      # ausholen, werfen, ausschwingen
+SOLDIER_THROW_L = ((0.00, SOLDIER_HAND[0]), (0.20, (-0.30, 0.10, 0.28)), (0.80, (-0.30, 0.10, 0.28)),
+                   (1.00, SOLDIER_HAND[0]))                                                  # linker Arm schwingt locker mit
+
+
+# Gehaltene Waffe der Mitspieler: (Massstab, rechter Griff (y, z), linke Hand (y, z)) im Waffenraum. Die rechte Hand
+# sitzt immer am Griff (SOLDIER_HAND[1]), die linke am Handschutz bzw. unter dem Griff.
+HELD_GUN = {"Pistole": (0.90, (0.0, -0.05), (0.02, -0.12)), "Revolver": (0.90, (-0.03, -0.05), (-0.02, -0.12)),
+            "Maschinenpistole": (0.80, (-0.02, -0.05), (0.08, -0.10)), "Sturmgewehr": (0.68, (0.06, -0.09), (0.42, -0.035)),
+            "Schrotflinte": (0.62, (-0.03, -0.04), (0.35, -0.065)), "Scharfschütze": (0.56, (-0.09, -0.07), (0.35, -0.04)),
+            "Raketenwerfer": (0.50, (0.10, -0.10), (0.36, -0.10)), "Minigun": (0.50, (0.0, -0.12), (0.05, 0.12)),
+            "Railgun": (0.62, (0.05, -0.10), (0.35, 0.0))}
+_HELD_CACHE = {}
+
+
+def held_gun_geom(wi):
+    """Detailliertes Waffenmodell für die Ansicht von aussen (ein GeomNode je Waffe, von allen Figuren geteilt)."""
+    g = _HELD_CACHE.get(wi)
+    if g is None:
+        w = WEAPONS[wi]
+        sh = GUN_SHAPES[w.name]
+        m = Mesh()
+        rng = random.Random(11 + wi)
+        build_shapes(m, sh["body"] + sh["barrel"] + sh["iron"], rng)
+        mp = MAG_PARTS.get(w.name)
+        if mp is not None:
+            build_shapes(m, sh["mag"], rng, (mp[0], mp[1], mp[2]))
+        g = _HELD_CACHE[wi] = m.node("held_" + w.name)
+    return g
+
+
+def held_hands(name):
+    """(Massstab, Ruheposition der linken Hand im Torso-Raum) für die gehaltene Waffe."""
+    s_, rg, lg = HELD_GUN[name]
+    hr = SOLDIER_HAND[1]
+    return s_, (hr[0], hr[1] + s_ * (lg[0] - rg[0]), hr[2] + s_ * (lg[1] - rg[1]))
+
+
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
     def __init__(self, p):
-        look = dict(skin=(0.88, 0.72, 0.58), cloth=PLAYER_COLORS[p.pid % len(PLAYER_COLORS)],
-                    eye=(0.1, 0.1, 0.1), w=0.5, horns=False)
-        self.root, self.torso, self.legL, self.legR, self.bar, self.fg = build_mob("player", look)
-        gm = Mesh()
-        box(gm, 0.2, 0.32, 0.4, 0.06, 0.5, 0.09, (0.15, 0.15, 0.17))     # Waffe in der Hand
-        self.gun_node = self.gun = self.torso.attachNewNode(gm.node("gun"))
+        look = soldier_look(getattr(p, "look", ""), p.pid)
+        (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
+         self.armL, self.armR) = build_soldier(look)
+        gc = (0.13, 0.13, 0.15)
+        sr = SOLDIER_SH[1]
+        self.gun_node = self.gun = self.armR.attachNewNode("gun")        # Halter am rechten Arm; darin die gehaltene Waffe
+        self.gun.setPos(-sr[0], -sr[1], -sr[2])
+        self.held, self.held_cur = {}, -1
+        self.hl = SOLDIER_HAND[0]                                         # Ruheposition der linken Hand (je Waffe)
+        mm = Mesh()
+        box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
+        self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
+        self.mag_nd.setPos(*sub(SOLDIER_HAND[0], SOLDIER_SH[0]))
+        self.mag_nd.hide()
+        gr = Mesh()
+        blob(gr, 0, 0, 0.0, 0.040, 0.040, 0.052, (0.22, 0.30, 0.16), random.Random(4), jitter=0.04)   # Handgranate
+        box(gr, 0, 0, 0.055, 0.022, 0.022, 0.02, (0.6, 0.6, 0.55))
+        self.gren_nd = self.armR.attachNewNode(gr.node("hand_gren"))
+        self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
+        self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
+        self.gren_nd.hide()
+        self.slung = False
+        self.melee_out = False
+        self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
+        self.rl_sg = False
+        self.th_t = 0.0                                               # Granatwurf (von "throw")
         self.melee_hand = self.torso.attachNewNode("melee_hand")       # Nahkampfwaffe (gezogen)
         self.melee_hand.setPos(0.24, 0.22, 0.42)
         self.melee_shown, self.melee_node, self.swing_t = None, None, 0.0
@@ -11358,6 +12551,89 @@ class PlayerView:
         self.jet_flame = self.torso.attachNewNode(fl.node("flamme"))
         self.jet_flame.setFogOff()
         self.jet_flame.hide()
+
+    def show_held(self, wi):
+        """Die Waffe in der Hand wechseln (Modell je Waffe einmal pro Figur angehängt)."""
+        if wi == self.held_cur or not (0 <= wi < len(WEAPONS)):
+            return
+        self.held_cur = wi
+        name = WEAPONS[wi].name
+        if wi not in self.held:
+            s_, rg, _lg = HELD_GUN[name]
+            hr = SOLDIER_HAND[1]
+            nd = self.gun.attachNewNode(held_gun_geom(wi))
+            nd.setScale(s_)
+            nd.setPos(hr[0], hr[1] - s_ * rg[0], hr[2] - s_ * rg[1])
+            self.held[wi] = nd
+        for k, nd in self.held.items():
+            (nd.show if k == wi else nd.hide)()
+        self.hl = held_hands(name)[1]
+
+    def start_reload(self, wi):
+        if not (0 <= wi < len(WEAPONS)) or self.th_t > 0:
+            return
+        w = WEAPONS[wi]
+        self.rl_sg = w.name == SG_NAME
+        self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
+        self.rl_t = self.rl_tot
+
+    def start_throw(self):
+        self.th_t = GREN_ANIM_T
+        self.rl_t = 0.0
+
+    def pose_arms(self, dt):
+        """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
+        (rechter Arm holt aus, Waffe hängt am Gurt) und Schlag (Waffe mit beiden Armen)."""
+        SL, SR = SOLDIER_SH
+        HL, HR = self.hl, SOLDIER_HAND[1]
+        v0L, v0R = sub(HL, SL), sub(HR, SR)
+        tl, tr = HL, HR
+        tilt = 0.0
+        mag = gren = slung = False
+        py = 0.0
+        if self.th_t > 0:
+            self.th_t = max(0.0, self.th_t - dt)
+            u = 1.0 - self.th_t / GREN_ANIM_T
+            tl, tr = kf_pos(SOLDIER_THROW_L, u), kf_pos(SOLDIER_THROW_R, u)
+            slung = True
+            gren = u < 0.33                                           # loslassen beim Vorschwung
+        elif self.rl_t > 0:
+            self.rl_t = max(0.0, self.rl_t - dt)
+            tt = self.rl_tot - self.rl_t
+            u = tt / self.rl_tot
+            tilt = 8.0 * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
+            if self.rl_sg:                                            # Patronen: Hand pendelt zwischen Weste und Lauf
+                k = 0.5 - 0.5 * math.cos(2 * math.pi * tt / 0.6)
+                tl = _lerp3((0.0, 0.20, 0.36), _MAG_SLOT, k)
+                tilt = 12.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
+            else:
+                tl = kf_pos(SOLDIER_RELOAD_L, u)
+                away = smoothstep(0.0, 0.18, u) * (1.0 - smoothstep(0.88, 1.0, u))      # Ruheposition je Waffe vorn/hinten
+                tl = add(tl, tuple(c * (1.0 - away) for c in sub(HL, SOLDIER_HAND[0])))
+                mag = (0.18 <= u < 0.38) or (0.58 <= u < 0.88)        # altes Magazin raus, neues in der Hand
+        elif self.melee_out:                                          # Nahkampfwaffe gezogen: beide Arme halten sie
+            pm = melee_pitch(1.0 - self.swing_t / 0.35) * 0.9 if self.swing_t > 0 else 0.0
+            tr = add(SR, rot_x(sub((0.24, 0.22, 0.42), SR), pm))
+            tl = add(SL, rot_x(sub((0.06, 0.24, 0.40), SL), pm * 0.6))
+            py = 0.15 * math.sin(math.pi * (1.0 - self.swing_t / 0.35)) if self.swing_t > 0 else 0.0
+        if tilt:
+            tr = add(SR, rot_x(v0R, tilt))
+        if slung != self.slung:                                       # Waffe beim Wurf am Gurt vor dem Körper
+            self.slung = slung
+            if slung:
+                self.gun.reparentTo(self.torso)
+                self.gun.setPos(0, 0, -0.10)
+                self.gun.setP(-35)
+            else:
+                self.gun.reparentTo(self.armR)
+                self.gun.setPos(-SR[0], -SR[1], -SR[2])
+                self.gun.setP(0)
+        (self.mag_nd.show if mag else self.mag_nd.hide)()
+        (self.gren_nd.show if gren else self.gren_nd.hide)()
+        self.armR.setPos(SR[0], SR[1] + py, SR[2])
+        aim_arm(self.armR, v0R, sub(tr, SR))
+        aim_arm(self.armL, v0L, sub(tl, SL))
+
 
     def show_gear(self, p):
         """Getragene Ausrüstung als einfache Formen an die Figur hängen (Helm, Platte/Weste/Jetpack, Schuhe)."""
@@ -11389,6 +12665,7 @@ class PlayerView:
         if math.hypot(p.x - self.x, p.y - self.y) > 8.0:                 # Sprung (Respawn)
             self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
         out = bool(getattr(p, "melee_out", False))
+        self.melee_out = out
         mi = getattr(p, "melee", START_MELEE)
         if out and self.melee_shown != mi:
             if self.melee_node is not None:
@@ -11418,6 +12695,7 @@ class PlayerView:
             self.bar.hide()
             return
         self.dead_t = 0.0
+        self.show_held(getattr(p, "cur", 0))
         self.show_gear(p)
         (self.jet_flame.show if getattr(p, "jet_on", False) else self.jet_flame.hide)()
         if getattr(p, "jet_on", False):
@@ -11438,13 +12716,7 @@ class PlayerView:
         self.legR.setP(-sw * 40)
         self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * mv)
         self.torso.setR(p.lean / LEAN_MAX * 14.0)          # Lehnen: Oberkörper kippt zur Seite
-        if self.swing > 0:                                  # Schlag: Waffe hoch, dann nach unten
-            self.swing = max(0.0, self.swing - dt)
-            self.gun.setP(melee_pitch(1.0 - self.swing / MELEE_T) * 0.9)
-            self.gun.setY(0.15 * math.sin(math.pi * (1.0 - self.swing / MELEE_T)))
-        else:
-            self.gun.setP(0)
-            self.gun.setY(0)
+        self.pose_arms(dt)
 
 
 # --------------------------------------------------------------- Ton
@@ -129341,6 +130613,8 @@ class Game(ShowBase):
         vs_ = st.get("vs")
         self.vol_sfx = int(vs_) if isinstance(vs_, (int, float)) and not isinstance(vs_, bool) and 0 <= vs_ <= 100 else 100        # Soundeffekte in %
         self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
+        lk = st.get("look")
+        self.look_code = lk if look_valid(lk) else look_default(random.randrange(100000))     # Aussehen des Charakters
         self.apply_fps()
         self.overlay_kind = self.overlay_yes = None
         self.amb_np = None
@@ -129565,6 +130839,8 @@ class Game(ShowBase):
             nd.removeNode()
         self.menu_cards = []
         self.menu_last = None
+        if self.setup_page is not None and hasattr(self.setup_page, "destroy"):
+            self.setup_page.destroy()
         self.setup_page = None
         self.slider_drag = False
         self.ui_sliders_clear()
@@ -129651,7 +130927,7 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "char"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
@@ -129671,8 +130947,8 @@ class Game(ShowBase):
             if self.name_back == "main":
                 spec.append(("Beenden   (Esc)", self.open_quit_box))
         elif st == "main":
-            spec = [("Spielen", dig(1)), ("Einstellungen", dig(2)),
-                    ("Ausrüstung", dig(3)), ("Beenden   (Esc)", self.open_quit_box)]
+            spec = [("Spiel hosten", dig(1)), ("Spiel beitreten", dig(2)), ("Charakter personalisieren", dig(3)),
+                    ("Einstellungen", dig(4)), ("Ausrüstung", dig(5)), ("Beenden   (Esc)", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
                     ("Nein, weiterspielen   (N / Esc)", back)]
@@ -129731,6 +131007,13 @@ class Game(ShowBase):
             if self.setup_page is None or self.menu_last is None:
                 self.menu_last = ("setup2", self.menu_msg)
                 self.setup_page = MorePage(self)
+            else:
+                self.setup_page.update()
+            return
+        if self.menu_state == "char":                     # Charakter personalisieren: Vorschau + Auswahlfelder
+            if self.setup_page is None or self.menu_last is None:
+                self.menu_last = ("char", "")
+                self.setup_page = CharPage(self)
             else:
                 self.setup_page.update()
             return
@@ -130094,10 +131377,15 @@ class Game(ShowBase):
             st = self.menu_state
             if st == "main":
                 if d == 1:
-                    self.show_menu("multi")
+                    self.open_setup("host")
                 elif d == 2:
-                    self.show_menu("settings")
+                    self.ip_text, self.ip_edited = "", False
+                    self.show_menu("join")
                 elif d == 3:
+                    self.show_menu("char")
+                elif d == 4:
+                    self.show_menu("settings")
+                elif d == 5:
                     self.show_menu("loadout")
             elif st == "loadout":
                 self.pick_loadout(d)
@@ -130187,7 +131475,7 @@ class Game(ShowBase):
             found = self.listener.hosts.get(ip) if self.listener is not None else None
             port = found["port"] if found else NET_PORT
             self.show_menu("connecting")
-            self.attempt = JoinAttempt(ip, port, self.my_name)
+            self.attempt = JoinAttempt(ip, port, self.my_name, self.look_code)
 
     def dead_screen_now(self):
         return self.player.hp <= 0 and self.world.phase == "play"
@@ -130221,8 +131509,8 @@ class Game(ShowBase):
         elif self.mode == "menu" and self.menu_state == "setup2":
             self.show_menu("setup")
         elif self.mode == "menu" and self.menu_state == "setup":
-            self.show_menu("main" if self.setup_for == "single" else "multi")
-        elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout"):
+            self.show_menu("main")
+        elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout", "char"):
             self.show_menu("main")
         elif self.mode == "menu" and self.menu_state == "name" and self.name_back != "main":
             self.name_back = "main"
@@ -130230,7 +131518,7 @@ class Game(ShowBase):
         elif self.mode == "menu" and self.menu_state in ("join", "connecting"):
             if self.attempt is not None:
                 self.attempt.close()
-            self.show_menu("multi")
+            self.show_menu("main")
         elif self.mode == "play":
             self.show_pause("main")
         else:
@@ -130652,13 +131940,50 @@ class Game(ShowBase):
             self.open_overlay("settings_round", "Rundeneinstellungen", items,
                               "Diese Einstellungen gelten für die ganze Runde", width=1.45)
 
+    def look_step(self, k, d):
+        """Eigenschaft k des Charakters eine Auswahl weiter (d = +1) oder zurück (d = -1)."""
+        n = len(LOOK_OPTS[k][2])
+        v = (int(self.look_code[k]) + d) % n
+        self.look_code = self.look_code[:k] + str(v) + self.look_code[k + 1:]
+        self.save_prefs()
+        self.menu_refresh()
+
+    def look_randomize(self):
+        self.look_code = look_random(self.prng)
+        self.save_prefs()
+        self.menu_refresh()
+
+    def look_reset(self):
+        self.look_code = look_default(0)
+        self.save_prefs()
+        self.menu_refresh()
+
+    def refresh_fp_arms(self):
+        """Hände und Ärmel in der Ego-Ansicht im gewählten Aussehen (Tarnmuster, Handschuhe) neu aufbauen."""
+        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0)
+        if getattr(self, "fp_key", None) == L["key"]:
+            return
+        self.fp_key = L["key"]
+        rng = random.Random(7)
+        for nd, length, endz, xoff, curl, s_ in ((self.vm_hand, 0.55, -0.17, -0.01, 1.0, -1),
+                                                 (self.vm_rhand, 0.55, -0.16, 0.01, 1.0, 1),
+                                                 (self.gad_arms[0], 0.5, -0.06, 0.0, 0.8, -1),
+                                                 (self.gad_arms[1], 0.5, -0.06, 0.0, 0.35, 1),
+                                                 (self.gren_arm, 0.5, -0.06, 0.0, 0.5, 1)):
+            m = Mesh()
+            fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
+            gn, new = nd.node(), m.node("arm")
+            gn.removeAllGeoms()
+            for gi in range(new.getNumGeoms()):
+                gn.addGeom(new.modifyGeom(gi), new.getGeomState(gi))     # modifyGeom: nicht-const Geom
+
     def pause_quit(self):
         self.close_quit_box(recapture=False)
         self.open_quit_box()
 
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
-                       "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct})
+                       "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code})
 
     def apply_volume(self):
         """Lautstärke übernehmen: Effekte über den Audio-Manager, Musik als Faktor der Menümusik."""
@@ -130835,6 +132160,8 @@ class Game(ShowBase):
 
     def menu_task(self, dt):
         self.animate_menu_bg(dt)
+        if self.setup_page is not None and hasattr(self.setup_page, "tick"):
+            self.setup_page.tick(dt)
         if self.slider_drag:
             self.slider_follow()
         self.update_hover()
@@ -130860,6 +132187,7 @@ class Game(ShowBase):
     def spawn_player(self):
         x, y = self.world.first_spawn(self.my_id)
         pl = Player(x, y, self.world, self.my_id, self.my_name)
+        pl.look = self.look_code
         pl.respawn(self.world, x, y, self.loadout)
         self.world.players[self.my_id] = pl
         return pl
@@ -131017,6 +132345,7 @@ class Game(ShowBase):
         self.world, self.host = world, host
         self.my_id = attempt.my_id if mode == "client" else 0
         self.player = self.spawn_player()
+        self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
@@ -131141,8 +132470,11 @@ class Game(ShowBase):
         rng = random.Random(9)
         for w in WEAPONS:
             gm = Mesh()
-            for cx, cy, cz, sx, sy, sz, col in GUN_PARTS[w.name][0]:
-                box(gm, cx, cy - 0.2, cz, sx, sy, sz, col, rng)
+            sh = GUN_SHAPES[w.name]
+            build_shapes(gm, sh["body"] + sh["barrel"] + sh["iron"], rng, (0.0, -0.2, 0.0))
+            mp_ = MAG_PARTS.get(w.name)
+            if mp_ is not None:
+                build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
             self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
         self.gear_models = [NodePath(gear_model(gi).node("gear")) for gi in range(len(GEAR))]
         self.melee_drop_models = []
@@ -131194,30 +132526,15 @@ class Game(ShowBase):
         self.att_nodes = []                                   # je Waffe: {(Platz, Aufsatz): [Knoten]}
         rng = random.Random(7)
         for w in WEAPONS:
-            parts, muzzle = GUN_PARTS[w.name]
+            muzzle = GUN_PARTS[w.name][1]
+            sh = GUN_SHAPES[w.name]
             gm = Mesh()
             magp = MAG_PARTS.get(w.name)
-            if w.name == "Sturmgewehr":
-                parts = parts[:-8]                          # Kimme/Korn: eigener Knoten (nur mit Visier "Kimme und Korn")
             sg_h = sg_a = None
+            build_shapes(gm, sh["body"], rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
             if w.name == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
                 gb = Mesh()
-                for part in parts:
-                    cx, cy, cz, sx, sy, sz, col = part
-                    if cy - sy / 2 < 0.15 and sy > 0.4:      # Lauf/Röhre: erst ab der Verschlussfront
-                        y0 = SG_PIV[1]
-                        cy, sy = (y0 + cy + sy / 2) / 2, (cy + sy / 2) - y0
-                        box(gb, cx, cy, cz, sx, sy, sz, col, rng)
-                    elif cy > 0.3 and sy < 0.3:              # Vorderschaft
-                        box(gb, cx, cy, cz, sx, sy, sz, col, rng)
-                    else:
-                        box(gm, cx, cy, cz, sx, sy, sz, col, rng)
-            else:
-                for part in parts:
-                    if magp is not None and tuple(part) == tuple(magp):
-                        continue                            # wird als bewegliches Magazin gebaut
-                    cx, cy, cz, sx, sy, sz, col = part
-                    box(gm, cx, cy, cz, sx, sy, sz, col, rng)
+                build_shapes(gb, sh["barrel"], rng)
             model = self.gun_pivot.attachNewNode(w.name)
             model.attachNewNode(gm.node("g"))
             if w.name == SG_NAME:
@@ -131231,7 +132548,7 @@ class Game(ShowBase):
             if magp is not None:
                 for k in range(2):                          # k=0: Magazin an der Waffe, k=1: ausgeworfenes
                     mm_ = Mesh()
-                    box(mm_, 0, 0, 0, magp[3], magp[4], magp[5], magp[6], rng)
+                    build_shapes(mm_, sh["mag"], rng)
                     nd = (model if k == 0 else self.gun_pivot).attachNewNode(mm_.node("mag"))
                     nd.setPos(magp[0], magp[1], magp[2])
                     if k == 1:
@@ -131304,15 +132621,13 @@ class Game(ShowBase):
             self.melee_models.append(nd)
         # linke Hand (Haut + Ärmel) für das Nachladen
         hm = Mesh()
-        box(hm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(hm, -0.01, -0.34, -0.10, 0.075, 0.55, 0.07, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(hm, rng, 0.55, -0.17, -0.01, 1.0, -1)
         self.vm_hand = self.gun_pivot.attachNewNode(hm.node("hand"))
         self.vm_hand.hide()
         self.vm_hand.setP(18)
         # rechte Hand (Haut + Ärmel): hält beim Nachladen der Kleinwaffen den Griff, während die linke das Magazin wechselt
         rm = Mesh()
-        box(rm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(rm, 0.01, -0.34, -0.09, 0.075, 0.55, 0.07, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(rm, rng, 0.55, -0.16, 0.01, 1.0, 1)
         self.vm_rhand = self.gun_pivot.attachNewNode(rm.node("rhand"))
         self.vm_rhand.hide()
         self.vm_rhand.setP(10)
@@ -131326,8 +132641,7 @@ class Game(ShowBase):
         self.gad_arms = []
         for _side in (0, 1):
             am = Mesh()
-            box(am, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-            box(am, 0, -0.31, -0.01, 0.08, 0.5, 0.075, (0.22, 0.28, 0.20), rng)
+            fp_arm_mesh(am, rng, 0.5, -0.06, 0.0, 0.35 if _side else 0.8, 1 if _side else -1)
             arm = self.gun_root.attachNewNode(am.node("arm%d" % _side))
             arm.hide()
             self.gad_arms.append(arm)
@@ -131342,8 +132656,7 @@ class Game(ShowBase):
             self.gad_hand.append(nd)
         # Wurfarm für Handgranaten (rechts, mit Granate in der Hand)
         gm = Mesh()
-        box(gm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(gm, 0, -0.31, -0.01, 0.08, 0.5, 0.075, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(gm, rng, 0.5, -0.06, 0.0, 0.5, 1)
         self.gren_arm = self.gun_root.attachNewNode(gm.node("grenarm"))
         gg = Mesh()
         box(gg, 0, 0.0, 0.075, 0.075, 0.105, 0.105, (0.20, 0.30, 0.16), rng)
@@ -133385,6 +134698,9 @@ class Game(ShowBase):
                     pass                            # eigener Wurf: Ton kam schon beim Klick
                 elif pw is not None:
                     self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
+                    v = self.player_views.get(e[1])
+                    if v is not None:
+                        v.start_throw()
             elif kind == "explosion":
                 if len(e) > 3 and e[3] == self.my_id:
                     self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
@@ -133457,6 +134773,10 @@ class Game(ShowBase):
             elif kind == "wreload":
                 if e[1] == self.my_id:
                     self.sfx.reload(e[2])
+                else:
+                    v = self.player_views.get(e[1])
+                    if v is not None:
+                        v.start_reload(e[2])
             elif kind == "shotpos":         # fremder Schuss -> Punkt auf der Minimap
                 if e[1] != self.my_id:
                     op = self.world.players.get(e[1])
@@ -135696,7 +137016,7 @@ def _exp_autostart(g):
     elif do == "connect":                              # Host aus der Suche des Hauptmenüs: gleich verbinden
         try:
             g.show_menu("connecting")
-            g.attempt = JoinAttempt(str(spec["ip"]), int(spec.get("port", NET_PORT)), g.my_name)
+            g.attempt = JoinAttempt(str(spec["ip"]), int(spec.get("port", NET_PORT)), g.my_name, g.look_code)
         except (KeyError, TypeError, ValueError):
             g.show_menu("join")
 

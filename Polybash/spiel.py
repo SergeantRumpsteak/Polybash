@@ -245,7 +245,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-EXP_NET_VERSION = 22    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
+EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 12         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -9371,7 +9371,7 @@ class CharPreview:
         if self.view is not None:
             self.view.root.removeNode()
         p = SimpleNamespace(pid=key[1], look=code, x=0.0, y=0.0, z=0.0, heading=0.0, heli=-1, hp=100.0, crouch=0.0,
-                            moving=False, lean=0.0)
+                            moving=False, lean=0.0, cur=[i for i, w_ in enumerate(WEAPONS) if w_.name == "Sturmgewehr"][0])
         self.view = PlayerView(p)
         self.view.root.reparentTo(self.pivot)
         self.fake = p
