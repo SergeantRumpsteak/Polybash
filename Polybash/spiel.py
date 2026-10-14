@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 43               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 44               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -11606,6 +11606,32 @@ def local_ip():
         s.close()
 
 
+_NETLOG = {"f": None, "t0": time.time()}
+
+
+def netlog(msg):
+    """Hängt eine Zeile an polybash_netz.log (neben dem Spiel) an - zur Fehlersuche bei Verbindungsproblemen."""
+    try:
+        if _NETLOG["f"] is None:
+            base = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+            path = os.path.join(base, "polybash_netz.log")
+            try:
+                if os.path.getsize(path) > 500000:
+                    os.remove(path)
+            except OSError:
+                pass
+            try:
+                _NETLOG["f"] = open(path, "a", encoding="utf-8")
+            except OSError:
+                import tempfile
+                _NETLOG["f"] = open(os.path.join(tempfile.gettempdir(), "polybash_netz.log"), "a", encoding="utf-8")
+            _NETLOG["f"].write(f"\n=== Start {time.strftime('%Y-%m-%d %H:%M:%S')} {VERSION} ===\n")
+        _NETLOG["f"].write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+        _NETLOG["f"].flush()
+    except Exception:
+        pass
+
+
 class Conn:
     """Nicht blockierende TCP-Verbindung. Eine JSON-Nachricht pro Zeile."""
     MAX_BUF = 1 << 20
@@ -11677,6 +11703,8 @@ class Conn:
         if not self.closed:
             self.closed = True
             self.error = reason
+            netlog(f"Verbindung zu: '{reason}' (pid={self.pid}, playing={getattr(self, 'playing', False)}, "
+                   f"ungesendet={len(self.wbuf)} B, stumm seit {time.time() - self.last_rx:.1f}s)")
             try:
                 self.sock.close()
             except OSError:
@@ -11789,6 +11817,7 @@ class NetServer:
                 break
             except OSError:
                 break
+            netlog(f"Host: Verbindung angenommen von {_addr}")
             self.conns.append(Conn(s))
 
     def close(self):
@@ -11952,6 +11981,7 @@ class HostSession:
             lk = m.get("look")
             w.players[pid].look = lk if look_valid(lk) else ""
             c.pid = pid
+            netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
                     "tomahawk": 1 if w.tomahawk_on else 0,
@@ -11961,6 +11991,8 @@ class HostSession:
         if pl is None:
             return
         if t == "st":                             # Position/Blickrichtung des Spielers
+            if not getattr(c, "playing", False):
+                netlog(f"Host: erste Position von pid {c.pid} - ab jetzt Snapshots")
             c.playing = True
             x, y, z, h, p = m["p"]
             if not finite(x, y, z, h, p):
@@ -12108,6 +12140,9 @@ class HostSession:
         for c in clients:
             c.send_line(line)
             c.flush()
+        if self.snap_n % 150 == 1 and clients:       # alle ~5 s: wie viel hängt ungesendet in der Leitung?
+            netlog("Host: Snapshot " + str(len(line)) + " B, ungesendet je Spieler " +
+                   str([(c.pid, len(c.wbuf)) for c in clients]))
 
 
 class NetMob:
@@ -12169,7 +12204,9 @@ class ClientSession:
         self.hp = None               # Lebenspunkte: entscheidet der Host
         self.lost = ""               # Text, wenn die Verbindung weg ist
         self.send_t = 0.0
-        conn.last_rx = time.time()   # das Kartenladen davor zählt nicht als "Host schweigt"
+        self.fresh = True            # erster Frame nach dem Kartenbau: Zeitmessung "Host schweigt" beginnt erst dann
+        self.got_snap = False
+        netlog(f"Client: Sitzung angelegt (id {my_id}), {len(list(backlog))} Nachrichten im Rückstau")
         for m in backlog:
             self.handle(m)
 
@@ -12179,9 +12216,14 @@ class ClientSession:
     def poll(self, dt):
         if self.lost:
             return
+        if self.fresh:
+            self.fresh = False
+            self.conn.last_rx = time.time()
+            netlog("Client: Karte fertig, erster Frame - sende Positionen")
         for m in self.conn.recv():
             self.handle(m)
         if not self.conn.closed and time.time() - self.conn.last_rx > NET_TIMEOUT:
+            netlog(f"Client: {NET_TIMEOUT:.0f}s keine Daten vom Host (Snapshot je erhalten: {self.got_snap})")
             self.conn.close("Zeitüberschreitung")
         if self.conn.closed:
             self.lost = self.conn.error or "Verbindung getrennt"
@@ -12193,6 +12235,9 @@ class ClientSession:
             return
         try:
             if m.get("t") == "snap":
+                if not self.got_snap:
+                    self.got_snap = True
+                    netlog("Client: erster Snapshot vom Host empfangen")
                 self.apply_snapshot(m)
         except (KeyError, IndexError, TypeError, ValueError):
             pass
