@@ -113499,6 +113499,9 @@ class Game(ShowBase):
                 if self.player.mount == e[1]:
                     self.sp_cam.kick(0.9)
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * 4.0)
+                    tt = next((t for t in self.world.turrets if t.id == e[1]), None)
+                    if tt is not None:                 # eigenes Geschütz feuert: Schallwelle auf der Minimap (wie Waffenschuss)
+                        self.noise_wave(tt.x, tt.y, NOISE_SHOT * 1.2)
             elif kind == "henter":
                 if e[1] == self.my_id:
                     q = self.world.heli_by_id(e[2])
@@ -114922,7 +114925,7 @@ class Game(ShowBase):
         self.mm_waves.append([n, now, r, x, y])
         if len(self.mm_waves) > 8:
             self.mm_waves.pop(0)[0].removeNode()
-        if NOISE_MINIMAP_ZOOM and r > self.MM_VIS * 0.92:          # zu gross für den Ausschnitt: herauszoomen
+        if NOISE_MINIMAP_ZOOM and r > self.MM_LEVELS[self.mm_level] * 0.92:          # zu gross für den Ausschnitt: herauszoomen
             self.mm_zoom_hold = max(self.mm_zoom_hold, min(NOISE_ZOOM_MAX, r * 1.1))
             self.mm_zoom_until = now + self.wave_t(r) + 0.5
 
@@ -114933,11 +114936,12 @@ class Game(ShowBase):
     def update_noise_map(self, dt):
         """Eigener Lärmkreis (Laufen/Rennen/Ducken/Fahren) und die Wellen; Zoom der Minimap."""
         pl, now = self.player, time.time()
+        base = self.MM_LEVELS[self.mm_level]          # gewählte Zoomstufe (X / Y)
         # Zoom: bei grosser Welle weich heraus, danach wieder zurück
-        want = self.mm_zoom_hold if now < getattr(self, "mm_zoom_until", 0.0) else self.MM_VIS
+        want = self.mm_zoom_hold if now < getattr(self, "mm_zoom_until", 0.0) else base
         if now >= getattr(self, "mm_zoom_until", 0.0):
             self.mm_zoom_hold = 0.0
-        self.mm_vis += (max(want, self.MM_VIS) - self.mm_vis) * min(1.0, dt * (6.0 if want > self.mm_vis else 2.5))
+        self.mm_vis += (max(want, base) - self.mm_vis) * min(1.0, dt * (6.0 if want > self.mm_vis else 2.5))
         k = self.mm_R / self.mm_vis
         self.mm_strike.setScale(self.MM_VIS / self.mm_vis)
         r = self.world.player_noise(pl) if NOISE_MINIMAP and pl.hp > 0 else 0.0

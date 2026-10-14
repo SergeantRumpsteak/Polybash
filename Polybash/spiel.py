@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 26    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 61               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 62               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -112300,6 +112300,9 @@ class Game(ShowBase):
                 if self.player.mount == e[1]:
                     self.sp_cam.kick(0.9)
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * 4.0)
+                    tt = next((t for t in self.world.turrets if t.id == e[1]), None)
+                    if tt is not None:                 # eigenes Geschütz feuert: Schallwelle auf der Minimap (wie Waffenschuss)
+                        self.noise_wave(tt.x, tt.y, NOISE_SHOT * 1.2)
             elif kind == "henter":
                 if e[1] == self.my_id:
                     q = self.world.heli_by_id(e[2])
