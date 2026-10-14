@@ -246,7 +246,7 @@ RESPAWN_T = 12.0
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
-NET_VERSION = 13         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -379,9 +379,14 @@ ROCK_C = (0.47, 0.45, 0.42)       # Felsformationen
 SANDBAG = (0.66, 0.59, 0.42)      # Sandsäcke
 WOOD_D = (0.30, 0.20, 0.12)        # dunkles Holz (Balken, Fensterläden, Regale)
 WOOD_M = (0.46, 0.31, 0.18)        # Möbelholz
-HOUSE_COLS = ((0.82, 0.74, 0.58), (0.76, 0.58, 0.38), (0.70, 0.74, 0.68), (0.80, 0.66, 0.56), (0.66, 0.70, 0.76))   # Putzfarben
-ROOFS = ((0.60, 0.27, 0.22), (0.44, 0.25, 0.20), (0.34, 0.35, 0.39), (0.56, 0.38, 0.22))                      # Dachfarben
-AWN = ((0.78, 0.20, 0.17), (0.93, 0.89, 0.78), (0.18, 0.34, 0.62), (0.22, 0.52, 0.26))                         # Markisen
+BRICK_R = (0.58, 0.30, 0.22)       # roter Backstein
+BRICK_Y = (0.68, 0.57, 0.38)       # gelber Backstein (London-Stock)
+HOUSE_COLS = (BRICK_R, BRICK_Y, (0.80, 0.76, 0.66), (0.64, 0.64, 0.60), (0.42, 0.45, 0.34))   # Backstein rot/gelb, Putz creme/grau, olivgrün
+ROOFS = ((0.52, 0.26, 0.19), (0.29, 0.30, 0.34), (0.23, 0.23, 0.25), (0.44, 0.33, 0.27))                      # Ziegel, Schiefer, Dachpappe, Betonstein
+AWN = ((0.40, 0.43, 0.30), (0.62, 0.57, 0.44), (0.30, 0.33, 0.26), (0.55, 0.52, 0.45))                         # Planen (olivgrün, khaki, ...)
+PAINT_W = (0.84, 0.83, 0.78)       # weiss gestrichene Rahmen und Fassadenbretter
+OLIVE = (0.36, 0.40, 0.28)         # Militär-Olivgrün
+STEEL = (0.46, 0.48, 0.50)         # Stahl, Radar
 CONT_COLS = ((0.22, 0.36, 0.55), (0.62, 0.27, 0.20), (0.27, 0.45, 0.33), (0.70, 0.52, 0.18))   # Container
 
 SKY = (0.70, 0.82, 0.93)          # Dunstfarbe am Horizont (Nebel und Hintergrund)
@@ -1413,7 +1418,7 @@ def end_tabs(koth):
     tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
              + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
                 ("K/D", lambda e: round(kd(e), 2), True)]
-             + ([("Zeit in der Burg", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
+             + ([("Zeit in der Radarstation", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
                   False)] if koth else []),
              "Sieger", None),
             ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
@@ -2075,7 +2080,7 @@ class World:
         self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
 
     def build_structures(self):
-        """Burg in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
+        """Burg (Polytown: Radarstation) in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
         mp = self.map or {}
         keep = mp.get("keep", {})
         c = CENTER
@@ -2328,6 +2333,7 @@ class World:
 
     def build_castle(self):
         cx = cy = CENTER
+        WALL, WALL_D = (WALL_C, WALL_CD) if self.mtn else (STONE, STONE_D)      # Polytown: Betonbauten (Radarstation)
         H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
         x0, x1, y0, y1 = cx - H, cx + H, cy - H, cy + H
         g0, g1 = cx - 4.0, cx + 4.0                     # Tore im Süden und Norden
@@ -2335,19 +2341,19 @@ class World:
         for a, b, c, d in ((x0, y0, g0, y0 + T), (g1, y0, x1, y0 + T),
                            (x0, y1 - T, g0, y1), (g1, y1 - T, x1, y1),
                            (x0, y0, x0 + T, y1), (x1 - T, y0, x1, y1)):
-            B(a, b, c, d, -2, ZW, STONE, True)          # Mauern mit Wehrgang
+            B(a, b, c, d, -2, ZW, WALL, True)          # Mauern mit Wehrgang
         for a, b, c, d in ((x0, y0, g0, y0 + PW), (g1, y0, x1, y0 + PW),
                            (x0, y1 - PW, g0, y1), (g1, y1 - PW, x1, y1),
                            (x0, y0, x0 + PW, y1), (x1 - PW, y0, x1, y1)):
-            B(a, b, c, d, ZW, ZW + 1.2, STONE_D)        # Brüstung aussen
+            B(a, b, c, d, ZW, ZW + 1.2, WALL_D)        # Brüstung aussen
         n, sd = 6, 0.7
         for sx in (-1, 1):
             for sy in (-1, 1):
                 tx, ty = cx + sx * H, cy + sy * H
-                B(tx - 3.5, ty - 3.5, tx + 3.5, ty + 3.5, -2, ZT, STONE, True)       # Eckturm
+                B(tx - 3.5, ty - 3.5, tx + 3.5, ty + 3.5, -2, ZT, WALL, True)       # Eckturm
                 ex, ey = tx + sx * 3.5, ty + sy * 3.5
-                B(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT, ZT + 1.2, STONE_D)
-                B(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT, ZT + 1.2, STONE_D)
+                B(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT, ZT + 1.2, WALL_D)
+                B(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT, ZT + 1.2, WALL_D)
                 fx, fy = tx - sx * 3.5, ty - sy * 3.5   # Innenkanten des Turms
                 wy = (y0 + PW) if sy < 0 else (y1 - T)  # Wehrgang der Nord/Süd-Mauer
                 wxx = (x0 + PW) if sx < 0 else (x1 - T)  # Wehrgang der West/Ost-Mauer
@@ -2363,33 +2369,33 @@ class World:
         self.stairs(x0 + T, cy - 10, "N", 10, 2.5, 0, 0.5, 0.8)
         self.stairs(x1 - T - 2.5, cy + 10, "S", 10, 2.5, 0, 0.5, 0.8)
         # Bergfried in der Mitte mit Treppe aufs Dach
-        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, STONE, True)
-        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, STONE_D)
-        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, STONE_D)
+        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)
+        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
+        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
         self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
         # niedrige Deckung: vor den Toren aussen und im Hof
         for s in (-1, 1):
             for a, b in ((cx - 5, cx - 2), (cx + 2, cx + 5)):
-                B(a, cy + s * 27, b, cy + s * 27 + 0.7, -2, 1.2, STONE_D)
-                B(cx + s * 27, a - cx + cy, cx + s * 27 + 0.7, b - cx + cy, -2, 1.2, STONE_D)
-            B(cx - 5, cy + s * 14, cx + 5, cy + s * 14 + 0.7, -2, 1.2, STONE_D)
+                B(a, cy + s * 27, b, cy + s * 27 + 0.7, -2, 1.2, WALL_D)
+                B(cx + s * 27, a - cx + cy, cx + s * 27 + 0.7, b - cx + cy, -2, 1.2, WALL_D)
+            B(cx - 5, cy + s * 14, cx + 5, cy + s * 14 + 0.7, -2, 1.2, WALL_D)
         # Kasematten: überdachte Räume an der Innenseite der Mauern (Schutz vor Feuer von oben und aussen)
         def casemate(xa, ya, xb, yb, front):
-            B(xa, ya, xb, yb, 3.0, 3.5, STONE_D)                                 # Dach
+            B(xa, ya, xb, yb, 3.0, 3.5, WALL_D)                                 # Dach
             if front in "NS":
-                B(xa, ya, xa + PW, yb, -2, 3.0, STONE)
-                B(xb - PW, ya, xb, yb, -2, 3.0, STONE)
+                B(xa, ya, xa + PW, yb, -2, 3.0, WALL)
+                B(xb - PW, ya, xb, yb, -2, 3.0, WALL)
                 fy = yb - PW if front == "N" else ya
                 for k in (1 / 3, 2 / 3):
                     px = xa + (xb - xa) * k
-                    B(px - 0.35, fy, px + 0.35, fy + PW, -2, 3.0, STONE)
+                    B(px - 0.35, fy, px + 0.35, fy + PW, -2, 3.0, WALL)
             else:
-                B(xa, ya, xb, ya + PW, -2, 3.0, STONE)
-                B(xa, yb - PW, xb, yb, -2, 3.0, STONE)
+                B(xa, ya, xb, ya + PW, -2, 3.0, WALL)
+                B(xa, yb - PW, xb, yb, -2, 3.0, WALL)
                 fx_ = xb - PW if front == "E" else xa
                 for k in (1 / 3, 2 / 3):
                     py = ya + (yb - ya) * k
-                    B(fx_, py - 0.35, fx_ + PW, py + 0.35, -2, 3.0, STONE)
+                    B(fx_, py - 0.35, fx_ + PW, py + 0.35, -2, 3.0, WALL)
         casemate(cx - 14, cy - 19, cx - 6, cy - 14, "N")
         casemate(cx + 6, cy - 19, cx + 14, cy - 14, "N")
         casemate(cx - 14, cy + 14, cx - 6, cy + 19, "S")
@@ -2397,20 +2403,21 @@ class World:
         casemate(cx + 14, cy - 14, cx + 19, cy - 4, "W")
         # freistehende Mauerstücke (2 m, volle Deckung) um den Bergfried und Sprengschutz hinter den Toren
         for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-            B(cx + sx * 10 - 2.5, cy + sy * 10, cx + sx * 10 + 2.5, cy + sy * 10 + 0.6, -2, 2.0, STONE_D)
+            B(cx + sx * 10 - 2.5, cy + sy * 10, cx + sx * 10 + 2.5, cy + sy * 10 + 0.6, -2, 2.0, WALL_D)
         for sy in (-1, 1):
-            B(cx - 2, cy + sy * 17, cx + 2, cy + sy * 17 + 0.6, -2, 2.2, STONE_D)
+            B(cx - 2, cy + sy * 17, cx + 2, cy + sy * 17 + 0.6, -2, 2.2, WALL_D)
         # Flak auf zwei Ecktürmen der Burg (Bedienung per F)
         for sx, sy in ((-1, 1), (1, -1)):
             tx, ty = cx + sx * H, cy + sy * H
             B(tx - 0.45, ty - 0.45, tx + 0.45, ty + 0.45, ZT, ZT + 0.9, (0.30, 0.32, 0.34))
             self.turrets.append(Turret(len(self.turrets), tx, ty, ZT + 1.35,
                                        math.degrees(math.atan2(-(cx - tx), cy - ty)), "flak"))
-        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, COBBLE))
+        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, CONCRETE if self.mtn else COBBLE))
         self.flats.append((cx, cy, 36.0, 50.0))
         self.add_crate(cx - 12, cy + 8, 0.0)
         self.add_crate(cx + 12, cy - 8, 0.0)
         if self.mtn:
+            B(cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 6.0, 9.3, WALL_D, False, False)      # Sockel der Radarschüssel
             self.build_moat()
             self.castle_extras()
 
@@ -2607,13 +2614,13 @@ class World:
         self.dams.append((c - hwb, c - a - 12.0, c + hwb, c - a - 0.5))       # Süden: Steinbrücke
         self.dams.append((c - a - 12.0, c - 2.6, c - a - 0.5, c + 2.6))       # Westen: Damm über dem Tunnel
         self.dams.append((c + a + 0.5, c - 2.6, c + a + 12.0, c + 2.6))       # Osten
-        W, T = STONE, STONE_D
+        W, T = CONCRETE, CONC_D
         B = self.add_box
         # Zugbrücke (Holz) nach Norden: Fahrbahn bündig mit dem Boden, Geländer als niedrige Deckung
         yb0, yb1 = c + 22.0, c + a + 11.0
         for sx in (-1, 1):
             B(c + sx * hwb - (0.2 if sx > 0 else 0.0), yb0 + 2.6, c + sx * hwb + (0.0 if sx > 0 else 0.2), yb1 - 0.3,
-              -0.5, 1.0, WOOD_M)
+              -0.5, 1.0, STEEL)
         self.vis.append({"k": "bridge", "style": "wood", "x0": c - hwb, "x1": c + hwb, "y0": yb0, "y1": yb1, "axis": "y",
                          "dir": 1})
         # Steinbrücke nach Süden
@@ -2663,7 +2670,7 @@ class World:
 
     def town_house(self, x, y, w, d, floors=2, door="S", col=PLASTER, roof=ROOF, fh=3.2, ridge=None, stairs="auto",
                    doff=0.0, balcony=False, crate=None, chimney=True, tower=None, avoid=(), shop=False, wide=False,
-                   sign=None, extra_win=True, flat=False, trim=WOOD_D, seed=None):
+                   sign=None, extra_win=True, flat=False, trim=PAINT_W, seed=None):
         """Wohnhaus mit mehreren Stockwerken: Türen, Fenster, innen Treppen, Decken, Möbel; Satteldach (unsichtbare
         Stufen als Kollision, die glatte Dachform wird in build_scene darübergelegt)."""
         rng = random.Random(seed if seed is not None else int(x * 31 + y * 17))
@@ -2718,12 +2725,12 @@ class World:
         for f, (ax, ay), dr, _hl in flights:
             self.stairs(ax, ay, dr, n_st, 1.3, f * fh, 0.4, 0.65, WOOD_F)
         self.add_box(x0, y0, x1, y1, H - 0.25, H + 0.1, col)                       # Decke / Dachboden
-        self.floors.append((x0, y0, x1, y1, WOOD_F))
+        self.floors.append((x0 + t, y0 + t, x1 - t, y1 - t, WOOD_F))        # nur der Innenraum (kein Überstand nach aussen)
         self.flats.append((x, y, math.hypot(w, d) / 2 + 3.0, math.hypot(w, d) / 2 + 13.0))
         # Dach (Kollision: hohle Stufen unter der glatten Dachfläche)
         rx = ridge or ("x" if w >= d else "y")
         span, ln = (d, w) if rx == "x" else (w, d)
-        rise = 0.0 if flat else min(3.4, span * 0.42)
+        rise = 0.0 if flat else min(2.8, span * 0.34)
         if flat:
             self.add_box(x0 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2, H + 0.1, H + 0.5, STONE_D)
             for (a0, b0, a1, b1) in ((x0 - 0.2, y0 - 0.2, x1 + 0.2, y0 + 0.2), (x0 - 0.2, y1 - 0.2, x1 + 0.2, y1 + 0.2),
@@ -2750,7 +2757,7 @@ class World:
                 ch_rect = (x - 0.6, y1, x + 0.6, y1 + 0.9)
             else:
                 ch_rect = (x - 0.6, y0 - 0.9, x + 0.6, y0)
-            self.add_box(*ch_rect[:2], ch_rect[2], ch_rect[3], -2, H + rise + 1.1, STONE_D)
+            self.add_box(*ch_rect[:2], ch_rect[2], ch_rect[3], -2, H + rise + 1.1, (0.50, 0.26, 0.20))
         # Eingangsstufe und Balkon
         if door == "S":
             self.add_box(dpos - hwd - 0.2, y0 - 0.55, dpos + hwd + 0.2, y0, -1, 0.22, STONE_D)
@@ -2838,6 +2845,40 @@ class World:
                 self.add_box(r[0], r[1], r[2], r[3], base, zb + hz, col)
                 break
 
+    NISSEN_U = (0.0, 1.0, 1.7, 2.2, 2.55, 2.8)            # Querschnitt der Nissenhütte: Stufen des Bogens (Abstand von der Mittellinie)
+
+    def nissen(self, x, y, door="E", L=11.0, seed=0):
+        """Nissenhütte (Wellblech-Halbtonne, Tür an der Stirnseite): Kollision als gestufter Bogen, Bodenplatte nur innen."""
+        R, H0 = 2.8, 2.9
+        sg = 1 if door == "E" else -1
+        xa, xb, ya, yb = x - L / 2, x + L / 2, y - R, y + R
+        zin = lambda u: H0 * math.sqrt(max(0.0, 1.0 - (u / R) ** 2))        # noqa: E731
+        U = self.NISSEN_U
+        for side in (-1, 1):
+            for i in range(len(U) - 1):
+                ua, ub = U[i], U[i + 1]
+                ylo, yhi = sorted((y + side * ua, y + side * ub))
+                z0, z1 = zin(ub), zin(ua) + 0.12
+                self.add_box(xa + 0.3, ylo, xb - 0.3, yhi, z0, z1, WOOD_F, False, False)            # Dachschale (Kollision)
+                # Stirnwände: unter dem Bogen bis zum Dach, Tür in der Mitte (Sturz darüber)
+                for xs0, xs1, dr in ((xa, xa + 0.3, door == "W"), (xb - 0.3, xb, door == "E")):
+                    zb_ = -2.0
+                    if dr and i == 0:
+                        zb_ = 2.3
+                    self.add_box(xs0, ylo, xs1, yhi, zb_, z1, WOOD_F, False, False)
+        self.add_box(xa + 0.3, y - 0.6, xb - 0.3, y + 0.6, 2.85, 3.02, WOOD_F, False, False)       # Firstbereich
+        self.floors.append((xa + 0.3, ya + 0.2, xb - 0.3, yb - 0.2, WOOD_F))
+        self.flats.append((x, y, L / 2 + 3.0, L / 2 + 12.0))
+        rng = random.Random(seed or int(x * 5 + y))
+        for k in range(3):                                                    # Feldbetten und Spind als Deckung
+            bx = xa + 1.6 + k * 2.6
+            self.add_box(bx, y - 2.0, bx + 1.0, y - 0.1 if k != 1 else y - 0.9, -1.0, 0.55, WOOD_M)
+        self.add_box(xa + 0.6, y + 1.8, xa + 1.6, y + 2.5, -1.0, 1.9, WOOD_D) if sg > 0 else \
+            self.add_box(xb - 1.6, y + 1.8, xb - 0.6, y + 2.5, -1.0, 1.9, WOOD_D)
+        self.add_crate(x - sg * 1.0, y + 1.7, 0.0)
+        self.vis.append({"k": "nissen", "x": x, "y": y, "L": L, "R": R, "H0": H0, "door": door, "seed": int(x * 3 + y)})
+        return xb if sg > 0 else xa
+
     def market_stall(self, x, y, along_x, col_a, col_b):
         """Marktstand: Pfosten, Tresen, Stoffdach in zwei Farben (Dach als Deckung von oben)."""
         w, d = (3.4, 2.2) if along_x else (2.2, 3.4)
@@ -2861,10 +2902,11 @@ class World:
         s = 2.7
         for a, b, c2, d2 in ((x - s, y - s, x + s, y - s + 0.5), (x - s, y + s - 0.5, x + s, y + s),
                              (x - s, y - s + 0.5, x - s + 0.5, y + s - 0.5), (x + s - 0.5, y - s + 0.5, x + s, y + s - 0.5)):
-            self.add_box(a, b, c2, d2, -1, 0.85, STONE)
-        self.add_box(x - 0.45, y - 0.45, x + 0.45, y + 0.45, -1, 2.3, STONE)
-        self.add_box(x - 0.9, y - 0.9, x + 0.9, y + 0.9, -1, 1.1, STONE_D)
+            self.add_box(a, b, c2, d2, -1, 0.85, CONCRETE)
+        self.add_box(x - 0.45, y - 0.45, x + 0.45, y + 0.45, -1, 2.3, CONC_D)
+        self.add_box(x - 0.9, y - 0.9, x + 0.9, y + 0.9, -1, 1.1, CONC_D)
         self.vis.append({"k": "fountain", "x": x, "y": y, "s": s})
+        self.flagpole(x, y, 2.3, 7.5, (0.85, 0.84, 0.78), 3.2, 1.9, 35.0)                 # Fahnenmast in der Mitte
 
     def flagpole(self, x, y, z, h, col, w=2.0, hh=1.2, ang=0.0):
         self.add_box(x - 0.08, y - 0.08, x + 0.08, y + 0.08, z, z + h, (0.30, 0.22, 0.14))
@@ -2884,71 +2926,59 @@ class World:
                 self.add_box(x0, a - mw / 2, x1, a + mw / 2, z, z + h, STONE_D)
 
     def castle_extras(self):
-        """Burg des Stadt-Updates: Zinnen, Torhäuser mit Falltor, Eckfahnen, Brunnen im Hof."""
+        """Radarstation: Wachhäuser an den Toren, Fahnen, Löschwasserbehälter im Hof, drehende Antennen (Schüssel + zwei Freya)."""
         c = CENTER
         H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
-        x0, x1, y0, y1 = c - H, c + H, c - H, c + H
         g0, g1 = c - 4.0, c + 4.0
         B = self.add_box
-        for a, b, c2, d2 in ((x0, y0, g0, y0 + PW), (g1, y0, x1, y0 + PW), (x0, y1 - PW, g0, y1), (g1, y1 - PW, x1, y1),
-                             (x0, y0, x0 + PW, y1), (x1 - PW, y0, x1, y1)):
-            self.merlons(a, b, c2, d2, ZW + 1.2)
-        # Türme: Zinnen aussen (die beiden Flak-Türme bleiben frei)
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                if (sx, sy) in ((-1, 1), (1, -1)):
-                    continue
-                tx, ty = c + sx * H, c + sy * H
-                ex, ey = tx + sx * 3.5, ty + sy * 3.5
-                self.merlons(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT + 1.2)
-                self.merlons(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT + 1.2)
-        # Torhäuser (Nord = Zugbrücke, Süd = Steinbrücke) und Sturz über dem Tor (Wehrgang läuft durch)
+        # Wachhäuser links und rechts der Tore (Nord = Stahlbrücke, Süd = Betonbrücke) und Sturz über dem Tor
         for sgn in (1, -1):
             yw = (c + H) if sgn > 0 else (c - H)                 # Aussenseite der Mauer
             ya, yb = (yw, yw + 2.7) if sgn > 0 else (yw - 2.7, yw)
             wy0, wy1 = (c + H - T, c + H) if sgn > 0 else (c - H, c - H + T)
-            B(g0, wy0, g1, wy1, 4.0, ZW, STONE, True)
+            B(g0, wy0, g1, wy1, 4.0, ZW, WALL_C, True)
             for gx0, gx1 in ((g0 - 3.0, g0), (g1, g1 + 3.0)):
-                B(gx0, ya, gx1, yb, -2, 7.2, STONE, True)
-                B(gx0, ya, gx1, yb, 7.2, 7.5, STONE_D)
+                B(gx0, ya, gx1, yb, -2, 7.2, WALL_C, True)
+                B(gx0, ya, gx1, yb, 7.2, 7.5, WALL_CD)
                 outer = (yb - 0.45, yb) if sgn > 0 else (ya, ya + 0.45)
-                B(gx0, outer[0], gx1, outer[1], 7.5, 8.2, STONE_D)
-                B(gx0 if gx0 < c else gx1 - 0.45, ya, gx0 + 0.45 if gx0 < c else gx1, yb, 7.5, 8.2, STONE_D)
+                B(gx0, outer[0], gx1, outer[1], 7.5, 8.2, WALL_CD)
+                B(gx0 if gx0 < c else gx1 - 0.45, ya, gx0 + 0.45 if gx0 < c else gx1, yb, 7.5, 8.2, WALL_CD)
             self.vis.append({"k": "gate", "x0": g0, "x1": g1, "y": yw, "sgn": sgn, "zt": 4.0, "zw": ZW})
-            self.flagpole(g0 - 1.5, (ya + yb) / 2, 8.2, 4.0, (0.78, 0.16, 0.14) if sgn > 0 else (0.15, 0.30, 0.65), 2.2, 1.3,
-                          90.0 if sgn > 0 else -90.0)
-            self.flagpole(g1 + 1.5, (ya + yb) / 2, 8.2, 4.0, (0.78, 0.16, 0.14) if sgn > 0 else (0.15, 0.30, 0.65), 2.2, 1.3,
-                          90.0 if sgn > 0 else -90.0)
-        # Eckfahnen und Fahne auf dem Bergfried
-        cols = {(-1, -1): (0.15, 0.30, 0.65), (1, -1): (0.88, 0.75, 0.20), (-1, 1): (0.78, 0.16, 0.14),
-                (1, 1): (0.18, 0.48, 0.24)}
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                if (sx, sy) in ((-1, 1), (1, -1)):
-                    continue
-                self.flagpole(c + sx * H, c + sy * H, ZT + 1.2, 4.2, cols[(sx, sy)], 2.4, 1.4, 0.0)
-        self.flagpole(c + 3.4, c + 3.4, 7.2, 5.0, (0.78, 0.16, 0.14), 2.6, 1.5, 0.0)
-        # Brunnen im Burghof und Fackelständer
+            for gx in (g0 - 1.5, g1 + 1.5):
+                self.flagpole(gx, (ya + yb) / 2, 8.2, 4.0, (0.85, 0.84, 0.78) if sgn > 0 else (0.55, 0.45, 0.20), 2.2, 1.3,
+                              90.0 if sgn > 0 else -90.0)
+        # Fahnen auf den Türmen und dem Betriebsgebäude
+        cols = {(-1, -1): OLIVE, (1, 1): (0.55, 0.45, 0.20)}
+        for (sx, sy), fc in cols.items():
+            self.flagpole(c + sx * H, c + sy * H - sy * 2.6, ZT + 1.2, 4.2, fc, 2.4, 1.4, 0.0)
+        self.flagpole(c + 3.4, c + 3.4, 7.2, 4.0, (0.85, 0.84, 0.78), 2.6, 1.5, 0.0)
+        # Löschwasserbehälter im Hof
         wx, wy = c + 8.0, c - 8.0
         for a, b, c2, d2 in ((wx - 1.1, wy - 1.1, wx + 1.1, wy - 0.7), (wx - 1.1, wy + 0.7, wx + 1.1, wy + 1.1),
                              (wx - 1.1, wy - 0.7, wx - 0.7, wy + 0.7), (wx + 0.7, wy - 0.7, wx + 1.1, wy + 0.7)):
-            B(a, b, c2, d2, -1, 0.95, STONE)
+            B(a, b, c2, d2, -1, 0.95, WALL_C)
         self.vis.append({"k": "well", "x": wx, "y": wy})
+        # Drehende Antennen: grosse Schüssel (Würzburg-Riese) auf dem Betriebsgebäude, zwei Freya-Wände auf den freien Ecktürmen
+        self.vis.append({"k": "spin", "kind": "dish", "x": c, "y": c, "z": 6.3, "speed": 24.0, "h0": 20.0})
+        for (sx, sy), spd in (((-1, -1), 34.0), ((1, 1), -34.0)):
+            tx, ty = c + sx * H, c + sy * H
+            B(tx - 0.4, ty - 0.4, tx + 0.4, ty + 0.4, ZT, ZT + 4.2, WALL_CD, False, False)
+            self.vis.append({"k": "spin", "kind": "freya", "x": tx, "y": ty, "z": ZT, "speed": spd, "h0": 90.0 * sx})
 
     def build_town(self):
-        """Polytown: Marktplatz mit Rathaus im Norden (an der Zugbrücke), Ringstrasse um die Burg, Wohnhäuser, Flughafenstrasse
-        im Süden. Jedes Gebäude hängt mit Weg(en) am Strassennetz."""
+        """Polytown (Stützpunkt der 40er Jahre): Appellplatz mit Kommandantur im Norden (an der Brücke), Ringstrasse um die
+        Radarstation, Wohn- und Unterkunftshäuser, Flughafenstrasse im Süden. Jedes Gebäude hängt mit Weg(en) am Strassennetz."""
         c = CENTER
         R = 52.0
         ring = [(c + R * math.cos(2 * math.pi * i / 28), c + R * math.sin(2 * math.pi * i / 28)) for i in range(28)]
         self.add_road(ring, 2.3, "dirt", closed=True)
-        self.add_road([(c, c + 26.0), (c, c + 76.0)], 2.9, "cobble")             # Burgstrasse zum Marktplatz
+        self.add_road([(c, c + 26.0), (c, c + 76.0)], 2.9, "cobble")             # Zufahrt zum Appellplatz
         self.add_road([(c, c - 26.0), (c, c - 68.0)], 2.9, "cobble")             # zur Landebahn (Süd)
         self.add_road([(c - R, c), (c - 70.0, c)], 2.4, "dirt")                  # zum Helipad West
         self.add_road([(c + R, c), (c + 70.0, c)], 2.4, "dirt")                  # zum Helipad Ost
-        # Marktplatz
+        # Appellplatz mit Löschwasserbecken und Fahnenmast, Versorgungsständen
         px, py = c, c + 64.0
-        self.floors.append((px - 15, py - 12, px + 15, py + 12, COBBLE))
+        self.floors.append((px - 15, py - 12, px + 15, py + 12, CONCRETE))
         self.flats.append((px, py, 21.0, 31.0))
         self.fountain(px, py)
         for sx, sy, ax, ca, cb in ((-9.0, -7.0, True, AWN[0], AWN[1]), (9.0, -7.0, True, AWN[2], AWN[1]),
@@ -2956,11 +2986,11 @@ class World:
             self.market_stall(px + sx, py + sy, ax, ca, cb)
         # Häuser (Mitte x, y, Breite, Tiefe, Stockwerke, Tür, ...)
         rathaus = self.town_house(c, c + 86.0, 20.0, 12.0, floors=3, door="S", col=(0.78, 0.74, 0.64), roof=ROOFS[2],
-                                  balcony=True, tower=(c, c + 86.0, 4.6, 7.4), wide=True, sign="RATHAUS", seed=11,
+                                  balcony=True, tower=(c, c + 86.0, 4.6, 7.4), wide=True, sign="KOMMANDANTUR", seed=11,
                                   crate=(c - 6.0, c + 86.0))
         self.town_house(c - 27.0, c + 64.0, 14.0, 12.0, floors=2, door="E", col=HOUSE_COLS[1], roof=ROOFS[1], balcony=True,
-                        sign="GASTHAUS", seed=12, shop=True, crate=(c - 31.0, c + 62.0))
-        self.town_house(c + 27.0, c + 64.0, 12.0, 10.0, floors=2, door="W", col=HOUSE_COLS[0], roof=ROOFS[0], sign="BÄCKEREI",
+                        sign="KANTINE", seed=12, shop=True, crate=(c - 31.0, c + 62.0))
+        self.town_house(c + 27.0, c + 64.0, 12.0, 10.0, floors=2, door="W", col=HOUSE_COLS[0], roof=ROOFS[0], sign="LAZARETT",
                         seed=13, shop=True)
         self.town_house(c - 27.0, c + 86.0, 10.0, 9.0, floors=2, door="E", col=HOUSE_COLS[3], roof=ROOFS[3], seed=14)
         self.town_house(c + 27.0, c + 86.0, 10.0, 9.0, floors=2, door="W", col=HOUSE_COLS[2], roof=ROOFS[1], seed=15)
@@ -2970,10 +3000,13 @@ class World:
         self.town_house(c + 41.0, c, 12.0, 12.0, floors=2, door="E", col=HOUSE_COLS[0], roof=ROOFS[0], stairs="N", seed=17,
                         avoid=[(185.4, 148.4, 189.2, 153.6)])
         # Streusiedlung ausserhalb der Ringstrasse
-        for hx, hy, dr, ci, ri in ((c - 49.0, c - 29.0, "E", 3, 3), (c + 49.0, c - 29.0, "W", 1, 0),
-                                   (c - 49.0, c + 29.0, "E", 0, 1), (c + 49.0, c + 29.0, "W", 2, 2)):
+        for hx, hy, dr, ci, ri in ((c - 49.0, c - 29.0, "E", 3, 3), (c + 49.0, c + 29.0, "W", 2, 2)):
             self.town_house(hx, hy, 10.0, 9.0, floors=2, door=dr, col=HOUSE_COLS[ci], roof=ROOFS[ri],
                             seed=int(hx * 3 + hy))
+        # Unterkünfte: Nissenhütten (Wellblech) an der Ringstrasse
+        for hx, hy, dr in ((c + 50.0, c - 29.0, "W"), (c - 50.0, c + 29.0, "E")):
+            ex = self.nissen(hx, hy, dr)
+            self.connect_road(ex + (1.4 if dr == "E" else -1.4), hy, 1.2, "dirt")
         # Süden: Flugleitung und Werkstatt an der Flughafenstrasse
         self.town_house(c - 25.0, c - 57.0, 13.0, 10.0, floors=2, door="E", col=(0.74, 0.74, 0.72), roof=ROOFS[2], seed=21,
                         flat=True, balcony=False, sign="FLUGLEITUNG", crate=(c - 28.0, c - 57.0))
@@ -5687,6 +5720,47 @@ def _t_roof(S):
     return _finish(S, cols, h, 0.6)
 
 
+def _t_brick(S):
+    """Backstein im Läuferverband: Fugen dunkel, Steine einzeln getönt (Farbe kommt aus den Vertexfarben)."""
+    n, n2 = _fbm(S, 81, 6, 3), _fbm(S, 82, 70, 2)
+    bh, bw = max(4, S // 16), max(8, S // 8)
+    cols, h = [], []
+    for y in range(S):
+        crow, hrow = [], []
+        r, ly = y // bh, y % bh
+        off = bw // 2 if r % 2 else 0
+        for x in range(S):
+            xo = (x + off) % S
+            lx = xo % bw
+            bid = r * 31 + xo // bw
+            v = 0.86 + 0.26 * (_hash01(bid + 7) - 0.5) + 0.22 * (n[y][x] - 0.5) + 0.14 * (n2[y][x] - 0.5)
+            joint = lx < 1 or ly < 1
+            if joint:
+                v = 0.52 + 0.1 * n2[y][x]                    # Mörtelfuge
+            crow.append(_rgb(v))
+            hrow.append(-1.2 if joint else 0.3 * n2[y][x])
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.55)
+
+
+def _t_corrug(S):
+    """Wellblech: senkrechte Wellen, leicht verrostet."""
+    n, n2 = _fbm(S, 91, 5, 3), _fbm(S, 92, 40, 2)
+    cols, h = [], []
+    wv = max(4, S // 10)
+    for y in range(S):
+        crow, hrow = [], []
+        for x in range(S):
+            ph = math.sin(2 * math.pi * x / wv)
+            v = 0.80 + 0.20 * ph + 0.26 * (n[y][x] - 0.5) + 0.10 * (n2[y][x] - 0.5)
+            crow.append(_rgb(v, (1.0, 0.99, 0.97)))
+            hrow.append(1.4 * ph + 0.3 * n2[y][x])
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.5)
+
+
 def _t_cobble(S):
     vor = _voronoi(S, 7, 61)
     n, n2 = _fbm(S, 62, 12, 3), _fbm(S, 63, 70, 2)
@@ -5927,6 +6001,7 @@ TEXGEN = {
     "roof": (128, _t_roof, False, True, 3.0), "cobble": (256, _t_cobble, False, True, 3.0),
     "rock": (256, _t_rock, False, True, 3.0), "wood": (128, _t_wood, False, True, 3.0),
     "bark": (64, _t_bark, False, True, 1.6), "leaves": (96, _t_leaves, False, True, 1.5),
+    "brick": (256, _t_brick, False, True, 3.0), "corrug": (128, _t_corrug, False, True, 2.0),
     "plaster": (256, _t_plaster, False, True, 3.0), "concrete": (128, _t_concrete, False, True, 4.0),
     "metal": (128, _t_metal, False, True, 2.0), "cloth": (32, _t_cloth, False, True, 0.4),
     "water": (128, _t_water, False, True, 6.0), "fire": (64, _t_fire, False, True, 3.0),
@@ -6091,8 +6166,10 @@ _MATC = {tuple(round(c, 3) for c in col): m for col, m in (
     (STONE, "stone"), (STONE_D, "stone"), (ROOF, "roof"), (PLASTER, "plaster"),
     (WOOD_F, "wood"), (COBBLE, "cobble"), (CONCRETE, "concrete"), (ROCK_C, "rock"), (SANDBAG, "cloth"))
     + tuple((c, "metal") for c in CONT_COLS)}
-for _c in HOUSE_COLS + ((0.78, 0.74, 0.64), (0.74, 0.74, 0.72), (0.62, 0.64, 0.66)):
+for _c in HOUSE_COLS + ((0.78, 0.74, 0.64), (0.74, 0.74, 0.72), (0.62, 0.64, 0.66), PAINT_W, OLIVE):
     _MATC[tuple(round(v, 3) for v in _c)] = "plaster"
+for _c in (BRICK_R, BRICK_Y, (0.50, 0.26, 0.20), (0.46, 0.38, 0.28)):
+    _MATC[tuple(round(v, 3) for v in _c)] = "brick"
 for _c in ROOFS:
     _MATC[tuple(round(v, 3) for v in _c)] = "roof"
 for _c in AWN:
@@ -6539,6 +6616,7 @@ def quadf(m, a, b, c, d, col, ref=None, mat=None, vk=None):
     m.tri(a, c, d, col, ref, mat=mat, vk=vk)
 
 
+_DOORC = ((0.20, 0.32, 0.22), (0.42, 0.18, 0.15), (0.18, 0.26, 0.40), (0.30, 0.24, 0.17))      # Türfarben (grün, weinrot, blau, braun)
 _SHUT = ((0.20, 0.38, 0.26), (0.55, 0.20, 0.18), (0.24, 0.34, 0.56), (0.36, 0.26, 0.14))
 _FLOW = ((0.95, 0.30, 0.35), (0.98, 0.85, 0.25), (0.95, 0.95, 0.95), (0.75, 0.45, 0.90), (0.98, 0.55, 0.20))
 
@@ -6588,22 +6666,22 @@ def house_details(m, lamps, r, rng):
     WL = _Wall(x0, y0, x1, y1)
     seed = r["seed"]
     hr = random.Random(seed)
-    timber = seed % 3 != 0
-    stone_c = tuple(min(1.0, c * 0.96 + 0.02) for c in STONE)
-    shut = _SHUT[seed % 4]
+    brick = mat_for_color(col) == "brick"
+    stone_c = (0.66, 0.65, 0.62)                          # Beton für Sockel, Sohlbänke, Stürze
+    door_c = _DOORC[seed % 4]
     sides = "NSEW"
     ext = {s: ((x0, x1) if s in "NS" else (y0, y1)) for s in sides}
     # --- Sockel
     for s in sides:
         a, b = ext[s]
-        WL.box(m, s, a - 0.1, b + 0.1, -0.3, 0.55, 0.0, 0.12, stone_c, "stone")
-        WL.box(m, s, a - 0.1, b + 0.1, 0.55, 0.64, 0.0, 0.17, stone_c, "stone")
+        WL.box(m, s, a - 0.1, b + 0.1, -0.3, 0.55, 0.0, 0.1, (0.30, 0.18, 0.15) if brick else stone_c, "brick" if brick else "concrete")
+        WL.box(m, s, a - 0.1, b + 0.1, 0.55, 0.64, 0.0, 0.15, stone_c, "concrete")
     # --- Ecken: Quader (Stein) oder Eckpfosten (Holz)
     for sx, sy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
         dxs = -1.0 if sx == x0 else 1.0
         dys = -1.0 if sy == y0 else 1.0
-        if timber:
-            box(m, sx + dxs * 0.04, sy + dys * 0.04, H / 2 + 0.3, 0.34, 0.34, H + 0.6, trim, None, "wood", False)
+        if brick:
+            pass
         else:
             nb = int(H / 0.5)
             for k in range(nb):
@@ -6611,11 +6689,11 @@ def house_details(m, lamps, r, rng):
                 z0 = 0.64 + k * 0.5
                 if z0 + 0.46 > H:
                     break
-                cc = jc(stone_c, hr, 0.05)
-                box(m, sx + dxs * 0.04 - dxs * (ln / 2 - 0.2), sy + dys * 0.065, z0 + 0.23, ln, 0.13, 0.46, cc, None, "stone", False)
+                cc = jc((0.56, 0.30, 0.23), hr, 0.05)
+                box(m, sx + dxs * 0.04 - dxs * (ln / 2 - 0.2), sy + dys * 0.065, z0 + 0.23, ln, 0.13, 0.46, cc, None, "brick", False)
                 ln2 = 0.34 if k % 2 == 0 else 0.62
                 box(m, sx + dxs * 0.065, sy + dys * 0.04 - dys * (ln2 / 2 - 0.2), z0 + 0.23, 0.13, ln2, 0.46, cc, None,
-                    "stone", False)
+                    "brick", False)
     # --- Gurtbalken auf Höhe der Decken (ausser vor Türen) und Fachwerk
     opens = r["opens"]
     for s in sides:
@@ -6634,95 +6712,55 @@ def house_details(m, lamps, r, rng):
                 segs.append((cur, b + 0.17))
             for lo, hi in segs:
                 if hi - lo > 0.2:
-                    WL.box(m, s, lo, hi, z - 0.14, z + 0.14, 0.0, 0.1, trim, "wood")
-        if timber:
-            for f in range(1, n):
-                zb, zt = f * fh + 0.14, (f + 1) * fh - 0.14
-                L = b - a
-                ns = max(2, int(L / 1.5))
-                for k in range(ns + 1):
-                    c = a + L * k / ns
-                    if any(abs(o[1] - c) < o[2] + 0.18 and o[3] < zt and o[4] > zb for o in opens if o[0] == s):
-                        continue
-                    if k in (0, ns):
-                        continue
-                    WL.box(m, s, c - 0.07, c + 0.07, zb, zt, 0.0, 0.07, trim, "wood")
-                for k in range(ns):                       # Streben in Feldern ohne Fenster
-                    c0, c1 = a + L * k / ns, a + L * (k + 1) / ns
-                    if any(c0 - 0.2 < o[1] < c1 + 0.2 and o[3] < zt and o[4] > zb for o in opens if o[0] == s):
-                        continue
-                    if hr.random() < 0.6:
-                        up, dn = (c0 + 0.1, zb + 0.1), (c1 - 0.1, zt - 0.1)
-                        if hr.random() < 0.5:
-                            up, dn = (c1 - 0.1, zb + 0.1), (c0 + 0.1, zt - 0.1)
-                        pa = WL.pt(s, up[0], up[1], 0.035)
-                        pb = WL.pt(s, dn[0], dn[1], 0.035)
-                        beam(m, pa, pb, 0.12, 0.07, trim, "wood", up=WL.nrm(s))
+                    WL.box(m, s, lo, hi, z - 0.14, z + 0.14, 0.0, 0.1, stone_c, "concrete")
     # --- Fenster und Türen
     for s, c, hw, zlo, zhi, kind, fl in opens:
         t_, nm = WL.tan(s), WL.nrm(s)
         if kind == "win":
-            WL.box(m, s, c - hw - 0.13, c + hw + 0.13, zhi, zhi + 0.16, 0.0, 0.13, stone_c, "stone")
-            WL.box(m, s, c - hw - 0.2, c + hw + 0.2, zlo - 0.12, zlo, 0.0, 0.22, stone_c, "stone")
-            WL.box(m, s, c - hw - 0.13, c - hw, zlo, zhi, 0.0, 0.1, trim, "wood")
-            WL.box(m, s, c + hw, c + hw + 0.13, zlo, zhi, 0.0, 0.1, trim, "wood")
-            WL.box(m, s, c - 0.035, c + 0.035, zlo, zhi, -0.3, -0.2, trim, "wood")
-            WL.box(m, s, c - hw, c + hw, (zlo + zhi) / 2 - 0.035, (zlo + zhi) / 2 + 0.035, -0.3, -0.2, trim, "wood")
-            sc = shut if (fl + seed) % 2 == 0 else _SHUT[(seed + 1) % 4]
-            for sg in (-1, 1):
-                e0 = c + sg * (hw + 0.13)
-                WL.box(m, s, min(e0, e0 + sg * 0.5), max(e0, e0 + sg * 0.5), zlo - 0.02, zhi + 0.02, 0.0, 0.06, sc, "wood")
-                for k in range(2):
-                    zz = zlo + 0.22 + (zhi - zlo - 0.44) * k
-                    WL.box(m, s, min(e0 + sg * 0.1, e0 + sg * 0.4), max(e0 + sg * 0.1, e0 + sg * 0.4), zz - 0.03, zz + 0.03,
-                           0.06, 0.09, tuple(v * 0.7 for v in sc), "wood")
-            if fl == 0 and hr.random() < 0.55:
-                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zlo - 0.42, zlo - 0.12, 0.05, 0.34, trim, "wood")
-                m.mat = "leaves"
-                for k in range(5):
-                    cc = c - hw + (2 * hw) * (k + 0.5) / 5
-                    pp = WL.pt(s, cc, zlo - 0.05, 0.2)
-                    blob(m, pp[0], pp[1], pp[2], 0.15, 0.15, 0.12, (0.20 + hr.random() * 0.08, 0.46, 0.18), hr, 0.2)
-                    if hr.random() < 0.8:
-                        fc = hr.choice(_FLOW)
-                        q = WL.pt(s, cc + hr.uniform(-0.05, 0.05), zlo + 0.07, 0.2)
-                        box(m, q[0], q[1], q[2], 0.07, 0.07, 0.07, fc, None, None, False)
-                m.mat = None
+            # Betonsturz und Sohlbank, weiss gestrichener Rahmen mit Sprossen (Stahl-/Holzfenster der 40er)
+            WL.box(m, s, c - hw - 0.14, c + hw + 0.14, zhi, zhi + 0.2, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.2, c + hw + 0.2, zlo - 0.1, zlo, 0.0, 0.2, stone_c, "concrete")
+            if brick:
+                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zhi + 0.2, zhi + 0.34, 0.0, 0.05, (0.40, 0.20, 0.15), "brick")   # Rollschicht
+            WL.box(m, s, c - hw - 0.1, c - hw, zlo, zhi, 0.0, 0.08, PAINT_W, "plaster")
+            WL.box(m, s, c + hw, c + hw + 0.1, zlo, zhi, 0.0, 0.08, PAINT_W, "plaster")
+            WL.box(m, s, c - hw, c + hw, zhi - 0.07, zhi, -0.3, -0.18, PAINT_W, "plaster")
+            WL.box(m, s, c - hw, c + hw, zlo, zlo + 0.07, -0.3, -0.18, PAINT_W, "plaster")
+            WL.box(m, s, c - 0.03, c + 0.03, zlo, zhi, -0.3, -0.2, PAINT_W, "plaster")
+            for k in (1, 2):
+                zz = zlo + (zhi - zlo) * k / 3
+                WL.box(m, s, c - hw, c + hw, zz - 0.025, zz + 0.025, -0.3, -0.2, PAINT_W, "plaster")
+            if fl == 0 and (seed + int(c * 7)) % 3 == 0:               # Verdunkelungsband (Papierstreifen) kreuz und quer
+                pa, pb = WL.pt(s, c - hw, zlo, 0.02), WL.pt(s, c + hw, zhi, 0.02)
+                beam(m, pa, pb, 0.07, 0.015, (0.78, 0.70, 0.52), None, up=nm)
+                pa, pb = WL.pt(s, c + hw, zlo, 0.02), WL.pt(s, c - hw, zhi, 0.02)
+                beam(m, pa, pb, 0.07, 0.015, (0.78, 0.70, 0.52), None, up=nm)
         else:                                              # Tür
             if zlo > 0.5:
-                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zlo - 0.1, zlo, 0.0, 0.18, stone_c, "stone")
-            WL.box(m, s, c - hw - 0.16, c - hw, zlo, zhi + 0.1, 0.0, 0.14, stone_c, "stone")
-            WL.box(m, s, c + hw, c + hw + 0.16, zlo, zhi + 0.1, 0.0, 0.14, stone_c, "stone")
-            WL.box(m, s, c - hw - 0.24, c + hw + 0.24, zhi, zhi + 0.34, 0.0, 0.2, stone_c, "stone")
-            WL.box(m, s, c - 0.18, c + 0.18, zhi + 0.34, zhi + 0.52, 0.0, 0.22, stone_c, "stone")      # Schlussstein
+                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zlo - 0.1, zlo, 0.0, 0.18, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.16, c - hw, zlo, zhi + 0.1, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c + hw, c + hw + 0.16, zlo, zhi + 0.1, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.22, c + hw + 0.22, zhi, zhi + 0.24, 0.0, 0.14, stone_c, "concrete")
             if zlo < 0.5:
-                WL.box(m, s, c - hw - 0.2, c + hw + 0.2, -0.1, 0.06, 0.0, 0.5, stone_c, "stone")      # Schwelle
-            # offener Türflügel, an die Wand zurückgeschlagen
-            dc = (0.40, 0.26, 0.15)
+                WL.box(m, s, c - hw - 0.2, c + hw + 0.2, -0.1, 0.06, 0.0, 0.5, stone_c, "concrete")      # Schwelle
+            # offener Türflügel (Füllungstür, Oberlicht-Rahmen), an die Wand zurückgeschlagen
             for sg in ((-1, 1) if hw > 1.2 else (1,)):
                 hinge = c + sg * (hw + 0.2)
                 lw = hw * (1.0 if hw > 1.2 else 0.9)
-                WL.box(m, s, min(hinge, hinge + sg * lw), max(hinge, hinge + sg * lw), zlo + 0.05, zhi - 0.08, 0.14, 0.22, dc, "wood")
-                for k in range(3):
-                    zz = zlo + 0.4 + (zhi - zlo - 0.8) * k / 2
-                    WL.box(m, s, min(hinge, hinge + sg * lw), max(hinge, hinge + sg * lw), zz - 0.05, zz + 0.05, 0.22, 0.26,
-                           (0.14, 0.12, 0.10), "metal")
-            if fl == 0:                                       # Vordach auf Konsolen
+                a_, b_ = min(hinge, hinge + sg * lw), max(hinge, hinge + sg * lw)
+                WL.box(m, s, a_, b_, zlo + 0.05, zhi - 0.08, 0.14, 0.21, door_c, "wood")
+                for kk in range(2):                                   # Füllungen
+                    zz = zlo + 0.35 + (zhi - zlo - 0.9) * kk / 1.0 * 0.5
+                    WL.box(m, s, a_ + 0.12, b_ - 0.12, zz, zz + (zhi - zlo - 0.9) * 0.45, 0.21, 0.235, tuple(v * 0.8 for v in door_c), "wood")
+                WL.box(m, s, a_ if sg < 0 else b_ - 0.1, b_ if sg > 0 else a_ + 0.1, zlo + 1.0, zlo + 1.12, 0.235, 0.27,
+                       (0.62, 0.56, 0.30), "metal")                   # Messinggriff
+            if fl == 0:                                       # freitragendes Betonvordach, Wandleuchten
+                WL.box(m, s, c - hw - 0.6, c + hw + 0.6, zhi + 0.45, zhi + 0.6, 0.0, 1.25, stone_c, "concrete")
+                WL.box(m, s, c - hw - 0.6, c + hw + 0.6, zhi + 0.6, zhi + 0.72, 1.15, 1.25, tuple(v * 0.8 for v in stone_c), "concrete")
                 for sg in (-1, 1):
-                    pa = WL.pt(s, c + sg * (hw + 0.05), zhi + 0.45, 0.02)
-                    pb = WL.pt(s, c + sg * (hw + 0.05), zhi + 0.85, 0.95)
-                    beam(m, pa, pb, 0.1, 0.1, trim, "wood", up=t_)
-                for sg in (-1, 1):
-                    p2 = WL.pt(s, c + sg * (hw + 0.18), zhi + 0.82, 0.55)
-                    lo_ = WL.pt(s, c + sg * (hw + 0.18), zhi + 0.35, 0.05)
-                    beam(m, lo_, p2, 0.08, 0.08, trim, "wood", up=t_)
-                WL.box(m, s, c - hw - 0.55, c + hw + 0.55, zhi + 0.78, zhi + 0.9, 0.0, 1.05, roof, "roof")
-                WL.box(m, s, c - hw - 0.6, c + hw + 0.6, zhi + 0.9, zhi + 0.97, 0.02, 1.1, tuple(v * 0.8 for v in roof), "roof")
-                # Laternen
-                for sg in (-1, 1):
-                    q = WL.pt(s, c + sg * (hw + 0.55), zhi - 0.3, 0.25)
-                    beam(m, WL.pt(s, c + sg * (hw + 0.55), zhi - 0.25, 0.0), q, 0.05, 0.05, (0.12, 0.12, 0.12), "metal")
-                    box(lamps, q[0], q[1], q[2] - 0.1, 0.16, 0.16, 0.24, (1.0, 0.82, 0.45))
+                    q = WL.pt(s, c + sg * (hw + 0.55), zhi - 0.2, 0.22)
+                    beam(m, WL.pt(s, c + sg * (hw + 0.55), zhi - 0.2, 0.0), q, 0.05, 0.05, (0.12, 0.12, 0.12), "metal")
+                    box(lamps, q[0], q[1], q[2] - 0.08, 0.16, 0.16, 0.2, (1.0, 0.82, 0.45))
     # --- Schild über oder neben der Tür
     if r.get("sign"):
         s = r["door"]
@@ -6734,9 +6772,9 @@ def house_details(m, lamps, r, rng):
             cc = c - hw - 1.35
         sgn = 1 if cc > c else -1
         h0 = hash(r["sign"]) % 360
-        sc = {"RATHAUS": (0.62, 0.50, 0.18), "GASTHAUS": (0.58, 0.40, 0.12), "BÄCKEREI": (0.82, 0.62, 0.30),
+        sc = {"KOMMANDANTUR": (0.30, 0.34, 0.24), "KANTINE": (0.55, 0.30, 0.16), "LAZARETT": (0.88, 0.88, 0.84),
               "FLUGLEITUNG": (0.25, 0.32, 0.42), "WERKSTATT": (0.55, 0.28, 0.14)}.get(r["sign"], (0.5, 0.4, 0.3))
-        if r["sign"] in ("GASTHAUS", "BÄCKEREI", "RATHAUS"):
+        if r["sign"] in ("KANTINE", "LAZARETT", "KOMMANDANTUR"):
             zc = 3.0
             beam(m, WL.pt(s, cc - sgn * 0.7, zc + 0.45, 0.0), WL.pt(s, cc - sgn * 0.7, zc + 0.45, 1.25), 0.07, 0.07, (0.14, 0.12, 0.10),
                  "metal", up=t_)
@@ -6745,6 +6783,9 @@ def house_details(m, lamps, r, rng):
             WL.box(m, s, min(cc - 0.1, cc + sgn * 0.5 - 0.1) - 0.0, max(cc - 0.1, cc + sgn * 0.5) + 0.0, zc - 0.4, zc + 0.4, 1.12, 1.2,
                    sc, "wood")
             WL.box(m, s, cc - 0.28, cc + 0.28, zc - 0.28, zc + 0.28, 1.2, 1.24, tuple(min(1, v * 1.3) for v in sc), "wood")
+            if r["sign"] == "LAZARETT":                                   # rotes Kreuz
+                WL.box(m, s, cc - 0.2, cc + 0.2, zc - 0.07, zc + 0.07, 1.24, 1.26, (0.75, 0.10, 0.10), "wood")
+                WL.box(m, s, cc - 0.07, cc + 0.07, zc - 0.2, zc + 0.2, 1.24, 1.26, (0.75, 0.10, 0.10), "wood")
         else:
             zc = 3.1
             WL.box(m, s, cc - 1.3, cc + 1.3, zc - 0.28, zc + 0.28, 0.06, 0.14, sc, "metal")
@@ -6769,12 +6810,12 @@ def house_details(m, lamps, r, rng):
     if r["chim"]:
         cx0, cy0, cx1, cy1 = r["chim"]
         top = H + rise + 1.1
-        box(m, (cx0 + cx1) / 2, (cy0 + cy1) / 2, top + 0.12, cx1 - cx0 + 0.24, cy1 - cy0 + 0.24, 0.26, stone_c, None, "stone", False)
+        box(m, (cx0 + cx1) / 2, (cy0 + cy1) / 2, top + 0.12, cx1 - cx0 + 0.24, cy1 - cy0 + 0.24, 0.26, stone_c, None, "concrete", False)
         for dx_, dy_ in ((-0.2, -0.2), (0.2, 0.2), (-0.2, 0.2), (0.2, -0.2)):
             prism(m, (cx0 + cx1) / 2 + dx_ * (cx1 - cx0) * 0.6, (cy0 + cy1) / 2 + dy_ * (cy1 - cy0) * 0.6, top + 0.24, 0.1, 0.38, 6,
                   (0.52, 0.30, 0.22), hr)
     # --- Fässer / Kisten an Läden
-    if r.get("sign") in ("GASTHAUS", "BÄCKEREI", "WERKSTATT"):
+    if r.get("sign") in ("KANTINE", "LAZARETT", "WERKSTATT"):
         s = r["door"]
         a, b = ext[s]
         c = r["dpos"]
@@ -6787,9 +6828,9 @@ def house_details(m, lamps, r, rng):
                 box(m, p[0], p[1], 0.45, 0.9, 0.9, 0.9, WOOD_M, None, "wood", False)
                 box(m, p[0], p[1], 1.25, 0.7, 0.7, 0.7, WOOD_D, None, "wood", False)
             else:
-                prism(m, p[0], p[1], 0.0, 0.42, 0.95, 10, (0.45, 0.30, 0.17), hr, 1.0)
-                for zz in (0.2, 0.75):
-                    prism(m, p[0], p[1], zz, 0.45, 0.07, 10, (0.20, 0.20, 0.22), hr, 1.0)
+                prism(m, p[0], p[1], 0.0, 0.3, 0.88, 10, (0.30, 0.37, 0.26), hr, 1.0)                    # Ölfass
+                for zz in (0.1, 0.42, 0.78):
+                    prism(m, p[0], p[1], zz, 0.32, 0.05, 10, (0.20, 0.24, 0.17), hr, 1.0)
 
 
 def roof_gable(m, r, rng, ext, roof, trim, col, hr):
@@ -6848,7 +6889,7 @@ def roof_gable(m, r, rng, ext, roof, trim, col, hr):
         zt = H + rise * (1.0 - 0.0)
         a, b2, c2 = P(u, -hh, H - 0.1), P(u, hh, H - 0.1), P(u, 0.0, H + rise * 0.99)
         ref = P(u - sgn_u * 3.0, 0.0, H)
-        m.tri(a, b2, c2, jc(gc, hr, 0.03), ref, mat="plaster")
+        m.tri(a, b2, c2, jc(gc, hr, 0.03), ref, mat=mat_for_color(col))
         # Windbretter an den Dachkanten
         for sg in (-1, 1):
             q0, q1 = P(u + sgn_u * (ov + 0.04), sg * e, plane(e) - 0.05), P(u + sgn_u * (ov + 0.04), 0.0, H + rise + 0.2)
@@ -6874,10 +6915,10 @@ def roof_gable(m, r, rng, ext, roof, trim, col, hr):
                 gw, gd, gh = 0.9, 1.1, 1.0
                 for sa in (-1, 1):
                     q = P(uc + sa * gw, vv, zbase)
-                    box(m, q[0], q[1], zbase + gh / 2 - 0.1, 0.16, 0.16, gh + 0.2, col, None, "plaster", False)
+                    box(m, q[0], q[1], zbase + gh / 2 - 0.1, 0.16, 0.16, gh + 0.2, col, None, mat_for_color(col), False)
                 fr = P(uc, vv + sg * 0.05, zbase + gh / 2 - 0.1)
-                box(m, fr[0], fr[1], fr[2], 2 * gw, 0.16, gh + 0.2, col, None, "plaster", False) if rx == "x" else \
-                    box(m, fr[0], fr[1], fr[2], 0.16, 2 * gw, gh + 0.2, col, None, "plaster", False)
+                box(m, fr[0], fr[1], fr[2], 2 * gw, 0.16, gh + 0.2, col, None, mat_for_color(col), False) if rx == "x" else \
+                    box(m, fr[0], fr[1], fr[2], 0.16, 2 * gw, gh + 0.2, col, None, mat_for_color(col), False)
                 wp = P(uc, vv + sg * 0.14, zbase + gh / 2 - 0.1)
                 if rx == "x":
                     box(m, wp[0], wp[1], wp[2], 1.1, 0.06, 0.62, (0.10, 0.11, 0.14))
@@ -6900,19 +6941,133 @@ def _spire(m, cx, cy, z0, r, h, col, hr, sides=4):
         m.tri(rg[i], rg[j], ap, jc(col, hr, 0.04), (cx, cy, z0 + h * 0.3), mat="roof")
 
 
+CONC_D = (0.47, 0.47, 0.49)          # dunkler Beton (Brüstungen, Sockel)
+WALL_C = (0.64, 0.62, 0.57)          # Radarstation: helles Betongrau mit warmem Stich
+WALL_CD = (0.52, 0.50, 0.46)
+WIRE_C = (0.16, 0.16, 0.17)
+for _c in (CONC_D, WALL_C, WALL_CD):
+    _MATC[tuple(round(v, 3) for v in _c)] = "concrete"
+
+
+class _SpinMesh(Mesh):
+    """Mesh für drehende Teile: die Beleuchtung ist nicht an die Drehlage gebunden (gleichmässig, ohne Sonnenrichtung)."""
+
+    def tri(self, a, b, c, col, ref=None, vk=None, mat=None, uv=None, nd=None):
+        super().tri(a, b, c, col, ref, vk, mat, uv, nd if nd is not None else (0.45, 0.45, 0.45))
+
+
+def radar_dish(m, R=5.9, depth=1.8, elev=50.0, hz=4.4):
+    """Grosse Parabolschüssel (Würzburg-Riese) auf Drehkranz: Koordinaten relativ zum Drehpunkt auf dem Dach (Blickrichtung +y)."""
+    e = math.radians(elev)
+    d = (0.0, math.cos(e), math.sin(e))
+    u = (1.0, 0.0, 0.0)
+    v = (0.0, -math.sin(e), math.cos(e))
+    f = R * R / (4.0 * depth)
+    C = (0.0, 0.8, hz)
+
+    def P(r, phi, off=0.0):
+        z_ = r * r / (4.0 * f)
+        rc, rs = r * math.cos(phi), r * math.sin(phi)
+        return (C[0] + u[0] * rc + v[0] * rs + d[0] * (z_ + off), C[1] + u[1] * rc + v[1] * rs + d[1] * (z_ + off),
+                C[2] + u[2] * rc + v[2] * rs + d[2] * (z_ + off))
+
+    N, K = 28, 6
+    back = (C[0] - d[0] * 4.0, C[1] - d[1] * 4.0, C[2] - d[2] * 4.0)
+    front = (C[0] + d[0] * f, C[1] + d[1] * f, C[2] + d[2] * f)
+    inner_c, outer_c, rim_c = (0.80, 0.82, 0.84), (0.55, 0.57, 0.59), (0.36, 0.38, 0.40)
+    for k in range(K):
+        r0, r1 = R * k / K, R * (k + 1) / K
+        for i in range(N):
+            p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+            sh = 0.92 + 0.08 * ((i + k) % 2)
+            ci = tuple(c * sh for c in inner_c)
+            co = tuple(c * sh for c in outer_c)
+            if k == 0:
+                m.tri(P(0, 0), P(r1, p0), P(r1, p1), ci, back, mat="metal")
+                m.tri(P(0, 0, -0.12), P(r1, p0, -0.12), P(r1, p1, -0.12), co, front, mat="metal")
+            else:
+                a, b, c2, d2 = P(r0, p0), P(r1, p0), P(r1, p1), P(r0, p1)
+                quadf(m, a, b, c2, d2, ci, back, "metal")
+                a, b, c2, d2 = P(r0, p0, -0.12), P(r1, p0, -0.12), P(r1, p1, -0.12), P(r0, p1, -0.12)
+                quadf(m, a, b, c2, d2, co, front, "metal")
+    for i in range(N):                                         # Randwulst
+        p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+        beam(m, P(R, p0, -0.05), P(R, p1, -0.05), 0.2, 0.2, rim_c, "metal", up=d)
+        quadf(m, P(R, p0), P(R, p1), P(R, p1, -0.12), P(R, p0, -0.12), outer_c, (C[0], C[1], C[2]), "metal")
+    for i in range(8):                                         # Rippen auf der Rückseite
+        phi = 2 * math.pi * i / 8
+        beam(m, P(0.3, phi, -0.2), P(R * 0.97, phi, -0.2), 0.16, 0.16, rim_c, "metal", up=d)
+    for r_ in (R * 0.35, R * 0.68):
+        for i in range(N):
+            p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+            beam(m, P(r_, p0, -0.2), P(r_, p1, -0.2), 0.1, 0.1, rim_c, "metal", up=d)
+    # Dipol-Erreger im Brennpunkt, Streben vom Rand
+    fh = P(0, 0, f)
+    for i in range(4):
+        phi = math.pi / 4 + i * math.pi / 2
+        beam(m, P(R, phi, -0.05), fh, 0.12, 0.12, rim_c, "metal", up=d)
+    obox(m, fh, u, d, v, 0.28, 0.32, 0.28, (0.30, 0.31, 0.33), "metal")
+    beam(m, (fh[0] - 0.5, fh[1], fh[2]), (fh[0] + 0.5, fh[1], fh[2]), 0.07, 0.07, (0.85, 0.85, 0.85), "metal")
+    # Drehgestell: Plattform, zwei Böcke, Achse, Kabine
+    for sx in (-1, 1):
+        beam(m, (sx * 1.25, 0.8, 0.45), (sx * 1.25, 0.8, hz + 0.1), 0.34, 0.34, (0.40, 0.42, 0.40), "metal")
+        beam(m, (sx * 1.25, 0.8, hz), (sx * 0.2, 0.8 + 0.2, hz - 0.1), 0.16, 0.16, rim_c, "metal")
+        beam(m, (sx * 1.25, 0.1, 0.45), (sx * 1.25, 0.8, hz - 0.6), 0.2, 0.2, (0.40, 0.42, 0.40), "metal")
+        beam(m, (sx * 1.25, 1.5, 0.45), (sx * 1.25, 0.8, hz - 0.6), 0.2, 0.2, (0.40, 0.42, 0.40), "metal")
+    beam(m, (-1.4, 0.8, hz), (1.4, 0.8, hz), 0.3, 0.3, (0.34, 0.35, 0.37), "metal")
+    box(m, 0.0, 0.8, 0.28, 3.4, 2.2, 0.5, (0.38, 0.40, 0.38), None, "metal", False)
+    prism(m, 0.0, 0.8, -0.05, 1.7, 0.2, 14, (0.34, 0.35, 0.36), random.Random(3), 1.0)
+    box(m, 0.0, -1.2, 1.15, 1.9, 1.6, 1.5, OLIVE, None, "metal", False)             # Gerätekabine hinter der Schüssel
+    box(m, 0.0, -2.05, 1.15, 1.4, 0.08, 1.0, (0.20, 0.22, 0.20), None, "metal", False)
+
+
+def freya_array(m, W=5.4, Hh=3.2, mast=4.2):
+    """Frühwarn-Antenne (Freya): Gittermast mit Dipolwand, dreht sich auf dem Turm."""
+    leg = 0.9
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            beam(m, (sx * leg, sy * leg, 0.0), (sx * 0.28, sy * 0.28, mast), 0.13, 0.13, (0.55, 0.57, 0.58), "metal")
+    for k in range(1, 4):
+        z = mast * k / 4
+        rr = leg - (leg - 0.28) * k / 4
+        for a, b in (((-1, -1), (1, -1)), ((1, -1), (1, 1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1))):
+            beam(m, (a[0] * rr, a[1] * rr, z), (b[0] * rr, b[1] * rr, z), 0.07, 0.07, (0.5, 0.52, 0.53), "metal")
+    z0 = mast + 0.2
+    beam(m, (0, 0, 0), (0, 0, z0 + Hh / 2), 0.18, 0.18, (0.45, 0.46, 0.48), "metal")
+    fr = (0.62, 0.64, 0.66)
+    for sx in (-1, 1):
+        beam(m, (sx * W / 2, 0.0, z0), (sx * W / 2, 0.0, z0 + Hh), 0.14, 0.14, fr, "metal")
+    for zz in (z0, z0 + Hh):
+        beam(m, (-W / 2, 0.0, zz), (W / 2, 0.0, zz), 0.14, 0.14, fr, "metal")
+    nrow, ncol = 4, 7
+    for r_ in range(nrow):
+        zz = z0 + Hh * (r_ + 0.5) / nrow
+        beam(m, (-W / 2, 0.0, zz), (W / 2, 0.0, zz), 0.05, 0.05, (0.55, 0.57, 0.58), "metal")
+        for c_ in range(ncol):
+            xx = -W / 2 + W * (c_ + 0.5) / ncol
+            beam(m, (xx - 0.28, 0.35, zz), (xx + 0.28, 0.35, zz), 0.06, 0.06, (0.88, 0.88, 0.86), "metal")
+            beam(m, (xx, 0.0, zz), (xx, 0.35, zz), 0.04, 0.04, (0.5, 0.5, 0.5), "metal")
+    for c_ in range(ncol + 1):                                  # Reflektorgitter dahinter
+        xx = -W / 2 + W * c_ / ncol
+        beam(m, (xx, -0.12, z0), (xx, -0.12, z0 + Hh), 0.03, 0.03, (0.36, 0.38, 0.40), "metal")
+    for r_ in range(nrow * 2 + 1):
+        zz = z0 + Hh * r_ / (nrow * 2)
+        beam(m, (-W / 2, -0.12, zz), (W / 2, -0.12, zz), 0.03, 0.03, (0.36, 0.38, 0.40), "metal")
+    box(m, 0.0, -0.9, z0 + 0.7, 1.2, 0.9, 1.1, OLIVE, None, "metal", False)     # Gegengewicht / Gerät
+
+
 def tower_details(m, r, hr):
+    """Uhrenturm der Kommandantur: Zifferblätter, Schallöffnungen, flaches Betonkapitell, Funkmast."""
     tx, ty, ts, th = r["tower"]
     H = r["H"]
     hs = ts / 2
-    stone = (0.70, 0.67, 0.60)
     z_clock = H + th * 0.5
     for sx, sy, ax in ((0, -1, "y"), (0, 1, "y"), (-1, 0, "x"), (1, 0, "x")):
-        # Zifferblatt
         pc = (tx + sx * (hs + 0.05), ty + sy * (hs + 0.05), z_clock)
         ux = (1.0, 0.0, 0.0) if sy else (0.0, 1.0, 0.0)
         nn = (float(sx), float(sy), 0.0)
-        obox(m, pc, ux, nn, (0.0, 0.0, 1.0), 1.15, 0.05, 1.15, (0.18, 0.14, 0.10), "wood")
-        obox(m, (pc[0] + nn[0] * 0.04, pc[1] + nn[1] * 0.04, pc[2]), ux, nn, (0.0, 0.0, 1.0), 0.98, 0.04, 0.98, (0.95, 0.93, 0.85))
+        obox(m, pc, ux, nn, (0.0, 0.0, 1.0), 1.15, 0.05, 1.15, (0.14, 0.14, 0.15), "metal")
+        obox(m, (pc[0] + nn[0] * 0.04, pc[1] + nn[1] * 0.04, pc[2]), ux, nn, (0.0, 0.0, 1.0), 0.98, 0.04, 0.98, (0.93, 0.92, 0.86))
         for k in range(12):
             a = k * math.pi / 6
             q = (pc[0] + nn[0] * 0.1 + ux[0] * math.sin(a) * 0.82, pc[1] + nn[1] * 0.1 + ux[1] * math.sin(a) * 0.82,
@@ -6924,147 +7079,214 @@ def tower_details(m, r, hr):
         beam(m, (pc[0] + nn[0] * 0.12, pc[1] + nn[1] * 0.12, pc[2]),
              (pc[0] + nn[0] * 0.12 - ux[0] * 0.45, pc[1] + nn[1] * 0.12 - ux[1] * 0.45, pc[2] - 0.25), 0.06, 0.03, (0.08, 0.08, 0.08),
              up=nn)
-        # Schallarkade
+        # Lamellenfenster
         pb = (tx + sx * (hs + 0.03), ty + sy * (hs + 0.03), H + th - 1.5)
-        obox(m, pb, ux, nn, (0.0, 0.0, 1.0), 0.55, 0.04, 0.8, (0.08, 0.08, 0.10))
-        obox(m, (pb[0], pb[1], pb[2] + 0.88), ux, nn, (0.0, 0.0, 1.0), 0.7, 0.07, 0.1, stone)
-    # Gesims und Zinnen-Kranz
-    box(m, tx, ty, H + th - 0.2, ts + 0.5, ts + 0.5, 0.4, stone, None, "stone", False)
-    box(m, tx, ty, H + th + 0.1, ts + 0.7, ts + 0.7, 0.2, stone, None, "stone", False)
-    for k in range(4):
-        a = k * math.pi / 2
-        _spire(m, tx + math.cos(a + math.pi / 4) * hs * 1.1, ty + math.sin(a + math.pi / 4) * hs * 1.1, H + th + 0.2, 0.28, 1.1,
-               (0.28, 0.52, 0.46), hr, 4)
-    _spire(m, tx, ty, H + th + 0.2, hs * 1.28, 5.6, (0.30, 0.55, 0.48), hr, 4)
-    beam(m, (tx, ty, H + th + 5.6), (tx, ty, H + th + 7.0), 0.1, 0.1, (0.85, 0.7, 0.2), "metal")
-    ell(m, (tx, ty, H + th + 7.1), 0.22, 0.22, 0.22, (0.9, 0.75, 0.2), None, "metal")
+        obox(m, pb, ux, nn, (0.0, 0.0, 1.0), 0.55, 0.04, 0.8, (0.08, 0.08, 0.10), "metal")
+        for k in range(6):
+            obox(m, (pb[0] + nn[0] * 0.07, pb[1] + nn[1] * 0.07, pb[2] - 0.65 + k * 0.26), ux, nn, (0.0, 0.0, 1.0), 0.6, 0.06, 0.04,
+                 (0.66, 0.65, 0.62), "concrete")
+    box(m, tx, ty, H + th - 0.2, ts + 0.5, ts + 0.5, 0.4, (0.66, 0.65, 0.62), None, "concrete", False)
+    box(m, tx, ty, H + th + 0.1, ts + 0.7, ts + 0.7, 0.2, (0.66, 0.65, 0.62), None, "concrete", False)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            beam(m, (tx + sx * hs * 1.15, ty + sy * hs * 1.15, H + th + 0.2), (tx + sx * hs * 1.15, ty + sy * hs * 1.15, H + th + 0.9),
+                 0.1, 0.1, WIRE_C, "metal")
+    for a_, b_ in (((-1, -1), (1, -1)), ((1, -1), (1, 1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1))):
+        beam(m, (tx + a_[0] * hs * 1.15, ty + a_[1] * hs * 1.15, H + th + 0.85), (tx + b_[0] * hs * 1.15, ty + b_[1] * hs * 1.15, H + th + 0.85),
+             0.06, 0.06, (0.55, 0.57, 0.58), "metal")
+    # Funkmast mit Querträgern
+    beam(m, (tx, ty, H + th + 0.3), (tx, ty, H + th + 7.5), 0.14, 0.14, (0.55, 0.57, 0.58), "metal")
+    for k, ln in enumerate((1.8, 1.3, 0.9)):
+        zz = H + th + 4.0 + k * 1.4
+        beam(m, (tx - ln, ty, zz), (tx + ln, ty, zz), 0.06, 0.06, (0.55, 0.57, 0.58), "metal")
+    for dx_, dy_ in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        beam(m, (tx + dx_ * hs * 1.1, ty + dy_ * hs * 1.1, H + th + 0.3), (tx, ty, H + th + 5.5), 0.03, 0.03, WIRE_C, "metal")
+    box(m, tx, ty, H + th + 7.6, 0.2, 0.2, 0.2, (0.95, 0.15, 0.1), None, None, False)
+
+
+def nissen_details(m, lamps, r, hr):
+    """Nissenhütte: Wellblech-Halbtonne mit Rippen, Stirnwände mit Tür und Fenster, Ofenrohr."""
+    x, y, L, R, H0, door = r["x"], r["y"], r["L"], r["R"], r["H0"], r["door"]
+    xa, xb = x - L / 2, x + L / 2
+    N = 16
+    zin = lambda u: H0 * math.sqrt(max(0.0, 1.0 - (u / R) ** 2))        # noqa: E731
+    shell = (0.50, 0.53, 0.48)
+    nl = int(L / 1.0)
+    inside = (x, y, 0.8)
+    for j in range(N):
+        a0, a1 = math.pi * j / N, math.pi * (j + 1) / N
+        u0, z0 = R * math.cos(a0), H0 * math.sin(a0)
+        u1, z1 = R * math.cos(a1), H0 * math.sin(a1)
+        sh = 0.92 + 0.08 * (j % 2)
+        for k in range(nl):
+            xs0, xs1 = xa + L * k / nl, xa + L * (k + 1) / nl
+            quadf(m, (xs0, y + u0, z0), (xs1, y + u0, z0), (xs1, y + u1, z1), (xs0, y + u1, z1), jc(tuple(c * sh for c in shell), hr, 0.03),
+                  inside, "corrug")
+    for k in range(int(L / 1.6) + 1):                                          # Spanten aussen
+        xx = xa + L * k / int(L / 1.6)
+        for j in range(N):
+            a0, a1 = math.pi * j / N, math.pi * (j + 1) / N
+            beam(m, (xx, y + (R + 0.04) * math.cos(a0), (H0 + 0.04) * math.sin(a0)),
+                 (xx, y + (R + 0.04) * math.cos(a1), (H0 + 0.04) * math.sin(a1)), 0.12, 0.07, (0.24, 0.26, 0.22), "metal", up=(1.0, 0.0, 0.0))
+    for sd in (-1, 1):                                                         # Fundamentstreifen
+        box(m, x, y + sd * (R + 0.05), 0.12, L, 0.2, 0.35, (0.55, 0.54, 0.52), None, "concrete", False)
+    # Stirnseiten: Fläche aus Streifen, Tür-Öffnung freilassen
+    for xe, dr in ((xa, door == "W"), (xb, door == "E")):
+        nstr = 16
+        sx_ = -1 if xe == xa else 1
+        for i in range(nstr):
+            ua, ub = -R + 2 * R * i / nstr, -R + 2 * R * (i + 1) / nstr
+            zb = 2.3 if (dr and abs((ua + ub) / 2) < 1.0) else 0.0
+            za, zb2 = zin(abs(ua)), zin(abs(ub))
+            if za <= zb and zb2 <= zb:
+                continue
+            col = jc((0.58, 0.30, 0.22), hr, 0.04)
+            quadf(m, (xe, y + ua, zb), (xe, y + ub, zb), (xe, y + ub, max(zb, zb2)), (xe, y + ua, max(zb, za)), col,
+                  (xe - sx_ * 2.0, y, 1.0), "brick")
+        if dr:
+            hx = xe + sx_ * 0.04
+            fc = _DOORC[r["seed"] % 4]
+            for dy_ in (-1.0, 1.0):
+                box(m, hx, y + dy_, 1.15, 0.12, 0.14, 2.3, PAINT_W, None, "plaster", False)
+            box(m, hx, y, 2.35, 0.12, 2.3, 0.14, PAINT_W, None, "plaster", False)
+            box(m, xe + sx_ * 0.05, y + 0.7, 1.15, 0.1, 0.9, 2.2, fc, None, "wood", False)           # angelehnter Türflügel
+            box(m, xe + sx_ * 0.4, y, 0.06, 1.0, 2.4, 0.12, (0.60, 0.58, 0.55), None, "concrete", False)
+            box(lamps, xe + sx_ * 0.12, y - 1.35, 2.2, 0.16, 0.16, 0.2, (1.0, 0.82, 0.45))
+        else:
+            for dy_ in (-0.9, 0.9):                                                                   # kleine Fenster
+                box(m, xe + sx_ * 0.04, y + dy_, 1.5, 0.08, 0.8, 0.9, (0.07, 0.09, 0.11), None, None, False)
+                box(m, xe + sx_ * 0.06, y + dy_, 1.5, 0.06, 0.95, 1.05, PAINT_W, None, "plaster", False)
+    # Ofenrohr
+    px = x + (L * 0.2 if door == "E" else -L * 0.2)
+    beam(m, (px, y + 0.4, H0 - 0.2), (px, y + 0.4, H0 + 1.1), 0.22, 0.22, (0.12, 0.12, 0.12), "metal")
+    prism(m, px, y + 0.4, H0 + 1.1, 0.22, 0.12, 8, (0.10, 0.10, 0.10), hr, 1.0)
 
 
 def stall_details(m, rec, hr):
+    """Versorgungsstand: Planen, Munitions- und Benzinkanister, Sandsäcke vorn."""
     x, y, w, d, ax = rec["x"], rec["y"], rec["w"], rec["d"], rec["along_x"]
-    # Waren auf dem Tresen: Kisten mit Obst und Brotkörbe
     n = 4
     for k in range(n):
         if ax:
             px, py = x - w / 2 + 0.5 + (w - 1.0) * (k + 0.5) / n, y - d / 2 + 0.5
         else:
             px, py = x - w / 2 + 0.5, y - d / 2 + 0.5 + (d - 1.0) * (k + 0.5) / n
-        box(m, px, py, 1.12, 0.52, 0.42, 0.24, WOOD_M, None, "wood", False)
-        fc = ((0.85, 0.15, 0.12), (0.95, 0.75, 0.15), (0.35, 0.65, 0.2), (0.85, 0.45, 0.12))[(k + int(x)) % 4]
-        for q in range(5):
-            blob(m, px + hr.uniform(-0.16, 0.16), py + hr.uniform(-0.12, 0.12), 1.3, 0.1, 0.1, 0.09, fc, hr, 0.15)
-    # Wimpelkette
-    if ax:
-        ya = y + d / 2 + 0.3
+        if (k + int(x)) % 2 == 0:
+            box(m, px, py, 1.2, 0.5, 0.3, 0.38, OLIVE, None, "metal", False)                 # Munitionskiste
+            box(m, px, py, 1.4, 0.54, 0.34, 0.04, (0.20, 0.24, 0.17), None, "metal", False)
+        else:
+            box(m, px, py, 1.2, 0.42, 0.14, 0.4, (0.40, 0.34, 0.16), None, "metal", False)   # Kanister
+            box(m, px, py, 1.42, 0.14, 0.08, 0.08, (0.2, 0.2, 0.2), None, "metal", False)
+    if ax:                                                  # Sandsack-Reihe vor dem Tresen
         for k in range(8):
             px = x - w / 2 + w * (k + 0.5) / 8
-            sag = 0.18 * math.sin(math.pi * (k + 0.5) / 8)
-            col = AWN[(k + 1) % 4]
-            m.tri((px - 0.14, ya, 2.45 - sag), (px + 0.14, ya, 2.45 - sag), (px, ya, 2.15 - sag), col, (px, ya + 3, 2.3), mat="cloth")
+            box(m, px, y - d / 2 - 0.15, 0.2, 0.42, 0.3, 0.3, jc(SANDBAG, hr, 0.05), None, "cloth", False)
 
 
 def fountain_details(m, rec, hr, water):
+    """Löschwasserbecken mit Betonrand, Pumpe und Fahnenmast in der Mitte."""
     x, y, s = rec["x"], rec["y"], rec["s"]
-    # Wasserfläche im Becken
-    quadf(water, (x - s + 0.5, y - s + 0.5, 0.72), (x + s - 0.5, y - s + 0.5, 0.72), (x + s - 0.5, y + s - 0.5, 0.72),
-          (x - s + 0.5, y + s - 0.5, 0.72), (0.16, 0.42, 0.68, 0.85), (x, y, -1.0))
-    # Beckenrand und Schalen
-    box(m, x, y, 0.92, 2 * s + 0.4, 2 * s + 0.4, 0.14, STONE, None, "stone", False)
-    for rr, zz, hh in ((1.25, 1.1, 0.16), (0.8, 2.3, 0.14)):
-        prism(m, x, y, zz, rr, hh, 14, STONE, hr, 0.82)
-    prism(m, x, y, 1.1, 0.45, 1.3, 10, STONE, hr, 0.85)
-    ell(m, (x, y, 2.75), 0.28, 0.28, 0.34, (0.7, 0.68, 0.62), hr, "stone")
-    # Wasserstrahl und Tropfen
-    for k in range(8):
-        a = k * math.pi / 4
-        q0 = (x + math.cos(a) * 0.1, y + math.sin(a) * 0.1, 2.9)
-        q1 = (x + math.cos(a) * 0.65, y + math.sin(a) * 0.65, 2.45)
-        beam(water, q0, q1, 0.05, 0.05, (0.7, 0.85, 0.95, 0.8))
+    quadf(water, (x - s + 0.5, y - s + 0.5, 0.62), (x + s - 0.5, y - s + 0.5, 0.62), (x + s - 0.5, y + s - 0.5, 0.62),
+          (x - s + 0.5, y + s - 0.5, 0.62), (0.16, 0.40, 0.55, 0.85), (x, y, -1.0))
+    box(m, x, y, 0.92, 2 * s + 0.4, 2 * s + 0.4, 0.14, (0.66, 0.65, 0.62), None, "concrete", False)
+    prism(m, x, y, 0.0, 1.15, 0.6, 12, CONC_D, hr, 0.9)                 # Sockel um den Mast
+    prism(m, x, y, 0.6, 0.55, 0.5, 10, (0.66, 0.65, 0.62), hr, 0.9)
+    for dx_, dy_ in ((-1.6, -1.6), (1.6, 1.6)):                         # Handpumpen
+        beam(m, (x + dx_, y + dy_, 0.9), (x + dx_, y + dy_, 1.9), 0.14, 0.14, (0.22, 0.30, 0.22), "metal")
+        beam(m, (x + dx_, y + dy_, 1.8), (x + dx_ + 0.5, y + dy_, 1.7), 0.07, 0.07, (0.2, 0.2, 0.2), "metal")
+    for k in range(8):                                                   # Betonpoller am Becken
+        a = k * math.pi / 4 + math.pi / 8
+        prism(m, x + math.cos(a) * (s * 1.5), y + math.sin(a) * (s * 1.5), 0.0, 0.2, 0.55, 6, CONC_D, hr, 0.85)
 
 
 def well_details(m, rec, hr):
+    """Löschwasserbehälter im Hof: Betonrand, Wasserfläche, Deckel, Handpumpe."""
     x, y = rec["x"], rec["y"]
-    quadf(m, (x - 0.7, y - 0.7, 0.55), (x + 0.7, y - 0.7, 0.55), (x + 0.7, y + 0.7, 0.55), (x - 0.7, y + 0.7, 0.55), (0.10, 0.20, 0.30),
+    quadf(m, (x - 0.7, y - 0.7, 0.55), (x + 0.7, y - 0.7, 0.55), (x + 0.7, y + 0.7, 0.55), (x - 0.7, y + 0.7, 0.55), (0.08, 0.18, 0.26),
           (x, y, -1.0))
-    for sx in (-1, 1):
-        beam(m, (x + sx * 1.15, y, 0.9), (x + sx * 1.15, y, 3.1), 0.2, 0.2, WOOD_D, "wood")
-    beam(m, (x - 1.3, y, 3.0), (x + 1.3, y, 3.0), 0.22, 0.22, WOOD_D, "wood")
-    # kleines Dach
-    for sg in (-1, 1):
-        quadf(m, (x - 1.7, y + sg * 1.35, 2.65), (x + 1.7, y + sg * 1.35, 2.65), (x + 1.7, y, 3.55), (x - 1.7, y, 3.55),
-              tuple(v * (0.9 if sg < 0 else 0.75) for v in ROOFS[0]), (x, y + sg * 3, 1.0), "roof")
-    beam(m, (x, y, 2.85), (x, y, 2.4), 0.04, 0.04, (0.25, 0.2, 0.15), "wood")
-    prism(m, x, y, 1.9, 0.14, 0.4, 8, WOOD_M, hr, 1.0)
+    box(m, x, y, 0.97, 2.4, 2.4, 0.08, (0.66, 0.65, 0.62), None, "concrete", False)
+    box(m, x - 0.45, y, 1.02, 0.9, 1.2, 0.07, (0.30, 0.34, 0.28), None, "metal", False)              # Stahldeckel
+    beam(m, (x + 0.6, y + 0.6, 0.95), (x + 0.6, y + 0.6, 2.0), 0.14, 0.14, (0.22, 0.30, 0.22), "metal")
+    beam(m, (x + 0.6, y + 0.6, 1.9), (x + 1.2, y + 0.6, 1.75), 0.07, 0.07, (0.2, 0.2, 0.2), "metal")
+    for dx_ in (-1, 1):
+        box(m, x + dx_ * 1.0, y - 1.25, 0.5, 0.45, 0.45, 0.9, (0.30, 0.37, 0.26), None, "metal", False)   # Fässer
+
+
+def _truss(m, xa, xb, y_a, y_b, ht, col, nseg, side):
+    """Fachwerkträger (Bailey) entlang y von y_a nach y_b bei x=xa..xb (Breite des Trägers), Höhe ht."""
+    L = y_b - y_a
+    xm = (xa + xb) / 2
+    wd = abs(xb - xa)
+    beam(m, (xm, y_a, 0.02), (xm, y_b, 0.02), wd, 0.22, col, "metal", up=(1.0, 0.0, 0.0))
+    beam(m, (xm, y_a, ht), (xm, y_b, ht), wd, 0.2, col, "metal", up=(1.0, 0.0, 0.0))
+    for k in range(nseg + 1):
+        yy = y_a + L * k / nseg
+        beam(m, (xm, yy, 0.0), (xm, yy, ht), wd, 0.16, col, "metal", up=(1.0, 0.0, 0.0))
+    for k in range(nseg):
+        y0_, y1_ = y_a + L * k / nseg, y_a + L * (k + 1) / nseg
+        a, b = ((y0_, 0.1), (y1_, ht - 0.1)) if (k + side) % 2 == 0 else ((y0_, ht - 0.1), (y1_, 0.1))
+        beam(m, (xm, a[0], a[1]), (xm, b[0], b[1]), wd * 0.85, 0.11, col, "metal", up=(1.0, 0.0, 0.0))
 
 
 def bridge_details(m, lamps, rec, hr, world):
+    """Brücken über den Graben: Bailey-Fachwerkbrücke (Nord), Betonbrücke (Süd), Betondämme über dem Tunnel (West/Ost)."""
     st = rec["style"]
     x0, x1, y0, y1 = rec["x0"], rec["x1"], rec["y0"], rec["y1"]
+    steel, deck_c = (0.36, 0.40, 0.34), (0.33, 0.33, 0.34)
     if rec["axis"] == "y":
         sgn = rec["dir"]
         cx = (x0 + x1) / 2
         ya, yb = (y0 + 2.6, y1) if sgn > 0 else (y0, y1 - 2.6)
-        if st == "wood":
-            n = int((yb - ya) / 0.5)
+        if st == "wood":                                              # Bailey-Brücke aus Stahl
+            n = int((yb - ya) / 0.6)
             for k in range(n):
                 zz = ya + (yb - ya) * (k + 0.5) / n
-                col = jc((0.50, 0.37, 0.22), hr, 0.07)
-                box(m, cx, zz, 0.03, x1 - x0 - 0.5, (yb - ya) / n - 0.03, 0.12, col, None, "wood", False)
-            for sx in (x0 + 0.15, x1 - 0.15):
-                box(m, sx, (ya + yb) / 2, 0.0, 0.3, yb - ya, 0.34, WOOD_D, None, "wood", False)
-            for k in range(0, 6):
-                px = ya + (yb - ya - 0.3) * k / 5
-                for sx in (x0 + 0.1, x1 - 0.1):
-                    box(m, sx, px + 0.15, 0.7, 0.24, 0.24, 1.4, WOOD_D, None, "wood", False)
-            for sx in (x0 + 0.1, x1 - 0.1):
-                box(m, sx, (ya + yb) / 2, 1.38, 0.2, yb - ya, 0.12, WOOD_D, None, "wood", False)
-            for k in range(0, 6, 5):
-                for sx in (x0 + 0.1, x1 - 0.1):
-                    zz = ya + 0.15 if k == 0 else yb - 0.15
-                    box(lamps, sx, zz, 1.58, 0.2, 0.2, 0.26, (1.0, 0.82, 0.45))
-            # Ketten vom Torhaus zur Brückenspitze
-            yw = world_castle_wall(world, sgn)
-            for sx, ox in ((x0 + 0.3, 0.4), (x1 - 0.3, -0.4)):
-                top = (sx + ox * 0.3, yw + sgn * 0.1, 6.2)
-                bot = (sx, yb - 0.3, 0.9)
-                nlk = 34
-                for k in range(nlk):
-                    a = tuple(top[i] + (bot[i] - top[i]) * k / nlk for i in range(3))
-                    b = tuple(top[i] + (bot[i] - top[i]) * (k + 0.8) / nlk for i in range(3))
-                    sag = 0.0
-                    beam(m, a, b, 0.09 if k % 2 == 0 else 0.03, 0.03 if k % 2 == 0 else 0.09, (0.20, 0.20, 0.22), "metal",
-                         up=(1.0, 0.0, 0.0))
-                box(m, sx, yb - 0.3, 0.9, 0.22, 0.22, 0.22, (0.15, 0.15, 0.17), None, "metal", False)
-            # Gelenkbalken am Tor
-            box(m, cx, yw + sgn * 0.5, 0.18, x1 - x0, 0.7, 0.3, WOOD_D, None, "wood", False)
-        else:
+                box(m, cx, zz, 0.025, x1 - x0 - 0.5, (yb - ya) / n - 0.04, 0.1, jc((0.30, 0.31, 0.30), hr, 0.05), None, "metal", False)
+            nseg = max(3, int(round((yb - ya) / 1.5)))
+            for sx_, side in ((x0 + 0.25, 0), (x1 - 0.25, 1)):
+                _truss(m, sx_ - 0.1, sx_ + 0.1, ya, yb, 1.5, steel, nseg, side)
+            for k in range(nseg + 1):                                 # Querträger unter der Fahrbahn
+                yy = ya + (yb - ya) * k / nseg
+                beam(m, (x0 + 0.1, yy, -0.2), (x1 - 0.1, yy, -0.2), 0.22, 0.28, (0.30, 0.31, 0.30), "metal", up=(0.0, 0.0, 1.0))
+            for sx_ in (x0 + 0.25, x1 - 0.25):
+                for yy in (ya + 0.2, yb - 0.2):
+                    box(lamps, sx_, yy, 1.78, 0.2, 0.2, 0.24, (1.0, 0.82, 0.45))
+            for sx_ in (x0 + 0.35, x1 - 0.35):                        # Widerlager
+                box(m, sx_, yb + sgn * 0.1, -0.35, 1.2, 1.3, 0.9, (0.58, 0.58, 0.58), None, "concrete", False)
+            box(m, cx, world_castle_wall(world, sgn) + sgn * 0.5, 0.1, x1 - x0, 0.9, 0.28, CONC_D, None, "concrete", False)
+        else:                                                         # Betonbrücke mit Brüstung
             for sx in (x0, x1):
                 s2 = -1 if sx == x0 else 1
                 px = sx + s2 * -0.2
-                box(m, px + (0.0), (ya + yb) / 2, 1.07, 0.55, yb - ya + 0.2, 0.14, STONE, None, "stone", False)
+                box(m, px, (ya + yb) / 2, 0.8, 0.55, yb - ya + 0.2, 0.9, (0.64, 0.63, 0.60), None, "concrete", False)
+                box(m, px, (ya + yb) / 2, 1.3, 0.7, yb - ya + 0.3, 0.12, CONC_D, None, "concrete", False)
                 for yy in (ya + 0.6, yb - 0.6):
-                    box(m, px, yy, 0.8, 0.8, 0.8, 1.8, STONE, None, "stone", False)
-                    box(m, px, yy, 1.8, 1.0, 1.0, 0.18, STONE, None, "stone", False)
-                    box(lamps, px, yy, 2.12, 0.28, 0.28, 0.4, (1.0, 0.82, 0.45))
+                    box(m, px, yy, 0.8, 0.8, 0.8, 1.8, CONC_D, None, "concrete", False)
+                    box(lamps, px, yy, 1.95, 0.28, 0.28, 0.36, (1.0, 0.82, 0.45))
             n = int((yb - ya) / 0.7)
             for k in range(n):
                 zz = ya + (yb - ya) * (k + 0.5) / n
-                col = jc((0.50, 0.48, 0.44), hr, 0.07)
-                box(m, cx, zz, 0.03, x1 - x0 - 0.9, (yb - ya) / n - 0.05, 0.1, col, None, "cobble", False)
+                box(m, cx, zz, 0.03, x1 - x0 - 0.9, (yb - ya) / n - 0.05, 0.1, jc(deck_c, hr, 0.05), None, "concrete", False)
+            for k in range(0, n, 3):                                  # Fahrbahnmarkierung (Mittelstreifen)
+                zz = ya + (yb - ya) * (k + 0.5) / n
+                box(m, cx, zz, 0.09, 0.14, 0.9, 0.02, (0.9, 0.9, 0.8), None, None, False)
     else:
-        sgn = rec["dir"]
         ya, yb = x0, x1
         cy = (y0 + y1) / 2
         for yy in (y0 + 0.1, y1 - 0.1):
-            box(m, (x0 + x1) / 2, yy, 0.93, x1 - x0 + 0.2, 0.5, 0.14, STONE, None, "stone", False)
+            box(m, (x0 + x1) / 2, yy, 0.93, x1 - x0 + 0.2, 0.5, 0.14, (0.64, 0.63, 0.60), None, "concrete", False)
         for xx in (x0 + 0.3, x1 - 0.3):
             for yy in (y0 + 0.15, y1 - 0.15):
-                box(m, xx, yy, 1.0, 0.7, 0.7, 2.0, STONE, None, "stone", False)
-                box(m, xx, yy, 2.1, 0.9, 0.9, 0.16, STONE, None, "stone", False)
+                box(m, xx, yy, 1.0, 0.5, 0.5, 2.0, CONC_D, None, "concrete", False)
+                beam(m, (xx, yy, 2.0), (xx, yy, 2.4), 0.08, 0.08, WIRE_C, "metal")
         n = int((x1 - x0) / 0.7)
         for k in range(n):
             xx = x0 + (x1 - x0) * (k + 0.5) / n
-            box(m, xx, cy, 0.03, (x1 - x0) / n - 0.05, y1 - y0 - 1.0, 0.1, jc((0.50, 0.48, 0.44), hr, 0.07), None, "cobble", False)
+            box(m, xx, cy, 0.03, (x1 - x0) / n - 0.05, y1 - y0 - 1.0, 0.1, jc(deck_c, hr, 0.05), None, "concrete", False)
+        for yy in (y0 + 0.2, y1 - 0.2):                               # Stacheldraht-Bügel am Damm
+            for k in range(3):
+                xx = x0 + (x1 - x0) * (k + 0.5) / 3
+                beam(m, (xx, yy, 1.0), (xx, yy, 1.6), 0.05, 0.05, WIRE_C, "metal")
 
 
 def world_castle_wall(world, sgn):
@@ -7072,54 +7294,52 @@ def world_castle_wall(world, sgn):
 
 
 def gate_details(m, lamps, rec, hr):
+    """Wachhäuser am Tor: Schranke, Warnstreifen am Sturz, Fensterbänder, Suchscheinwerfer."""
     x0, x1, yw, sgn, zt = rec["x0"], rec["x1"], rec["y"], rec["sgn"], rec["zt"]
-    ym = yw - sgn * 1.5
-    # Fallgitter (hochgezogen, unter dem Sturz sichtbar)
-    for k in range(int((x1 - x0) / 0.42) + 1):
-        xx = x0 + 0.2 + k * 0.42
-        if xx > x1 - 0.1:
-            break
-        box(m, xx, ym, zt - 0.7, 0.07, 0.07, 1.4, (0.14, 0.14, 0.16), None, "metal", False)
-        cone_down = [(xx - 0.05, ym, zt - 1.4), (xx + 0.05, ym, zt - 1.4), (xx, ym, zt - 1.75)]
-        m.tri(cone_down[0], cone_down[1], cone_down[2], (0.14, 0.14, 0.16), (xx, ym - 1, zt - 1.0), mat="metal")
-        m.tri(cone_down[1], cone_down[0], cone_down[2], (0.14, 0.14, 0.16), (xx, ym + 1, zt - 1.0), mat="metal")
-    for zz in (zt - 0.25, zt - 0.7, zt - 1.15):
-        box(m, (x0 + x1) / 2, ym, zz, x1 - x0, 0.09, 0.09, (0.14, 0.14, 0.16), None, "metal", False)
-    # Konsolsteine unter dem Sturz und Wappen
-    for xx in (x0 + 0.5, x1 - 0.5):
-        box(m, xx, yw + sgn * 0.25, zt - 0.3, 0.9, 0.5, 0.6, STONE, None, "stone", False)
-        box(m, xx, yw + sgn * 0.3, zt - 0.8, 0.6, 0.5, 0.4, STONE_D, None, "stone", False)
-    sc = (0.78, 0.16, 0.14) if sgn > 0 else (0.15, 0.30, 0.65)
-    px = (x0 + x1) / 2
-    py = yw + sgn * 0.12
-    nn = (0.0, float(sgn), 0.0)
-    obox(m, (px, py, zt + 0.55), (1.0, 0.0, 0.0), nn, (0.0, 0.0, 1.0), 0.7, 0.05, 0.35, STONE_D, "stone")
-    pts = [(px - 0.5, py + sgn * 0.08, zt + 0.82), (px + 0.5, py + sgn * 0.08, zt + 0.82), (px + 0.5, py + sgn * 0.08, zt + 0.5),
-           (px, py + sgn * 0.08, zt + 0.22), (px - 0.5, py + sgn * 0.08, zt + 0.5)]
-    for i in range(1, 4):
-        m.tri(pts[0], pts[i], pts[i + 1], sc, (px, py + sgn * 3, zt + 0.5), mat="cloth")
-    for dz in (0.6, 0.45):
-        quadf(m, (px - 0.04, py + sgn * 0.09, zt + dz + 0.2), (px + 0.04, py + sgn * 0.09, zt + dz + 0.2),
-              (px + 0.04, py + sgn * 0.09, zt + dz - 0.2), (px - 0.04, py + sgn * 0.09, zt + dz - 0.2), (0.95, 0.85, 0.3),
-              (px, py + sgn * 3, zt + 0.5))
-    # Pechnasen (Zinnenkranz) und Schießscharten an den Torhaus-Türmen
+    # Warnstreifen (rot/weiss) an der Aussenseite des Sturzes
+    nst = 16
+    wst = (x1 - x0) / nst
+    for k in range(nst):
+        xa = x0 + wst * k
+        col = (0.80, 0.12, 0.10) if k % 2 == 0 else (0.90, 0.90, 0.86)
+        yy = yw + sgn * 0.03
+        quadf(m, (xa, yy, zt + 0.05), (xa + wst, yy, zt + 0.05), (xa + wst, yy, zt + 0.95), (xa, yy, zt + 0.95), col,
+              (xa, yy - sgn * 3.0, zt + 0.5), "metal")
+    # Hochgeklappte Schranken (rot/weiss), Gegengewicht
+    for sx_, dx_ in ((x0 + 0.5, 1), (x1 - 0.5, -1)):
+        yy = yw - sgn * 0.8
+        box(m, sx_, yy, 0.55, 0.45, 0.45, 1.1, (0.30, 0.32, 0.30), None, "metal", False)
+        L = 3.8
+        ang = math.radians(68.0)
+        tip = (sx_ + dx_ * L * math.cos(ang), yy, 1.0 + L * math.sin(ang))
+        nseg = 7
+        for k in range(nseg):
+            a_ = tuple((sx_, yy, 1.0)[i] + (tip[i] - (sx_, yy, 1.0)[i]) * k / nseg for i in range(3))
+            b_ = tuple((sx_, yy, 1.0)[i] + (tip[i] - (sx_, yy, 1.0)[i]) * (k + 1) / nseg for i in range(3))
+            beam(m, a_, b_, 0.13, 0.13, (0.82, 0.12, 0.10) if k % 2 == 0 else (0.92, 0.92, 0.88), "metal", up=(0.0, 1.0, 0.0))
+        beam(m, (sx_, yy, 1.0), (sx_ - dx_ * 0.9, yy, 1.0 - 0.9 * math.sin(ang) + 0.4), 0.13, 0.13, (0.2, 0.2, 0.2), "metal")
+        box(m, sx_ - dx_ * 0.9, yy, 0.75, 0.3, 0.3, 0.3, (0.18, 0.18, 0.2), None, "metal", False)
+    # Wachhäuser: Fensterbänder, Betonkranz, Suchscheinwerfer auf dem Dach
     for gx0, gx1 in ((x0 - 3.0, x0), (x1, x1 + 3.0)):
         ya_ = yw + sgn * 2.7
-        for k in range(3):
-            xx = gx0 + 0.5 + k * 1.0
-            box(m, xx, ya_ - sgn * 0.15, 6.6, 0.5, 0.32, 0.6, STONE_D, None, "stone", False)
-        for zz in (3.2, 5.2):
-            box(m, (gx0 + gx1) / 2, ya_ + sgn * 0.01, zz, 0.24, 0.05, 0.9, (0.04, 0.04, 0.05), None, None, False)
-            box(m, (gx0 + gx1) / 2, ya_ + sgn * 0.0, zz, 0.45, 0.06, 1.12, STONE_D, None, "stone", False)
-        box(m, (gx0 + gx1) / 2, yw + sgn * 1.4, 7.4, 3.2, 2.9, 0.12, STONE_D, None, "stone", False)
+        cxm = (gx0 + gx1) / 2
+        for zz0 in (2.4, 4.8):
+            box(m, cxm, ya_ + sgn * 0.02, zz0 + 0.6, 2.0, 0.06, 0.9, PAINT_W, None, "plaster", False)
+            box(m, cxm, ya_ + sgn * 0.045, zz0 + 0.6, 1.8, 0.05, 0.7, (0.07, 0.09, 0.11), None, None, False)
+            box(m, cxm, ya_ + sgn * 0.07, zz0 + 0.6, 0.06, 0.04, 0.7, PAINT_W, None, "plaster", False)
+        box(m, cxm, yw + sgn * 1.4, 7.3, 3.2, 2.9, 0.12, (0.66, 0.65, 0.62), None, "concrete", False)
+        px, py = cxm, yw + sgn * 1.4
+        prism(m, px, py, 7.5, 0.35, 0.5, 8, (0.28, 0.30, 0.28), hr, 1.0)                   # Scheinwerfer
+        ell(m, (px + 0.0, py + sgn * 0.3, 8.25), 0.5, 0.35, 0.45, (0.30, 0.32, 0.30), None, "metal")
+        box(lamps, px, py + sgn * 0.7, 8.3, 0.5, 0.1, 0.45, (1.0, 0.95, 0.75))
 
 
 def castle_details(m, lamps, world, hr):
+    """Radarstation: Betonmauer mit Stacheldraht, Bunkertürme, Betriebsgebäude mit Eingang, Laternen im Hof."""
     c = CENTER
     H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
     g0, g1 = c - 4.0, c + 4.0
-    stone = (0.58, 0.56, 0.52)
-    # Mauern: Sockel, Gesims, Schießscharten, Strebepfeiler (je Aussenseite)
+    conc, concd = WALL_C, WALL_CD
     walls = [("S", c - H, [(c - H, g0), (g1, c + H)]), ("N", c + H, [(c - H, g0), (g1, c + H)]),
              ("W", c - H, [(c - H, c + H)]), ("E", c + H, [(c - H, c + H)])]
     for s, pos, spans in walls:
@@ -7127,7 +7347,7 @@ def castle_details(m, lamps, world, hr):
             L = a1 - a0
             nrm = {"S": (0, -1), "N": (0, 1), "W": (-1, 0), "E": (1, 0)}[s]
 
-            def wb(c0, c1, z0, z1, o0, o1, col, mat="stone"):
+            def wb(c0, c1, z0, z1, o0, o1, col, mat="concrete"):
                 if s in "NS":
                     ya_, yb_ = (pos + nrm[1] * o0, pos + nrm[1] * o1)
                     box(m, (c0 + c1) / 2, (ya_ + yb_) / 2, (z0 + z1) / 2, c1 - c0, abs(yb_ - ya_), z1 - z0, col, None, mat, False)
@@ -7135,55 +7355,78 @@ def castle_details(m, lamps, world, hr):
                     xa_, xb_ = (pos + nrm[0] * o0, pos + nrm[0] * o1)
                     box(m, (xa_ + xb_) / 2, (c0 + c1) / 2, (z0 + z1) / 2, abs(xb_ - xa_), c1 - c0, z1 - z0, col, None, mat, False)
 
-            wb(a0, a1, -0.4, 1.3, 0.0, 0.32, STONE_D)
-            wb(a0, a1, 1.3, 1.5, 0.0, 0.42, STONE_D)
-            wb(a0, a1, 3.55, 3.8, 0.0, 0.2, stone)
-            wb(a0, a1, ZW - 0.5, ZW, 0.0, 0.18, stone)
-            ns = max(2, int(L // 6.0))
-            for k in range(ns):
+            wb(a0, a1, -0.4, 1.0, 0.0, 0.2, concd)                          # Sockel
+            wb(a0, a1, ZW - 0.35, ZW, 0.0, 0.22, conc)                      # Kranzgesims
+            ns = max(2, int(L // 4.0))
+            for k in range(1, ns):                                          # Dehnungsfugen
+                cc = a0 + L * k / ns
+                wb(cc - 0.04, cc + 0.04, 1.0, ZW - 0.35, 0.0, 0.03, (0.20, 0.20, 0.22), None)
+            for k in range(ns):                                             # liegende Schlitzfenster
                 cc = a0 + L * (k + 0.5) / ns
-                wb(cc - 0.14, cc + 0.14, 2.0, 3.3, 0.0, 0.04, (0.03, 0.03, 0.04), None)
-                wb(cc - 0.3, cc + 0.3, 1.9, 3.4, 0.0, 0.03, stone)
-            for k in range(0, ns + 1):
+                wb(cc - 0.7, cc + 0.7, 2.5, 2.85, 0.0, 0.03, (0.04, 0.04, 0.05), None)
+                wb(cc - 0.8, cc + 0.8, 2.45, 2.9, 0.0, 0.02, conc)
+            for k in range(0, ns + 1):                                      # Pfeiler
                 cc = a0 + L * k / ns
                 if k in (0, ns) and s in "NS" and (a0 == c - H and k == 0 or a1 == c + H and k == ns):
                     continue
-                wb(cc - 0.3, cc + 0.3, -0.4, 4.2, 0.0, 0.55, STONE)
-                wb(cc - 0.3, cc + 0.3, 4.2, 4.5, 0.0, 0.45, STONE_D)
-    # Ecktürme: Sockel, Konsolen unter der Brüstung, Schießscharten
+                wb(cc - 0.3, cc + 0.3, -0.4, ZW - 0.35, 0.0, 0.4, concd)
+            # Stacheldraht auf der Brüstung: Y-Pfosten und drei Drähte
+            zt_ = ZW + 1.2
+            nposts = max(2, int(L // 2.0))
+            for k in range(nposts + 1):
+                cc = a0 + L * k / nposts
+                wb(cc - 0.04, cc + 0.04, zt_, zt_ + 0.95, -0.35, -0.27, WIRE_C, "metal")
+                wb(cc - 0.04, cc + 0.04, zt_ + 0.95, zt_ + 1.15, -0.15, -0.05, WIRE_C, "metal")
+            for zz in (zt_ + 0.4, zt_ + 0.7, zt_ + 1.0):
+                wb(a0, a1, zz, zz + 0.03, -0.32, -0.29, WIRE_C, "metal")
+            wb(a0, a1, zt_ + 1.1, zt_ + 1.13, -0.12, -0.08, WIRE_C, "metal")
+    # Ecktürme: Bunkertürme mit Schlitzbändern, Dachrand, Leiter
     for sx in (-1, 1):
         for sy in (-1, 1):
             tx, ty = c + sx * H, c + sy * H
-            for o in (0.0, 0.3):
-                for side in ((sx, 0), (0, sy)):
-                    if side[0]:
-                        box(m, tx + side[0] * (3.5 + 0.16), ty, 1.0 + o, 0.34, 7.2, 2.4 - o * 2, STONE_D, None, "stone", False)
-                    else:
-                        box(m, tx, ty + side[1] * (3.5 + 0.16), 1.0 + o, 7.2, 0.34, 2.4 - o * 2, STONE_D, None, "stone", False)
-            for k in range(7):
-                dd = -3.0 + k
-                for side in ((sx, 0), (0, sy)):
-                    if side[0]:
-                        box(m, tx + side[0] * 3.75, ty + dd, ZT - 0.45, 0.5, 0.5, 0.9, STONE_D, None, "stone", False)
-                    else:
-                        box(m, tx + dd, ty + side[1] * 3.75, ZT - 0.45, 0.5, 0.5, 0.9, STONE_D, None, "stone", False)
             for side in ((sx, 0), (0, sy)):
-                for dd in (-1.5, 1.5):
+                for zz in (3.2, 5.6):
                     if side[0]:
-                        box(m, tx + side[0] * 3.5, ty + dd, 5.2, 0.05, 0.3, 1.2, (0.03, 0.03, 0.04), None, None, False)
+                        box(m, tx + side[0] * 3.52, ty, zz, 0.06, 5.2, 0.5, (0.04, 0.04, 0.05), None, None, False)
+                        box(m, tx + side[0] * 3.51, ty, zz, 0.05, 5.5, 0.7, conc, None, "concrete", False)
+                        box(m, tx + side[0] * 3.53, ty, zz, 0.06, 5.2, 0.45, (0.04, 0.04, 0.05), None, None, False)
                     else:
-                        box(m, tx + dd, ty + side[1] * 3.5, 5.2, 0.3, 0.05, 1.2, (0.03, 0.03, 0.04), None, None, False)
-    # Bergfried: Eingangsbogen und Schlitze
+                        box(m, tx, ty + side[1] * 3.52, zz, 5.2, 0.06, 0.5, (0.04, 0.04, 0.05), None, None, False)
+                        box(m, tx, ty + side[1] * 3.51, zz, 5.5, 0.05, 0.7, conc, None, "concrete", False)
+                        box(m, tx, ty + side[1] * 3.53, zz, 5.2, 0.06, 0.45, (0.04, 0.04, 0.05), None, None, False)
+                if side[0]:
+                    box(m, tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, conc, None, "concrete", False)
+                else:
+                    box(m, tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, conc, None, "concrete", False)
+    # Betriebsgebäude (Mitte): Eingang, Fensterbänder, Dachaufbauten
     kx, ky = c, c - 4.0
-    box(m, kx, ky - 0.05, 1.3, 2.4, 0.2, 2.6, STONE_D, None, "stone", False)
-    box(m, kx, ky - 0.12, 1.15, 1.6, 0.08, 2.3, (0.22, 0.14, 0.08), None, "wood", False)
-    for dx in (-2.2, 2.2):
-        box(m, kx + dx, ky - 0.04, 4.0, 0.3, 0.05, 1.2, (0.03, 0.03, 0.04), None, None, False)
-    # Fackeln im Hof
+    box(m, kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, conc, None, "concrete", False)
+    box(m, kx, ky - 0.2, 1.15, 1.7, 0.1, 2.3, OLIVE, None, "metal", False)
+    box(m, kx, ky - 0.27, 1.15, 0.05, 0.05, 2.3, (0.1, 0.1, 0.1), None, None, False)
+    box(m, kx, ky - 0.7, 2.75, 3.4, 1.2, 0.18, conc, None, "concrete", False)            # Vordach
+    box(lamps, kx - 1.0, ky - 0.2, 2.5, 0.2, 0.2, 0.24, (1.0, 0.82, 0.45))
+    for dx in (-2.6, 2.6):
+        for dz in (2.6,):
+            box(m, kx + dx, ky - 0.04, dz + 0.6, 1.5, 0.06, 1.2, PAINT_W, None, "plaster", False)
+            box(m, kx + dx, ky - 0.07, dz + 0.6, 1.3, 0.05, 1.0, (0.07, 0.09, 0.11), None, None, False)
+    for sidx, (ox_, oy_, ux_) in enumerate(((4.04, 0.0, 0), (-4.04, 0.0, 0), (0.0, 4.04, 1))):
+        for dd in (-2.0, 2.0):
+            if ux_ == 0:
+                box(m, c + ox_, c + dd, 3.0, 0.06, 1.6, 1.3, (0.07, 0.09, 0.11), None, None, False)
+                box(m, c + ox_ * 0.999, c + dd, 3.0, 0.05, 1.8, 1.5, PAINT_W, None, "plaster", False)
+            else:
+                box(m, c + dd, c + oy_, 3.0, 1.6, 0.06, 1.3, (0.07, 0.09, 0.11), None, None, False)
+                box(m, c + dd, c + oy_ * 0.999, 3.0, 1.8, 0.05, 1.5, PAINT_W, None, "plaster", False)
+    # Dach: Lüfter, Antennenkabel, Auslass
+    for dx, dy, hh in ((-2.4, -2.4, 0.9), (2.5, 2.4, 0.7)):
+        box(m, c + dx, c + dy, 6.0 + hh / 2, 1.0, 1.0, hh, (0.40, 0.42, 0.40), None, "metal", False)
+        prism(m, c + dx, c + dy, 6.0 + hh, 0.3, 0.25, 8, (0.30, 0.32, 0.30), hr, 1.0)
+    box(m, c, c, 6.15, 3.2, 3.2, 0.3, concd, None, "concrete", False)                   # Fundament des Drehkranzes
+    # Lampenmasten im Hof
     for fx, fy in ((c - 6.0, c - 16.0), (c + 6.0, c - 16.0), (c - 6.0, c + 16.0), (c + 6.0, c + 16.0)):
-        box(m, fx, fy, 1.0, 0.14, 0.14, 2.0, (0.20, 0.17, 0.14), None, "wood", False)
-        box(lamps, fx, fy, 2.15, 0.3, 0.3, 0.3, (1.0, 0.65, 0.25))
-        box(lamps, fx, fy, 2.4, 0.18, 0.18, 0.22, (1.0, 0.85, 0.4))
+        beam(m, (fx, fy, -0.2), (fx, fy, 4.6), 0.14, 0.14, (0.30, 0.32, 0.32), "metal")
+        beam(m, (fx, fy, 4.5), (fx + 0.7, fy, 4.75), 0.1, 0.1, (0.30, 0.32, 0.32), "metal")
+        box(lamps, fx + 0.8, fy, 4.62, 0.5, 0.3, 0.14, (1.0, 0.95, 0.8))
 
 
 # ------------------------------------------------------------ Bäume (detailliert, Kronen schwingen im Wind)
@@ -7213,15 +7456,21 @@ def _bark_trunk(m, x, y, z, h, r0, r1, bend, col, rng, sides=8, roots=3):
 def tree_conifer(m, fm, x, y, z, zo, r, rng):
     h = rng.uniform(7.5, 12.0) * (0.85 + 0.15 * r / 2.2)
     g0 = (rng.uniform(0.09, 0.15), rng.uniform(0.30, 0.40), rng.uniform(0.13, 0.19))
-    _bark_trunk(m, x, y, z, h * 0.86, 0.32, 0.06, rng.uniform(-0.4, 0.4), (0.42, 0.30, 0.20), rng, 8, 4)
-    n = 9
+    ta, ttop = _bark_trunk(m, x, y, z, h * 0.86, 0.32, 0.06, rng.uniform(-0.4, 0.4), (0.42, 0.30, 0.20), rng, 9, 5)
+    for k in range(4):                                       # abgestorbene Aststummel am unteren Stamm
+        b = rng.uniform(0, 2 * math.pi)
+        zz = z + h * rng.uniform(0.05, 0.16)
+        loft(m, [(x + math.cos(b) * 0.1, y + math.sin(b) * 0.1, zz), (x + math.cos(b) * 0.6, y + math.sin(b) * 0.6, zz + 0.18),
+                 (x + math.cos(b) * 1.05, y + math.sin(b) * 1.05, zz + 0.08)], [0.07, 0.05, 0.02], [0.07, 0.05, 0.02], (0.36, 0.26, 0.18),
+             rng, "bark", None, (False, True), 0.04, 5)
+    n = 13
     fm.mat = "leaves"
     for i in range(n):
         t = i / (n - 1)
         zi = z - zo + h * (0.14 + 0.78 * t)
         ri = r * (1.18 - 0.98 * t) * rng.uniform(0.92, 1.08)
         hi = h * (0.19 - 0.04 * t)
-        M = 12
+        M = 16
         ph = rng.uniform(0, 6.28)
         col = (g0[0] * (1 - 0.15 * t) + 0.02 * t, g0[1] * (1 + 0.28 * t), g0[2])
         outer = []
@@ -7244,12 +7493,12 @@ def tree_conifer(m, fm, x, y, z, zo, r, rng):
 
 def tree_oak(m, fm, x, y, z, zo, r, rng, autumn=False):
     h1 = rng.uniform(2.3, 3.4)
-    a, top = _bark_trunk(m, x, y, z, h1, 0.42, 0.22, rng.uniform(-0.3, 0.3), (0.40, 0.29, 0.20), rng, 9, 4)
+    a, top = _bark_trunk(m, x, y, z, h1, 0.42, 0.22, rng.uniform(-0.3, 0.3), (0.40, 0.29, 0.20), rng, 11, 5)
     col = (rng.uniform(0.14, 0.23), rng.uniform(0.40, 0.52), rng.uniform(0.13, 0.20))
     if autumn:
         col = (rng.uniform(0.62, 0.74), rng.uniform(0.38, 0.5), rng.uniform(0.08, 0.14))
     cz = z + h1 + r * 0.7
-    nl = 4
+    nl = 6
     clumps = [(x + math.cos(a) * 0.3, y + math.sin(a) * 0.3, cz + r * 0.25, r * 1.12, r * 1.0)]
     for k in range(nl):
         b = rng.uniform(0, 2 * math.pi) if k else a + 0.5
@@ -7263,10 +7512,17 @@ def tree_oak(m, fm, x, y, z, zo, r, rng, autumn=False):
         pm = (top[0] + (cc[0] - top[0]) * 0.5, top[1] + (cc[1] - top[1]) * 0.5, p0[2] + (cc[2] - p0[2]) * 0.4 + 0.2)
         p1 = (cc[0], cc[1], cc[2] - cc[4] * 0.4)
         loft(m, [p0, pm, p1], [0.17, 0.12, 0.07], [0.17, 0.12, 0.07], (0.38, 0.28, 0.19), rng, "bark", None, (False, True), 0.05, 6)
+        for q in range(2):                                   # Zweige innerhalb der Krone
+            t_ = rng.uniform(0.45, 0.8)
+            ps = (pm[0] + (p1[0] - pm[0]) * t_, pm[1] + (p1[1] - pm[1]) * t_, pm[2] + (p1[2] - pm[2]) * t_)
+            bb = rng.uniform(0, 2 * math.pi)
+            loft(m, [ps, (ps[0] + math.cos(bb) * 0.5, ps[1] + math.sin(bb) * 0.5, ps[2] + 0.35),
+                     (ps[0] + math.cos(bb) * 1.0, ps[1] + math.sin(bb) * 1.0, ps[2] + 0.6)], [0.06, 0.04, 0.02], [0.06, 0.04, 0.02],
+                 (0.36, 0.27, 0.18), rng, "bark", None, (False, True), 0.04, 5)
     clumps.append((x + rng.uniform(-0.3, 0.3), y + rng.uniform(-0.3, 0.3), cz + r * 0.95, r * 0.7, r * 0.55))
     for cx_, cy_, cz_, rx_, rz_ in clumps:
         blob(fm, cx_, cy_, cz_ - zo, rx_, rx_, rz_, jc(col, rng, 0.08), rng, jitter=0.2, subdiv=2 if rx_ > r else 1, mat="leaves")
-        for _ in range(2):                      # kleine Laubbüschel am Rand
+        for _ in range(4):                      # kleine Laubbüschel am Rand
             aa = rng.uniform(0, 2 * math.pi)
             blob(fm, cx_ + math.cos(aa) * rx_ * 0.85, cy_ + math.sin(aa) * rx_ * 0.85, cz_ - zo + rng.uniform(-0.3, 0.4) * rz_,
                  rx_ * 0.38, rx_ * 0.38, rz_ * 0.36, jc(col, rng, 0.1), rng, jitter=0.2, subdiv=1, mat="leaves")
@@ -7282,7 +7538,7 @@ def tree_birch(m, fm, x, y, z, zo, r, rng):
         ps = (x + (top[0] - x) * t * t, y + (top[1] - y) * t * t)
         prism(m, ps[0], ps[1], zz, (0.17 + (0.07 - 0.17) * t) * 1.04, 0.08, 7, (0.18, 0.17, 0.16), rng, 1.0)
     col = (rng.uniform(0.34, 0.45), rng.uniform(0.55, 0.65), rng.uniform(0.16, 0.24))
-    n = 10
+    n = 15
     for k in range(n):
         t = k / (n - 1)
         b = rng.uniform(0, 2 * math.pi)
@@ -7291,7 +7547,7 @@ def tree_birch(m, fm, x, y, z, zo, r, rng):
         rr = r * (0.78 - 0.3 * t) * rng.uniform(0.85, 1.1)
         blob(fm, top[0] + math.cos(b) * d_, top[1] + math.sin(b) * d_, zz - zo, rr, rr, rr * 0.85, jc(col, rng, 0.07), rng,
              jitter=0.22, subdiv=2 if k % 2 == 0 else 1, mat="leaves")
-        if k in (1, 3):
+        if k in (1, 3, 6, 9):
             p0 = (top[0], top[1], z + h * 0.55)
             p1 = (top[0] + math.cos(b) * d_, top[1] + math.sin(b) * d_, zz)
             loft(m, [p0, p1], [0.06, 0.03], [0.06, 0.03], (0.80, 0.78, 0.72), rng, "bark", None, (False, True), 0.05, 5)
@@ -7302,7 +7558,7 @@ def tree_poplar(m, fm, x, y, z, zo, r, rng):
     h = rng.uniform(9.0, 13.0)
     a, top = _bark_trunk(m, x, y, z, h * 0.35, 0.2, 0.1, rng.uniform(-0.2, 0.2), (0.42, 0.34, 0.24), rng, 7, 3)
     col = (rng.uniform(0.16, 0.24), rng.uniform(0.42, 0.52), rng.uniform(0.14, 0.2))
-    n = 6
+    n = 10
     for k in range(n):
         t = k / (n - 1)
         rr = r * (0.55 - 0.3 * abs(t - 0.35)) * rng.uniform(0.9, 1.1)
@@ -7505,6 +7761,34 @@ def build_scene(world, progress=None):
     n0 = int(-marg // cs)
     n1 = int((WORLD + marg) // cs) + 1
 
+    # Fussböden ebener Flächen (Innenräume, Höfe, Plätze) als eigene Platten exakt im Rechteck - so schwappt keine Bodenfarbe
+    # über die Gebäudekante hinaus; Aussparungen (Treppenschächte in den Tunnel) bleiben offen
+    flat_floors = set()
+    frng = random.Random(world.seed + 5)
+    for fi, (fx0, fy0, fx1, fy1, fc) in enumerate(world.floors):
+        if world.cm is not None or fx1 - fx0 < 1.0 or fy1 - fy0 < 1.0:
+            continue
+        hs_ = [sh(fx0 + (fx1 - fx0) * i / 4.0, fy0 + (fy1 - fy0) * j / 4.0) for i in range(5) for j in range(5)]
+        if max(hs_) - min(hs_) > 0.03:
+            continue
+        flat_floors.add(fi)
+        zf = max(hs_) + 0.03
+        nx_ = max(1, int(round((fx1 - fx0) / (1.0 if fx1 - fx0 < 14.0 else 2.0))))
+        ny_ = max(1, int(round((fy1 - fy0) / (1.0 if fy1 - fy0 < 14.0 else 2.0))))
+        fmat = mat_for_color(fc)
+        for i in range(nx_):
+            for j in range(ny_):
+                ta, tb = fx0 + (fx1 - fx0) * i / nx_, fx0 + (fx1 - fx0) * (i + 1) / nx_
+                tc, td = fy0 + (fy1 - fy0) * j / ny_, fy0 + (fy1 - fy0) * (j + 1) / ny_
+                subs = [(ta, tc, tb, td)]
+                if any(vx0 < tb and vx1 > ta and vy0 < td and vy1 > tc for vx0, vy0, vx1, vy1 in world.voids):
+                    subs = [(ta + (tb - ta) * a_ / 2, tc + (td - tc) * b_ / 2, ta + (tb - ta) * (a_ + 1) / 2,
+                             tc + (td - tc) * (b_ + 1) / 2) for a_ in range(2) for b_ in range(2)]
+                    subs = [q for q in subs if not any(vx0 < q[2] and vx1 > q[0] and vy0 < q[3] and vy1 > q[1]
+                                                       for vx0, vy0, vx1, vy1 in world.voids)]
+                for qa, qc, qb, qd in subs:
+                    quadf(m, (qa, qc, zf), (qb, qc, zf), (qb, qd, zf), (qa, qd, zf), jc(fc, frng, 0.04), (qa, qc, zf - 1.0), fmat)
+
     def cell(x0, y0, x1, y1, par, rc=False):
         if world.voids and world.in_void((x0 + x1) / 2, (y0 + y1) / 2):
             return                                  # Tunneleingang: hier ist das Gelände offen
@@ -7520,8 +7804,8 @@ def build_scene(world, progress=None):
                 n = (-n[0], -n[1], -n[2])
             cx_, cy_ = (a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3
             floor = None
-            for fx0, fy0, fx1, fy1, fc in world.floors:    # Hof und Fussböden in Gebäuden
-                if fx0 <= cx_ <= fx1 and fy0 <= cy_ <= fy1:
+            for fi_, (fx0, fy0, fx1, fy1, fc) in enumerate(world.floors):    # Hof und Fussböden (unebene; ebene = Platten oben)
+                if fi_ not in flat_floors and fx0 <= cx_ <= fx1 and fy0 <= cy_ <= fy1:
                     floor = fc
             if floor is not None:
                 m.tri(a, b, c, jc(floor, rng, 0.04), mat=mat_for_color(floor))
@@ -7536,7 +7820,7 @@ def build_scene(world, progress=None):
             for p in (a, b, c):
                 col = terrain_col(p[0], p[1], p[2])
                 if rdk is not None:
-                    col = (0.60, 0.57, 0.51) if rdk == "cobble" else (0.58, 0.47, 0.34)
+                    col = (0.50, 0.50, 0.52) if rdk == "cobble" else (0.58, 0.47, 0.34)
                 elif k > 0:
                     col = mix(col, (0.50, 0.44, 0.36), k)
                 cols.append(jc(col, rng, 0.04 if rdk else 0.03))
@@ -7548,7 +7832,7 @@ def build_scene(world, progress=None):
             if mtn and mat == "grass" and rock_w(cx_, cy_) > 0.6:
                 mat = "rock"
             if rdk is not None:
-                mat = "cobble" if rdk == "cobble" else "dirt"
+                mat = "concrete" if rdk == "cobble" else "dirt"
             m.tri(a, b, c, cols, mat=mat, nd=nds)
 
     fine, roadc = fine_cells(world, cs, n0, n1) if (world.mtn and (world.roads or world.moats)) else (set(), set())
@@ -7857,6 +8141,8 @@ def build_scene(world, progress=None):
                 tower_details(cm_, r_, hr_)
         elif k_ == "stall":
             stall_details(cm_, r_, hr_)
+        elif k_ == "nissen":
+            nissen_details(cm_, lamps, r_, hr_)
         elif k_ == "fountain":
             fountain_details(cm_, r_, hr_, w)
         elif k_ == "well":
@@ -7873,6 +8159,15 @@ def build_scene(world, progress=None):
             fmesh = Mesh()
             flag_mesh(fmesh, r_["w"], r_["h"], r_["col"], hr_)
             flags.append({"node": fmesh.node("flag"), "x": r_["x"], "y": r_["y"], "z": r_["z"] + r_["h"], "ang": r_["ang"]})
+    spins = []                                                        # drehende Radarantennen (Knoten drehen im Spiel)
+    for r_ in world.vis:
+        if r_["k"] == "spin":
+            sm_ = _SpinMesh()
+            if r_["kind"] == "dish":
+                radar_dish(sm_)
+            else:
+                freya_array(sm_)
+            spins.append({"node": sm_.node("radar"), "x": r_["x"], "y": r_["y"], "z": r_["z"], "speed": r_["speed"], "h0": r_["h0"]})
     # --- King-of-the-Hill-Zone: gelber Ring mit Pfosten und leicht getönter Boden
     zone = []
     if world.mode == "koth":
@@ -7895,7 +8190,7 @@ def build_scene(world, progress=None):
             box(edge, px, py, 1.6, 0.25, 0.25, 3.2, (1.0, 0.85, 0.15))
         zone = [fill.node("zone_fill"), edge.node("zone_ring")]
     extra = [lamps.node("lamps"), [c.node("grass") for c in gcells.values()], shadows.node("decals"), w2.node("water2"),
-             winds.nodes(), flags, [c_.node("block") for c_ in chunks.values()]]
+             winds.nodes(), flags, [c_.node("block") for c_ in chunks.values()], spins]
     return m.node("land"), w.node("water"), zone, extra
 
 
@@ -130154,7 +130449,7 @@ class Game(ShowBase):
         self.vignette = self.land_np = None
         self.water_nps = []
         self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
-        self.wind_nodes, self.flag_nodes = [], []
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.shadows = {}
         self.camLens.setFov(FOV)
         self.camLens.setNearFar(0.1, 450)      # grosse Karten: siehe build_world (Fernsicht)
@@ -131662,7 +131957,7 @@ class Game(ShowBase):
         self.strike_fx = None
         self.water_nps = []
         self.town_np = None
-        self.wind_nodes, self.flag_nodes = [], []
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
@@ -131927,7 +132222,7 @@ class Game(ShowBase):
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
         lamps, grass, decals, water2 = extra[:4]
         self.town_np = None
-        self.wind_nodes, self.flag_nodes = [], []
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         if len(extra) >= 7:
             self.town_np = self.render.attachNewNode("stadt")
             for bn in extra[6]:
@@ -131940,6 +132235,13 @@ class Game(ShowBase):
                 if wd["kind"] in ("reed", "grass", "bush"):
                     wnp.setTwoSided(True)
                 self.wind_nodes.append((wnp, wd["x"], wd["y"], wd["z"], wd["kind"]))
+            self.spin_nodes = []
+            for sd in (extra[7] if len(extra) > 7 else ()):
+                snp = self.town_np.attachNewNode(sd["node"])
+                snp.setTwoSided(True)
+                snp.setPos(sd["x"], sd["y"], sd["z"])
+                snp.setH(sd["h0"])
+                self.spin_nodes.append((snp, sd["speed"], sd["h0"], sd["x"], sd["y"]))
             for fd in extra[5]:
                 fnp = self.town_np.attachNewNode(fd["node"])
                 fnp.setTwoSided(True)
@@ -133558,6 +133860,8 @@ class Game(ShowBase):
 
     def update_wind(self, t, cp):
         """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe)."""
+        for snp, spd, h0, sx_, sy_ in self.spin_nodes:                 # Radarantennen drehen sich immer (auch weit weg: sichtbar bis 400 m)
+            snp.setH(h0 + (t * spd) % 360.0)
         if not self.wind_nodes and not self.flag_nodes:
             return
         cx, cy = cp[0], cp[1]
