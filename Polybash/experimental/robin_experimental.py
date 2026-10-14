@@ -390,7 +390,9 @@ DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 NET_VERSION = 26         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
-NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
+NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
+NET_TIMEOUT = 30.0       # so lange ohne Daten, dann gilt die Verbindung als tot (Hamachi/WLAN stocken auch mal 10 s)
+NET_STALE_BUF = 64000    # Host: liegt so viel ungesendet bei einem Mitspieler, werden Snapshots ausgelassen (nur der neueste zählt)
 MAX_PLAYERS = 8
 
 STEP_H = 0.6             # so viel darf man ohne Sprung hochsteigen (Treppenstufe)
@@ -12063,6 +12065,32 @@ def local_ip():
         s.close()
 
 
+_NETLOG = {"f": None}
+
+
+def netlog(msg):
+    """Hängt eine Zeile an polybash_netz.log (neben dem Spiel) an - zur Fehlersuche bei Verbindungsproblemen."""
+    try:
+        if _NETLOG["f"] is None:
+            base = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+            path = os.path.join(base, "polybash_netz.log")
+            try:
+                if os.path.getsize(path) > 500000:
+                    os.remove(path)
+            except OSError:
+                pass
+            try:
+                _NETLOG["f"] = open(path, "a", encoding="utf-8")
+            except OSError:
+                import tempfile
+                _NETLOG["f"] = open(os.path.join(tempfile.gettempdir(), "polybash_netz.log"), "a", encoding="utf-8")
+            _NETLOG["f"].write(f"\n=== Start {time.strftime('%Y-%m-%d %H:%M:%S')} Experimental (Netz {NET_VERSION}) ===\n")
+        _NETLOG["f"].write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+        _NETLOG["f"].flush()
+    except Exception:
+        pass
+
+
 class Conn:
     """Nicht blockierende TCP-Verbindung. Eine JSON-Nachricht pro Zeile."""
     MAX_BUF = 1 << 20
@@ -12134,6 +12162,8 @@ class Conn:
         if not self.closed:
             self.closed = True
             self.error = reason
+            netlog(f"Verbindung zu: '{reason}' (pid={self.pid}, playing={getattr(self, 'playing', False)}, "
+                   f"ungesendet={len(self.wbuf)} B, stumm seit {time.time() - self.last_rx:.1f}s)")
             try:
                 self.sock.close()
             except OSError:
@@ -12246,6 +12276,7 @@ class NetServer:
                 break
             except OSError:
                 break
+            netlog(f"Host: Verbindung angenommen von {_addr}")
             self.conns.append(Conn(s))
 
     def close(self):
@@ -12375,7 +12406,8 @@ class HostSession:
                     self.handle(c, m)
                 except (KeyError, IndexError, TypeError, ValueError):
                     pass                          # kaputte Nachricht ignorieren
-            if not c.closed and now - c.last_rx > NET_TIMEOUT:
+            # Beitretende laden erst die Karte (mehrere Sekunden ohne Daten): bis zur ersten Positionsmeldung gilt eine lange Frist
+            if not c.closed and now - c.last_rx > (NET_TIMEOUT if getattr(c, "playing", False) else NET_LOAD_TIMEOUT):
                 c.close("Zeitüberschreitung")
             if c.closed:
                 self.server.conns.remove(c)
@@ -12404,6 +12436,7 @@ class HostSession:
             lk = m.get("look")
             w.players[pid].look = lk if look_valid(lk) else ""
             c.pid = pid
+            netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
                     "tomahawk": 1 if w.tomahawk_on else 0,
@@ -12413,6 +12446,9 @@ class HostSession:
         if pl is None:
             return
         if t == "st":                             # Position/Blickrichtung des Spielers
+            if not getattr(c, "playing", False):
+                netlog(f"Host: erste Position von pid {c.pid} - ab jetzt Snapshots")
+            c.playing = True
             x, y, z, h, p = m["p"]
             if not finite(x, y, z, h, p):
                 return
@@ -12536,7 +12572,10 @@ class HostSession:
         w = self.world
         if self.beacon is not None:
             self.beacon.update(dt, len(w.players))
-        clients = [c for c in self.server.conns if c.pid is not None and not c.closed]
+        # Snapshots erst, wenn der Beitretende die Karte geladen hat und seine erste Position meldet ("playing"):
+        # sonst staut sich der Sendepuffer während des Ladens und der Host kappt ihn als "zu langsam"
+        clients = [c for c in self.server.conns
+                   if c.pid is not None and not c.closed and getattr(c, "playing", False)]
         self.snap_t -= dt
         if self.snap_t > 0:
             return
@@ -12583,9 +12622,21 @@ class HostSession:
         line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
         self.events = []
         for c in clients:
+            if len(c.wbuf) > NET_STALE_BUF:           # Leitung staut: keine veralteten Snapshots anhäufen
+                if not getattr(c, "stalled", False):
+                    c.stalled = True
+                    netlog(f"Host: Leitung zu pid {c.pid} staut ({len(c.wbuf)} B ungesendet) - Snapshots ausgelassen")
+                c.flush()
+                continue
+            if getattr(c, "stalled", False) and len(c.wbuf) < 4000:
+                c.stalled = False
+                netlog(f"Host: Leitung zu pid {c.pid} frei, Snapshots laufen wieder")
             c.send_line(line)
             self.send_toma(c)
             c.flush()
+        if self.snap_n % 150 == 1 and clients:       # alle ~5 s: wie viel hängt ungesendet in der Leitung?
+            netlog("Host: Snapshot " + str(len(line)) + " B, ungesendet je Spieler " +
+                   str([(c.pid, len(c.wbuf)) for c in clients]))
 
     def send_toma(self, c):
         """Wo die Tomahawk-Säule steht (bzw. versinkt), erfährt ein Mitspieler nur in Sichtweite (TOMA_SEE_R);
@@ -12678,6 +12729,10 @@ class ClientSession:
         self.hp = None               # Lebenspunkte: entscheidet der Host
         self.lost = ""               # Text, wenn die Verbindung weg ist
         self.send_t = 0.0
+        self.fresh = True            # erster Frame nach dem Kartenbau: Zeitmessung "Host schweigt" beginnt erst dann
+        self.got_snap = False
+        self.stall_t0 = time.time()
+        netlog(f"Client: Sitzung angelegt (id {my_id}), {len(list(backlog))} Nachrichten im Rückstau")
         for m in backlog:
             self.handle(m)
 
@@ -12687,9 +12742,27 @@ class ClientSession:
     def poll(self, dt):
         if self.lost:
             return
-        for m in self.conn.recv():
+        if self.fresh:
+            self.fresh = False
+            self.conn.last_rx = time.time()
+            netlog("Client: Karte fertig, erster Frame - sende Positionen")
+        now = time.time()
+        self.max_dt = max(getattr(self, "max_dt", 0.0), dt)
+        gap = now - self.conn.last_rx
+        if gap > 2.0 and not getattr(self, "stall_log", False):
+            self.stall_log = True
+            netlog(f"Client: Daten vom Host stocken seit {gap:.1f}s (größter Frame-dt {self.max_dt:.2f}s)")
+        msgs = self.conn.recv()
+        if msgs and getattr(self, "stall_log", False):
+            self.stall_log = False
+            netlog(f"Client: Daten wieder da nach {now - self.stall_t0:.1f}s")
+        if not getattr(self, "stall_log", False):
+            self.stall_t0 = now
+            self.max_dt = 0.0
+        for m in msgs:
             self.handle(m)
         if not self.conn.closed and time.time() - self.conn.last_rx > NET_TIMEOUT:
+            netlog(f"Client: {NET_TIMEOUT:.0f}s keine Daten vom Host (Snapshot je erhalten: {self.got_snap})")
             self.conn.close("Zeitüberschreitung")
         if self.conn.closed:
             self.lost = self.conn.error or "Verbindung getrennt"
@@ -12701,6 +12774,9 @@ class ClientSession:
             return
         try:
             if m.get("t") == "snap":
+                if not self.got_snap:
+                    self.got_snap = True
+                    netlog("Client: erster Snapshot vom Host empfangen")
                 self.apply_snapshot(m)
             elif m.get("t") == "tb":                 # Tomahawk-Säule in Sichtweite (oder -1 = keine)
                 w = self.world
