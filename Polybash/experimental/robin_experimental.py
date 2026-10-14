@@ -8898,14 +8898,16 @@ class SliderSpec:
 class UiSlider:
     """Waagerechter Schieberegler: Beschriftung links, Wert rechts, darunter Schiene mit Knopf.
     Gezogen wird mit der linken Maustaste (Game.ui_slider_press / slider_follow)."""
-    def __init__(self, parent, spec, x0, x1, z):
+    def __init__(self, parent, spec, x0, x1, z, binned=True):
+        # binned=False (Hauptmenü): Zeichenreihenfolge = Reihenfolge im Szenengraph, sonst läge der Hintergrund darüber
         self.sp, self.x0, self.x1, self.z, self.on = spec, x0, x1, z, False
         self.zt = z - 0.065
         self.root = parent.attachNewNode("uislider")
 
         def lay(n, sort):
             n.setTransparency(TransparencyAttrib.MAlpha)
-            n.setBin("fixed", sort)
+            if binned:
+                n.setBin("fixed", sort)
             n.setDepthTest(False)
             n.setDepthWrite(False)
             return n
@@ -8921,8 +8923,9 @@ class UiSlider:
                                 shadow=(0, 0, 0, 0.9), align=TextNode.ALeft, mayChange=False)
         self.val = OnscreenText(text="", pos=(x1, z), scale=0.05, parent=self.root, fg=(1.0, 0.85, 0.2, 1),
                                 shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
-        self.lab.setBin("fixed", 95)
-        self.val.setBin("fixed", 95)
+        if binned:
+            self.lab.setBin("fixed", 95)
+            self.val.setBin("fixed", 95)
         self.track = card(x0, x1, zt - 0.007, zt + 0.007, 92)
         self.track.setColor(0.16, 0.22, 0.30, 1)
         self.fill = card(0.0, 1.0, zt - 0.007, zt + 0.007, 93)
@@ -129781,7 +129784,7 @@ class Game(ShowBase):
             self.ui_sliders_clear()
             if self.menu_state == "settings":
                 for k, sp in enumerate(self.personal_sliders()):
-                    self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k]))
+                    self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
 
     # ------------------------------------------------------------ Maus im Menü
     def mouse_2d(self):
