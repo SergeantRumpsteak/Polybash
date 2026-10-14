@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Zaehlt bei jedem Commit auf main die Build-Nummer in Polybash/spiel.py hoch (BUILD = Anzahl der Commits inkl. diesem).
+Aktivieren (einmal pro Klon):  git config core.hooksPath hooks"""
+import re
+import subprocess
+import sys
+
+def git(*a):
+    return subprocess.check_output(("git",) + a, text=True).strip()
+
+if git("rev-parse", "--abbrev-ref", "HEAD") != "main":
+    sys.exit(0)
+try:
+    n = int(git("rev-list", "--count", "HEAD")) + 1
+except subprocess.CalledProcessError:
+    n = 1
+path = "Polybash/spiel.py"
+with open(path, newline="", encoding="utf-8") as f:
+    s = f.read()
+t, k = re.subn(r"^BUILD = \d+", f"BUILD = {n}", s, count=1, flags=re.M)
+if k and t != s:
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        f.write(t)
+    subprocess.check_call(["git", "add", path])
