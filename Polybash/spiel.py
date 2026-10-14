@@ -247,6 +247,8 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 23    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
+BUILD = 40               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_TIMEOUT = 10.0       # so lange ohne Daten, dann gilt die Verbindung als tot
@@ -11936,7 +11938,7 @@ class HostSession:
             if c.pid is not None:
                 return
             if m.get("v") != NET_VERSION:
-                return self.refuse(c, "Andere Spielversion")
+                return self.refuse(c, f"Andere Spielversion (Host: {VERSION})")
             if len(w.players) >= MAX_PLAYERS:
                 return self.refuse(c, "Das Spiel ist voll")
             pid = self.next_pid
@@ -130761,7 +130763,7 @@ class Game(ShowBase):
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
-            self.menu_items.append(OnscreenText(text="Polybash Alpha", pos=(1.2, -0.94), scale=0.045,
+            self.menu_items.append(OnscreenText(text=f"Polybash Alpha  {VERSION}", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
 
