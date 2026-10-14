@@ -3,6 +3,12 @@
 # richtet beim ersten Mal alles ein (Python-Umgebung + Panda3D) und startet das Spiel aus diesem Ordner.
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
+# Neuesten Stand aus GitHub holen (nur wenn dieser Ordner ein Git-Klon ist; ohne Netz/Git einfach weiter)
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Hole neuesten Stand ..."
+    git pull --ff-only || echo "Aktualisieren nicht moeglich - starte mit dem vorhandenen Stand."
+fi
+
 fail() {
     echo
     echo "$1"

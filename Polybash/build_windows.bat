@@ -4,6 +4,12 @@ cd /d "%~dp0"
 title Polybash
 rem Doppelklick: richtet beim ersten Mal alles ein (Python-Umgebung + Panda3D) und startet das Spiel aus diesem Ordner.
 
+rem Neuesten Stand aus GitHub holen (nur wenn dieser Ordner ein Git-Klon ist; ohne Netz/Git einfach weiter)
+where git >nul 2>nul && git rev-parse --is-inside-work-tree >nul 2>nul && (
+    echo Hole neuesten Stand ...
+    git pull --ff-only || echo Aktualisieren nicht moeglich - starte mit dem vorhandenen Stand.
+)
+
 if exist ".venv\Scripts\python.exe" goto install
 
 set "PY="
