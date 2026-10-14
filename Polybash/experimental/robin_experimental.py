@@ -8690,7 +8690,10 @@ GUN_PARTS = {
 # Wechselmagazin je Waffe (für die Nachladeanimation der Ego-Ansicht). Gleiche Tupel wie in GUN_PARTS
 # werden dort im Ego-Modell weggelassen (das Magazin ist dann ein eigenes, bewegliches Teil).
 RHAND_GRIP = {"Pistole": (0.0, 0.003, -0.07, -3.0), "Revolver": (0.0, -0.027, -0.07, -14.0),
-              "Maschinenpistole": (0.0, -0.033, -0.06, -15.0)}      # rechte Hand am Griff (Waffenraum): Position, Neigung des Griffs
+              "Maschinenpistole": (0.0, -0.033, -0.06, -15.0), "Sturmgewehr": (0.0, 0.052, -0.09, -7.0),
+              "Scharfschütze": (0.0, -0.1155, -0.08, 20.0), "Schrotflinte": (0.0, -0.098, -0.02, 0.0),
+              "Railgun": (0.0, 0.052, -0.11, -5.0), "Raketenwerfer": (0.0, 0.08, -0.107, -7.0),
+              "Minigun": (0.0, 0.0045, -0.127, -2.0)}      # rechte Hand am Griff (Waffenraum): Position, Neigung des Griffs
 MAG_PARTS = {
     "Pistole": (0, 0.0, -0.12, 0.04, 0.06, 0.09, (0.10, 0.10, 0.12)),
     "Sturmgewehr": (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
@@ -135222,7 +135225,7 @@ class Game(ShowBase):
             (m.show if i == pl.cur and not pl.melee_out and not hidden and pl.hp > 0 and not driving else m.hide)()
         for i, m in enumerate(self.melee_models):
             (m.show if pl.melee_out and i == pl.melee and pl.hp > 0 and not driving else m.hide)()
-        rh = RHAND_GRIP.get(w.name) if (w.name in SECONDARY_NAMES and pl.reload_t > 0 and pl.switch_t <= 0) else None
+        rh = RHAND_GRIP.get(w.name) if (pl.reload_t > 0 and pl.switch_t <= 0) else None
         if rh is not None and self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
             self.vm_rhand.setPos(*rh[:3])           # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
             self.vm_rhand.setP(rh[3])
