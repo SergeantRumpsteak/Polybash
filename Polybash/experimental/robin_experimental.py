@@ -111367,6 +111367,8 @@ class Game(ShowBase):
                                      fg=(0.7, 1, 0.7, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight,
                                      mayChange=True)
         self.fps_text.hide()
+        if getattr(self, "show_fps", False):          # F3 wurde schon im Menü gedrückt
+            self.fps_text.show()
         self.build_turret_sight()
         self.build_minimap()
         self.build_tab_overlay()
@@ -111424,7 +111426,9 @@ class Game(ShowBase):
 
     def toggle_fps(self):
         self.show_fps = not getattr(self, "show_fps", False)
-        (self.fps_text.show if self.show_fps else self.fps_text.hide)()
+        ft = getattr(self, "fps_text", None)          # gibt es erst im Spiel, nicht im Hauptmenü
+        if ft is not None:
+            (ft.show if self.show_fps else ft.hide)()
 
     TACHO_MAX = 80.0                                   # km/h am Ende der Skala
 

@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 26    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 56               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 57               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -110561,6 +110561,8 @@ class Game(ShowBase):
                                      fg=(0.7, 1, 0.7, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight,
                                      mayChange=True)
         self.fps_text.hide()
+        if getattr(self, "show_fps", False):          # F3 wurde schon im Menü gedrückt
+            self.fps_text.show()
         self.build_turret_sight()
         self.build_minimap()
         self.build_tab_overlay()
@@ -110852,7 +110854,9 @@ class Game(ShowBase):
 
     def toggle_fps(self):
         self.show_fps = not getattr(self, "show_fps", False)
-        (self.fps_text.show if self.show_fps else self.fps_text.hide)()
+        ft = getattr(self, "fps_text", None)          # gibt es erst im Spiel, nicht im Hauptmenü
+        if ft is not None:
+            (ft.show if self.show_fps else ft.hide)()
 
     TACHO_MAX = 80.0                                   # km/h am Ende der Skala
 
