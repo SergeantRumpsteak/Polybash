@@ -6212,6 +6212,8 @@ class World:
             pl.death_pos = None
             pl.stats = new_stats()
         for pl in list(self.players.values()):
+            if getattr(pl, "prespawn", False):
+                continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
             self.respawn_player(pl)
         self.events.append(("newmatch",))
 
