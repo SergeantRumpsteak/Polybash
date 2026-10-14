@@ -15,7 +15,10 @@ Fuer deine Freunde:
     installiert es nur fuer Polybash (Unterordner "python"); andere Programme bleiben unberuehrt.
   - Danach holt er die Spiele-Engine Panda3D aus dem Internet (1-3 Minuten).
   - Start ueber das Startmenue bzw. die Desktop-Verknuepfung "Polybash".
-  - Beim ersten Start fragt die Windows-Firewall: "Zugriff zulassen" waehlen (fuer den Mehrspieler im WLAN).
+  - Mehrspieler: Im Installer gibt es den Haken "Windows-Firewall fuer Mehrspieler freigeben" (standardmaessig an).
+    Dann fragt Windows einmal nach Administratorrechten und der Installer legt Regeln fuer TCP 37020 (Spiel) und
+    UDP 37021 (Spielsuche) an, fuer alle Netzwerkprofile (wichtig fuer Hamachi). Beim Deinstallieren werden sie
+    wieder entfernt. Haken weg = kein Administrator noetig; dann beim ersten Start in der Firewall "Zugriff zulassen" waehlen.
   - Deinstallieren: Windows-Einstellungen > Apps > Polybash.
 
 Aktualisieren: neue spiel.py einsetzen, Installer neu bauen und verteilen; die Freunde fuehren ihn

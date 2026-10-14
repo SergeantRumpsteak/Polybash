@@ -35,6 +35,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Verknuepfung auf dem Desktop anlegen"; GroupDescription: "Zusaetzliche Symbole:"
+Name: "firewall"; Description: "Windows-Firewall fuer Mehrspieler freigeben (LAN / Hamachi; fragt nach Administratorrechten)"; GroupDescription: "Mehrspieler:"
 
 [Files]
 Source: "..\spiel.py"; DestDir: "{app}"; Flags: ignoreversion
@@ -66,6 +67,31 @@ var
 function InstallOk: Boolean;
 begin
   Result := Ok;
+end;
+
+const
+  FwName = 'Polybash';
+
+{ Eigene Firewall-Regeln zum Spiel: TCP 37020 (Spiel) und UDP 37021 (Spielsuche), alle Netzwerkprofile
+  (Windows stuft die Hamachi-Karte oft als "oeffentlich" ein). }
+function FwRulesCmd: String;
+begin
+  Result := '/C netsh advfirewall firewall delete rule name="' + FwName + '" >nul 2>&1 & ' +
+    'netsh advfirewall firewall add rule name="' + FwName + '" dir=in action=allow protocol=TCP localport=37020 profile=any >nul 2>&1 & ' +
+    'netsh advfirewall firewall add rule name="' + FwName + '" dir=in action=allow protocol=UDP localport=37021 profile=any >nul 2>&1';
+end;
+
+{ Nur auf Wunsch (Haken im Installer): Regeln mit Administratorrechten anlegen. Windows fragt dann einmal nach. }
+procedure SetupFirewall;
+var
+  RC: Integer;
+begin
+  if not WizardIsTaskSelected('firewall') then
+    Exit;
+  if (not ShellExec('runas', ExpandConstant('{cmd}'), FwRulesCmd, '', SW_HIDE, ewWaitUntilTerminated, RC)) or (RC <> 0) then
+    SuppressibleMsgBox('Die Firewall-Regeln wurden nicht eingerichtet (Administratorabfrage abgelehnt?).' + #13#10 +
+      'Das Spiel funktioniert trotzdem; fuer Mehrspieler als Host muss Windows beim ersten Start "Zugriff zulassen" bekommen.',
+      mbInformation, MB_OK, IDOK);
 end;
 
 { Fuehrt "cmd /C <Befehl>" aus und liefert den Rueckgabewert (-1 = konnte nicht gestartet werden). }
@@ -212,6 +238,7 @@ begin
       Exit;
     end;
     Ok := True;
+    SetupFirewall;
   finally
     Prog.Hide;
   end;
@@ -222,4 +249,17 @@ begin
   if (CurPageID = wpFinished) and (not Ok) then
     WizardForm.FinishedLabel.Caption := 'Die Einrichtung ist nicht vollstaendig abgeschlossen. ' +
       'Bitte den Installer noch einmal ausfuehren. Die Meldung steht in install.log im Installationsordner.';
+end;
+
+{ Beim Deinstallieren die Firewall-Regeln wieder entfernen (nur wenn es sie gibt; dann fragt Windows nach Administratorrechten). }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  RC: Integer;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+  if RunCmd('netsh advfirewall firewall show rule name="' + FwName + '" >nul 2>&1') <> 0 then
+    Exit;
+  ShellExec('runas', ExpandConstant('{cmd}'), '/C netsh advfirewall firewall delete rule name="' + FwName + '" >nul 2>&1',
+    '', SW_HIDE, ewWaitUntilTerminated, RC);
 end;
