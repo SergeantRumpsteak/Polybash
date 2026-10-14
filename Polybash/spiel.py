@@ -147,7 +147,7 @@ from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, Colo
                           CullFaceAttrib, DepthOffsetAttrib, DirectionalLight, Fog, Geom, GeomNode, GeomTriangles, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, KeyboardButton, LineSegs, MouseButton,
                           NodePath, PerspectiveLens, PNMImage, Point2, Point3, RenderState, Texture,
-                          TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3,
+                          TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3, Quat,
                           WindowProperties, loadPrcFileData)
 
 # Konfiguration muss VOR dem Erzeugen des Fensters passieren
@@ -6435,6 +6435,8 @@ CAMO_PAL = [(0.17, 0.20, 0.11), (0.29, 0.33, 0.19), (0.44, 0.41, 0.27), (0.28, 0
 _SIDES = 16
 _CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
 _SOLDIER_CACHE = {}
+SOLDIER_SH = ((-0.245, 0.0, 0.55), (0.245, 0.0, 0.55))        # Schultergelenke links / rechts (Torso-Raum)
+SOLDIER_HAND = ((0.10, 0.36, 0.40), (0.10, 0.14, 0.375))      # Hände am Gewehr: links Handschutz, rechts Griff
 
 
 def _camo_col(p, f=11.0, off=0.0):
@@ -6449,11 +6451,12 @@ def _lerp3(a, b, t):
     return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
 
 
-def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True), jit=0.03):
+def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True), jit=0.03, sides=None):
     """Gelenkte Röhre durch die Mittelpunkte cs mit elliptischen Querschnitten (rx, ry je Punkt), weich beleuchtet.
     So entstehen Körperformen (Brust, Taille, Waden ...) aus vielen kleinen Dreiecken. colfn(Punkt) -> Farbe (Tarnmuster)."""
     n = len(cs)
     rings = []
+    tab = _CS if sides is None else [(math.cos(2 * math.pi * i / sides), math.sin(2 * math.pi * i / sides)) for i in range(sides)]
     for i, c in enumerate(cs):
         d = norm(sub(cs[min(n - 1, i + 1)], cs[max(0, i - 1)]))
         ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
@@ -6462,7 +6465,7 @@ def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True)
         v = cross(d, u)
         rx, ry = rxs[i], rys[i]
         pts, nds = [], []
-        for co, si in _CS:
+        for co, si in tab:
             pts.append((c[0] + u[0] * co * rx + v[0] * si * ry, c[1] + u[1] * co * rx + v[1] * si * ry,
                         c[2] + u[2] * co * rx + v[2] * si * ry))
             a, b = co / max(rx, 1e-3), si / max(ry, 1e-3)
@@ -6474,7 +6477,7 @@ def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True)
         cc = colfn(((a[0] + b[0] + c3[0]) / 3, (a[1] + b[1] + c3[1]) / 3, (a[2] + b[2] + c3[2]) / 3)) if colfn else col
         return jc(cc, rng, jit) if rng else cc
 
-    S = _SIDES
+    S = len(tab)
     for r in range(n - 1):
         A, B = rings[r], rings[r + 1]
         ref = _lerp3(A[2], B[2], 0.5)
@@ -6503,6 +6506,51 @@ def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
         rxs.append(rx * math.cos(a))
         rys.append(ry * math.cos(a))
     loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
+
+
+def glove(m, wr, d, s, col, rng, curl=1.0):
+    """Handschuh: Handteller, vier gebogene Finger und Daumen. wr = Handgelenk, d = Richtung zu den Fingern,
+    s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu)."""
+    ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+    k = dot(ref, d)
+    u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+    v = cross(d, u)
+    if v[2] > 0:
+        v = (-v[0], -v[1], -v[2])                                  # v zeigt nach unten: dorthin krümmen sich die Finger
+
+    def at(base, a, b, c):
+        return (base[0] + d[0] * a + u[0] * b + v[0] * c, base[1] + d[1] * a + u[1] * b + v[1] * c,
+                base[2] + d[2] * a + u[2] * b + v[2] * c)
+
+    kn = at(wr, 0.085, 0, 0)
+    loft(m, [wr, at(wr, 0.04, 0, 0), kn], [0.032, 0.043, 0.045], [0.022, 0.027, 0.026], col, rng, None, None,
+         (True, True), 0.03, 10)                                   # Handteller
+    for i, (off, ln) in enumerate(((-1.5, 0.9), (-0.5, 1.0), (0.5, 0.95), (1.5, 0.8))):
+        b0 = at(kn, 0, off * 0.0225, 0)
+        p1 = at(b0, 0.028 * ln, 0, 0.012 * curl)
+        p2 = at(p1, 0.022 * ln * (1 - 0.55 * curl), 0, 0.026 * curl * ln)
+        p3 = at(p2, 0.010 * (1 - 0.8 * curl), 0, 0.020 * curl)
+        loft(m, [b0, p1, p2, p3], [0.0105, 0.0095, 0.0085, 0.0070], [0.0105, 0.0095, 0.0085, 0.0070], col, rng,
+             None, None, (False, True), 0.03, 6)                   # Finger
+    t0 = at(wr, 0.03, -s * 0.034, -0.004)
+    t1 = at(t0, 0.030, -s * 0.010, 0.005 * curl)
+    t2 = at(t1, 0.025, s * 0.004, 0.011 * curl)
+    loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
+         (False, True), 0.03, 6)                                   # Daumen
+
+
+def fp_arm_mesh(m, rng, length, endz, xoff, curl, s):
+    """Arm in der Ego-Ansicht (Hand im Ursprung, Unterarm läuft nach hinten -y und etwas nach unten):
+    Handschuh mit Fingern, Manschette und Tarnärmel wie beim Soldaten."""
+    wr = (0.0, -0.09, -0.012)
+    glove(m, wr, (0.0, 1.0, 0.0), s, (0.11, 0.11, 0.10), rng, curl)
+    y1 = -(length + 0.07)
+    cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
+          (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, "cloth",
+         lambda p: _camo_col(p, 11.0, s * 0.3), (False, True))
+    loft(m, [(0.0, -0.082, -0.0135), (0.0, -0.118, -0.0145)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
+         rng, None, None, (False, False), 0.02)                    # Manschette
 
 
 def _soldier_meshes(L):
@@ -6552,23 +6600,28 @@ def _soldier_meshes(L):
     box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, (0.17, 0.18, 0.12), rng, mat="cloth")
     ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, "cloth")
 
-    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Spielerfarbe)
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Spielerfarbe); eigene Teile mit Schulter als
+    #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
     def arm(S, E, H, s):
+        am = Mesh()
+        E, H = sub(E, S), sub(H, S)
+        S = (0.0, 0.0, 0.0)
         mid = _lerp3(S, E, 0.5)
         up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
-        loft(tm, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, "cloth", lambda p: camo(p, 11.0, s * 0.3))
-        loft(tm, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, "cloth", None, (False, False))
-        ell(tm, E, 0.047, 0.047, 0.047, CAMO_PAL[1], rng, "cloth")
+        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, "cloth", lambda p: camo(p, 11.0, s * 0.3))
+        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, "cloth", None, (False, False))
+        ell(am, E, 0.047, 0.047, 0.047, CAMO_PAL[1], rng, "cloth")
         d = norm(sub(H, E))
         wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
-        loft(tm, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, "cloth",
+        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, "cloth",
              lambda p: camo(p, 11.0, s * 0.3), (False, False))
-        tip = (H[0] + d[0] * 0.07, H[1] + d[1] * 0.07, H[2] + d[2] * 0.07)
-        loft(tm, [wr, H, tip], [0.034, 0.045, 0.030], [0.034, 0.030, 0.022], DK, rng, None, None, (True, True), 0.03)   # Handschuh
-        ell(tm, (H[0] - s * 0.02, H[1] - 0.02, H[2] + 0.025), 0.016, 0.03, 0.016, DK, rng)                          # Daumen
+        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], (0.12, 0.12, 0.10), rng, None, None,
+             (False, False), 0.02)                                 # Manschette
+        glove(am, wr, d, s, (0.11, 0.11, 0.10), rng, 1.0)
+        return am
 
-    arm((0.245, 0.0, 0.55), (0.285, -0.02, 0.31), (0.10, 0.14, 0.375), 1)       # rechte Hand am Griff
-    arm((-0.245, 0.0, 0.55), (-0.10, 0.14, 0.34), (0.10, 0.36, 0.40), -1)       # linke Hand am Handschutz
+    arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
+            arm(SOLDIER_SH[1], (0.285, -0.02, 0.31), SOLDIER_HAND[1], 1)]     # rechte Hand am Griff
 
     # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
     hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
@@ -6629,7 +6682,7 @@ def _soldier_meshes(L):
         box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
         box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
         legs.append(lm)
-    return tm, legs
+    return tm, legs, arms
 
 
 def build_soldier(look):
@@ -6638,8 +6691,8 @@ def build_soldier(look):
     key = (look["skin"], look["hair"], look["eye"], look["acc"])
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
-        tm, lms = _soldier_meshes(look)
-        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms])
+        tm, lms, ams = _soldier_meshes(look)
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams])
     root = NodePath("soldier")
     torso = root.attachNewNode("torso")
     torso.setZ(0.75)
@@ -6650,6 +6703,12 @@ def build_soldier(look):
         leg.setPos(sx * 0.115, 0, 0.75)
         leg.attachNewNode(gn)
         legs.append(leg)
+    arms = []
+    for sh, gn in zip(SOLDIER_SH, parts[2]):
+        an = torso.attachNewNode("arm")
+        an.setPos(*sh)
+        an.attachNewNode(gn)
+        arms.append(an)
     bar = root.attachNewNode("bar")
     bar.setPos(0, 0, 2.2)
     bar.setBillboardPointEye()
@@ -6666,7 +6725,7 @@ def build_soldier(look):
     fg.setColor(0.85, 0.1, 0.1, 1)
     fg.setDepthOffset(1)
     bar.hide()
-    return root, torso, legs[0], legs[1], bar, fg
+    return root, torso, legs[0], legs[1], bar, fg, arms[0], arms[1]
 
 
 # Höhe der Visierlinie über dem Waffenursprung beim Zielen (Kimme und Korn liegen auf dieser Höhe)
@@ -9638,6 +9697,46 @@ def melee_pitch(u):
     return 55.0 * wind - 60.0 * hit
 
 
+def kf_pos(kf, u):
+    """Hand-Zielposition zwischen Schlüsselpunkten ((u, (x, y, z)), ...) mit weichen Übergängen."""
+    for i in range(len(kf) - 1):
+        if u <= kf[i + 1][0]:
+            t = smoothstep(kf[i][0], kf[i + 1][0], u)
+            return _lerp3(kf[i][1], kf[i + 1][1], t)
+    return kf[-1][1]
+
+
+def aim_arm(node, v0, tgt):
+    """Dreht einen Arm um die Schulter (Ursprung des Knotens) so, dass der Vektor zur Hand von v0 nach tgt zeigt
+    (kleinste Drehung, Armlänge bleibt gleich). So lassen sich Hände einfach an Zielpunkte führen."""
+    a, b = norm(v0), norm(tgt)
+    c = clampf(dot(a, b), -1.0, 1.0)
+    ax = cross(a, b)
+    if dot(ax, ax) < 1e-9:
+        if c > 0:
+            node.setQuat(Quat.identQuat())
+            return
+        ax = (1.0, 0.0, 0.0)
+    q = Quat()
+    q.setFromAxisAngle(math.degrees(math.acos(c)), Vec3(*norm(ax)))
+    node.setQuat(q)
+
+
+def rot_x(v, deg):
+    c, sn = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return (v[0], v[1] * c - v[2] * sn, v[1] * sn + v[2] * c)
+
+
+# Hand-Zielpunkte (Torso-Raum) der Soldaten-Animationen
+_MAG_SLOT = (0.10, 0.30, 0.27)           # Magazinschacht unter der Waffe
+SOLDIER_RELOAD_L = ((0.00, SOLDIER_HAND[0]), (0.18, _MAG_SLOT), (0.38, (0.08, 0.28, 0.10)), (0.58, (0.0, 0.20, 0.36)),
+                    (0.66, (0.0, 0.20, 0.36)), (0.88, _MAG_SLOT), (1.00, SOLDIER_HAND[0]))   # Magazin raus, aus der Weste, rein
+SOLDIER_THROW_R = ((0.00, SOLDIER_HAND[1]), (0.15, (0.32, -0.30, 0.80)), (0.32, (0.20, 0.45, 0.75)),
+                   (0.48, (0.15, 0.30, 0.12)), (1.00, SOLDIER_HAND[1]))                      # ausholen, werfen, ausschwingen
+SOLDIER_THROW_L = ((0.00, SOLDIER_HAND[0]), (0.20, (-0.30, 0.10, 0.28)), (0.80, (-0.30, 0.10, 0.28)),
+                   (1.00, SOLDIER_HAND[0]))                                                  # linker Arm schwingt locker mit
+
+
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
@@ -9645,7 +9744,8 @@ class PlayerView:
         k = p.pid
         look = dict(skin=SOLDIER_SKINS[k % len(SOLDIER_SKINS)], hair=SOLDIER_HAIR[(k * 3 + 1) % len(SOLDIER_HAIR)],
                     eye=SOLDIER_EYES[(k * 2 + 1) % len(SOLDIER_EYES)], acc=PLAYER_COLORS[k % len(PLAYER_COLORS)])
-        self.root, self.torso, self.legL, self.legR, self.bar, self.fg = build_soldier(look)
+        (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
+         self.armL, self.armR) = build_soldier(look)
         gm = Mesh()
         gc, gl = (0.13, 0.13, 0.15), (0.22, 0.22, 0.25)                  # Waffe in beiden Händen
         box(gm, 0.10, 0.32, 0.40, 0.06, 0.50, 0.09, gc)                    # Gehäuse
@@ -9654,13 +9754,97 @@ class PlayerView:
         box(gm, 0.10, 0.30, 0.31, 0.04, 0.07, 0.13, gc)                    # Magazin
         box(gm, 0.10, 0.00, 0.41, 0.05, 0.16, 0.12, (0.16, 0.14, 0.12))    # Schulterstütze
         box(gm, 0.10, 0.40, 0.46, 0.02, 0.05, 0.02, gl)                    # Visier
-        self.gun = self.torso.attachNewNode(gm.node("gun"))
+        sr = SOLDIER_SH[1]
+        self.gun = self.armR.attachNewNode(gm.node("gun"))                # die Waffe hängt am rechten Arm
+        self.gun.setPos(-sr[0], -sr[1], -sr[2])
+        mm = Mesh()
+        box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
+        self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
+        hl = sub(SOLDIER_HAND[0], SOLDIER_SH[0])
+        self.mag_nd.setPos(*hl)
+        self.mag_nd.hide()
+        gr = Mesh()
+        blob(gr, 0, 0, 0.0, 0.040, 0.040, 0.052, (0.22, 0.30, 0.16), random.Random(4), jitter=0.04)   # Handgranate
+        box(gr, 0, 0, 0.055, 0.022, 0.022, 0.02, (0.6, 0.6, 0.55))
+        self.gren_nd = self.armR.attachNewNode(gr.node("hand_gren"))
+        self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
+        self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
+        self.gren_nd.hide()
+        self.slung = False
         self.swing = 0.0
+        self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
+        self.rl_sg = False
+        self.th_t = 0.0                                               # Granatwurf (von "throw")
         self.bar.hide()                                               # keine Lebensbalken über Mitspielern
         # (und auch keine Namensschilder)
         self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
         self.phase = 0.0
         self.dead_t = 0.0
+
+    def start_reload(self, wi):
+        if not (0 <= wi < len(WEAPONS)) or self.th_t > 0:
+            return
+        w = WEAPONS[wi]
+        self.rl_sg = w.name == SG_NAME
+        self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
+        self.rl_t = self.rl_tot
+
+    def start_throw(self):
+        self.th_t = GREN_ANIM_T
+        self.rl_t = 0.0
+
+    def pose_arms(self, dt):
+        """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
+        (rechter Arm holt aus, Waffe hängt am Gurt) und Schlag (Waffe mit beiden Armen)."""
+        SL, SR = SOLDIER_SH
+        HL, HR = SOLDIER_HAND
+        v0L, v0R = sub(HL, SL), sub(HR, SR)
+        tl, tr = HL, HR
+        tilt = 0.0
+        mag = gren = slung = False
+        py = 0.0
+        if self.th_t > 0:
+            self.th_t = max(0.0, self.th_t - dt)
+            u = 1.0 - self.th_t / GREN_ANIM_T
+            tl, tr = kf_pos(SOLDIER_THROW_L, u), kf_pos(SOLDIER_THROW_R, u)
+            slung = True
+            gren = u < 0.33                                           # loslassen beim Vorschwung
+        elif self.rl_t > 0:
+            self.rl_t = max(0.0, self.rl_t - dt)
+            tt = self.rl_tot - self.rl_t
+            u = tt / self.rl_tot
+            tilt = 8.0 * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
+            if self.rl_sg:                                            # Patronen: Hand pendelt zwischen Weste und Lauf
+                k = 0.5 - 0.5 * math.cos(2 * math.pi * tt / 0.6)
+                tl = _lerp3((0.0, 0.20, 0.36), _MAG_SLOT, k)
+                tilt = 12.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
+            else:
+                tl = kf_pos(SOLDIER_RELOAD_L, u)
+                mag = (0.18 <= u < 0.38) or (0.58 <= u < 0.88)        # altes Magazin raus, neues in der Hand
+        elif self.swing > 0:                                          # Schlag: Waffe hoch, dann nach unten
+            self.swing = max(0.0, self.swing - dt)
+            u = 1.0 - self.swing / MELEE_T
+            pm = melee_pitch(u) * 0.9
+            tr = add(SR, rot_x(v0R, pm))
+            tl = add(SL, rot_x(v0L, pm * 0.6))
+            py = 0.15 * math.sin(math.pi * u)
+        if tilt:
+            tr = add(SR, rot_x(v0R, tilt))
+        if slung != self.slung:                                       # Waffe beim Wurf am Gurt vor dem Körper
+            self.slung = slung
+            if slung:
+                self.gun.reparentTo(self.torso)
+                self.gun.setPos(0, 0, -0.10)
+                self.gun.setP(-35)
+            else:
+                self.gun.reparentTo(self.armR)
+                self.gun.setPos(-SR[0], -SR[1], -SR[2])
+                self.gun.setP(0)
+        (self.mag_nd.show if mag else self.mag_nd.hide)()
+        (self.gren_nd.show if gren else self.gren_nd.hide)()
+        self.armR.setPos(SR[0], SR[1] + py, SR[2])
+        aim_arm(self.armR, v0R, sub(tr, SR))
+        aim_arm(self.armL, v0L, sub(tl, SL))
 
     def update(self, p, dt):
         if math.hypot(p.x - self.x, p.y - self.y) > 8.0:                 # Sprung (Respawn)
@@ -9680,6 +9864,8 @@ class PlayerView:
             r.setSz(1.0)
             r.setColorScale(0.7, 0.7, 0.7, 1)
             self.bar.hide()
+            self.rl_t = self.th_t = self.swing = 0.0
+            self.pose_arms(0.0)
             return
         self.dead_t = 0.0
         r.clearColorScale()
@@ -9692,13 +9878,7 @@ class PlayerView:
         self.legR.setP(-sw * 40)
         self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * mv)
         self.torso.setR(p.lean / LEAN_MAX * 14.0)          # Lehnen: Oberkörper kippt zur Seite
-        if self.swing > 0:                                  # Schlag: Waffe hoch, dann nach unten
-            self.swing = max(0.0, self.swing - dt)
-            self.gun.setP(melee_pitch(1.0 - self.swing / MELEE_T) * 0.9)
-            self.gun.setY(0.15 * math.sin(math.pi * (1.0 - self.swing / MELEE_T)))
-        else:
-            self.gun.setP(0)
-            self.gun.setY(0)
+        self.pose_arms(dt)
 
 
 # --------------------------------------------------------------- Ton
@@ -129454,15 +129634,13 @@ class Game(ShowBase):
             self.scope_nodes.append(sn)
         # linke Hand (Haut + Ärmel) für das Nachladen
         hm = Mesh()
-        box(hm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(hm, -0.01, -0.34, -0.10, 0.075, 0.55, 0.07, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(hm, rng, 0.55, -0.17, -0.01, 1.0, -1)
         self.vm_hand = self.gun_pivot.attachNewNode(hm.node("hand"))
         self.vm_hand.hide()
         self.vm_hand.setP(18)
         # rechte Hand (Haut + Ärmel): hält beim Nachladen der Kleinwaffen den Griff, während die linke das Magazin wechselt
         rm = Mesh()
-        box(rm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(rm, 0.01, -0.34, -0.09, 0.075, 0.55, 0.07, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(rm, rng, 0.55, -0.16, 0.01, 1.0, 1)
         self.vm_rhand = self.gun_pivot.attachNewNode(rm.node("rhand"))
         self.vm_rhand.hide()
         self.vm_rhand.setP(10)
@@ -129476,8 +129654,7 @@ class Game(ShowBase):
         self.gad_arms = []
         for _side in (0, 1):
             am = Mesh()
-            box(am, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-            box(am, 0, -0.31, -0.01, 0.08, 0.5, 0.075, (0.22, 0.28, 0.20), rng)
+            fp_arm_mesh(am, rng, 0.5, -0.06, 0.0, 0.35 if _side else 0.8, 1 if _side else -1)
             arm = self.gun_root.attachNewNode(am.node("arm%d" % _side))
             arm.hide()
             self.gad_arms.append(arm)
@@ -129492,8 +129669,7 @@ class Game(ShowBase):
             self.gad_hand.append(nd)
         # Wurfarm für Handgranaten (rechts, mit Granate in der Hand)
         gm = Mesh()
-        box(gm, 0, 0, 0, 0.085, 0.11, 0.075, (0.86, 0.66, 0.52), rng)
-        box(gm, 0, -0.31, -0.01, 0.08, 0.5, 0.075, (0.22, 0.28, 0.20), rng)
+        fp_arm_mesh(gm, rng, 0.5, -0.06, 0.0, 0.5, 1)
         self.gren_arm = self.gun_root.attachNewNode(gm.node("grenarm"))
         gg = Mesh()
         box(gg, 0, 0.0, 0.075, 0.075, 0.105, 0.105, (0.20, 0.30, 0.16), rng)
@@ -131314,6 +131490,9 @@ class Game(ShowBase):
                     pass                            # eigener Wurf: Ton kam schon beim Klick
                 elif pw is not None:
                     self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
+                    v = self.player_views.get(e[1])
+                    if v is not None:
+                        v.start_throw()
             elif kind == "explosion":
                 if len(e) > 4 and e[4] == self.my_id:
                     self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
@@ -131382,6 +131561,10 @@ class Game(ShowBase):
             elif kind == "wreload":
                 if e[1] == self.my_id:
                     self.sfx.reload(e[2])
+                else:
+                    v = self.player_views.get(e[1])
+                    if v is not None:
+                        v.start_reload(e[2])
             elif kind == "shotpos":         # fremder Schuss -> Punkt auf der Minimap
                 if e[1] != self.my_id:
                     op = self.world.players.get(e[1])
