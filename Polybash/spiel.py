@@ -129377,7 +129377,7 @@ class Game(ShowBase):
             gn, new = nd.node(), m.node("arm")
             gn.removeAllGeoms()
             for gi in range(new.getNumGeoms()):
-                gn.addGeom(new.getGeom(gi), new.getGeomState(gi))
+                gn.addGeom(new.modifyGeom(gi), new.getGeomState(gi))     # modifyGeom: nicht-const Geom
 
     def pause_quit(self):
         self.close_quit_box(recapture=False)
