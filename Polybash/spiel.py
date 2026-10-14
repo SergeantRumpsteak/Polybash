@@ -6427,6 +6427,248 @@ def build_mob(kind, look=None):
     return root, torso, legs[0], legs[1], bar, fg
 
 
+# ------------------------------------------------------- Modell: Soldat (Spieler)
+SOLDIER_SKINS = [(0.89, 0.72, 0.58), (0.80, 0.60, 0.45), (0.62, 0.44, 0.32), (0.45, 0.31, 0.22), (0.93, 0.78, 0.66)]
+SOLDIER_HAIR = [(0.10, 0.07, 0.05), (0.28, 0.17, 0.08), (0.52, 0.38, 0.18), (0.05, 0.05, 0.06), (0.35, 0.12, 0.06)]
+SOLDIER_EYES = [(0.25, 0.38, 0.55), (0.30, 0.20, 0.10), (0.25, 0.42, 0.28), (0.18, 0.15, 0.12)]
+CAMO_PAL = [(0.17, 0.20, 0.11), (0.29, 0.33, 0.19), (0.44, 0.41, 0.27), (0.28, 0.21, 0.13)]   # Waldtarn: dunkel, oliv, sand, braun
+_SIDES = 16
+_CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
+_SOLDIER_CACHE = {}
+
+
+def _camo_col(p, f=11.0, off=0.0):
+    """Tarnmuster: fleckige Farbwahl aus drei überlagerten Sinuswellen (je Dreieck, stabil auf allen Rechnern)."""
+    x = p[0] + off
+    v = math.sin(x * f + p[2] * f * 0.7) + math.sin(p[1] * f * 1.3 - p[2] * f * 1.1 + 1.7) \
+        + math.sin((x + p[1]) * f * 0.8 + p[2] * f * 0.5 + 3.1)
+    return CAMO_PAL[0] if v < -0.9 else CAMO_PAL[1] if v < 0.5 else CAMO_PAL[2] if v < 1.5 else CAMO_PAL[3]
+
+
+def _lerp3(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+
+
+def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True), jit=0.03):
+    """Gelenkte Röhre durch die Mittelpunkte cs mit elliptischen Querschnitten (rx, ry je Punkt), weich beleuchtet.
+    So entstehen Körperformen (Brust, Taille, Waden ...) aus vielen kleinen Dreiecken. colfn(Punkt) -> Farbe (Tarnmuster)."""
+    n = len(cs)
+    rings = []
+    for i, c in enumerate(cs):
+        d = norm(sub(cs[min(n - 1, i + 1)], cs[max(0, i - 1)]))
+        ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+        k = dot(ref, d)
+        u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+        v = cross(d, u)
+        rx, ry = rxs[i], rys[i]
+        pts, nds = [], []
+        for co, si in _CS:
+            pts.append((c[0] + u[0] * co * rx + v[0] * si * ry, c[1] + u[1] * co * rx + v[1] * si * ry,
+                        c[2] + u[2] * co * rx + v[2] * si * ry))
+            a, b = co / max(rx, 1e-3), si / max(ry, 1e-3)
+            nn = norm((u[0] * a + v[0] * b, u[1] * a + v[1] * b, u[2] * a + v[2] * b))
+            nds.append(max(0.0, dot(nn, SUN)))
+        rings.append((pts, nds, c, d))
+
+    def pick(a, b, c3):
+        cc = colfn(((a[0] + b[0] + c3[0]) / 3, (a[1] + b[1] + c3[1]) / 3, (a[2] + b[2] + c3[2]) / 3)) if colfn else col
+        return jc(cc, rng, jit) if rng else cc
+
+    S = _SIDES
+    for r in range(n - 1):
+        A, B = rings[r], rings[r + 1]
+        ref = _lerp3(A[2], B[2], 0.5)
+        for i in range(S):
+            j = (i + 1) % S
+            p0, p1, p2, p3 = A[0][i], A[0][j], B[0][j], B[0][i]
+            m.tri(p0, p1, p2, pick(p0, p1, p2), ref, mat=mat, nd=(A[1][i], A[1][j], B[1][j]))
+            m.tri(p0, p2, p3, pick(p0, p2, p3), ref, mat=mat, nd=(A[1][i], B[1][j], B[1][i]))
+    for k, (idx, sgn) in enumerate(((0, -1.0), (n - 1, 1.0))):
+        if not caps[k] or n < 2:
+            continue
+        pts, _nds, c, d = rings[idx]
+        other = rings[1 if idx == 0 else n - 2][2]
+        nd = max(0.0, dot((d[0] * sgn, d[1] * sgn, d[2] * sgn), SUN))
+        for i in range(S):
+            j = (i + 1) % S
+            m.tri(c, pts[i], pts[j], pick(c, pts[i], pts[j]), other, mat=mat, nd=(nd, nd, nd))
+
+
+def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
+    """Weiches Ellipsoid (Gelenke, Ohren, Hände, Kinn)."""
+    cs, rxs, rys = [], [], []
+    for k in range(rings + 1):
+        a = -math.pi / 2 + math.pi * k / rings
+        cs.append((c[0], c[1], c[2] + rz * math.sin(a)))
+        rxs.append(rx * math.cos(a))
+        rys.append(ry * math.cos(a))
+    loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
+
+
+def _soldier_meshes(L):
+    """Baut die Teile des Soldaten: Oberkörper samt Kopf und Armen (Mesh in torso-Koordinaten, Hüfte = Ursprung,
+    Blick +y) und je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75)."""
+    rng = random.Random(1234 + int(L["skin"][0] * 1000) + int(L["hair"][0] * 100))
+    skin, hair, eye, acc = L["skin"], L["hair"], L["eye"], L["acc"]
+    skin_d = tuple(c * 0.84 for c in skin)
+    camo = _camo_col
+    OLV = (0.21, 0.23, 0.15)          # Weste
+    DK = (0.11, 0.11, 0.10)           # schwarzes Leder / Gummi
+    LEATH = (0.16, 0.12, 0.08)
+    METAL = (0.50, 0.46, 0.34)
+    tm = Mesh()
+
+    # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
+    zs = [-0.07, 0.0, 0.10, 0.20, 0.30, 0.42, 0.52, 0.585, 0.635, 0.668]
+    rxs = [0.200, 0.215, 0.210, 0.185, 0.190, 0.210, 0.225, 0.225, 0.170, 0.080]
+    rys = [0.120, 0.130, 0.125, 0.110, 0.115, 0.130, 0.140, 0.125, 0.100, 0.075]
+    cys = [0.0, -0.010, -0.015, 0.0, 0.005, 0.010, 0.015, 0.0, -0.010, 0.0]
+    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, "cloth", camo)
+    # ---- Hals mit Kragen
+    loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
+         skin, rng, None, None, (False, False), 0.015)
+    loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
+         tuple(c * 0.8 for c in CAMO_PAL[1]), rng, "cloth", None, (False, False))
+    # ---- Koppel mit Schnalle und Taschen
+    loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
+    box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
+    for sx in (-1, 1):
+        box(tm, sx * 0.165, 0.05, 0.19, 0.055, 0.075, 0.09, LEATH, rng)                  # Gürteltaschen
+        box(tm, sx * 0.165, 0.05, 0.236, 0.058, 0.078, 0.02, tuple(c * 1.15 for c in LEATH), rng)
+    # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
+    vz = [0.30, 0.40, 0.50, 0.578]
+    loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
+         [0.130, 0.146, 0.156, 0.140], OLV, rng, "cloth", None, (True, False), 0.04)
+    for sx in (-1, 1):
+        box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat="cloth")       # Schulterriemen
+    for x in (-0.09, 0.0, 0.09):
+        box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, (0.15, 0.16, 0.11), rng, mat="cloth")   # Magazintaschen
+        box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, (0.19, 0.20, 0.14), rng, mat="cloth")    # Klappe
+    box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                                 # Funkgerät
+    box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                         # Antenne
+    box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, (0.18, 0.19, 0.13), rng, mat="cloth")      # Brusttasche
+    # ---- Rucksack mit Schlafrolle
+    box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, (0.22, 0.23, 0.15), rng, mat="cloth")
+    box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, (0.17, 0.18, 0.12), rng, mat="cloth")
+    ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, "cloth")
+
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Spielerfarbe)
+    def arm(S, E, H, s):
+        mid = _lerp3(S, E, 0.5)
+        up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
+        loft(tm, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, "cloth", lambda p: camo(p, 11.0, s * 0.3))
+        loft(tm, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, "cloth", None, (False, False))
+        ell(tm, E, 0.047, 0.047, 0.047, CAMO_PAL[1], rng, "cloth")
+        d = norm(sub(H, E))
+        wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
+        loft(tm, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, "cloth",
+             lambda p: camo(p, 11.0, s * 0.3), (False, False))
+        tip = (H[0] + d[0] * 0.07, H[1] + d[1] * 0.07, H[2] + d[2] * 0.07)
+        loft(tm, [wr, H, tip], [0.034, 0.045, 0.030], [0.034, 0.030, 0.022], DK, rng, None, None, (True, True), 0.03)   # Handschuh
+        ell(tm, (H[0] - s * 0.02, H[1] - 0.02, H[2] + 0.025), 0.016, 0.03, 0.016, DK, rng)                          # Daumen
+
+    arm((0.245, 0.0, 0.55), (0.285, -0.02, 0.31), (0.10, 0.14, 0.375), 1)       # rechte Hand am Griff
+    arm((-0.245, 0.0, 0.55), (-0.10, 0.14, 0.34), (0.10, 0.36, 0.40), -1)       # linke Hand am Handschutz
+
+    # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
+    hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
+    hrx = [0.035, 0.070, 0.080, 0.084, 0.086, 0.086, 0.080, 0.060, 0.020]
+    hry = [0.050, 0.075, 0.090, 0.103, 0.110, 0.112, 0.108, 0.090, 0.040]
+    hcy = [0.060, 0.050, 0.040, 0.028, 0.018, 0.010, 0.005, 0.0, 0.0]
+    loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
+    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, skin, rng)                                  # Kinn
+    for sx in (-1, 1):
+        ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
+        ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                      # Wangenknochen
+        box(tm, sx * 0.037, 0.1245, 0.915, 0.036, 0.012, 0.019, (0.93, 0.93, 0.90))             # Augapfel
+        box(tm, sx * 0.037, 0.1315, 0.915, 0.019, 0.006, 0.019, eye)                            # Iris
+        box(tm, sx * 0.037, 0.1345, 0.915, 0.009, 0.004, 0.009, (0.02, 0.02, 0.03))             # Pupille
+        box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
+        box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
+        box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                          # Koteletten
+    for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
+                     ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
+                     ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
+                     ((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0.019, 0.134, 0.872))):
+        tm.tri(a, b, c3, skin, (0, 0.09, 0.9))
+    box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                           # Oberlippe
+    box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                           # Unterlippe
+    box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                            # Mundspalt
+    box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                       # Haar im Nacken
+    # ---- Gefechtshelm mit Tarnbezug, Spielerband, Schutzbrille, Kinnriemen
+    loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
+                                           (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
+         [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
+         None, rng, "cloth", lambda p: camo(p, 17.0, 0.7), (True, True))
+    loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
+    loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, "cloth", None, (False, False))
+    box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, CAMO_PAL[1], rng, mat="cloth")                    # Nackenschutz
+    box(tm, 0, 0.137, 0.995, 0.13, 0.016, 0.042, DK)                                              # Brillenrahmen
+    for sx in (-1, 1):
+        box(tm, sx * 0.032, 0.145, 0.995, 0.050, 0.010, 0.034, (0.12, 0.18, 0.26))              # Gläser
+        box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                                 # Kinnriemen
+
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        off = sx * 0.4
+        # Hose: Oberschenkel, Knie, Wade, Knöchel
+        lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
+        lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
+        lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
+        lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
+        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, "cloth", lambda p, o=off: camo(p, 11.0, o))
+        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, CAMO_PAL[0], rng, mat="cloth")     # Beintasche
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, CAMO_PAL[3], rng, mat="cloth")      # Klappe
+        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, (0.15, 0.16, 0.11), rng, mat="cloth")     # Knieschoner
+        # Stiefel: Schaft, Fuss, Sohle, Schnürung
+        loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
+             LEATH, rng, None, None, (False, False), 0.03)
+        loft(lm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
+             [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
+        box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
+        box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
+        legs.append(lm)
+    return tm, legs
+
+
+def build_soldier(look):
+    """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
+    (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
+    key = (look["skin"], look["hair"], look["eye"], look["acc"])
+    parts = _SOLDIER_CACHE.get(key)
+    if parts is None:
+        tm, lms = _soldier_meshes(look)
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms])
+    root = NodePath("soldier")
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.75)
+    torso.attachNewNode(parts[0])
+    legs = []
+    for sx, gn in zip((-1, 1), parts[1]):
+        leg = root.attachNewNode("leg")
+        leg.setPos(sx * 0.115, 0, 0.75)
+        leg.attachNewNode(gn)
+        legs.append(leg)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 2.2)
+    bar.setBillboardPointEye()
+    bar.setLightOff()
+    bar.setTwoSided(True)
+    cm = CardMaker("bg")
+    cm.setFrame(-0.5, 0.5, -0.05, 0.05)
+    bg = bar.attachNewNode(cm.generate())
+    bg.setColor(0, 0, 0, 1)
+    cm = CardMaker("fg")
+    cm.setFrame(0, 1, -0.035, 0.035)
+    fg = bar.attachNewNode(cm.generate())
+    fg.setPos(-0.5, -0.01, 0)
+    fg.setColor(0.85, 0.1, 0.1, 1)
+    fg.setDepthOffset(1)
+    bar.hide()
+    return root, torso, legs[0], legs[1], bar, fg
+
+
 # Höhe der Visierlinie über dem Waffenursprung beim Zielen (Kimme und Korn liegen auf dieser Höhe)
 ADS_Z = {"Pistole": 0.069, "Sturmgewehr": 0.079, "Revolver": 0.0765, "Maschinenpistole": 0.071}
 ADS_Z_DEFAULT = 0.095
@@ -9400,11 +9642,18 @@ class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
     def __init__(self, p):
-        look = dict(skin=(0.88, 0.72, 0.58), cloth=PLAYER_COLORS[p.pid % len(PLAYER_COLORS)],
-                    eye=(0.1, 0.1, 0.1), w=0.5, horns=False)
-        self.root, self.torso, self.legL, self.legR, self.bar, self.fg = build_mob("player", look)
+        k = p.pid
+        look = dict(skin=SOLDIER_SKINS[k % len(SOLDIER_SKINS)], hair=SOLDIER_HAIR[(k * 3 + 1) % len(SOLDIER_HAIR)],
+                    eye=SOLDIER_EYES[(k * 2 + 1) % len(SOLDIER_EYES)], acc=PLAYER_COLORS[k % len(PLAYER_COLORS)])
+        self.root, self.torso, self.legL, self.legR, self.bar, self.fg = build_soldier(look)
         gm = Mesh()
-        box(gm, 0.2, 0.32, 0.4, 0.06, 0.5, 0.09, (0.15, 0.15, 0.17))     # Waffe in der Hand
+        gc, gl = (0.13, 0.13, 0.15), (0.22, 0.22, 0.25)                  # Waffe in beiden Händen
+        box(gm, 0.10, 0.32, 0.40, 0.06, 0.50, 0.09, gc)                    # Gehäuse
+        box(gm, 0.10, 0.66, 0.41, 0.026, 0.20, 0.026, gl)                  # Lauf
+        box(gm, 0.10, 0.12, 0.34, 0.04, 0.08, 0.10, gc)                    # Griff
+        box(gm, 0.10, 0.30, 0.31, 0.04, 0.07, 0.13, gc)                    # Magazin
+        box(gm, 0.10, 0.00, 0.41, 0.05, 0.16, 0.12, (0.16, 0.14, 0.12))    # Schulterstütze
+        box(gm, 0.10, 0.40, 0.46, 0.02, 0.05, 0.02, gl)                    # Visier
         self.gun = self.torso.attachNewNode(gm.node("gun"))
         self.swing = 0.0
         self.bar.hide()                                               # keine Lebensbalken über Mitspielern
