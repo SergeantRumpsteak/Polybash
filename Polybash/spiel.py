@@ -245,9 +245,9 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-EXP_NET_VERSION = 35    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
-NET_VERSION = 14         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 75               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+EXP_NET_VERSION = 36    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
+NET_VERSION = 15         # Protokollversion: nur gleiche Versionen spielen zusammen
+BUILD = 76               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -2007,6 +2007,7 @@ class World:
         self.next_bid = 1
         self.next_mid = 1
         self.phase = "play"      # play | over (Rangliste wird gezeigt)
+        self.lobby = False       # Host-Lobby: alle warten, bis der Host 'Spiel starten' drückt (Zeit und Monster ruhen)
         self.time_left = self.limit
         self.over_t = 0.0
         self.reset_crates()
@@ -3545,8 +3546,8 @@ class World:
         return best
 
     def can_respawn(self, pl):
-        """Tot, Runde läuft und die Wartezeit ist um."""
-        return pl.hp <= 0 and self.phase == "play" and pl.dead_age >= self.respawn_delay
+        """Tot, Runde läuft (nicht Lobby) und die Wartezeit ist um."""
+        return pl.hp <= 0 and self.phase == "play" and not self.lobby and pl.dead_age >= self.respawn_delay
 
     def respawn_player(self, pl):
         """Host/Einzelspiel: Figur neu aufstellen. Die Darstellung (und beim Spieler die
@@ -4923,10 +4924,29 @@ class World:
             self.respawn_player(pl)
         self.events.append(("newmatch",))
 
+    def start_round(self):
+        """Host: die Lobby beenden. Alle Spieler (auch die, die noch nicht gespawnt waren) werden aufgestellt;
+        die gewählte Ausrüstung setzt jeder Spieler bei sich selbst (Ereignis 'respawn')."""
+        if not self.lobby:
+            return
+        self.lobby = False
+        self.time_left = self.limit
+        for pl in list(self.players.values()):
+            pl.kills = pl.deaths = 0
+            pl.score = 0.0
+            pl.stats = new_stats()
+            self.respawn_player(pl)
+        self.events.append(("newmatch",))
+        netlog(f"Host: Lobby beendet, Runde startet mit {len(self.players)} Spielern")
+
     def update(self, dt):
         """Simulation der Welt (Monster, Kugeln, Schaden, Punkte) - läuft nur beim Host
         bzw. im Einzelspiel. Die Gegenseite sind alle Spieler in self.players."""
         players = list(self.players.values())
+        if self.lobby:                                   # Lobby: nichts läuft, alle warten auf 'Spiel starten'
+            for pl in players:
+                pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
+            return
         for pl in players:                               # Strecken für die Statistik
             last = getattr(pl, "stat_pos", None)
             pl.stat_pos = (pl.x, pl.y, pl.z)
@@ -12200,7 +12220,7 @@ class HostSession:
                         1 if g.arm > 0 else 0] for g in w.gadgets],
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
                         v.driver, r1(v.dead_t)] for v in w.vehicles],
-                "gm": [1 if w.phase == "over" else 0, r1(w.time_left), r1(w.over_t)],
+                "gm": [1 if w.phase == "over" else 0, r1(w.time_left), r1(w.over_t), 1 if w.lobby else 0],
                 "tu": [[t.id, r1(t.heading), r1(t.pitch), r2(t.heat), 1 if t.over else 0,
                         1 if t.firing else 0, t.op] for t in w.turrets],
                 "hc": [[q.id, r2(q.x), r2(q.y), r2(q.z), r1(q.heading), r1(q.pitch), r1(q.roll),
@@ -12497,6 +12517,8 @@ class ClientSession:
         if gm:
             w.phase = "over" if gm[0] else "play"
             w.time_left, w.over_t = gm[1], gm[2]
+            if len(gm) > 3:
+                w.lobby = bool(gm[3])
         w.kills = m.get("k", w.kills)
         for e in m.get("ev", ()):
             self.events.append(tuple(e))
@@ -109127,12 +109149,131 @@ class Game(ShowBase):
         """Klick auf dem Todesbildschirm: Waffenkarte, Gadget oder 'Loadout konfigurieren'."""
         if m is None or not self.dead_free:
             return
+        if getattr(self.world, "lobby", False):
+            self.lobby_click(m)
+            return
         card = self.death_picker.hit(m[0], m[1])
         b = self.DEAD_BTN
+        rb = self.right_btn_rect()
         if card is not None:
             self.set_loadout_card(card[0], card[1])
         elif b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
             self.open_loadscreen()
+        elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
+            self.do_respawn()
+
+    def right_btn_rect(self):
+        """Grosser Knopf unten rechts (Respawn bzw. 'Spiel starten'), folgt dem Bildschirmrand."""
+        a = float(self.getAspectRatio())
+        return (a - 0.76, a - 0.08, -0.94, -0.76)
+
+    LOBBY_EQ_BTN = (-0.42, 0.42, -0.90, -0.76)
+    LOBBY_EQUIP = True          # Ausrüstungsmenü-Knopf in der Lobby (im Experimental gibt es keins: immer Pistole)
+
+    def lobby_click(self, m):
+        rb = self.right_btn_rect()
+        e = self.LOBBY_EQ_BTN
+        if rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
+            if self.net_mode == "host" and self.world.lobby:
+                self.world.start_round()            # nur der Host darf die Runde starten
+        elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
+            self.open_loadscreen()
+
+    def build_lobby_ui(self):
+        """Runden-Lobby (vor dem ersten Spawn von Host und Mitspielern): Spielerliste, 'Spiel starten', Ausrüstungsmenü."""
+        root = self.aspect2d.attachNewNode("lobby")
+        cm = CardMaker("lobbybg")
+        cm.setFrame(-0.92, 0.92, -0.40, 0.80)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.04, 0.06, 0.10, 0.84)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm.setFrame(-0.55, 0.55, 0.655, 0.663)
+        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        OnscreenText(text="RUNDEN-LOBBY", parent=root, pos=(0, 0.69), scale=0.085, fg=(1.0, 0.62, 0.14, 1),
+                     shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
+        info = OnscreenText(text="", parent=root, pos=(0, 0.585), scale=0.045, fg=(0.75, 0.85, 0.95, 1), mayChange=True)
+        rows = []
+        for i in range(MAX_PLAYERS):
+            y = 0.47 - i * 0.078
+            nm = OnscreenText(text="", parent=root, pos=(-0.74, y), scale=0.055, fg=(1, 1, 1, 1), align=TextNode.ALeft,
+                              shadow=(0, 0, 0, 0.8), mayChange=True)
+            tg = OnscreenText(text="", parent=root, pos=(0.74, y), scale=0.042, fg=(0.6, 0.75, 0.9, 1),
+                              align=TextNode.ARight, mayChange=True)
+            rows.append((nm, tg))
+        addr = OnscreenText(text="", parent=root, pos=(0, -0.20), scale=0.043, fg=(0.7, 0.9, 0.7, 1), mayChange=True)
+        hint = OnscreenText(text="", parent=root, pos=(0, -0.30), scale=0.042, fg=(0.85, 0.85, 0.9, 1), mayChange=True)
+        cm.setFrame(0, 0.68, 0, 0.18)
+        start = root.attachNewNode(cm.generate())
+        start.setColor(*START_BTN)
+        start.setTransparency(TransparencyAttrib.MAlpha)
+        start_t = OnscreenText(text="Spiel starten", parent=root, pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
+                               shadow=(0, 0, 0, 0.8), mayChange=True)
+        cm.setFrame(*self.LOBBY_EQ_BTN)
+        eq = root.attachNewNode(cm.generate())
+        eq.setColor(0.10, 0.17, 0.26, 0.9)
+        eq.setTransparency(TransparencyAttrib.MAlpha)
+        eq_t = OnscreenText(text="Ausrüstungsmenü", parent=root, pos=(0, -0.855), scale=0.05, fg=(1, 1, 1, 1),
+                            shadow=(0, 0, 0, 0.8), mayChange=False)
+        root.hide()
+        self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
+                         "start_t": start_t, "eq": eq, "eq_t": eq_t}
+
+    def update_lobby_ui(self, show, mpos):
+        ui = getattr(self, "lobby_ui", None)
+        if ui is None:
+            return
+        if not show:
+            ui["root"].hide()
+            return
+        ui["root"].show()
+        w = self.world
+        host = self.net_mode == "host"
+        pls = sorted(w.players.values(), key=lambda p: p.pid)
+        self.set_text(ui["info"], f"{MODE_NAMES.get(w.mode, w.mode)}   -   {len(pls)} / {MAX_PLAYERS} Spieler   -   "
+                                  f"{int(w.limit // 60)} Minuten")
+        for i, (nm, tg) in enumerate(ui["rows"]):
+            if i < len(pls):
+                p = pls[i]
+                tags = (["HOST"] if p.pid == 0 else []) + (["DU"] if p.pid == self.my_id else [])
+                self.set_text(nm, f"{i + 1}   {p.name}")
+                nm.setFg((1.0, 0.85, 0.3, 1) if p.pid == self.my_id else (1, 1, 1, 1))
+                self.set_text(tg, "   ".join(tags))
+            else:
+                self.set_text(nm, "")
+                self.set_text(tg, "")
+        if host:
+            ip = getattr(getattr(self, "host", None), "ip_label", "")
+            self.set_text(ui["addr"], f"Mitspieler beitreten unter: {ip}" if ip else "")
+            self.set_text(ui["hint"], "Warte, bis deine Freunde da sind. Mit 'Spiel starten' beginnt die Runde für alle.")
+        else:
+            self.set_text(ui["addr"], "")
+            self.set_text(ui["hint"], "Warte, bis der Host die Runde startet." + (" Du kannst schon deine Ausrüstung wählen." if self.LOBBY_EQUIP else ""))
+        rb = self.right_btn_rect()
+        hov_s = host and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
+        ui["start"].setPos(rb[0], 0, rb[2])
+        ui["start_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
+        if host:
+            ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_s else ui["start"].setColor(*START_BTN)
+            self.set_text(ui["start_t"], "Spiel starten")
+        else:
+            ui["start"].setColor(0.16, 0.19, 0.24, 0.9)
+            self.set_text(ui["start_t"], "Warte auf den Host ...")
+        e = self.LOBBY_EQ_BTN
+        hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
+        for nd in (ui["eq"], ui["eq_t"]):
+            (nd.show if self.LOBBY_EQUIP else nd.hide)()
+        ui["eq"].setColor(*((0.22, 0.30, 0.42, 0.95) if hov_e else (0.10, 0.17, 0.26, 0.9)))
+
+    def build_respawn_btn(self):
+        cm = CardMaker("respbtn")
+        cm.setFrame(0, 0.68, 0, 0.18)
+        self.resp_btn = self.aspect2d.attachNewNode(cm.generate())
+        self.resp_btn.setColor(*START_BTN)
+        self.resp_btn.setTransparency(TransparencyAttrib.MAlpha)
+        self.resp_btn_text = OnscreenText(text="Respawn", pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
+                                          shadow=(0, 0, 0, 0.8), mayChange=True)
+        self.resp_btn.hide()
+        self.resp_btn_text.hide()
 
     def on_escape(self):
         if self.loadscreen is not None and self.quit_box is None:
@@ -109995,8 +110136,9 @@ class Game(ShowBase):
         self.world, self.host = world, host
         self.my_id = attempt.my_id if mode == "client" else 0
         self.player = self.spawn_player()
-        if mode in ("host", "client"):             # erst im Server, dann Ausrüstung wählen und mit R spawnen
+        if mode in ("host", "client"):             # erst im Server: Lobby (Host startet die Runde), danach Respawn-Menü
             self.player.hp, self.player.dead_age, self.player.prespawn = 0.0, 1e9, True
+            world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
         if mode == "client":
@@ -110457,6 +110599,8 @@ class Game(ShowBase):
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.death_picker = Picker(self.aspect2d, self.weapon_icons, 0.22, -0.10, -0.42, flat=True)   # wie im Hauptmenü
         self.death_picker.hide()
+        self.build_respawn_btn()
+        self.build_lobby_ui()
         self.reload_text = OnscreenText(text="NACHLADEN", pos=(0, -0.35), scale=0.06,
                                         fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.8), mayChange=True)
         self.reload_text.hide()
@@ -111164,14 +111308,21 @@ class Game(ShowBase):
             return
         pl = self.player
         if pl.hp > 0:
-            self.reload_req = True
-        elif self.world.phase == "play":
-            if self.net_mode == "client":
-                waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
-                if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
-                    self.client.request_respawn()   # der Host sucht den Startpunkt aus
-            elif self.world.can_respawn(pl):
-                self.world.respawn_player(pl)       # Einzelspiel/Host: Ereignis 'respawn' folgt
+            self.reload_req = True                  # (Respawn nur noch über den grünen Knopf im Respawn-Menü)
+
+    def do_respawn(self):
+        """Klick auf den grünen Respawn-Knopf."""
+        if self.mode != "play" or self.quit_box is not None:
+            return
+        pl = self.player
+        if pl.hp > 0 or self.world.phase != "play" or getattr(self.world, "lobby", False):
+            return
+        if self.net_mode == "client":
+            waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
+            if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
+                self.client.request_respawn()       # der Host sucht den Startpunkt aus
+        elif self.world.can_respawn(pl):
+            self.world.respawn_player(pl)           # Einzelspiel/Host: Ereignis 'respawn' folgt
 
     def on_use(self):
         if self.mode == "play" and self.quit_box is None:
@@ -113009,15 +113160,16 @@ class Game(ShowBase):
 
         # Todes-Bildschirm mit Waffenwahl (Bilder) / Rundenende mit Rangliste
         dead_screen = pl.hp <= 0 and world.phase == "play"
+        lobby = dead_screen and bool(getattr(world, "lobby", False))
+        wait = 0.0
         if dead_screen:
             if self.dead_since is None:
                 self.dead_since = now
             pre = getattr(pl, "prespawn", False)
             wait = 0.0 if pre else world.respawn_delay - (now - self.dead_since)
-            hint = ("R   Spawnen" if pre else "R   Respawn") if wait <= 0 else f"Respawn in {int(math.ceil(wait))} s"
         else:
             self.dead_since = None
-            hint = ""
+        hint = ""
         # Maus auf dem Todesbildschirm freigeben (Klick auf Karten und Knopf), beim Respawn wieder einfangen
         if dead_screen and not self.dead_free and self.quit_box is None:
             self.dead_free = True
@@ -113028,7 +113180,7 @@ class Game(ShowBase):
                 self.close_loadscreen()
             if self.quit_box is None and self.mode == "play":
                 self.set_capture(True)
-        show_dead = dead_screen and self.loadscreen is None
+        show_dead = dead_screen and self.loadscreen is None and not lobby
         self.set_text(self.dead_hint, hint if show_dead else "")
         self.set_text(self.dead_text, ("WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:") if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
@@ -113047,6 +113199,20 @@ class Game(ShowBase):
             self.death_picker.hide()
             self.dead_btn.hide()
             self.dead_btn_text.hide()
+        rb = self.right_btn_rect()
+        if show_dead:                                     # grüner Respawn-Knopf unten rechts (kein R mehr)
+            ready = wait <= 0
+            hov = ready and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
+            self.resp_btn.setPos(rb[0], 0, rb[2])
+            self.resp_btn_text.setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
+            self.resp_btn.setColor(*((0.20, 0.62, 0.28, 0.98) if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
+            self.set_text(self.resp_btn_text, "Respawn" if ready else f"Respawn in {int(math.ceil(wait))} s")
+            self.resp_btn.show()
+            self.resp_btn_text.show()
+        else:
+            self.resp_btn.hide()
+            self.resp_btn_text.hide()
+        self.update_lobby_ui(lobby and self.loadscreen is None, mpos)
         if dead_screen != self.hud_dead_hidden:           # Todesbildschirm: kein Spieler-HUD (Minimap, Slots, Munition ...)
             self.hud_dead_hidden = dead_screen
             for nm in ("a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter", "a2dBottomLeft",
