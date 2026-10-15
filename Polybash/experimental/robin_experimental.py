@@ -37,6 +37,8 @@ der Statistik (Special Shots).
 Eigener Lärm auf der Minimap (NOISE_MINIMAP): ein dezenter weisser Kreis zeigt, wie weit man gerade zu hören ist
 (geduckt/gehen/rennen/fahren); bei Schuss, Schlag oder eigener Explosion breitet sich eine Welle bis zum
 Lärmradius aus. Ist sie grösser als der Ausschnitt, zoomt die Minimap kurz heraus (NOISE_MINIMAP_ZOOM).
+Tomahawk-Anflug (7d): Auf der Rakete reitet ein fiktiver Comic-Rodeo-General (Sonnenbrille, schwenkt den Cowboyhut,
+hält eine wehende Sterne-und-Streifen-Fahne) und ruft beim Überflug "Yeehaw!" (TOMA_RIDER, TOMA_YEEHAW).
 Rundenende: Statt des Banners kommt ein Endbildschirm (das Spiel steht still): Siegerpodest (1./2./3.) und
 Reiter mit der Rundenstatistik - Übersicht, Jäger (Monster je Art), Looten (Kisten je Art, Buffs), Tomahawk
 (ausgelöst, Kills), Special Shots (weitester Kill mit Waffe, Kopfschüsse, Treffer), Bewegung (zu Fuss, im Wagen,
@@ -9872,6 +9874,87 @@ def gadget_icon(kind, width=0.42, height=0.2):
     return np
 
 
+TOMA_RIDER = True          # 7d: auf der anfliegenden Tomahawk-Rakete reitet ein (fiktiver) Comic-Rodeo-General mit
+TOMA_RIDER_SCALE = 1.5     # ... in Comic-Grösse (gut sichtbar am Himmel)
+TOMA_YEEHAW = True         # ... und ruft beim Überflug "Yeehaw!" ...
+TOMA_YEEHAW_U = 0.45       # ... wenn die Rakete so weit (Anteil des Countdowns) geflogen ist
+TOMA_YEEHAW_VOL = 0.75
+
+
+def build_rodeo_rider():
+    """7d: Fiktiver Comic-Rodeo-General (Low-Poly) in Raketen-Koordinaten (Rakete: Spitze +y, Länge ~1, Breite 0,12;
+    sie wird x10 gezeichnet): sitzt rittlings, Sonnenbrille, Uniformjacke mit Orden; rechte Hand schwenkt den
+    Cowboyhut, linke hält einen Stab mit wehender Flagge (Sterne und Streifen). Keine echte Person.
+    -> (root, Arm mit Hut, Flagge)"""
+    rng = random.Random(77)
+    root = NodePath("rodeo_reiter")
+    m = Mesh()
+    skin, khaki, dk = (0.93, 0.74, 0.60), (0.52, 0.47, 0.30), (0.32, 0.20, 0.10)
+    boot, belt = (0.36, 0.20, 0.08), (0.25, 0.16, 0.08)
+    for sx in (-1, 1):                                          # Beine rittlings: Oberschenkel, Unterschenkel, Stiefel
+        box(m, sx * 0.075, 0.0, 0.065, 0.04, 0.10, 0.04, khaki, rng)
+        box(m, sx * 0.09, 0.02, 0.0, 0.035, 0.04, 0.10, khaki, rng)
+        box(m, sx * 0.095, 0.04, -0.06, 0.04, 0.08, 0.035, boot, rng)
+        box(m, sx * 0.095, 0.075, -0.05, 0.03, 0.02, 0.03, (0.85, 0.75, 0.3))   # Sporen
+    box(m, 0, 0.0, 0.10, 0.12, 0.08, 0.04, khaki, rng)          # Hüfte / Sattel
+    box(m, 0, -0.005, 0.175, 0.11, 0.065, 0.12, (0.40, 0.42, 0.26), rng)   # Uniformjacke
+    box(m, 0, -0.005, 0.125, 0.115, 0.07, 0.018, belt)          # Gürtel
+    box(m, 0, 0.03, 0.125, 0.03, 0.006, 0.02, (0.95, 0.8, 0.25))  # grosse Gürtelschnalle
+    for k, c in enumerate(((0.9, 0.2, 0.15), (0.95, 0.8, 0.25), (0.2, 0.35, 0.8), (0.95, 0.8, 0.25))):
+        box(m, -0.035 + (k % 2) * 0.016, 0.03, 0.2 - (k // 2) * 0.018, 0.012, 0.004, 0.012, c)   # Orden
+    for sx in (-1, 1):
+        box(m, sx * 0.06, -0.005, 0.235, 0.035, 0.07, 0.012, (0.95, 0.8, 0.25))   # goldene Schulterstücke
+    box(m, 0, 0.0, 0.25, 0.03, 0.03, 0.03, skin)                # Hals
+    box(m, 0, 0.0, 0.29, 0.07, 0.07, 0.07, skin, rng)           # Kopf
+    box(m, 0, 0.012, 0.268, 0.075, 0.06, 0.03, skin, rng)       # breites Kinn
+    box(m, 0, -0.01, 0.33, 0.072, 0.066, 0.016, (0.55, 0.52, 0.48))   # graues Haar
+    box(m, 0, 0.037, 0.3, 0.078, 0.008, 0.016, (0.03, 0.03, 0.04))    # Sonnenbrille
+    box(m, 0, 0.037, 0.3, 0.012, 0.01, 0.006, (0.6, 0.6, 0.62))
+    box(m, 0, 0.038, 0.277, 0.03, 0.006, 0.006, (0.6, 0.25, 0.2))     # breites Grinsen
+    box(m, -0.07, 0.01, 0.21, 0.03, 0.03, 0.08, (0.40, 0.42, 0.26), rng)  # linker Oberarm (hält die Fahne)
+    box(m, -0.075, 0.035, 0.18, 0.025, 0.06, 0.025, (0.40, 0.42, 0.26), rng)
+    box(m, -0.075, 0.07, 0.18, 0.028, 0.028, 0.028, skin)          # linke Hand
+    box(m, -0.075, 0.07, 0.29, 0.008, 0.008, 0.36, (0.55, 0.45, 0.3))   # Fahnenstab
+    box(m, -0.075, 0.07, 0.475, 0.018, 0.018, 0.018, (0.95, 0.8, 0.25))  # goldene Spitze
+    body = root.attachNewNode(m.node("reiter"))
+    # Rechter Arm mit Hut (dreht um die Schulter: winkt)
+    arm = root.attachNewNode("arm_hut")
+    arm.setPos(0.065, 0.0, 0.225)
+    a = Mesh()
+    box(a, 0.0, 0.0, 0.05, 0.03, 0.03, 0.11, (0.40, 0.42, 0.26), rng)
+    box(a, 0.0, 0.0, 0.115, 0.028, 0.028, 0.028, skin)
+    hat = (0.55, 0.36, 0.18)
+    box(a, 0.0, 0.0, 0.15, 0.16, 0.12, 0.012, hat, rng)               # Krempe
+    box(a, 0.0, 0.0, 0.175, 0.08, 0.07, 0.05, hat, rng)               # Kopfteil
+    box(a, 0.0, 0.0, 0.158, 0.082, 0.072, 0.01, (0.15, 0.1, 0.06))    # Hutband
+    for sx in (-1, 1):
+        box(a, sx * 0.075, 0.0, 0.16, 0.02, 0.12, 0.012, hat)          # hochgebogene Krempe
+    arm.attachNewNode(a.node("arm"))
+    arm.setR(-35.0)
+    # Flagge am Stab (weht nach hinten, unbeleuchtet, beidseitig)
+    flag = root.attachNewNode("flagge")
+    flag.setPos(-0.075, 0.07, 0.43)
+    f = Mesh(lit=False)
+    W, H = 0.22, 0.12
+    n_st = 7
+    for i in range(n_st):                                           # Streifen rot/weiss
+        z0, z1 = -H + H * i / n_st, -H + H * (i + 1) / n_st
+        c = (0.78, 0.1, 0.12) if i % 2 == 0 else (0.95, 0.95, 0.95)
+        f.tri((0, 0, z0), (0, -W, z0), (0, -W, z1), c)
+        f.tri((0, 0, z0), (0, -W, z1), (0, 0, z1), c)
+    cz0 = -H * 3 / n_st
+    bl = (0.12, 0.18, 0.5)
+    f.tri((0.0005, 0, cz0), (0.0005, -W * 0.42, cz0), (0.0005, -W * 0.42, 0), bl)
+    f.tri((0.0005, 0, cz0), (0.0005, -W * 0.42, 0), (0.0005, 0, 0), bl)
+    for i in range(3):                                              # angedeutete Sterne
+        for j in range(4):
+            sy, sz = -0.012 - j * 0.022, cz0 + 0.01 + i * 0.016
+            f.tri((0.001, sy, sz), (0.001, sy - 0.006, sz), (0.001, sy - 0.003, sz + 0.006), (1, 1, 1))
+    fn = flag.attachNewNode(f.node("flagge"))
+    fn.setTwoSided(True)
+    return root, arm, flag
+
+
 def build_rocket(lit=True):
     """Rakete (Spitze bei +y, Länge ~1 m) und ihre Flamme (hinten bei -y) als zwei Modelle."""
     rng = random.Random(21)
@@ -13658,6 +13741,30 @@ def synth_sounds():
         a = min(1.0, t / 0.4) * (0.4 + 0.6 * t / 2.8)
         wh.append(math.sin(ph) * a)
     out["whistle"] = norm(mix((wh, 1.0), (mul(lowpass(noise(n), 0.4), [0.15 + 0.3 * i / n for i in range(n)]), 0.4)), 0.8)
+    # 7d: "Yeehaw!" des Rodeo-Reiters: Stimmimpulse durch zwei Formant-Filter, Tonhöhe hoch und wieder runter
+    def voiced(dur, f0a, f0b, fa, fb, breath=0.0):
+        n_ = int(dur * SR)
+        src, ph_ = [], 0.0
+        for i in range(n_):
+            t = i / n_
+            f0 = f0a + (f0b - f0a) * (t if f0b > f0a else t ** 0.6)
+            ph_ = (ph_ + f0 / SR) % 1.0
+            src.append((1.0 - 2.0 * ph_) + breath * rng.uniform(-1, 1))
+        out_ = [0.0] * n_
+        for fc, bw, g in ((fa, 90.0, 1.0), (fb, 140.0, 0.6)):
+            r_ = math.exp(-math.pi * bw / SR)
+            c1, c2 = 2 * r_ * math.cos(tp * fc / SR), -r_ * r_
+            y1 = y2 = 0.0
+            for i in range(n_):
+                y = (1 - r_) * src[i] + c1 * y1 + c2 * y2
+                y2, y1 = y1, y
+                out_[i] += y * g
+        return [v * min(1.0, i / (0.03 * SR)) * min(1.0, (n_ - i) / (0.06 * SR)) for i, v in enumerate(out_)]
+    yee = voiced(0.42, 260, 470, 320, 2300)
+    gap = [0.0] * int(0.05 * SR)
+    hh = mul(lowpass(noise(int(0.07 * SR)), 0.3), env(int(0.07 * SR), 20))
+    haw = voiced(0.55, 470, 230, 720, 1150, 0.15)
+    out["yeehaw"] = norm(yee + gap + [v * 0.4 for v in hh] + haw, 0.85)
     # Elektroschuss der Drohne: knisterndes Zischen mit hohem Summen
     n = int(0.45 * SR)
     crack = [(rng.uniform(-1, 1) if rng.random() < 0.35 else 0.0) for _ in range(n)]
@@ -108257,7 +108364,7 @@ class Sfx:
     über OpenAL; fehlt eine Audioausgabe, läuft das Spiel ohne Ton weiter."""
 
     POOL = {"step_soft": 5, "step_hard": 5, "pistol": 4, "rifle": 8, "shotgun": 3, "heavy": 3,
-            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "servo": 2, "whistle": 1, "zap": 3, "whiz": 4,
+            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "servo": 2, "whistle": 1, "zap": 3, "whiz": 4, "yeehaw": 1,
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2}
@@ -115171,6 +115278,14 @@ class Game(ShowBase):
         gn.setTransparency(TransparencyAttrib.MAlpha)
         gn.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd))
         gn.setDepthWrite(False)
+        self.toma_rider = None
+        if TOMA_RIDER:                                    # 7d: Comic-Reiter auf der Rakete
+            rider, arm, flag = build_rodeo_rider()
+            rider.reparentTo(rr)
+            rider.setPos(0, -0.05, 0.06)
+            rider.setScale(TOMA_RIDER_SCALE)
+            self.toma_rider = (rider, arm, flag)
+        self.toma_yeehaw = False
         rr.setScale(10.0)                                 # gross genug, um sie am Himmel zu sehen
         rr.setFogOff()
         rr.setLightOff()
@@ -115392,8 +115507,19 @@ class Game(ShowBase):
                 rr.hide()
             self.sfx.jet_sound(None)
             self.toma_whistled = False
+            self.toma_yeehaw = False
         else:
             u = 1.0 - max(0.0, w.strike_t) / w.strike_dur
+            if getattr(self, "toma_rider", None) is not None:   # 7d: Hut schwenken, Flagge wehen lassen
+                tt = time.time()
+                _r, arm, flag = self.toma_rider
+                arm.setR(-35.0 + 40.0 * math.sin(tt * 7.0))
+                arm.setP(15.0 * math.sin(tt * 3.5))
+                flag.setH(10.0 * math.sin(tt * 9.0) + 4.0 * math.sin(tt * 23.0))
+                flag.setShear(0, 0.15 * math.sin(tt * 11.0), 0)
+            if TOMA_YEEHAW and not getattr(self, "toma_yeehaw", True) and u >= TOMA_YEEHAW_U:
+                self.toma_yeehaw = True
+                self.sfx.play("yeehaw", None, TOMA_YEEHAW_VOL, 1.0)
             p = self.toma_rocket_pos(u)
             q = self.toma_rocket_pos(min(1.0, u + 0.002)) if u < 0.998 else self.toma_rocket_pos(u)
             if q == p:
