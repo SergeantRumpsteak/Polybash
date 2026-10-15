@@ -13,6 +13,7 @@ jobs:
 
       - name: Inno Setup installieren
         shell: pwsh
+        timeout-minutes: 30
         run: choco install innosetup --no-progress -y
 
       - name: Installer kompilieren
@@ -38,10 +39,20 @@ jobs:
             if ($t.Length -gt 6000) { $t = $t.Substring($t.Length - 6000) }
             Write-Host "::$lvl title=$title::$t"
           }
+          function Run($file, $argl, $name) {
+            $q = Start-Process $file -ArgumentList $argl -PassThru
+            if (-not $q.WaitForExit(480000)) {
+              Ann "error" "Haengt: $name" ((Get-Process | Where-Object { $_.ProcessName -match 'python|unins|Polybash|msiexec' } | ForEach-Object { $_.ProcessName }) -join ", ")
+              if (Test-Path "$dest\install.log") { Ann "error" "install.log bei $name" ((Get-Content "$dest\install.log" -Tail 15) -join "`n") }
+              taskkill /F /T /PID $q.Id | Out-Null
+              throw "$name haengt (nach 8 Minuten abgebrochen)"
+            }
+            return $q
+          }
           $dest = "$env:RUNNER_TEMP\pbtest"
           $exe = (Resolve-Path "Polybash/installer/dist/Polybash-Installer.exe").Path
           try {
-            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup.log","/forcepy=1" -Wait -PassThru
+            $p = Run $exe @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup.log","/forcepy=1") "Installer-Lauf 1"
             Ann "notice" "Installer-Exitcode" "$($p.ExitCode)"
             $ls = if (Test-Path $dest) { (Get-ChildItem $dest | ForEach-Object { $_.Name }) -join ", " } else { "(Zielordner fehlt)" }
             Ann "notice" "Zielordner" $ls
@@ -57,26 +68,26 @@ jobs:
             $r = netsh advfirewall firewall show rule name="Polybash" 2>&1
             Ann "notice" "Firewall-Regeln nach Installation" ($r -join "`n")
             if ($LASTEXITCODE -ne 0) { throw "Firewall-Regeln fehlen" }
-            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
+            Run "$dest\unins000.exe" @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART") "Deinstallation 5" | Out-Null
             netsh advfirewall firewall show rule name="Polybash" | Out-Null
             if ($LASTEXITCODE -eq 0) { throw "Firewall-Regeln wurden beim Deinstallieren nicht entfernt" }
             # zweiter Durchlauf ohne /forcepy: vorhandenes System-Python benutzen, danach Verknuepfungsziel pruefen
-            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup2.log" -Wait -PassThru
+            $p = Run $exe @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup2.log") "Installer-Lauf 2"
             Ann "notice" "Zweiter Durchlauf (System-Python)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
             if (-not (Test-Path "$dest\venv\Scripts\pythonw.exe")) { throw "2. Durchlauf: venv\Scripts\pythonw.exe fehlt" }
             $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Polybash\Polybash.lnk")
             Ann "notice" "Verknuepfung" "Ziel: $($lnk.TargetPath) | Argumente: $($lnk.Arguments) | existiert: $(Test-Path $lnk.TargetPath)"
             if (-not (Test-Path $lnk.TargetPath)) { throw "Ziel der Startmenue-Verknuepfung fehlt: $($lnk.TargetPath)" }
             # dritter Durchlauf: Python-Ordner von Hand loeschen (Windows kennt Python noch) und mit erzwungenem Python neu installieren
-            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
-            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup3.log","/forcepy=1" -Wait -PassThru
+            Run "$dest\unins000.exe" @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART") "Deinstallation 6" | Out-Null
+            $p = Run $exe @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup3.log","/forcepy=1") "Installer-Lauf 3"
             Ann "notice" "Dritter Durchlauf (nach Loeschen)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
             if (-not (Test-Path "$dest\python\python.exe")) { throw "3. Durchlauf: python.exe fehlt" }
             Remove-Item "$dest\python","$dest\venv" -Recurse -Force
-            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup4.log","/forcepy=1" -Wait -PassThru
+            $p = Run $exe @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup4.log","/forcepy=1") "Installer-Lauf 4"
             Ann "notice" "Vierter Durchlauf (Python-Ordner geloescht)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
             if (-not (Test-Path "$dest\venv\Scripts\pythonw.exe")) { throw "4. Durchlauf: pythonw.exe fehlt" }
-            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
+            Run "$dest\unins000.exe" @("/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART") "Deinstallation 7" | Out-Null
             Ann "notice" "Test" "alles in Ordnung"
             $global:LASTEXITCODE = 0
           } catch {
