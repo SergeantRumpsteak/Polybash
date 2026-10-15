@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 36    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 15         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 76               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 77               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -109170,14 +109170,32 @@ class Game(ShowBase):
     LOBBY_EQ_BTN = (-0.42, 0.42, -0.90, -0.76)
     LOBBY_EQUIP = True          # Ausrüstungsmenü-Knopf in der Lobby (im Experimental gibt es keins: immer Pistole)
 
+    def back_btn_rect(self):
+        a = float(self.getAspectRatio())
+        return (-a + 0.08, -a + 0.80, -0.94, -0.76)
+
     def lobby_click(self, m):
         rb = self.right_btn_rect()
         e = self.LOBBY_EQ_BTN
-        if rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
+        bb = self.back_btn_rect()
+        equip = self.LOBBY_EQUIP and getattr(self, "lobby_equip", False)
+        if bb[0] <= m[0] <= bb[1] and bb[2] <= m[1] <= bb[3]:
+            if equip:
+                self.lobby_equip = False            # zurück zur Lobby
+            else:
+                self.show_pause("leave")            # zurück ins Hauptmenü (mit Sicherheitsabfrage)
+        elif equip:                                 # Waffenmenü: Karten wählen, unten 'Loadout konfigurieren'
+            card = self.death_picker.hit(m[0], m[1])
+            b = self.DEAD_BTN
+            if card is not None:
+                self.set_loadout_card(card[0], card[1])
+            elif b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
+                self.open_loadscreen()
+        elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             if self.net_mode == "host" and self.world.lobby:
                 self.world.start_round()            # nur der Host darf die Runde starten
         elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
-            self.open_loadscreen()
+            self.lobby_equip = True                 # erst das Waffenmenü
 
     def build_lobby_ui(self):
         """Runden-Lobby (vor dem ersten Spawn von Host und Mitspielern): Spielerliste, 'Spiel starten', Ausrüstungsmenü."""
@@ -109274,6 +109292,14 @@ class Game(ShowBase):
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.resp_btn.hide()
         self.resp_btn_text.hide()
+        cm.setFrame(0, 0.72, 0, 0.18)
+        self.back_btn = self.aspect2d.attachNewNode(cm.generate())
+        self.back_btn.setColor(0.10, 0.17, 0.26, 0.9)
+        self.back_btn.setTransparency(TransparencyAttrib.MAlpha)
+        self.back_btn_text = OnscreenText(text="Zurück ins Hauptmenü", pos=(0, 0), scale=0.05, fg=(1, 1, 1, 1),
+                                          shadow=(0, 0, 0, 0.8), mayChange=True)
+        self.back_btn.hide()
+        self.back_btn_text.hide()
 
     def on_escape(self):
         if self.loadscreen is not None and self.quit_box is None:
@@ -109360,7 +109386,7 @@ class Game(ShowBase):
         txt.destroy()
         for h in hots:
             h.destroy()
-        if recapture and self.mode == "play" and self.player is not None:
+        if recapture and self.mode == "play" and self.player is not None and not self.dead_free:   # Respawn-Menue/Lobby: Maus bleibt frei
             self.set_capture(True)
 
     def on_confirm(self, yes):
@@ -113180,9 +113206,12 @@ class Game(ShowBase):
                 self.close_loadscreen()
             if self.quit_box is None and self.mode == "play":
                 self.set_capture(True)
-        show_dead = dead_screen and self.loadscreen is None and not lobby
+        equip_view = lobby and self.LOBBY_EQUIP and getattr(self, "lobby_equip", False) and self.loadscreen is None
+        if not lobby:
+            self.lobby_equip = False
+        show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
         self.set_text(self.dead_hint, hint if show_dead else "")
-        self.set_text(self.dead_text, ("WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:") if show_dead else "")
+        self.set_text(self.dead_text, ("AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:") if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
         if show_dead:
             card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
@@ -113200,7 +113229,7 @@ class Game(ShowBase):
             self.dead_btn.hide()
             self.dead_btn_text.hide()
         rb = self.right_btn_rect()
-        if show_dead:                                     # grüner Respawn-Knopf unten rechts (kein R mehr)
+        if show_dead and not lobby:                       # grüner Respawn-Knopf unten rechts (kein R mehr)
             ready = wait <= 0
             hov = ready and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
             self.resp_btn.setPos(rb[0], 0, rb[2])
@@ -113212,7 +113241,19 @@ class Game(ShowBase):
         else:
             self.resp_btn.hide()
             self.resp_btn_text.hide()
-        self.update_lobby_ui(lobby and self.loadscreen is None, mpos)
+        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None, mpos)
+        if lobby and self.loadscreen is None and self.quit_box is None:       # Knopf unten links
+            bb = self.back_btn_rect()
+            hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
+            self.back_btn.setPos(bb[0], 0, bb[2])
+            self.back_btn_text.setPos((bb[0] + bb[1]) / 2, bb[2] + 0.062)
+            self.back_btn.setColor(*((0.22, 0.30, 0.42, 0.95) if hov else (0.10, 0.17, 0.26, 0.9)))
+            self.set_text(self.back_btn_text, "Zurück zur Lobby" if equip_view else "Zurück ins Hauptmenü")
+            self.back_btn.show()
+            self.back_btn_text.show()
+        else:
+            self.back_btn.hide()
+            self.back_btn_text.hide()
         if dead_screen != self.hud_dead_hidden:           # Todesbildschirm: kein Spieler-HUD (Minimap, Slots, Munition ...)
             self.hud_dead_hidden = dead_screen
             for nm in ("a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter", "a2dBottomLeft",
