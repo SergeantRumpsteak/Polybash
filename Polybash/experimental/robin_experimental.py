@@ -15,8 +15,10 @@ Steuerung:
                  Fahrzeug ein-/aussteigen; ist nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
   4              Nahkampfwaffe (zurück zu den Schusswaffen mit 1-3 / Mausrad); Linke Maus = zuschlagen
   Tab (halten)   Übersicht: Scoreboard (Punkte, Kills, Tode, Monster, Kisten, Buffs) und Tasten-Legende;
-                 die Maus ist solange frei - Mausover über Waffen, Ausrüstung und Buff zeigt die Werte;
-                 Klick auf eine Waffe: Aufsatz-Fenster (Aufsätze aus dem Lager aufstecken)
+                 die Maus ist solange frei - Mausover über Waffen, Ausrüstung und Buff zeigt die Werte
+  T              Waffe ansehen (9b): die Waffe wird von der Seite präsentiert, Markierungen an Visier, Lauf,
+                 Magazin, Griff - Klick öffnet die passenden Aufsätze aus dem Lager; T / Esc schliesst.
+                 Laufen geht weiter, Schiessen ist gesperrt. Mit der Bratpfanne in der Hand: essen (9c)
   Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
   Menüs          auch mit der Maus bedienbar (Hover = gelb, Klick = wählen)
   5              Gadget in die Hand (eigene Karte rechts neben den Waffen; Wahl im Hauptmenü "Ausrüstung"
@@ -65,6 +67,9 @@ Geröll und Fels bis Schnee ab MTN_SNOW_Z, an steilen Stellen nur dünner Schnee
 sitzen auf der richtigen Höhe (Wind-Knoten auf zref). Bodennahe Quader und flache Deko bekommen ein Fundament bis
 unter das Gelände (ground_boxes, GROUND_*), Sandsäcke folgen dem Gelände, Felsen sitzen am Hang auf. Keine Ritzen
 mehr zwischen fein und grob unterteilten Geländezellen (Kanten werden angeglichen), Schürze am Geländerand.
+9b: Drohnen: feste Zahl DRONE_COUNT (jede Dichte ausser "Aus", Respawn nie darüber), DRONE_SIZE-fach grösser
+(Modell + Trefferzone). Aufsätze/Visier über T (Inspektions-Ansicht der Waffe mit Markierungen, INSPECT_*), Tab ist
+nur noch Übersicht. Tomahawk: Sirene halb so laut (TOMA_SIREN_VOL), im Anflug leise die US-Hymne (TOMA_ANTHEM*).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -86,9 +91,10 @@ Waffen und Kisten (in allen Modi und auf allen Karten):
   Spieler. Draufschauen zeigt Name und Werte, F hebt genau dieses Teil auf (erst dann greift der Tausch).
   LOOT_OWNER_T s lang nur für den Öffnenden, danach für jeden; liegen gelassen verschwindet es nach DROP_LIFE.
   Aufsatz aufheben: passt er auf die Waffe in der Hand, kommt er sofort darauf (der alte desselben Platzes ins
-  Aufsatz-Lager), sonst ins Aufsatz-Lager (unsichtbar, Doppelte erlaubt, wird beim Tod geleert). Tab halten und auf
-  eine Waffe der Waffenleiste klicken: Aufsatz-Fenster mit Reitern (Visier, Lauf, Magazin, Griff - nur was zur
-  Waffe passt); Klick steckt ein Teil aus dem Lager auf, "Standard" geht immer. Visiere gelten jetzt je Waffe.
+  Aufsatz-Lager), sonst ins Aufsatz-Lager (unsichtbar, Doppelte erlaubt, wird beim Tod geleert). T (9b, vorher Tab):
+  Inspektions-Ansicht der Waffe in der Hand mit anklickbaren Markierungen (Visier, Lauf, Magazin, Griff - nur was
+  zur Waffe passt); Klick zeigt die passenden Teile aus dem Lager, Klick steckt auf, "Standard" geht immer.
+  Visiere gelten je Waffe.
   Waffen fallen mit ihren Aufsätzen und dem Visier (Tausch, Tod). Waffensymbol und Tab-Mausover zeigen sie.
   Kisten liegen zufällig verteilt (bei Gebäuden, Türmen,
   Aussenposten, im Tunnel und im Gelände) und sind nicht auf der Minimap. Eine geöffnete Kiste verschwindet;
@@ -410,7 +416,9 @@ ROCK_DMG = 95.0          # Schaden im Zentrum des Aufpralls ...
 ROCK_R = 5.0             # ... linear weniger bis zu diesem Radius; Deckung (Wand dazwischen) schützt
 ROCK_SIZE = 1.4          # m Durchmesser (Darstellung und Treffer)
 TITAN_BEAM_H = 60.0      # m: goldene Lichtsäule über der Kiste, die der Titan fallen lässt
-N_DRONE = 4              # Elektro-Drohnen
+N_DRONE = 4              # Elektro-Drohnen (9b: nicht mehr verwendet - siehe DRONE_COUNT)
+DRONE_COUNT = 4          # 9b: feste Zahl Drohnen gleichzeitig auf der Karte (jede Monsterdichte ausser "Aus")
+DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; sinnvoll 1,25-1,5)
 N_CRITTER = 5            # Fluchttiere (spawnen wie alle Monster nach RESPAWN_T wieder nach)
 MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.4), ("Mäßig", 1.0), ("Viel", 2.0), ("Gottlos", 3.5))   # Monsterdichte
 MOB_DEFAULT = 2
@@ -430,7 +438,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 28         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 29         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -571,6 +579,10 @@ TOMA_LOUD_T = 2.0           # s vor dem Einschlag: erst dann wird der Raketenton
 TOMA_JET_QUIET = 0.05       # Lautstärke des Dröhnens im Anflug (leise im Hintergrund)
 TOMA_JET_VOL = 0.55         # Lautstärke in der letzten Sekunde
 TOMA_WHISTLE_VOL = 0.5      # Lautstärke des Pfeifens
+TOMA_SIREN_VOL = 0.275      # 9b: Sirene/Warnton im Countdown (vorher 0.55 - halb so laut)
+TOMA_ANTHEM = True          # 9b: im Anflug leise "The Star-Spangled Banner" (Instrumental, selbst errechnet; gemeinfrei)
+TOMA_ANTHEM_VOL = 0.22      # 9b: Lautstärke der Hymne (leise unter Sirene und Rakete)
+TOMA_ANTHEM_BPM = 92.0      # 9b: Tempo der Hymne (Viertel pro Minute)
 CASTLE_HALF = 22.0       # Deathmatch: alles innerhalb der Burgmauern
 TO = CENTER - 80.0       # Verschiebung der Tunnel-Koordinaten (entworfen für eine 160-m-Karte)
 
@@ -1053,9 +1065,15 @@ SPRING_JUMP = 1.55        # Springfedern: Sprunggeschwindigkeit x1,55 (gut doppe
 DOUBLE_JUMP_V = JUMP_V    # Doppelsprung: zweiter Sprung in der Luft
 # Zentrale Tastenzuordnung (Grundlage für ein späteres Menü "Steuerung"). Gelesen werden sie mit
 # Game.key_down(name); die übrigen Tasten (F, R, G, V, Tab, 1-3 ...) sind noch per accept() verdrahtet.
+INSPECT_KEY = "t"        # 9b: Waffen-Inspektion (Aufsätze/Visier wechseln); mit der Bratpfanne: deren Fähigkeit (9c)
+INSPECT_FILL = 0.62      # 9b: so viel der Bildbreite füllt die Waffe in der Inspektion (höchstens)
+INSPECT_FILL_V = 0.40    # 9b: ... und höchstens so viel der Bildhöhe
+INSPECT_LIFT = 0.30      # 9b: Waffe so weit über der Bildmitte (Anteil der halben Bildhöhe; unten ist das Auswahlfenster)
+INSPECT_BLEND = 8.0      # 9b: Tempo der Überblendung in die Inspektions-Haltung
+INSPECT_SWAY = 5.0       # 9b: Grad, um die die präsentierte Waffe langsam hin und her dreht
 KEYS = {"forward": "w", "back": "s", "left": "a", "right": "d", "sprint": "shift", "jump": "space",
         "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g",
-        "ability": SET_ICON_KEY}
+        "ability": SET_ICON_KEY, "inspect": INSPECT_KEY}
 # ======================================================================== Ende Loot
 
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
@@ -1277,8 +1295,10 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
                   rock_min=20.0, rock_max=70.0, rock_windup=2.4, rock_recover=1.4),
     # Elektro-Drohne: schwebt in fly m Höhe (7a: je Drohne DRONE_FLY_MIN..MAX, steigt zu höheren Zielen), schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
     # betäubt für STUN_MIN..STUN_MAX s. Wenig HP, aber klein (hit_r/hit_h) und in der Luft.
+    # 9b: DRONE_SIZE-fach so gross (Modell über scale, Trefferzone hit_r/hit_h mitskaliert).
     "drone": dict(hp=35.0, speed=5.5, wander=2.0, dmg=0.0, cooldown=7.0, windup=0.6, recover=0.3,
-                  aggro=30.0, scale=1.0, hear=1.1, fly=3.6, range=20.0, hit_r=0.42, hit_h=0.5),
+                  aggro=30.0, scale=DRONE_SIZE, hear=1.1, fly=3.6, range=20.0, hit_r=0.42 * DRONE_SIZE,
+                  hit_h=0.5 * DRONE_SIZE),
     # Fluchttier: greift nie an (calm). Sieht (aggro) oder hört es einen Spieler, flieht es in Haken
     # (Strecken CRITTER_LEG_MIN..MAX m, Richtung zufällig, aber grob weg vom Auslöser).
     "critter": dict(hp=20.0, speed=11.5, wander=1.6, dmg=0.0, cooldown=1.0, windup=0.3, aggro=16.0,
@@ -1314,7 +1334,7 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
-              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht/Aufsätze"),
+              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"), ("T", "Waffe ansehen / Aufsätze"),
               ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
 
@@ -5062,8 +5082,10 @@ class World:
         k = (1.3 * BIG_MOB_K if self.big else 1.3) if self.mtn else 1.0   # grössere Standardkarte: mehr Monster
         k *= MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
         for kind, n in (("grunt", N_GRUNT), ("brute", N_BRUTE), ("huntress", N_HUNT),
-                        ("colossus", N_COLOSSUS), ("drone", N_DRONE), ("critter", N_CRITTER), ("titan", N_TITAN)):
+                        ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER), ("titan", N_TITAN)):
             cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
+            if kind == "drone":                          # 9b: feste Zahl, unabhängig von Kartengrösse und Dichte
+                cnt = DRONE_COUNT if k > 0 else 0
             for _ in range(cnt):
                 self.spawn_mob(kind, [], 0.0)
 
@@ -7249,7 +7271,9 @@ class World:
         for e in self.pending[:]:
             e[0] -= dt
             if e[0] <= 0:
-                if self.spawn_mob(e[1], avoid, 45.0):
+                if e[1] == "drone" and sum(1 for o in self.mobs if o.kind == "drone") >= DRONE_COUNT:
+                    self.pending.remove(e)                       # 9b: nie mehr als DRONE_COUNT Drohnen
+                elif self.spawn_mob(e[1], avoid, 45.0):
                     self.pending.remove(e)
                 else:
                     e[0] = 1.0
@@ -16318,6 +16342,43 @@ def synth_sounds():
     hh = mul(lowpass(noise(int(0.07 * SR)), 0.3), env(int(0.07 * SR), 20))
     haw = voiced(0.55, 470, 230, 720, 1150, 0.15)
     out["yeehaw"] = norm(yee + gap + [v * 0.4 for v in hh] + haw, 0.85)
+    # 9b: "The Star-Spangled Banner" (Melodie: John Stafford Smith, gemeinfrei), erste Strophe bis "gleaming" und
+    # "And the rocket's red glare ..." - Blechbläser (Wellentabelle mit Obertönen, Vibrato) + weiche Streicher eine
+    # Oktave tiefer + leiser Trommelwirbel. (MIDI-Nummer, Viertel); None = Pause
+    mel = [(65, .75), (62, .25), (58, 1), (62, 1), (65, 1), (70, 2), (74, .75), (72, .25), (70, 1), (62, 1), (64, 1),
+           (65, 2), (65, .5), (65, .5), (74, 1.5), (72, .5), (70, 1), (69, 2), (67, .75), (69, .25), (70, 1), (70, 1),
+           (65, 1), (62, 1), (58, 1), (None, 1),
+           (74, .75), (74, .25), (74, 1), (75, 1), (77, 1), (77, 2), (75, .5), (74, .5), (72, 1), (74, 1), (75, 1),
+           (75, 2), (75, 1), (74, 1.5), (72, .5), (70, 1), (69, 2), (67, .75), (69, .25), (70, 1), (62, 1), (64, 1),
+           (65, 2.5), (None, .5)]
+    beat = 60.0 / TOMA_ANTHEM_BPM
+    TN = 2048
+    brass_t = [sum(math.sin(tp * k * i / TN) / k ** 0.75 for k in range(1, 8)) for i in range(TN)]
+    str_t = [sum(math.sin(tp * k * i / TN) / k ** 1.6 for k in range(1, 5)) for i in range(TN)]
+    tot = int(sum(d for _m, d in mel) * beat * SR) + int(0.6 * SR)
+    an = [0.0] * tot
+    pos = 0
+    for m_, d_ in mel:
+        n_ = int(d_ * beat * SR)
+        if m_ is not None:
+            f_ = 440.0 * 2 ** ((m_ - 69) / 12.0)
+            a_n, r_n = int(0.035 * SR), int(min(0.09, d_ * beat * 0.25) * SR)
+            ph1 = ph2 = 0.0
+            for i in range(n_ + r_n):
+                t_ = i / SR
+                vib = 1.0 + 0.004 * math.sin(tp * 5.2 * t_) * min(1.0, t_ / 0.25)
+                ph1 = (ph1 + f_ * vib * TN / SR) % TN
+                ph2 = (ph2 + f_ * 0.5 * TN / SR) % TN
+                e_ = min(1.0, i / a_n) * (0.85 + 0.15 * math.exp(-6.0 * t_))
+                if i >= n_:
+                    e_ *= 1.0 - (i - n_) / r_n
+                j = pos + i
+                if j < tot:
+                    an[j] += e_ * (0.55 * brass_t[int(ph1)] + 0.35 * str_t[int(ph2)])
+        pos += n_
+    roll = mul(lowpass(noise(tot), 0.5), [0.10 + 0.06 * math.sin(tp * 13.0 * i / SR) ** 2 for i in range(tot)])
+    an = lowpass(mix((an, 1.0), (roll, 0.5)), 0.35)
+    out["anthem"] = norm([v * min(1.0, (tot - i) / (0.4 * SR)) for i, v in enumerate(an)], 0.8)
     # Elektroschuss der Drohne: knisterndes Zischen mit hohem Summen
     n = int(0.45 * SR)
     crack = [(rng.uniform(-1, 1) if rng.random() < 0.35 else 0.0) for _ in range(n)]
@@ -110958,7 +111019,7 @@ class Sfx:
         self.mob_st = {}               # Monster-ID -> [x, y, Schrittstrecke, nächster Laut (s), Zustand, Art, ...]
         self.loops = {}                # Schlüssel -> (Sound, Knoten, Name): Drohnen-Surren, fliegende Brocken
         self.voice_t = []              # Zeitpunkte der letzten Monsterlaute (Begrenzung)
-        self.nuke = None               # [Sound, Knoten, Lautstärke] des Tomahawk-Countdowns
+        self.nuke = None               # [Sound, Knoten, Lautstärke, (Hymne, Knoten)|None] des Tomahawk-Countdowns
         self.chat = None               # Funkgeräusch aus dem Kontrollraum (Sound, Knoten)
         self.music_path, self.music, self.music_v = None, None, 0.0     # Menümusik (Schleife)
         self.music_gain = 1.0          # Einstellung "Musik-Lautstärke" (0..1)
@@ -111136,6 +111197,8 @@ class Sfx:
         if self.nuke:
             try:
                 self.nuke[0].stop()
+                if len(self.nuke) > 3 and self.nuke[3]:
+                    self.nuke[3][0].stop()                 # 9b: Hymne
             except Exception:
                 pass
         self.nuke = None
@@ -111548,26 +111611,38 @@ class Sfx:
         ent = self.nuke
         if on and ent is None:
             snd, node = self.make("nuke")
-            ent = self.nuke = [snd, node, 1.0]
+            ent = self.nuke = [snd, node, 1.0, None]
             elapsed = max(0.0, float(getattr(world, "strike_dur", 0.0)) - float(getattr(world, "strike_t", 0.0)))
-            snd.setVolume(0.55)
-            try:
-                if elapsed > 0.3:
-                    snd.setTime(elapsed)                       # Spät beigetretener Spieler: an der richtigen Stelle einsteigen
-            except Exception:
-                pass
-            snd.play()
+            snd.setVolume(TOMA_SIREN_VOL)
+            if TOMA_ANTHEM and "anthem" in self.paths and not self.muted:   # 9b: Hymne leise darunter
+                asnd, anode = self.make("anthem")
+                asnd.setVolume(TOMA_ANTHEM_VOL)
+                ent[3] = (asnd, anode)
+            for s_ in [snd] + ([ent[3][0]] if ent[3] else []):
+                try:
+                    if elapsed > 0.3:
+                        s_.setTime(elapsed)                    # Spät beigetretener Spieler: an der richtigen Stelle einsteigen
+                except Exception:
+                    pass
+                s_.play()
         if ent is None:
             return
-        snd, node, v = ent
+        snd, node, v, anth = ent
         node.setPos(*self.cam())                               # immer am Hörer -> keine Abschwächung durch Entfernung
+        if anth is not None:
+            anth[1].setPos(*self.cam())
         if on:
             return
         v = max(0.0, v - dt / 0.35)                            # Einschlag / Abbruch: kurz ausblenden
         ent[2] = v
-        snd.setVolume(0.55 * v)
+        snd.setVolume(TOMA_SIREN_VOL * v)
+        if anth is not None:
+            anth[0].setVolume(TOMA_ANTHEM_VOL * v)
         if v <= 0.0:
             snd.stop()
+            if anth is not None:
+                anth[0].stop()
+                anth[1].removeNode()
             self.nuke = None
 
     def helis(self, dt):
@@ -111806,6 +111881,7 @@ class Game(ShowBase):
         self.accept("arrow_right", self.end_key, [1])
         self.accept("tab", self.tab_down)
         self.accept("tab-up", self.tab_up)
+        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
         self.accept("r", self.on_r)
         for i in range(10):          # Ziffern: Waffenwahl im Spiel, Auswahl/IP-Eingabe im Menü
             self.accept(str(i), self.on_digit, [i])
@@ -112192,8 +112268,8 @@ class Game(ShowBase):
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
             return
-        if self.mode == "play" and self.quit_box is None and getattr(self, "tab_held", False):
-            self.tab_click(self.mouse_2d())                  # 7b: Tab gehalten - Waffe anklicken = Aufsatz-Fenster
+        if self.mode == "play" and self.quit_box is None and getattr(self, "insp_on", False):
+            self.insp_click(self.mouse_2d())                 # 9b: Inspektion - Markierung/Aufsatz anklicken
             return
         if self.mode != "menu" and self.quit_box is None:
             return
@@ -112554,6 +112630,9 @@ class Game(ShowBase):
             self.open_loadscreen()
 
     def on_escape(self):
+        if getattr(self, "insp_on", False) and self.quit_box is None:
+            self.close_inspect()                             # 9b: Esc schliesst die Inspektion
+            return
         if self.loadscreen is not None and self.quit_box is None:
             self.close_loadscreen()
             return
@@ -113168,6 +113247,7 @@ class Game(ShowBase):
 
     def cleanup_scene(self):
         """Alles entfernen, was zu einem laufenden Spiel gehört (Szene, HUD, Effekte)."""
+        self.close_inspect(False)                            # 9b
         self.sfx.silence()
         self.teardown_hq()
         keepers = [n for n in (self.sky_root, self.vignette) if n is not None]
@@ -114843,28 +114923,166 @@ class Game(ShowBase):
         if self.captured:
             self.set_capture(False)
 
-    # ------------------------------------------------------------ 7b: Aufsatz-Fenster (nur mit Tab)
+    # ------------------------------------------------------------ 7b/9b: Aufsatz-Fenster (Inspektion mit T)
     ATT_PANEL_W, ATT_PANEL_Z0, ATT_PANEL_Z1 = 0.86, -0.64, -0.06   # Grösse/Lage des Fensters (aspect2d)
 
-    def tab_click(self, m):
-        """Klick bei gehaltenem Tab: Reiter/Aufsatz im Fenster wählen oder eine Waffe der Waffenleiste öffnen."""
+    def insp_ok(self):
+        """9b: darf jetzt inspiziert werden (lebt, Schusswaffe in der Hand, nicht im Fahrzeug)?"""
+        pl = self.player
+        return (self.mode == "play" and pl is not None and pl.hp > 0 and not pl.melee_out and not pl.gad_out
+                and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and self.world.phase == "play")
+
+    def on_inspect(self):
+        """9b: T - Waffe von der Seite ansehen; Markierungen an allen veränderbaren Stellen (Klick = Auswahl aus
+        dem Aufsatz-Lager). Nochmal T oder Esc schliesst. Mit der Nahkampfwaffe: deren Fähigkeit (Bratpfanne)."""
+        if self.mode != "play" or self.quit_box is not None or getattr(self, "end", None) is not None:
+            return
+        if getattr(self, "insp_on", False):
+            self.close_inspect()
+            return
+        pl = self.player
+        if pl is None or pl.hp <= 0:
+            return
+        if pl.melee_out:
+            fn = getattr(self, "on_melee_ability", None)          # 9c: Bratpfanne essen
+            if fn is not None:
+                fn()
+            return
+        if not self.insp_ok():
+            return
+        wi = pl.cur
+        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
+        if not tabs:
+            self.toast(f"{WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            return
+        if self.tab_held:
+            self.tab_up()
+        self.insp_on, self.insp_wi, self.insp_t = True, wi, getattr(self, "insp_t", 0.0)
+        self.insp_root = self.aspect2d.attachNewNode("inspektion")
+        self.insp_root.setBin("fixed", 84)
+        self.insp_root.setDepthTest(False)
+        self.insp_root.setDepthWrite(False)
+        self.insp_marks = {}
+        tex = get_tex("glow")
+        for si in tabs:
+            nd = self.insp_root.attachNewNode("mark%d" % si)
+            cm = CardMaker("m")
+            cm.setFrame(-0.045, 0.045, -0.045, 0.045)
+            gl = nd.attachNewNode(cm.generate())
+            gl.setTransparency(TransparencyAttrib.MAlpha)
+            if tex is not None:
+                gl.setTexture(tex)
+            cm.setFrame(-0.012, 0.012, -0.012, 0.012)
+            dot_ = nd.attachNewNode(cm.generate())
+            dot_.setColor(1, 1, 1, 1)
+            lab = OnscreenText(text="", parent=nd, pos=(0, 0.06), scale=0.034, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1),
+                               align=TextNode.ACenter)
+            self.insp_marks[si] = (nd, gl, lab)
+        self.insp_hint = OnscreenText(text="Waffe ansehen: Markierung anklicken = Aufsätze   -   T / Esc = zurück",
+                                      parent=self.insp_root, pos=(0, 0.76), scale=0.042, fg=(1, 0.85, 0.4, 1),
+                                      shadow=(0, 0, 0, 1), align=TextNode.ACenter)
+        self.att_panel_tab = None
+        self.close_att_panel()
+        self.insp_hits = []
+        if self.captured:
+            self.set_capture(False)
+        self.sfx.ui_click()
+
+    def close_inspect(self, recapture=True):
+        if not getattr(self, "insp_on", False):
+            return
+        self.insp_on = False
+        self.close_att_panel()
+        r = getattr(self, "insp_root", None)
+        if r is not None:
+            r.removeNode()
+        self.insp_root, self.insp_marks, self.insp_hits = None, {}, []
+        if (recapture and self.mode == "play" and self.quit_box is None and not self.tab_held and self.player is not None
+                and self.player.hp > 0):
+            self.set_capture(True)
+
+    def insp_anchor(self, wi, si):
+        """9b: Punkt (Waffenkoordinaten) der Markierung für Platz si."""
+        wn = WEAPONS[wi].name
+        if si == ATT_SCOPE:
+            sy_, sz_ = SCOPE_MOUNT.get(wn, (0.1, 0.04))
+            return (0.0, sy_, sz_ + 0.035)
+        if si == 0:
+            mz_ = GUN_PARTS[wn][1]
+            return (mz_[0], mz_[1] + 0.02, mz_[2])
+        if si == 1:
+            mp = MAG_PARTS.get(wn)
+            return (mp[0], mp[1], mp[2] - mp[5] * 0.3) if mp is not None else (0.0, 0.1, -0.06)
+        y_, zt = GRIP_AT.get(wn, (0.15, -0.02))
+        return (0.0, y_, zt - 0.035)
+
+    def insp_pose(self, w, t):
+        """9b: (x, y, z, h, p, r) der präsentierten Waffe vor der Waffenkamera: Lauf nach rechts, Mitte etwas oben."""
+        y0, y1, z0, z1 = weapon_frame(w.name)
+        hfov = math.radians(self.gun_lens.getHfov())
+        vfov = math.radians(self.gun_lens.getVfov())
+        dist = max(0.35, (y1 - y0) / INSPECT_FILL / (2.0 * math.tan(hfov / 2.0)),
+                   (z1 - z0) / INSPECT_FILL_V / (2.0 * math.tan(vfov / 2.0)))
+        yc, zc = (y0 + y1) / 2.0, (z0 + z1) / 2.0
+        h = -90.0 + INSPECT_SWAY * math.sin(t * 0.7)
+        hr = math.radians(h)                                  # Mitte der Waffe (0, yc, zc) nach der Drehung um z
+        ox, oy = -yc * math.sin(hr), yc * math.cos(hr)
+        return (-ox, dist - oy, -zc + dist * math.tan(vfov / 2.0) * INSPECT_LIFT, h, 2.0 * math.sin(t * 0.5), 0.0)
+
+    def update_inspect(self, dt):
+        """9b: Markierungen auf die Waffe projizieren, Auswahlfenster pflegen; schliesst, wenn es nicht mehr passt."""
+        if not getattr(self, "insp_on", False):
+            return
+        pl = self.player
+        if not self.insp_ok() or pl.cur != self.insp_wi:
+            if self.insp_ok() and any(att_fits(pl.cur, s) for s in (ATT_SCOPE, 0, 1, 2)):
+                sel = self.att_panel_tab                          # Waffe gewechselt: Inspektion folgt
+                self.close_inspect()
+                self.on_inspect()
+                if sel is not None and att_fits(pl.cur, sel) and getattr(self, "insp_on", False):
+                    self.insp_pick(sel)
+            else:
+                self.close_inspect()
+            return
+        wi = self.insp_wi
+        model = self.gun_models[wi]
+        ar = self.getAspectRatio()
+        hits = []
+        for si, (nd, gl, lab) in self.insp_marks.items():
+            p3 = self.gun_cam.getRelativePoint(model, Point3(*self.insp_anchor(wi, si)))
+            p2 = Point2()
+            if self.insp_t < 0.6 or not self.gun_lens.project(p3, p2):
+                nd.hide()
+                continue
+            nd.show()
+            x, z = p2[0] * ar, p2[1]
+            nd.setPos(x, 0, z)
+            on = si == self.att_panel_tab
+            pulse = 0.75 + 0.25 * math.sin(time.time() * 5.0)
+            gl.setColor(1.0, 0.85 if on else 0.6, 0.15 if on else 0.1, (1.0 if on else 0.8) * pulse)
+            cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+            nm = att_name(si, cur) if cur else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
+            self.set_text(lab, f"{ATT_SLOT_NAMES[si]}\n{nm}")
+            lab.setFg((1, 0.88, 0.3, 1) if on else (1, 1, 1, 1))
+            hits.append((x - 0.07, x + 0.07, z - 0.07, z + 0.07, (lambda s=si: self.insp_pick(s))))
+        self.insp_hits = hits
+        self.update_att_panel()
+
+    def insp_pick(self, si):
+        """9b: Markierung angeklickt -> Auswahl der passenden Aufsätze dieses Platzes."""
+        self.att_panel_tab = si
+        self.open_att_panel(self.insp_wi)
+        self.att_select_tab(si)
+
+    def insp_click(self, m):
         if m is None:
             return
         mx, mz = m
-        for x0, x1, z0, z1, act in getattr(self, "att_hits", ()):
+        for x0, x1, z0, z1, act in list(getattr(self, "att_hits", ())) + list(getattr(self, "insp_hits", ())):
             if x0 <= mx <= x1 and z0 <= mz <= z1:
                 self.sfx.ui_click()
                 act()
                 return
-        pl, a2 = self.player, self.aspect2d
-        for i, fr in enumerate(self.slot_frames):
-            wi = pl.slots[i] if i < len(pl.slots) else None
-            p = fr.getPos(a2)
-            if wi is not None and abs(mx - p[0]) <= 0.16 and abs(mz - p[2]) <= 0.085:
-                self.sfx.ui_click()
-                self.open_att_panel(wi)
-                return
-        self.close_att_panel()
 
     def open_att_panel(self, wi):
         tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
@@ -114924,7 +115142,7 @@ class Game(ShowBase):
         root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
         OnscreenText(text=f"Aufsätze: {WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
                      fg=(1.0, 0.8, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
-        OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, Tab loslassen = zu", parent=root,
+        OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, T / Esc = zu", parent=root,
                      pos=(W - 0.04, Z1 - 0.06), scale=0.034, fg=(0.8, 0.85, 0.9, 1), align=TextNode.ARight)
         x = -W + 0.06                                        # Reiter
         for s in self.att_panel_tabs:
@@ -114980,11 +115198,10 @@ class Game(ShowBase):
     def tab_up(self):
         if not self.tab_held:
             return
-        self.close_att_panel()
         self.tab_held = False
         self.tab_root.hide()
         self.tip_root.hide()
-        if self.mode == "play" and self.quit_box is None:
+        if self.mode == "play" and self.quit_box is None and not getattr(self, "insp_on", False):
             self.set_capture(True)
 
     def build_tab_overlay(self):
@@ -115085,7 +115302,6 @@ class Game(ShowBase):
         ip = getattr(self, "host_ip", None)
         self.set_text(self.tab_ip, f"Host-IP {ip}" if ip and self.net_mode == "host" else "")
         self.update_tooltip()
-        self.update_att_panel()
 
     def hover_targets(self):
         """(Mitte x, Mitte z, halbe Breite, halbe Höhe, Infotext) der HUD-Elemente mit Mausover-Info."""
@@ -115695,8 +115911,8 @@ class Game(ShowBase):
             if not trig:                               # erst Loslassen, dann zählt ein neuer Druck
                 self.trig_need_up = False
             trig = edge = False
-        if (self.quit_box is not None or getattr(self, "tab_held", False)
-                or getattr(self, "end", None) is not None):       # Abfrage/Tab/Endbildschirm: kein Schuss
+        if (self.quit_box is not None or getattr(self, "tab_held", False) or getattr(self, "insp_on", False)
+                or getattr(self, "end", None) is not None):       # Abfrage/Tab/Inspektion/Endbildschirm: kein Schuss
             trig = edge = False
         elif not self.captured and edge and not self.dead_free:      # Klick fängt die Maus wieder ein
             self.set_capture(True)
@@ -116674,8 +116890,18 @@ class Game(ShowBase):
             pz -= 0.30 * dipg
             pitch -= 25 * dipg
             roll += 8 * dipg
+        hdg = self.sw_h.x + hdg_add
+        ins = 1.0 if getattr(self, "insp_on", False) else 0.0       # 9b: Inspektion - Waffe von der Seite präsentieren
+        self.insp_t = getattr(self, "insp_t", 0.0)
+        self.insp_t += (ins - self.insp_t) * min(1.0, INSPECT_BLEND * dt)
+        if self.insp_t > 0.002:
+            e_ = smoothstep(0.0, 1.0, self.insp_t)
+            ix, iy, iz, ih, ip, ir = self.insp_pose(w, time.time())
+            px, py, pz = px + (ix - px) * e_, py + (iy - py) * e_, pz + (iz - pz) * e_
+            hdg, pitch, roll = hdg + (ih - hdg) * e_, pitch + (ip - pitch) * e_, roll + (ir - roll) * e_
         self.gun_pivot.setPos(px, py, pz)
-        self.gun_pivot.setHpr(self.sw_h.x + hdg_add, pitch, roll)
+        self.gun_pivot.setHpr(hdg, pitch, roll)
+        self.update_inspect(dt)
         self.update_gren_arm(pl, driving)
         scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and self.melee_t <= 0
         rsc = w.sight == "rocket" and self.ads_t > 0.6 and pl.hp > 0 and not driving
