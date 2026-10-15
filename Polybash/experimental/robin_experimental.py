@@ -114874,8 +114874,7 @@ class Game(ShowBase):
         elif kind == "settings":
             self.open_overlay("settings", "Einstellungen", [
                 ("Grafikeinstellungen", lambda: self.show_pause("settings_gfx")),
-                ("Spieleinstellungen", lambda: self.show_pause("settings_game")),
-                ("Rundeneinstellungen", lambda: self.show_pause("settings_round")),
+                ("Klangeinstellungen", lambda: self.show_pause("settings_game")),
                 ("Zurück   (Esc)", lambda: self.show_pause("main"))], "")
         else:                                      # settings_gfx / settings_game / settings_round
             w = self.world
@@ -114903,7 +114902,7 @@ class Game(ShowBase):
             if kind == "settings_game":                 # persönliche Einstellungen: Maus und Lautstärke
                 items = list(self.personal_sliders())
                 items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
-                self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
+                self.open_overlay("settings_game", "Klangeinstellungen", items, "", width=1.45)
                 return
             # settings_round: alles, was die laufende Runde betrifft
             if host_side:
