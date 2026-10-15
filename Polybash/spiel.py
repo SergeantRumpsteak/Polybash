@@ -246,9 +246,9 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-EXP_NET_VERSION = 37    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
-NET_VERSION = 16         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 103               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
+NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
+BUILD = 104               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -11128,7 +11128,7 @@ class SetupPage:
         first = self.page * self.PER_PAGE
         vis = self.ents[first:first + self.PER_PAGE]
         n = len(vis)
-        self.text("title", "Einzelspieler" if g.setup_for == "single" else "Spiel hosten", 0, 0.395, 0.075,
+        self.text("title", self.title_label(), 0, 0.395, 0.075,
                   (1.0, 0.78, 0.3, 1.0))
         # --- Karten
         cw = 0.62 if n <= 2 else 0.46
@@ -11183,9 +11183,7 @@ class SetupPage:
         self.rect("knob", self.vx(v) - 0.028, self.vx(v) + 0.028, self.SLZ - 0.028, self.SLZ + 0.028, rot=45.0)
         self.hit("slider", self.SL0 - 0.05, self.SL1 + 0.05, self.SLZ - 0.06, self.SLZ + 0.06, g.slider_begin)
         # --- Knöpfe
-        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
-        self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
-        self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.begin_game(g.setup_for))
+        self.bottom_buttons(X0, X1)
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         elif g.cfg["mode"] == "experimental":
@@ -11194,6 +11192,15 @@ class SetupPage:
         else:
             self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    Enter = Start",
                       0, -0.885, 0.028, self.GREY)
+
+    def title_label(self):
+        return "Einzelspieler" if self.g.setup_for == "single" else "Spiel hosten"
+
+    def bottom_buttons(self, X0, X1):
+        g = self.g
+        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
+        self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
+        self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.begin_game(g.setup_for))
 
     def button(self, name, x0, x1, z0, z1, label, scale, action):
         self.rect("b_" + name, x0, x1, z0, z1)
@@ -11286,6 +11293,23 @@ class SetupPage:
         if "val" in self.nodes:
             self.nodes["val"].setText(self.minutes(v))
 
+
+
+class EndSetupPage(SetupPage):
+    """Karte, Modus und Zeitlimit der nächsten Runde - dieselbe Seite wie beim Hosten, aber im Rundenendbildschirm
+    eingebettet: 'Übernehmen' ändert die laufende Sitzung, ohne dass jemand getrennt wird."""
+
+    def title_label(self):
+        return "Rundeneinstellungen"
+
+    def mode_off(self, k):
+        return MODES[k] == "experimental" or SetupPage.mode_off(self, k)
+
+    def bottom_buttons(self, X0, X1):
+        g = self.g
+        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.end_cfg_more)
+        self.button("back", X0, -0.02, -0.805, -0.72, "Abbrechen   (Esc)", 0.052, g.end_cfg_cancel)
+        self.button("go", 0.02, X1, -0.805, -0.72, "Übernehmen", 0.052, g.end_cfg_apply)
 
 
 class CharPreview:
@@ -12026,6 +12050,45 @@ class HostSession:
         if self.beacon is not None:
             self.beacon.close()
 
+    def cfg_msg(self):
+        w = self.world
+        return {"t": "cfg", "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
+                "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate}
+
+    def send_cfg(self):
+        """Neue Rundeneinstellungen an alle Mitspieler (gleiche Karte, keine Neuverbindung)."""
+        m = self.cfg_msg()
+        for c in self.server.conns:
+            if c.pid is not None and not c.closed:
+                c.send(m)
+                c.flush()
+
+    def rebind(self, world, info):
+        """Kartenwechsel: neue Welt übernehmen, alle verbundenen Mitspieler bleiben (landen in der neuen Lobby)."""
+        self.world = world
+        self.events = []
+        self.last_phase = None
+        if self.beacon is not None:
+            self.beacon.mode = world.mode
+        for c in self.server.conns:
+            if c.closed or c.pid is None:
+                continue
+            name, look = info.get(c.pid, (f"Spieler{c.pid}", ""))
+            x, y = world.first_spawn(c.pid)
+            pl = world.players[c.pid] = Player(x, y, world, c.pid, name)
+            pl.look = look if look_valid(look) else ""
+            pl.hp, pl.dead_age, pl.prespawn = 0.0, 1e9, True
+            pl.ready = False
+            c.playing = False                             # lädt jetzt die neue Karte
+            c.pend_ev, c.stalled = [], False
+            c.last_rx = time.time()
+            c.send({"t": "reload", "id": c.pid, "seed": world.seed, "props": world.prop_count(),
+                    "mode": world.mode, "limit": world.limit, "mobs": 1 if world.mobs_on else 0,
+                    "tomahawk": 1 if world.tomahawk_on else 0, "map": getattr(world, "map_raw", None)})
+            c.flush()
+        netlog(f"Host: Welt gewechselt (Karte {'eigene' if getattr(world, 'map_raw', None) else 'Standard'}, "
+               f"Modus {world.mode}), {len(world.players)} Spieler")
+
     def queue_events(self, events):
         """Ereignisse (Treffer, Tod, ...) für den nächsten Snapshot vormerken.
         'shot' nicht: den Rückstoss simuliert jeder Schütze selbst."""
@@ -12360,6 +12423,8 @@ class ClientSession:
         self.stall_t0 = time.time()
         self.n_snap, self.max_gap = 0, 0.0
         self.last_msg_t = self.sum_t = time.time()
+        self.reload = None           # Host wechselt die Karte: Daten für den Neuaufbau
+        self.cfg_changed = False     # Host hat die Rundeneinstellungen geändert
         netlog(f"Client: Sitzung angelegt (id {my_id}), {len(list(backlog))} Nachrichten im Rückstau")
         for m in backlog:
             self.handle(m)
@@ -12414,6 +12479,18 @@ class ClientSession:
                     netlog("Client: erster Snapshot vom Host empfangen")
                 self.n_snap += 1
                 self.apply_snapshot(m)
+            elif m.get("t") == "cfg":
+                w = self.world
+                if m.get("mode") in MODES and not w.mc:
+                    w.mode = m["mode"]
+                w.limit = clampf(float(m.get("limit", w.limit)), 30.0, 7200.0)
+                w.mobs_on = bool(m.get("mobs", w.mobs_on))
+                w.tomahawk_on = bool(m.get("tomahawk", w.tomahawk_on))
+                w.strike_cd = float(m.get("cd", w.strike_cd))
+                w.regen_rate = float(m.get("regen", w.regen_rate))
+                self.cfg_changed = True
+            elif m.get("t") == "reload":
+                self.reload = m
         except (KeyError, IndexError, TypeError, ValueError):
             pass
         except Exception:
@@ -108441,6 +108518,9 @@ class Game(ShowBase):
         self.quit_box = None                  # Sicherheitsabfrage beim Beenden (Text + Hintergrund)
         self.menu_picker = None               # Waffenwahl mit Bildern im Menü
         self.end = None                       # Endbildschirm nach Rundenende
+        self.end_cfg = None                   # Rundeneinstellungen im Endbildschirm: None | "setup" | "more"
+        self.cfg_backup = None
+        self.reuse_host = self.reuse_info = None   # Kartenwechsel: bestehende Verbindungen behalten
         self.tab_held = False
         self.loadscreen = None                # "Loadout konfigurieren" (Menü und Todesbildschirm)
         self.pending_start = None             # (Start-Aktion, Zurück-Menü): Ausrüstung vor dem Rundenstart
@@ -108756,7 +108836,7 @@ class Game(ShowBase):
                 spec.append(("(Automatische Suche nicht möglich)", None))
             else:
                 spec.append(("Suche Spiele im WLAN" + "." * (int(time.time() * 2) % 4), None))
-            spec += [(f"IP-Adresse:  {self.current_ip()}_", None), 
+            spec += [(f"IP-Adresse:  {self.current_ip()}_", None), ("", None), ("", None), ("", None),     # Buttons weiter unten
                      ("Verbinden   (Enter)", self.menu_enter), ("Zurück   (Esc)", self.on_escape)]
         else:                                          # connecting
             host = self.attempt.host if self.attempt is not None else ""
@@ -108766,6 +108846,10 @@ class Game(ShowBase):
         return spec
 
     def menu_refresh(self):
+        if getattr(self, "end_cfg", None) is not None:      # Rundeneinstellungen im Endbildschirm
+            if self.setup_page is not None:
+                self.setup_page.update()
+            return
         if self.menu_state == "setup":                 # Kartenwahl, Modus, Zeitlimit: eigene Seite mit Bildern
             if self.setup_page is None or self.menu_last is None:
                 self.menu_last = ("setup", self.menu_msg)
@@ -108865,7 +108949,7 @@ class Game(ShowBase):
         """Hebt die Zeile bzw. Waffenkarte unter der Maus farbig hervor. -> (Zeile, Karte)"""
         m = self.mouse_2d()
         active = self.quit_box[2] if self.quit_box is not None else (
-            self.menu_lines if self.mode == "menu" else [])
+            self.menu_lines if (self.mode == "menu" or getattr(self, "end_cfg", None) is not None) else [])
         hit = None
         if m is not None:
             hit = next((h for h in active if h.hit(m[0], m[1])), None)
@@ -109112,6 +109196,9 @@ class Game(ShowBase):
 
     def setup_turn(self, a):
         self.map_page += a
+        if self.end_cfg is not None:
+            self.end_cfg_show()
+            return
         self.show_menu("setup")
 
     def setup_more(self):
@@ -109120,9 +109207,21 @@ class Game(ShowBase):
     def on_w(self):
         if self.mode == "menu" and self.menu_state == "setup" and self.quit_box is None:
             self.setup_more()
+        elif self.end_cfg == "setup" and self.quit_box is None:
+            self.end_cfg_more()
 
     def on_arrow(self, dx, dy):
         if getattr(self, "end", None) is not None:          # Endbildschirm: Pfeile blättern durch die Reiter
+            if self.end_cfg == "setup":
+                if dx:
+                    self.set_limit(self.cfg["limit"] + dx)
+                elif dy:
+                    ok = [m for m in MODES if m != "experimental" and not (self.cfg_is_mc() and m not in MC_MODES)]
+                    cur = self.cfg["mode"]
+                    self.setup_mode(ok[(ok.index(cur) + 1) % len(ok)] if cur in ok else ok[0])
+                return
+            if self.end_cfg is not None:
+                return
             if dx:
                 self.end_key(dx)
             return
@@ -109167,7 +109266,13 @@ class Game(ShowBase):
         if self.quit_box is not None:
             return
         if getattr(self, "end", None) is not None:      # Endbildschirm: Ziffern wählen den Reiter
-            self.show_end_tab(d - 1)
+            if self.end_cfg == "setup":
+                self.setup_pick(d - 1)
+            elif self.end_cfg == "more":
+                if 1 <= d <= len(MOB_LEVELS):
+                    self.set_cfg("mobs", d - 1)
+            else:
+                self.show_end_tab(d - 1)
             return
         if self.mode == "menu":
             st = self.menu_state
@@ -109312,6 +109417,148 @@ class Game(ShowBase):
         """Rundenendmenü, Host/Einzelspiel: nächste Runde starten, wenn alle bereit sind."""
         if self.net_mode in ("host", "single") and self.world.phase == "over":
             self.world.start_next_match()
+
+    # ------------------------------------------------------------ Rundeneinstellungen im Endbildschirm
+    def can_edit_round(self):
+        """Nur der Host (bzw. im Einzelspiel der Spieler) ändert im Rundenende die Einstellungen."""
+        w = self.world
+        return self.net_mode in ("host", "single") and w is not None and w.phase == "over" and getattr(self, "end", None) is not None
+
+    def end_note(self, text, secs=6.0):
+        e = getattr(self, "end", None)
+        if e is not None and "note" in e:
+            self.set_text(e["note"], text)
+            e["note_t"] = time.time() + secs
+
+    def end_cfg_open(self):
+        """Host: 'Rundeneinstellungen ändern' - dieselbe Seite wie beim Hosten, mit den Werten der laufenden Runde."""
+        w, e = self.world, self.end
+        if e is None or not self.can_edit_round():
+            return
+        c = self.cfg
+        self.cfg_backup = dict(c)
+        c["map"] = getattr(w, "map_path", c.get("map"))
+        c["mode"] = w.mode if w.mode in MODES else c["mode"]
+        c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
+        c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
+        c["tomahawk"] = bool(w.tomahawk_on)
+        self.map_list = list_maps()
+        if c.get("map") not in [pp for _n, pp in self.map_list]:
+            c["map"] = None
+        self.setup_for = self.net_mode
+        self.map_page, self.prev_mode, self.menu_msg = 0, None, ""
+        e["root"].hide()
+        self.end_cfg = "setup"
+        self.end_cfg_show()
+
+    def end_cfg_show(self):
+        self.clear_menu()
+        cm = CardMaker("endcfgbg")
+        cm.setFrame(-3, 3, -1, 1)
+        bg = self.aspect2d.attachNewNode(cm.generate())
+        bg.setColor(0.05, 0.07, 0.11, 1.0)
+        self.menu_items.append(Deco(bg))
+        self.menu_last = (self.end_cfg, "")
+        self.setup_page = EndSetupPage(self) if self.end_cfg == "setup" else MorePage(self)
+
+    def end_cfg_more(self):
+        self.end_cfg = "more"
+        self.end_cfg_show()
+
+    def end_cfg_back(self):
+        if self.end_cfg == "more":
+            self.end_cfg = "setup"
+            self.end_cfg_show()
+        else:
+            self.end_cfg_cancel()
+
+    def end_cfg_close(self):
+        self.end_cfg = None
+        self.slider_drag = False
+        self.clear_menu()
+        if self.end is not None:
+            self.end["root"].show()
+
+    def end_cfg_cancel(self):
+        if self.cfg_backup is not None:
+            self.cfg.clear()
+            self.cfg.update(self.cfg_backup)
+        self.end_cfg_close()
+
+    def end_cfg_apply(self):
+        self.end_cfg_close()
+        self.apply_round_settings()
+
+    def apply_round_settings(self):
+        """Host/Einzelspiel: gewählte Rundeneinstellungen übernehmen, ohne dass jemand getrennt wird.
+        Gleiche Karte: Werte der laufenden Welt ändern, Mitspieler bekommen sie per 'cfg'.
+        Andere Karte: Welt für alle neu aufbauen (Verbindungen bleiben, alle landen wieder in der Lobby)."""
+        w, c = self.world, self.cfg
+        if w is None or self.net_mode == "client":
+            return
+        try:
+            self.save_prefs()
+        except Exception:
+            pass
+        if c.get("map") != getattr(w, "map_path", None):
+            self.reload_world()
+            return
+        lvl = mob_level_of(c["mobs"])
+        mode = c["mode"] if c["mode"] in ("koth", "dm") else w.mode
+        w.mode = "dm" if w.mc else mode
+        w.limit = float(c["limit"]) * 60.0
+        w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
+        w.tomahawk_on = bool(c.get("tomahawk", True))
+        w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
+        if self.host is not None:
+            self.host.send_cfg()
+        netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
+        self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
+
+    def reload_world(self):
+        w = self.world
+        info = {pid: (pl.name, getattr(pl, "look", "")) for pid, pl in w.players.items() if pid != 0}
+        netlog(f"Host: neue Karte - Welt wird neu aufgebaut, {len(info)} Mitspieler bleiben verbunden")
+        self.reload_session(self.net_mode, host=self.host, info=info)
+
+    def client_reload(self, cs):
+        """Mitspieler: der Host hat die Karte gewechselt - Welt neu bauen, die Verbindung bleibt."""
+        m, cs.reload = cs.reload, None
+        try:
+            att = SimpleNamespace(conn=cs.conn, extra=[], my_id=cs.my_id, seed=int(m["seed"]), props=int(m["props"]),
+                                  mode=m.get("mode") if m.get("mode") in MODES else "koth",
+                                  limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
+                                  mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
+                                  map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
+                                  close=lambda: cs.conn.close("abgebrochen"))
+        except (KeyError, TypeError, ValueError):
+            return
+        netlog("Client: Host wechselt die Karte - baue die Welt neu auf")
+        self.client = None
+        self.reload_session("client", attempt=att)
+
+    def reload_session(self, mode, attempt=None, host=None, info=None):
+        """Szene abbauen und neu aufbauen, ohne die Netzwerkverbindungen zu schließen."""
+        self.close_quit_box(recapture=False)
+        if getattr(self, "end_cfg", None) is not None:
+            self.end_cfg = None
+            self.clear_menu()
+        self.cleanup_scene()
+        if self.hud_dead_hidden:
+            self.hud_dead_hidden = False
+            for nm in ("a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter", "a2dBottomLeft",
+                       "a2dBottomRight", "a2dLeftCenter", "a2dRightCenter"):
+                nd = getattr(self, nm, None)
+                if nd is not None:
+                    nd.show()
+        self.mode = "menu"
+        self.world = self.player = None
+        self.dead_free = False
+        self.reuse_host, self.reuse_info = host, info
+        try:
+            self.start_game(mode, attempt)
+        finally:
+            self.reuse_host = self.reuse_info = None
 
     def end_round_now(self):
         """Esc-Menü, Host: Runde vorzeitig beenden - alle springen in den Spielendbildschirm."""
@@ -109490,6 +109737,8 @@ class Game(ShowBase):
                 self.show_pause("main")
             else:
                 self.close_quit_box()              # Pause-Menü bzw. Abfrage schliessen = weiterspielen
+        elif getattr(self, "end_cfg", None) is not None:
+            self.end_cfg_back()                    # Rundeneinstellungen: Weitere -> Seite 1 -> Abbrechen
         elif self.mode == "menu" and self.menu_state == "quit":
             self.show_menu(getattr(self, "quit_back", None) or "main")
         elif self.mode == "menu" and self.menu_state == "setup2":
@@ -110353,10 +110602,15 @@ class Game(ShowBase):
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
                           tomahawk=bool(self.cfg.get("tomahawk", True)))
         world.map_raw = raw
+        world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
         if mode == "host":
             try:
-                host = HostSession(world, self.my_name)
+                if self.reuse_host is not None:            # Kartenwechsel: Verbindungen bleiben bestehen
+                    host = self.reuse_host
+                    host.rebind(world, self.reuse_info or {})
+                else:
+                    host = HostSession(world, self.my_name)
             except OSError as e:
                 netlog(f"Host: Hosten nicht möglich: {e}")
                 self.show_menu("main", f"Hosten nicht möglich: {e}")
@@ -110481,6 +110735,12 @@ class Game(ShowBase):
             self.lost_text.setText(f"Verbindung zum Host verloren ({cs.lost})\nEsc öffnet das Menü")
             self.lost_text.show()
             return
+        if cs.reload is not None:                  # Host hat die Karte gewechselt
+            self.client_reload(cs)
+            return
+        if cs.cfg_changed:
+            cs.cfg_changed = False
+            self.end_note("Der Host hat die Rundeneinstellungen geändert")
         pl = self.player
         if cs.hp is not None:
             pl.hp = cs.hp                      # Lebenspunkte entscheidet der Host
@@ -111007,9 +111267,9 @@ class Game(ShowBase):
             t = OnscreenText(text=lb, parent=root, pos=(cx, 0.19), scale=0.042, fg=Hot.BASE, mayChange=True)
             self.end["rects"].append((x, x + wd, 0.16, 0.24, t))
             x += wd
-        self.end["best"] = OnscreenText(text="", parent=root, pos=(0, -0.76), scale=0.05, fg=(1.0, 0.8, 0.3, 1),
+        self.end["best"] = OnscreenText(text="", parent=root, pos=(0, -0.66), scale=0.05, fg=(1.0, 0.8, 0.3, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.9), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
+        self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.74), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
                                          mayChange=True)
         cmb = CardMaker("endbtn")
         cmb.setFrame(0, 0.68, 0, 0.18)
@@ -111017,6 +111277,17 @@ class Game(ShowBase):
         self.end["btn"].setTransparency(TransparencyAttrib.MAlpha)
         self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, fg=(1, 1, 1, 1),
                                          shadow=(0, 0, 0, 0.8), mayChange=True)
+        self.end["note"] = OnscreenText(text="", parent=root, pos=(0, -0.58), scale=0.042, fg=(0.6, 1.0, 0.6, 1),
+                                        shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.end["note_t"] = 0.0
+        cmu = CardMaker("endbtn2")
+        cmu.setFrame(0, 1, 0, 1)
+        for nm in ("menu", "set"):                          # Zurück zum Hauptmenü / Rundeneinstellungen ändern
+            nd = root.attachNewNode(cmu.generate())
+            nd.setTransparency(TransparencyAttrib.MAlpha)
+            self.end[nm + "_btn"] = nd
+            self.end[nm + "_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
+                                               shadow=(0, 0, 0, 0.8), mayChange=True)
         self.show_end_tab(0)
         self.set_capture(False)
 
@@ -111064,9 +111335,24 @@ class Game(ShowBase):
             txt = f"{best_name}: {top['name']}" if top is not None and best_f(top) > 0 else f"{best_name}: -"
         self.set_text(e["best"], txt)
 
+    END_SET_BTN = (-0.36, 0.36, -0.94, -0.76)
+
     def end_click(self):
         p = self.mouse_2d()
         if p is None or self.end is None:
+            return
+        if self.end_cfg is not None:                       # Rundeneinstellungen: Karten, Knöpfe, Regler
+            hit, _card = self.update_hover()
+            if hit is not None:
+                hit.action()
+            return
+        bb = self.back_btn_rect()
+        if bb[0] <= p[0] <= bb[1] and bb[2] <= p[1] <= bb[3]:
+            self.show_pause("leave")                       # zurück ins Hauptmenü (mit Sicherheitsabfrage)
+            return
+        sb = self.END_SET_BTN
+        if self.can_edit_round() and sb[0] <= p[0] <= sb[1] and sb[2] <= p[1] <= sb[3]:
+            self.end_cfg_open()
             return
         rb = self.right_btn_rect()
         if rb[0] <= p[0] <= rb[1] and rb[2] <= p[1] <= rb[3]:
@@ -111091,6 +111377,16 @@ class Game(ShowBase):
         if world.phase == "play":                         # neue Runde hat begonnen
             self.close_end_screen()
             return
+        want = ("fixed", 60) if self.quit_box is not None else ("gui-popup", 0)     # Esc-Menü liegt über dem Endbildschirm
+        if e.get("bin") != want:
+            e["bin"] = want
+            e["root"].setBin(*want)
+        if self.end_cfg is not None:                      # Rundeneinstellungen sind offen
+            if self.slider_drag:
+                self.slider_follow()
+            if self.quit_box is None:
+                self.update_hover()
+            return
         p = self.mouse_2d()
         n_r, n_g = world.ready_counts()
         rb = self.right_btn_rect()
@@ -111111,10 +111407,32 @@ class Game(ShowBase):
             if i != e["tab"]:
                 on = p is not None and x0 <= p[0] <= x1 and z0 <= p[1] <= z1
                 t.setFg(Hot.ON if on else Hot.BASE)
+        bb, sb = self.back_btn_rect(), self.END_SET_BTN
+        for nm, r, lab, vis in (("menu", bb, "Zurück ins Hauptmenü", True),
+                                ("set", sb, "Rundeneinstellungen ändern", self.can_edit_round())):
+            if not vis:
+                e[nm + "_btn"].hide()
+                e[nm + "_t"].hide()
+                continue
+            on = p is not None and r[0] <= p[0] <= r[1] and r[2] <= p[1] <= r[3]
+            e[nm + "_btn"].setPos(r[0], 0, r[2])
+            e[nm + "_btn"].setScale(r[1] - r[0], 1, r[3] - r[2])
+            e[nm + "_btn"].setColor(*((0.22, 0.30, 0.42, 0.95) if on else (0.10, 0.17, 0.26, 0.9)))
+            e[nm + "_t"].setPos((r[0] + r[1]) / 2, r[2] + 0.062)
+            self.set_text(e[nm + "_t"], lab)
+            e[nm + "_btn"].show()
+            e[nm + "_t"].show()
+        if e.get("note_t") and time.time() > e["note_t"]:
+            e["note_t"] = 0.0
+            self.set_text(e["note"], "")
 
     def close_end_screen(self):
         e = getattr(self, "end", None)
         self.end = None
+        if getattr(self, "end_cfg", None) is not None:
+            self.end_cfg = None
+            self.slider_drag = False
+            self.clear_menu()
         if e is None:
             return
         for c in e["cells"]:
@@ -113364,7 +113682,8 @@ class Game(ShowBase):
         self.hurt_flash = max(0.0, self.hurt_flash - 1.5 * dt)
         low = 0.35 * max(0.0, 1 - pl.hp / 40.0) if pl.hp > 0 else 0.5
         if pl.hp <= 0:                                    # tot: neutraler grauer Hintergrund statt Rot
-            self.hurt_card.setColor(0.15, 0.16, 0.18, 0.86)
+            # Esc-Menü offen: kein Grauschleier, das Bild sieht aus wie bei einem lebenden Spieler
+            self.hurt_card.setColor(0.15, 0.16, 0.18, 0.0 if self.quit_box is not None else 0.86)
         else:
             self.hurt_card.setColor(0.8, 0, 0, min(0.8, self.hurt_flash + low))
 
