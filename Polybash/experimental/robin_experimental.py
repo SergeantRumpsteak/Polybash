@@ -86,6 +86,9 @@ Untergrund, nicht im Heli/Fahrzeug, nicht in der Luft darüber. Heli und Jetpack
 10b: Keine verteilten Kisten (CRATES_ON_MAP), Beute kommt von Monstern (MOB_LOOT: Stufe + Anzahl, verschiedene
 Kategorien LOOT_CATS mit Kategorie-Gedächtnis LOOT_CAT_*), Set-Affinität (SET_AFF_*), Granaten als Beute. Tod: aktive
 Waffe (mit Aufsätzen) + ein zufälliges weiteres Teil (Nahkampf, Granaten oder ein getragenes Ausrüstungsteil).
+10c: Neue Sets - Zweite Chance (Basic-Helm, Splitterweste, Druckwellen-Stiefel; SAVE_HP), Jetpack (Jetpack, Jet-Helm,
+Jetpack-Stiefel; JET_*), Springfeder (Springfeder-Schuhe, Sprungweste = Doppelsprung, Krallenhelm = an Wänden
+festkrallen; CLING_*). Hermes-Set stärker (HERMES_SET_*).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -454,7 +457,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 33         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 34         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -997,6 +1000,12 @@ LOOT_GEAR_TABLES = {
     "Springfeder-Schuhe":  (10.0,  9.0,  6.0),
     "Kampfstiefel":        ( 9.0,  9.0,  7.0),     # Rüstungs-Set
     "Schild-Stiefel":      ( 5.0,  8.0, 10.0),     # Schild-Set
+    "Splitterweste":       ( 8.0,  8.0,  7.0),     # 10c: Zweite-Chance-Set (mit Basic-Helm)
+    "Druckwellen-Stiefel": ( 8.0,  8.0,  7.0),
+    "Jet-Helm":            ( 6.0,  8.0,  8.0),     # 10c: Jetpack-Set (mit Jetpack)
+    "Jetpack-Stiefel":     ( 6.0,  8.0,  8.0),
+    "Sprungweste":         ( 8.0,  8.0,  6.0),     # 10c: Springfeder-Set (mit Springfeder-Schuhen)
+    "Krallenhelm":         ( 6.0,  8.0,  8.0),
 }
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
 LOOT_MELEE_TABLES = {
@@ -1088,34 +1097,50 @@ class Gear:
 GEAR_HP_PART = 25.0            # Rüstungs-Set: jedes Teil +25 max. HP
 SHIELD_HP_TORSO, SHIELD_HP_HEAD, SHIELD_HP_FEET = 30.0, 15.0, 15.0   # Schild-HP je Teil
 GEAR = (
-    Gear("Basic-Helm", "head", "save_head", "H", (0.55, 0.58, 0.5), "Helm"),
+    Gear("Basic-Helm", "head", "save_head", "H", (0.55, 0.58, 0.5), "Helm", "second"),
     Gear("Armeehelm", "head", "hp", "A", (0.40, 0.45, 0.30), "Armeehelm", "armor", GEAR_HP_PART),
     Gear("Schild-Helm", "head", "shield", "S", (0.3, 0.7, 1.0), "Schildhelm", "shield", 0.0, SHIELD_HP_HEAD),
     Gear("Hermes-Helm", "head", "dash", "D", (1.0, 0.85, 0.3), "Hermeshelm", "hermes"),
     Gear("Plattenrüstung", "torso", "hp", "P", (0.6, 0.62, 0.66), "Platte", "armor", GEAR_HP_PART),
     Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild", "shield", 0.0, SHIELD_HP_TORSO),
-    Gear("Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Jetpack"),
+    Gear("Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Jetpack", "jet"),
     Gear("Hermes-Weste", "torso", "dash", "D", (1.0, 0.85, 0.3), "Hermesweste", "hermes"),
     Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes", "hermes"),
-    Gear("Springfeder-Schuhe", "feet", "spring", "F", (0.6, 1.0, 0.4), "Federn"),
+    Gear("Springfeder-Schuhe", "feet", "spring", "F", (0.6, 1.0, 0.4), "Federn", "spring"),
     Gear("Kampfstiefel", "feet", "hp", "K", (0.28, 0.24, 0.20), "Kampfstiefel", "armor", GEAR_HP_PART),
     Gear("Schild-Stiefel", "feet", "shield", "S", (0.3, 0.7, 1.0), "Schildstiefel", "shield", 0.0, SHIELD_HP_FEET),
+    # 10c: neue Teile (hinten angehängt - die Indexe der alten bleiben)
+    Gear("Splitterweste", "torso", "save_body", "Z", (0.52, 0.54, 0.57), "Splitterweste", "second"),
+    Gear("Druckwellen-Stiefel", "feet", "save_blast", "Z", (0.52, 0.54, 0.57), "Druckstiefel", "second"),
+    Gear("Jet-Helm", "head", "fuel", "J", (1.0, 0.55, 0.15), "Jet-Helm", "jet"),
+    Gear("Jetpack-Stiefel", "feet", "nofall", "J", (1.0, 0.55, 0.15), "Jetstiefel", "jet"),
+    Gear("Sprungweste", "torso", "double_jump", "F", (0.6, 1.0, 0.4), "Sprungweste", "spring"),
+    Gear("Krallenhelm", "head", "cling", "K", (0.6, 1.0, 0.4), "Krallenhelm", "spring"),
 )
 GEAR_FIG_SCALE = {"head": 0.46, "torso": 0.74, "feet": 0.8}   # 7c: Ausrüstung an der Figur (Sinans Soldat ist schmaler)
 GEAR_FIG_HEAD_Z = 0.95         # Höhe des Helms über der Hüfte (Torso-Raum)
 SETS = {"armor": ("Rüstungs-Set", (0.55, 0.62, 0.40)), "shield": ("Schild-Set", (0.35, 0.75, 1.0)),
-        "hermes": ("Hermes-Set", (1.0, 0.85, 0.3))}
+        "hermes": ("Hermes-Set", (1.0, 0.85, 0.3)), "second": ("Zweite-Chance-Set", (0.85, 0.25, 0.22)),
+        "jet": ("Jetpack-Set", (1.0, 0.55, 0.15)), "spring": ("Springfeder-Set", (0.55, 0.95, 0.35))}
 ARMOR_SET_BONUS = 75.0         # Rüstungs-Set komplett: zusätzlich + so viele max. HP (3 x 25 + 75 = +150 -> 250 HP)
 SHIELD_RATE_PART = 0.25        # Schild lädt je weiterem Schild-Teil um so viel schneller (1 Teil x1, 3 Teile x1,5)
 SHOCK_R = 4.0                  # Schild-Set: Stromstoss betäubt alles in diesem Umkreis (m) ...
 SHOCK_STUN_MIN, SHOCK_STUN_MAX = 1.0, 3.0   # ... zufällig so lange (s) ...
 SHOCK_CD = 30.0                # ... Abklingzeit (s)
-HERMES_SET_SPEED = 1.5         # Hermes-Set: dauerhaft so viel schneller
-HERMES_SET_DASH = 2.0          # ... Dash so viel schneller als mit 1-2 Hermes-Teilen ...
-HERMES_GLIDE_MAX = 30.0        # ... und Shift halten gleitet weiter, bis zu so vielen Metern
+HERMES_SET_SPEED = 1.6         # Hermes-Set: dauerhaft so viel schneller (10c: 1,5 -> 1,6)
+HERMES_SET_DASH = 2.3          # ... Dash so viel schneller als mit 1-2 Hermes-Teilen (10c: 2,0 x 1,15) ...
+HERMES_SET_DASH_DIST = 2.0     # ... 10c: und so viel weiter ...
+HERMES_GLIDE_MAX = 60.0        # ... und Shift halten gleitet weiter, bis zu so vielen Metern (10c: 30 -> 60)
+JET_PACK_SHARE = 0.5           # 10c: Jetpack allein: so viel des alten Tanks (JET_FUEL) ...
+JET_HELM_SHARE = 0.5           # ... der Jet-Helm bringt so viel dazu (zusammen = alter Tank)
+JET_SET_FUEL = 1.5             # 10c: Jetpack-Set: Tank x so viel ...
+JET_SET_SPEED = 1.6            # ... und so viel schneller steigen und sinken (waagerecht bleibt es langsam)
+CLING_SLIDE_V = 1.2            # 10c: Krallenhelm: so langsam (m/s) rutscht man an der Wand herunter
+NOISE_CLING = 18.0             # 10c: ... das Kratzen ist so laut (Lärmradius, m)
+SPRING_SET_NOFALL = True       # 10c: Springfeder-Set komplett: kein Fallschaden
 SET_ICON_KEY = "b"             # Taste der Set-Fähigkeit (Stromstoss); X/Y sind die Minimap
 GEAR_IDX = {g.name: i for i, g in enumerate(GEAR)}
-SAVE_HP = 10.0            # Helm/Platte: man überlebt den tödlichen Treffer mit so viel HP (Teil ist danach kaputt)
+SAVE_HP = 50.0            # Zweite-Chance-Teile: man überlebt den tödlichen Treffer mit so viel HP (Teil zerbricht; 10c: 10 -> 50)
 SHIELD_HP = 30.0          # Schild fängt zuerst so viel Schaden ab
 SHIELD_DELAY = 5.0        # s ohne Schildschaden, dann lädt es auf
 SHIELD_RATE = 5.0         # HP/s Aufladen
@@ -1126,7 +1151,7 @@ JET_VMAX = 5.5            # m/s höchstens nach oben
 DASH_DIST = 15.0          # m Dash nach vorn (10-20)
 DASH_TIME = DASH_DIST / RUN * 0.5   # halb so lange, wie Sprinten bräuchte (1 s)
 DASH_CD = 10.0            # s Abklingzeit
-SPRING_JUMP = 1.55        # Springfedern: Sprunggeschwindigkeit x1,55 (gut doppelt so hoch: ~2,8 m)
+SPRING_JUMP = 1.2247      # Springfedern: Sprunggeschwindigkeit x1,22 = 1,5-mal so hoch (10c; vorher x1,55)
 DOUBLE_JUMP_V = JUMP_V    # Doppelsprung: zweiter Sprung in der Luft
 # Zentrale Tastenzuordnung (Grundlage für ein späteres Menü "Steuerung"). Gelesen werden sie mit
 # Game.key_down(name); die übrigen Tasten (F, R, G, V, Tab, 1-3 ...) sind noch per accept() verdrahtet.
@@ -1556,7 +1581,11 @@ SET_BONUS_TEXT = {
     "armor": f"+{ARMOR_SET_BONUS:.0f} max. HP (zusammen +{3 * GEAR_HP_PART + ARMOR_SET_BONUS:.0f})",
     "shield": f"Stromstoss (Taste {SET_ICON_KEY.upper()}): betäubt alles in {SHOCK_R:.0f} m für "
               f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s, alle {SHOCK_CD:.0f} s",
-    "hermes": f"x{HERMES_SET_SPEED:g} Tempo, Dash x{HERMES_SET_DASH:g} so schnell, Shift halten = bis {HERMES_GLIDE_MAX:.0f} m gleiten",
+    "hermes": f"x{HERMES_SET_SPEED:g} Tempo, Dash x{HERMES_SET_DASH_DIST:g} so weit und x{HERMES_SET_DASH:g} so schnell, "
+              f"Shift halten = bis {HERMES_GLIDE_MAX:.0f} m gleiten",
+    "second": f"Tödlicher Tomahawk-Treffer: du überlebst mit {SAVE_HP:.0f} HP - dafür zerbricht die ganze Ausrüstung",
+    "jet": f"Tank x{JET_SET_FUEL:g}, steigen und sinken x{JET_SET_SPEED:g} so schnell",
+    "spring": "Kein Fallschaden",
 }
 
 
@@ -1565,14 +1594,22 @@ def gear_info(gi, pl=None):
     g = GEAR[gi]
     desc = {
         "save_head": f"Fängt einen tödlichen Kopftreffer ab (du überlebst mit {SAVE_HP:.0f} HP),\n"
-                     "danach zerstört. Nicht gegen Tomahawk, Nahgranate, Sturz.",
+                     "danach zerbricht er.",
+        "save_body": f"Fängt tödlichen normalen Schaden ab (Kugeln, Nahkampf, Monster, Überfahren):\n"
+                     f"du überlebst mit {SAVE_HP:.0f} HP, danach zerbricht sie.",
+        "save_blast": f"Fängt tödlichen Explosionsschaden ab (Granate, Rakete, Heli-Rakete, Fahrzeug):\n"
+                      f"du überlebst mit {SAVE_HP:.0f} HP, danach zerbrechen sie.",
+        "fuel": f"+{JET_HELM_SHARE * 100:.0f} % Treibstoff fürs Jetpack (zusammen ein voller Tank).",
+        "nofall": "Kein Fallschaden.",
+        "double_jump": "Leertaste in der Luft: Doppelsprung.",
+        "cling": f"An Wänden festkrallen: langsam herunterrutschen (kratzt laut),\nSprung und Doppelsprung sind wieder bereit.",
         "hp": f"+{g.hp:.0f} max. Lebenspunkte.",
         "shield": f"Schild {g.shield:.0f} HP (alle Schild-Teile ein Balken) fängt Schaden vor den Lebenspunkten ab.\n"
                   f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf (je weiteres Teil schneller).",
-        "jetpack": f"Leertaste in der Luft: Doppelsprung, danach halten = Schub.\n"
-                   f"Treibstoff {JET_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.",
+        "jetpack": f"Leertaste in der Luft halten = steigen, Strg = sinken.\n"
+                   f"Treibstoff {JET_FUEL * JET_PACK_SHARE:.0f} s (mit Jet-Helm {JET_FUEL:.0f} s), leer -> voll in {JET_REFILL_T:.0f} s.",
         "dash": f"Shift beim Laufen: Dash {DASH_DIST:.0f} m nach vorne in {DASH_TIME:.1f} s,\n{DASH_CD:.0f} s Abklingzeit.",
-        "spring": f"Springt deutlich höher (Sprungkraft x{SPRING_JUMP:g}).",
+        "spring": f"Springt {SPRING_JUMP ** 2:.1f}-mal so hoch.",
     }.get(g.kind, "")
     out = f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
     if g.set:
@@ -2757,6 +2794,17 @@ def set_count(pl, name):
 
 def set_full(pl, name):
     return set_count(pl, name) >= 3
+
+
+def jet_fuel_max(pl):
+    """10c: Tankgrösse: Jetpack JET_PACK_SHARE, Jet-Helm +JET_HELM_SHARE, Jetpack-Set x JET_SET_FUEL."""
+    f = JET_FUEL * ((JET_PACK_SHARE if wears(pl, "jetpack") else 0.0) + (JET_HELM_SHARE if wears(pl, "fuel") else 0.0))
+    return f * (JET_SET_FUEL if set_full(pl, "jet") else 1.0)
+
+
+def no_fall(pl):
+    """10c: kein Fallschaden (Jetpack-Stiefel oder Springfeder-Set)."""
+    return wears(pl, "nofall") or (SPRING_SET_NOFALL and set_full(pl, "spring"))
 
 
 def gear_hp_bonus(pl):
@@ -5348,6 +5396,8 @@ class World:
             t = self.turrets[pl.mount] if 0 <= pl.mount < len(self.turrets) else None
             v = self.vehicle_by_id(t.vid) if t is not None and t.kind == "car" else None
             return NOISE_VEHICLE if v is not None and abs(v.speed) > 1.0 else 0.0
+        if getattr(pl, "cling", False):                    # 10c: Krallen kratzen an der Wand
+            return NOISE_CLING
         if not pl.moving:
             return 0.0
         if pl.crouch > 0.5:
@@ -5411,13 +5461,24 @@ class World:
                 self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
             if dmg <= 0:
                 return
-        if not instant and dmg >= pl.hp and head:        # tödlich: der Basic-Helm rettet einmal (7c: nur Kopf)
-            save = "save_head" if head else "save_body"
-            slot = "head" if head else "torso"
+        if dmg >= pl.hp and wi == WI_TOMAHAWK and set_full(pl, "second"):   # 10c: Set-Bonus - überlebt den Tomahawk,
+            for sl, gi in list(pl.gear.items()):                          # dafür zerbricht die ganze Ausrüstung
+                if gi is not None:
+                    pl.gear[sl] = None
+                    self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
+            update_max_hp(pl)
+            pl.hp, pl.since_hurt = min(pl.max_hp, SAVE_HP), 0.0
+            self.events.append(("player_hurt", dmg, pl.pid))
+            return
+        blast = wi in (WI_GRENADE, ROCKET_WI, WI_C4, WI_CLAY, WI_VEHICLE, WI_HELI, WI_FLAK)
+        if dmg >= pl.hp and wi not in (WI_FALL, WI_TOMAHAWK):            # 10c: Zweite Chance (je Teil einmal)
+            save, slot = (("save_head", "head") if head and not blast else
+                          ("save_blast", "feet") if blast else ("save_body", "torso"))
             gi = pl.gear.get(slot)
             if gi is not None and GEAR[gi].kind == save:
                 pl.gear[slot] = None
-                pl.hp = SAVE_HP
+                update_max_hp(pl)
+                pl.hp = min(pl.max_hp, SAVE_HP)
                 pl.since_hurt = 0.0
                 self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
                 self.events.append(("player_hurt", dmg, pl.pid))
@@ -7824,6 +7885,7 @@ class Player:
         self.shock_cd = 0.0               # 7c: Abklingzeit Stromstoss (Schild-Set)
         self.dash_dist = 0.0              # 7c: Hermes-Set: so weit ist der laufende Dash schon geglitten
         self.jet_fuel = JET_FUEL          # Jetpack-Treibstoff (s); gehört dem Spieler, nicht dem Teil
+        self.cling, self.cling_t = False, 0.0   # 10c: hängt an einer Wand (Krallenhelm)
         self.jet_on = False               # Jetpack feuert gerade (Anzeige, auch für andere)
         self.dash_cd, self.dash_t = 0.0, 0.0   # Hermes: Abklingzeit, laufender Dash (s)
         self.dash_dir = (0.0, 0.0)
@@ -7980,7 +8042,7 @@ def step(pl, forward, strafe, run, jump, dt, world):
         if (pl.run_edge and pl.moving and pl.dash_cd <= 0 and pl.dash_t <= 0 and pl.crouch < 0.3
                 and wears(pl, "dash")):                             # Hermes: Shift drücken = Dash nach vorn
             hs = set_full(pl, "hermes")
-            pl.dash_t, pl.dash_cd = DASH_TIME / (HERMES_SET_DASH if hs else 1.0), DASH_CD
+            pl.dash_t, pl.dash_cd = DASH_TIME * ((HERMES_SET_DASH_DIST / HERMES_SET_DASH) if hs else 1.0), DASH_CD
             pl.dash_dir = (dx / l, dy / l)
             pl.dash_dist = 0.0
             amp = getattr(pl, "amp", None)
@@ -8018,7 +8080,16 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.leap_t -= dt
         pl.x += pl.leap_dir[0] * pl.leap_v * dt
         pl.y += pl.leap_dir[1] * pl.leap_v * dt
+    wx_, wy_ = pl.x, pl.y
     pl.x, pl.y = push_out(pl.x, pl.y, PLAYER_R, world, pl.z)
+    pushed = (wx_ - pl.x, wy_ - pl.y)
+    pl.cling_t = max(0.0, getattr(pl, "cling_t", 0.0) - dt)
+    if (gear is not None and not pl.on_ground and pl.moving and math.hypot(*pushed) > 1e-4 and wears(pl, "cling")
+            and pl.vz < 1.0):                            # 10c: Krallenhelm - in die Wand gelaufen: festkrallen
+        pl.cling_t = 0.15
+        pl.cling_n = (-pushed[0], -pushed[1])
+        pl.air_jump = False                          # Doppelsprung wieder bereit
+    pl.cling = pl.cling_t > 0
     lo = edge_margin(world)                          # Kartenrand / Gebirgskamm: unsichtbare Wand
     pl.x = max(lo, min(WORLD - lo, pl.x))
     pl.y = max(lo, min(WORLD - lo, pl.y))
@@ -8040,34 +8111,45 @@ def step(pl, forward, strafe, run, jump, dt, world):
         return
     jedge = getattr(pl, "jump_edge", False)
     pl.jump_edge = False
-    if jump and pl.on_ground and pl.crouch < 0.3:
-        pl.vz = JUMP_V * (SPRING_JUMP if wears(pl, "spring") else 1.0)   # Springfedern: deutlich höher
+    if (jump and pl.on_ground and pl.crouch < 0.3) or (jedge and pl.cling):
+        pl.vz = JUMP_V * (SPRING_JUMP if wears(pl, "spring") else 1.0)   # Springfedern: 1,5-mal so hoch
+        if pl.cling and not pl.on_ground:            # 10c: von der Wand abstossen
+            cn = getattr(pl, "cling_n", (0.0, 0.0))
+            ln_ = math.hypot(*cn) or 1.0
+            pl.x, pl.y = push_out(pl.x - cn[0] / ln_ * 0.35, pl.y - cn[1] / ln_ * 0.35, PLAYER_R, world, pl.z)
+            pl.cling_t, pl.cling = 0.0, False
         pl.on_ground = False
         pl.air_jump = False
         jedge = False                                # dieser Druck war der normale Sprung
-    elif jedge and not pl.on_ground and not pl.air_jump and (wears(pl, "double_jump") or wears(pl, "jetpack")):
+    elif jedge and not pl.on_ground and not pl.air_jump and wears(pl, "double_jump"):   # 10c: Sprungweste
         pl.vz = max(pl.vz, DOUBLE_JUMP_V)            # Jetpack-Schuhe: zweiter Sprung in der Luft
         pl.air_jump = True
         jedge = False
         amp = getattr(pl, "amp", None)
-        if amp and "jet" in amp and wears(pl, "jetpack"):
+    jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
+           and pl.jet_fuel > 0)                               # 10c: Jetpack = Leertaste in der Luft halten
+    if jet and not getattr(pl, "jet_on", False):
+        amp = getattr(pl, "amp", None)
+        if amp and "jet" in amp:
             amp.discard("jet")                       # 9c: Erschöpfungsdolch: dieser Flug mit doppeltem Schub
             pl.jet_amp = DAGGER_AMP
-    jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
-           and pl.jet_fuel > 0 and pl.air_jump)               # 7c: Jetpack = erst Doppelsprung, dann Schub
+    jsp = JET_SET_SPEED if gear is not None and set_full(pl, "jet") else 1.0
     sink = (gear is not None and not jet and getattr(pl, "duck", False) and not pl.on_ground and wears(pl, "jetpack")
-            and pl.jet_fuel > 0 and pl.vz < -JET_DOWN_V + 0.5)   # 10a: Strg in der Luft = kontrolliert sinken
+            and pl.jet_fuel > 0 and pl.vz < -JET_DOWN_V * jsp + 0.5)   # 10a: Strg in der Luft = kontrolliert sinken
     pl.jet_on = jet or sink                          # Jetpack: Leertaste in der Luft halten
     if sink:
-        pl.vz = -JET_DOWN_V + GRAVITY * dt           # (die Schwerkraft unten zieht es wieder ab)
+        pl.vz = -JET_DOWN_V * jsp + GRAVITY * dt     # (die Schwerkraft unten zieht es wieder ab)
         pl.jet_fuel = max(0.0, pl.jet_fuel - dt * 0.5)
     elif jet:
-        ja = getattr(pl, "jet_amp", 1.0)
-        pl.jet_fuel = max(0.0, pl.jet_fuel - dt / ja)
+        ja = getattr(pl, "jet_amp", 1.0) * jsp
+        pl.jet_fuel = max(0.0, pl.jet_fuel - dt / getattr(pl, "jet_amp", 1.0))
         pl.vz = min(JET_VMAX * ja, pl.vz + JET_ACC * ja * dt)
     elif gear is not None:
-        pl.jet_fuel = min(JET_FUEL, pl.jet_fuel + JET_FUEL / JET_REFILL_T * dt)
+        fm_ = jet_fuel_max(pl)
+        pl.jet_fuel = min(fm_, pl.jet_fuel + max(fm_, 1.0) / JET_REFILL_T * dt)
     pl.vz -= GRAVITY * dt
+    if getattr(pl, "cling", False) and pl.vz < -CLING_SLIDE_V:
+        pl.vz = -CLING_SLIDE_V                       # 10c: an der Wand langsam herunterrutschen
     pl.z += pl.vz * dt
     if pl.vz > 0:                                    # Kopf stösst an eine Decke
         cap = world.ceiling_at(pl.x, pl.y, pl.z) - PLAYER_H
@@ -8078,7 +8160,7 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.jet_amp = 1.0
         if pl.vz < 0:                                # Aufprall: Fallhöhe aus der Aufprallgeschwindigkeit
             fall = pl.vz * pl.vz / (2.0 * GRAVITY)
-            if fall > FALL_SAFE and not getattr(pl, "slam_pending", False):   # 9c: Sprungangriff ohne Fallschaden
+            if fall > FALL_SAFE and not getattr(pl, "slam_pending", False) and not (gear is not None and no_fall(pl)):
                 pl.fall_dmg = getattr(pl, "fall_dmg", 0.0) + (fall - FALL_SAFE) * FALL_DMG
                 pl.fall_h = fall
         pl.z, pl.vz, pl.on_ground = ground, 0.0, True
@@ -8479,7 +8561,7 @@ def apply_drain(att, tgt):
         tgt.amp, tgt.amp_t = set(), 0.0
     if att is not None:
         att.dash_cd = 0.0
-        att.jet_fuel = JET_FUEL
+        att.jet_fuel = jet_fuel_max(att)
         att.shock_cd = 0.0
         att.pan_lock = 0.0
         att.amp, att.amp_t = {"dash", "jet", "shock", "pan"}, DAGGER_AMP_T
@@ -13992,6 +14074,9 @@ class Hot:
 GEAR_LOOK = {"armor": ((0.36, 0.40, 0.25), (0.22, 0.25, 0.15), (0.50, 0.48, 0.32)),     # Grundfarbe, dunkel, Akzent
              "shield": ((0.20, 0.25, 0.33), (0.12, 0.15, 0.20), (0.40, 0.90, 1.00)),
              "hermes": ((0.92, 0.72, 0.26), (0.66, 0.48, 0.14), (0.98, 0.97, 0.92)),
+             "second": ((0.50, 0.52, 0.55), (0.28, 0.29, 0.31), (0.85, 0.18, 0.15)),     # 10c: Stahl mit roten Streifen
+             "jet": ((1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)),        # 10c: Orange/Alu
+             "spring": ((0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)),    # 10c: Grün mit Stahlfedern
              "": ((0.55, 0.57, 0.58), (0.32, 0.33, 0.35), (0.80, 0.80, 0.78))}
 _GL_GLOW = (0.45, 0.95, 1.0)
 
@@ -14063,6 +14148,20 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                      None, None, (True, True), 0.02, 8)
                 box(m, 0, 0.27, 0.1, 0.1, 0.04, 0.08, (0.12, 0.12, 0.12), rng)
                 box(m, 0.2, -0.12, 0.22, 0.02, 0.1, 0.05, acc, rng)                           # Schablonen-Nummer
+            elif g.kind == "fuel":                                                            # 10c Jet-Helm: Visier, Flossen, Düsen
+                loft(m, [(-0.22, 0.2, 0.06), (0, 0.29, 0.07), (0.22, 0.2, 0.06)], [0.03] * 3, [0.05, 0.055, 0.05],
+                     (0.12, 0.12, 0.14), rng, None, None, (True, True), 0.0, 6)
+                for sx in (-1, 1):
+                    loft(m, [(sx * 0.12, -0.12, 0.24), (sx * 0.14, -0.3, 0.3)], [0.012, 0.008], [0.06, 0.03], acc, rng,
+                         None, None, (True, True), 0.02, 4)
+                    _tube(m, [(sx * 0.14, -0.27, 0.02), (sx * 0.14, -0.3, -0.08)], [0.035, 0.03], dark, rng, 8)
+                    _cone(m, sx * 0.14, -0.3, -0.16, 0.03, 0.08, 8, (1.0, 0.75, 0.3), rng)
+            elif g.kind == "cling":                                                           # 10c Krallenhelm: Krallen
+                for sx in (-1, 1):
+                    for k in range(3):
+                        _tube(m, [(sx * 0.27, 0.12 - 0.12 * k, 0.12 + 0.04 * k), (sx * 0.38, 0.17 - 0.12 * k, 0.02 + 0.04 * k)],
+                              [0.02, 0.004], acc, rng, 5)
+                _tube(m, [(0, 0.25, 0.2), (0, 0.06, 0.33), (0, -0.2, 0.27)], [0.025, 0.03, 0.02], dark, rng, 6)
             else:                                                                             # Schild-Helm: Visier + Emitter
                 loft(m, [(-0.22, 0.2, 0.06), (0, 0.29, 0.07), (0.22, 0.2, 0.06)], [0.03, 0.03, 0.03], [0.05, 0.055, 0.05],
                      _GL_GLOW, None, None, None, (True, True), 0.0, 6)
@@ -14094,6 +14193,21 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                 for sx in (-1, 0, 1):
                     box(m, sx * 0.15, 0.27, -0.1, 0.11, 0.06, 0.13, (0.30, 0.33, 0.20), rng)
                 box(m, 0.12, 0.25, 0.2, 0.08, 0.01, 0.04, acc, rng)
+            elif g.set == "second":                                                            # 10c Splitterweste: Segmente + Rot
+                for k in range(4):
+                    box(m, 0, 0.245, -0.18 + 0.12 * k, 0.5, 0.02, 0.1, dark if k % 2 else base, rng)
+                for sx in (-1, 1):
+                    box(m, sx * 0.2, 0.25, 0.04, 0.03, 0.022, 0.5, acc, rng)
+                box(m, 0, 0.255, 0.2, 0.12, 0.02, 0.06, (0.95, 0.95, 0.95))
+                box(m, 0, 0.26, 0.2, 0.02, 0.02, 0.05, acc)
+            elif g.kind == "double_jump":                                                      # 10c Sprungweste: Federn am Rücken
+                for sx in (-1, 1):
+                    pts = [(sx * 0.12 + 0.05 * math.cos(t * 0.6), -0.27 + 0.05 * math.sin(t * 0.6), -0.18 + 0.018 * t)
+                           for t in range(24)]
+                    loft(m, pts, [0.013] * len(pts), [0.013] * len(pts), acc, rng, "metal", None, (True, True), 0.0, 5)
+                    box(m, sx * 0.12, -0.27, -0.2, 0.14, 0.14, 0.03, dark, rng)
+                    box(m, sx * 0.12, -0.27, 0.26, 0.14, 0.14, 0.03, dark, rng)
+                box(m, 0, 0.245, 0.0, 0.4, 0.012, 0.03, dark, rng)
             elif g.set == "shield":                                                            # Generator-Kern + Leuchtlinien
                 loft(m, [(0, 0.23, 0.04), (0, 0.27, 0.04)], [0.09, 0.07], [0.09, 0.07], acc, rng, None, None, (True, True), 0.0, 6)
                 loft(m, [(0, 0.265, 0.04), (0, 0.28, 0.04)], [0.06, 0.05], [0.06, 0.05], _GL_GLOW, None, None, None, (True, True), 0.0, 6)
@@ -14132,6 +14246,19 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                     box(m, x, -0.02 + 0.06 * k, 0.04, 0.17, 0.025, 0.015, acc, rng)
                 for wx in ((sx,) if sx else (-1, 1)):
                     _wing(m, x + wx * 0.09, -0.08, 0.06, wx, acc, rng, 0.6)
+            elif g.kind == "save_blast":                                                        # 10c Druckwellen-Stiefel
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.16)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                box(m, x, 0.05, -0.085, 0.21, 0.35, 0.045, acc, rng)                            # dicke rote Dämpfersohle
+                for k in range(3):
+                    box(m, x + (k - 1) * 0.06, 0.05, -0.085, 0.02, 0.36, 0.05, dark, rng)
+                ell(m, (x, 0.15, -0.01), 0.07, 0.045, 0.04, dark, rng, rings=3)
+            elif g.kind == "nofall":                                                            # 10c Jetpack-Stiefel: Fersendüsen
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.14)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                _tube(m, [(x, -0.15, -0.02), (x, -0.17, -0.08)], [0.035, 0.03], acc, rng, 8)
+                _cone(m, x, -0.17, -0.13, 0.025, 0.05, 8, (1.0, 0.75, 0.3), rng)
+                box(m, x, 0.0, 0.08, 0.18, 0.02, 0.03, dark, rng)
             elif g.kind == "spring":                                                            # Springfedern unter der Sohle
                 pts = [(x + 0.05 * math.cos(t * 0.5), 0.05 + 0.05 * math.sin(t * 0.5), -0.07 - 0.008 * t) for t in range(25)]
                 loft(m, pts, [0.012] * len(pts), [0.012] * len(pts), acc, rng, "metal", None, (True, True), 0.0, 5)
@@ -14163,6 +14290,13 @@ def gear_icon_shapes(gi):
         elif g.set == "shield":
             S += [("p", 0, 0.1, [(0.12, 0.03), (0.31, 0.04), (0.29, 0.12), (0.1, 0.1)], _GL_GLOW),
                   ("b", 0, 0.0, 0.31, 0.1, 0.12, 0.04, acc)]
+        elif g.kind == "fuel":
+            S += [("p", 0, 0.1, [(0.12, 0.03), (0.31, 0.04), (0.29, 0.12), (0.1, 0.1)], (0.12, 0.12, 0.14)),
+                  ("p", 0, 0.1, [(-0.18, 0.22), (-0.38, 0.32), (-0.3, 0.16)], acc),
+                  ("p", 0, 0.1, [(-0.33, -0.02), (-0.27, -0.02), (-0.28, -0.14), (-0.32, -0.14)], dark)]
+        elif g.kind == "cling":
+            S += [("p", 0, 0.1, [(y - 0.03, 0.12), (y + 0.03, 0.12), (y + 0.06, -0.1), (y + 0.03, -0.08)], acc)
+                  for y in (-0.15, 0.0, 0.15)]
         else:
             S += [("p", 0, 0.1, [(-0.25, 0.16), (0.0, 0.31), (0.25, 0.16), (0.0, 0.27)], acc)]
     elif g.slot == "torso":
@@ -14180,6 +14314,14 @@ def gear_icon_shapes(gi):
                     S.append(("b", 0, 0.0, z, 0.1, 0.5, 0.025, dark))
                 for y in (-0.15, 0.0, 0.15):
                     S.append(("b", 0, y, -0.12, 0.1, 0.11, 0.12, (0.30, 0.33, 0.20)))
+            elif g.set == "second":
+                for k in range(4):
+                    S.append(("b", 0, 0.0, -0.18 + 0.12 * k, 0.1, 0.5, 0.09, dark if k % 2 else base))
+                S.append(("b", 0, 0.0, 0.05, 0.1, 0.05, 0.5, acc))
+            elif g.kind == "double_jump":
+                for y in (-0.14, 0.14):
+                    for k in range(6):
+                        S.append(("b", 0, y, -0.18 + 0.08 * k, 0.1, 0.14, 0.02, acc))
             elif g.set == "shield":
                 S.append(("e", 0, 0.0, 0.03, 0.05, 0.09, 0.09, acc))
                 S.append(("e", 0, 0.0, 0.03, 0.05, 0.06, 0.06, _GL_GLOW))
@@ -14202,6 +14344,11 @@ def gear_icon_shapes(gi):
             S += [("e", 0, 0.15, -0.01, 0.05, 0.05, 0.035, _GL_GLOW), ("b", 0, -0.08, 0.12, 0.1, 0.13, 0.02, _GL_GLOW)]
         elif g.kind == "dash":
             S += [("p", 0, 0.1, [(-0.1, 0.05), (-0.3, 0.22), (-0.26, 0.12), (-0.34, 0.15), (-0.2, 0.02)], acc)]
+        elif g.kind == "save_blast":
+            S += [("p", 0, 0.1, [(-0.15, -0.12), (0.21, -0.12), (0.21, -0.06), (-0.15, -0.06)], acc)]
+        elif g.kind == "nofall":
+            S += [("p", 0, 0.1, [(-0.16, 0.0), (-0.1, 0.0), (-0.11, -0.12), (-0.15, -0.12)], acc),
+                  ("p", 0, 0.1, [(-0.15, -0.12), (-0.11, -0.12), (-0.13, -0.18)], (1.0, 0.75, 0.3))]
         else:
             for k in range(5):
                 S.append(("b", 0, 0.03, -0.1 - 0.035 * k, 0.1, 0.16, 0.015, acc))
@@ -16495,7 +16642,8 @@ class HostSession:
             cr = m.get("cr", 0.0)
             pl.crouch = clampf(float(cr), 0.0, 1.0) if finite(cr) else 0.0
             pl.running = bool(m.get("rn")) and pl.moving
-            pl.jet_on = bool(m.get("jt")) and wears(pl, "jetpack")    # grobe Prüfung: nur mit Jetpack
+            pl.jet_on = m.get("jt") == 1 and wears(pl, "jetpack")    # grobe Prüfung: nur mit Jetpack
+            pl.cling = m.get("jt") == 2 and wears(pl, "cling")       # 10c: hängt an der Wand
             pl.melee_out = bool(m.get("mo"))
             pl.trig = bool(m.get("tg")) and (pl.mount >= 0 or pl.heli >= 0)
             pn_m = m.get("hc")                    # Pilot meldet seinen Helikopter
@@ -16635,7 +16783,7 @@ class HostSession:
                         p.cur, 1 if p.moving else 0, p.name, p.kills, p.deaths, r1(p.score),
                         r1(p.protect), r2(p.lean), r2(p.crouch), r1(p.stun_t),
                         BUFF_KINDS.index(p.buff) if p.buff in BUFF_KINDS else -1, r1(p.buff_t),
-                        int(p.max_hp), gear_list(p), r1(p.shield_hp), 1 if p.jet_on else 0,
+                        int(p.max_hp), gear_list(p), r1(p.shield_hp), 1 if p.jet_on else (2 if getattr(p, "cling", False) else 0),
                         p.melee, 1 if p.melee_out else 0, p.look]
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
@@ -16899,7 +17047,8 @@ class ClientSession:
             pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
             pl.stun_t, pl.buff, pl.buff_t, pl.max_hp = st, buff, bt, float(mx)
-            pl.gear, pl.shield_hp, pl.jet_on = gear, shp, jet
+            pl.gear, pl.shield_hp, pl.jet_on = gear, shp, jet == 1
+            pl.cling = jet == 2
             pl.melee, pl.melee_out = mel, mout
             seen.add(pid)
         for pid in [pid for pid in w.players if pid != self.my_id and pid not in seen]:
@@ -17087,7 +17236,7 @@ class ClientSession:
         msg = {"t": "st", "p": [r2(pl.x), r2(pl.y), r2(pl.z), r1(pl.heading), r1(pl.pitch)],
                "mv": 1 if pl.moving else 0, "cur": pl.cur, "ln": r2(pl.lean),
                "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0,
-               "jt": 1 if getattr(pl, "jet_on", False) else 0,
+               "jt": 1 if getattr(pl, "jet_on", False) else (2 if getattr(pl, "cling", False) else 0),
                "mo": 1 if getattr(pl, "melee_out", False) else 0}
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
@@ -17738,6 +17887,9 @@ def synth_sounds():
             if o_ + i < n:
                 ch[o_ + i] += v * g_
     out["chew"] = norm(ch, 0.75)
+    n = int(1.2 * SR)                                               # 10c: Krallen kratzen an der Wand (Schleife)
+    scr = mul(lowpass(noise(n), 0.55), [0.45 + 0.55 * abs(math.sin(tp * 7.0 * i / n * 1.2)) ** 3 for i in range(n)])
+    out["scrape"] = norm(mix((scr, 1.0), (mul(sweep(n, 2600, 1800, 2), [0.15] * n), 1.0)), 0.7)
     brp = voiced(0.95, 105, 62, 380, 820, 0.35)
     flt = [0.55 + 0.45 * abs(math.sin(tp * 23.0 * i / SR + 0.3 * math.sin(tp * 3.0 * i / SR))) for i in range(len(brp))]
     out["burp"] = norm(mul(brp, flt), 0.9)
@@ -112360,14 +112512,14 @@ class Sfx:
              "growl": 34.0, "growl_deep": 45.0, "hiss": 30.0, "mstep": 26.0, "mstep_heavy": 55.0, "mstep_giant": 140.0,
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
-             "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R}
+             "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
            "growl": 4.0, "growl_deep": 6.0, "hiss": 3.0, "mstep": 3.0, "mstep_heavy": 8.0, "mstep_giant": 25.0,
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
-           "falls": 6.0, "chew": 2.0, "burp": 4.0}
+           "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0}
 
     def __init__(self, game):
         self.game = game
@@ -112909,6 +113061,13 @@ class Sfx:
                 key = ("rock", r.rid)
                 loops_on.add(key)
                 self.loop_at(key, "whoosh", (r.x, r.y, r.z), MOB_VOL["rock_fly"], 1.0)
+        for q in world.players.values():                               # 10c: Krallenhelm - Kratzen an der Wand
+            if getattr(q, "cling", False) and q.hp > 0:
+                pos = (q.x, q.y, q.z + 1.6)
+                if math.dist(pos, cam) < self.RANGE["scrape"]:
+                    key = ("cling", q.pid)
+                    loops_on.add(key)
+                    self.loop_at(key, "scrape", pos, 0.8)
         for i, wf in enumerate(getattr(g, "falls", None) or ()):        # 9a: Wasserfälle rauschen leise
             fp = wf["foot"]
             pos = (fp[0], fp[1], fp[2] + min(6.0, wf["h"] * 0.4))
@@ -119905,8 +120064,9 @@ class Game(ShowBase):
         else:
             dash.hide()
         if alive and wears(pl, "jetpack"):
-            jet.set(pl.jet_fuel > 0.3, pl.jet_fuel / JET_FUEL, None, "")
-            jet.bar(pl.jet_fuel / JET_FUEL)
+            fm_ = max(0.1, jet_fuel_max(pl))
+            jet.set(pl.jet_fuel > 0.3, min(1.0, pl.jet_fuel / fm_), None, "")
+            jet.bar(min(1.0, pl.jet_fuel / fm_))
         else:
             jet.hide()
         if alive and wears(pl, "shield"):

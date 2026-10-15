@@ -2,6 +2,40 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10c: Neue Sets – Zweite Chance, Jetpack, Springfeder; Hermes stärker (2026-10-15)
+- Neues Set "Zweite Chance" (`second`), Stahl mit roten Streifen. Jedes Teil rettet einmal vor tödlichem Schaden: man überlebt mit `SAVE_HP` = 50 HP (vorher 10), das Teil zerbricht mit Hinweis.
+  - Basic-Helm (Kopf): Kopftreffer.
+  - NEU Splitterweste (Torso): normaler Schaden – Kugeln, Nahkampf, Monster, Überfahren.
+  - NEU Druckwellen-Stiefel (Füße): Explosionen – Granate, Rakete, Heli-Rakete, Flak, C4, Claymore, Fahrzeug.
+  - Set-Bonus: Ein tödlicher Tomahawk-Treffer wird überlebt (50 HP), dafür zerbricht die gesamte Ausrüstung.
+- Hermes-Set stärker: Tempo `HERMES_SET_SPEED` 1,5 -> 1,6. Dash im Set doppelt so weit (`HERMES_SET_DASH_DIST` = 2, 15 -> 30 m) und 15 % schneller (`HERMES_SET_DASH` 2,0 -> 2,3). Gleiten mit gehaltenem Shift 30 -> 60 m (`HERMES_GLIDE_MAX`). Einzelteile wie bisher.
+- Neues Jetpack-Set (`jet`), Orange/Alu:
+  - Jetpack (Torso): halber Tank (`JET_PACK_SHARE`).
+  - NEU Jet-Helm (Kopf): +50 % Treibstoff (`JET_HELM_SHARE`), zusammen ein voller Tank.
+  - NEU Jetpack-Stiefel (Füße): kein Fallschaden.
+  - Set-Bonus: Tank ×1,5 (`JET_SET_FUEL`), steigen und sinken ×1,6 (`JET_SET_SPEED`); waagerecht bleibt es langsam.
+  - Steuerung: Leertaste in der Luft halten = steigen, Strg = sinken. Das Jetpack gibt keinen Doppelsprung mehr.
+- Neues Springfeder-Set (`spring`), Grün mit Stahlfedern:
+  - Springfeder-Schuhe (Füße): Sprung 1,5-mal so hoch (`SPRING_JUMP` 1,55 -> 1,2247 Sprungtempo).
+  - NEU Sprungweste (Torso): Doppelsprung.
+  - NEU Krallenhelm (Kopf): Läuft man in der Luft gegen eine Wand, krallt man sich fest und rutscht langsam herunter (`CLING_SLIDE_V` = 1,2 m/s). Das Kratzgeräusch ist für alle hörbar und zählt als Lärm (`NOISE_CLING` = 18 m). Sprung und Doppelsprung sind wieder bereit; Leertaste stößt von der Wand ab.
+  - Set-Bonus: kein Fallschaden (`SPRING_SET_NOFALL`).
+- Jetzt 6 Teile je Slot. Neue Teile sind in Loot-Tabellen, Set-Affinität, Modellen, Symbolen, Hover-Infos und Set-Anzeige im HUD enthalten. Jetpack-Anzeige nach echter Tankgröße.
+- Ausrüstungsteile:
+
+  | Teil | Slot | Wirkung | Set | Set-Bonus |
+  |---|---|---|---|---|
+  | Basic-Helm | Kopf | rettet bei tödlichem Kopftreffer (50 HP) | Zweite Chance | Tomahawk überleben, ganze Ausrüstung zerbricht |
+  | Splitterweste | Torso | rettet bei tödlichem normalem Schaden | Zweite Chance | ″ |
+  | Druckwellen-Stiefel | Füße | rettet bei tödlicher Explosion | Zweite Chance | ″ |
+  | Armeehelm / Plattenrüstung / Kampfstiefel | K/T/F | je +25 max. HP | Rüstung | +75 max. HP |
+  | Schild-Helm / Schild / Schild-Stiefel | K/T/F | Schild 15/30/15 | Schild | Stromstoß (B) |
+  | Hermes-Helm / -Weste / -Schuhe | K/T/F | Dash | Hermes | ×1,6 Tempo, Dash ×2 weit und ×2,3 schnell, 60 m gleiten |
+  | Jet-Helm / Jetpack / Jetpack-Stiefel | K/T/F | +50 % Tank / Jetpack (50 % Tank) / kein Fallschaden | Jetpack | Tank ×1,5, steigen/sinken ×1,6 |
+  | Krallenhelm / Sprungweste / Springfeder-Schuhe | K/T/F | an Wänden krallen / Doppelsprung / ×1,5 Sprunghöhe | Springfeder | kein Fallschaden |
+
+- NET_VERSION 33 -> 34 (neue Teile, Zustand "krallt" im Snapshot/st).
+
 ## Experimental 10b: Beute von Monstern, Kategorie-Gedächtnis, Set-Affinität (2026-10-15)
 - Verteilte Kisten pausiert: `CRATES_ON_MAP = False`. Der Kisten-Code bleibt erhalten (Airdrops in 10e).
 - Jedes getötete Monster lässt Beute fallen, verteilt im Kreis um seine Stelle (`MOB_LOOT_R`). Die Teile fliegen sichtbar heraus und werden mit F aufgehoben; Name und Werte erscheinen beim Anschauen. Monster-Beute gehört 3 s dem Schützen und verschwindet nach `MOB_LOOT_LIFE` = 45 s.
