@@ -83,6 +83,9 @@ in der Entfernung das einfache Modell (LODNode, MOB_LOD_DIST); Trefferhöhen pas
 Boden), Monster sehen in 3D, Explosionen/Bodenschlag nicht durch Wände und Decken (blast_los), Kisten/Drops nicht durch
 Decken benutzen. KotH (Polytown): Zone = Burg-Volumen (koth_box) inkl. Mauern, Kontrollturm (koth_tower, KT_*) und
 Untergrund, nicht im Heli/Fahrzeug, nicht in der Luft darüber. Heli und Jetpack: Leertaste steigen, Strg sinken.
+10b: Keine verteilten Kisten (CRATES_ON_MAP), Beute kommt von Monstern (MOB_LOOT: Stufe + Anzahl, verschiedene
+Kategorien LOOT_CATS mit Kategorie-Gedächtnis LOOT_CAT_*), Set-Affinität (SET_AFF_*), Granaten als Beute. Tod: aktive
+Waffe (mit Aufsätzen) + ein zufälliges weiteres Teil (Nahkampf, Granaten oder ein getragenes Ausrüstungsteil).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -451,7 +454,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 32         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 33         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -514,7 +517,7 @@ VEH_RESPAWN = 35.0       # s bis ein zerstörtes Fahrzeug wieder dasteht
 VEH_BLAST_R, VEH_BLAST_DMG = 5.5, 110.0
 ROCKET_KILL_R = 5.5      # Rakete: Fahrzeug innerhalb dieses Radius ist sofort zerstört
 DROP_LIFE = 90.0         # s, so lange liegt eine fallengelassene Waffe herum
-MAX_DROPS = 40           # 7b: mehr Platz, weil Kistenbeute jetzt erst am Boden liegt
+MAX_DROPS = 120          # 7b: mehr Platz, weil Kistenbeute jetzt erst am Boden liegt (10b: Monster-Beute -> 120)
 
 GREN_KILL_R = 2.6        # Granate: wer näher als das steht, stirbt sofort
 
@@ -1027,6 +1030,20 @@ LOOT_ATT_TABLES = {
     "ACOG":                ( 2.0,  6.0, 10.0),
     "Sniper-Visier":       ( 0.0,  3.0,  9.0),
 }
+# --- 10b: Kisten pausiert, Beute kommt von Monstern
+CRATES_ON_MAP = False          # verteilte Kisten auf der Karte (Code bleibt, später für Airdrops)
+MOB_LOOT = {"grunt": ("common", 2), "huntress": ("common", 2), "brute": ("rare", 2), "drone": ("rare", 2),
+            "colossus": ("gold", 2), "titan": ("gold", 6)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl)
+MOB_LOOT_LIFE = 45.0           # s liegt Monster-Beute (dann verschwindet sie)
+MOB_LOOT_R = 1.1               # m: so weit verteilt um die Stelle des Monsters (Titan: x2)
+LOOT_CATS = ("weapon", "melee", "grenade", "gear", "att")         # Kategorien (je Drop verschieden)
+LOOT_CAT_BASE = {"weapon": 0.30, "melee": 0.14, "grenade": 0.16, "gear": 0.24, "att": 0.16}
+LOOT_CAT_DOWN = 0.55           # Kategorie-Gedächtnis: bekommene Kategorie x so viel ...
+LOOT_CAT_UP = 1.18             # ... alle anderen x so viel (je Spieler und Leben)
+LOOT_CAT_MIN, LOOT_CAT_MAX = 0.15, 4.0
+LOOT_GREN_COUNT = {"common": 1, "rare": 2, "gold": 3}             # Granaten je Beute (bis 10e nur Splitter)
+SET_AFF_STEP = 0.5             # Set-Affinität: fehlende Teile des zuletzt aufgehobenen Sets je Stufe x(1 + so viel)
+SET_AFF_MAX = 6                # höchstens so viele Stufen
 LOOT_GEAR_MISS = 0.0           # Chance, dass in einer Kiste KEIN Ausrüstungsteil liegt (0 = immer dabei)
 LOOT_ATT_MISS = 0.0            # Chance, dass KEIN Aufsatz dabei ist
 LOOT_TABLES.update(LOOT_ATT_TABLES)
@@ -1472,6 +1489,8 @@ def weapon_info(wi, gun=None, att=None, scope=None):
 
 def drop_info(d):
     """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
+    if getattr(d, "gren", 0) > 0:
+        return f"Splittergranate x{d.gren}\nG: werfen"
     if d.att >= 0:
         si, v = divmod(d.att, ATT_CODE)
         if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
@@ -2129,8 +2148,9 @@ class Drop:
     atts = Aufsätze, die an einer Waffe stecken (fallen mit ihr). owner/lock: Kistenbeute gehört LOOT_OWNER_T s
     lang nur dem, der die Kiste geöffnet hat."""
 
-    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1):
+    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0):
         self.did, self.x, self.y, self.z, self.wi = did, x, y, z, wi
+        self.gren = gren if isinstance(gren, int) else 0          # 10b: Granaten (Anzahl), sonst 0
         self.scope = scope if isinstance(scope, int) else -1   # Visier einer Waffe (-1 = ab Werk)
         self.gear = gear
         self.melee = melee
@@ -5423,19 +5443,35 @@ class World:
         else:
             air = pl.z - self.floor_at(pl.x, pl.y, pl.z) > 1.5 and pl.mount < 0 \
                 and not (self.ladders and self.on_ladder(pl.x, pl.y, pl.z))
-        if pl.melee_out:                                 # Nahkampfwaffe in der Hand: sie fällt (das Start-
-            if pl.melee != START_MELEE and not air:      # Messer nicht), die Schusswaffen sind verloren
+        act = pl.cur                                     # 10b: genau zwei Dinge fallen - die aktive Waffe (mit Aufsätzen)
+        if not 0 <= act < len(WEAPONS) or act not in pl.slots:
+            act = next((wi for wi in pl.slots if wi is not None), START_WEAPON)
+        if not air:                                      # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
+            rng = self.mrng
+            if pl.melee_out and pl.melee != START_MELEE:
                 self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
-        else:
-            act = pl.cur                                 # nur die Waffe in der Hand fällt auf den Boden,
-            if not 0 <= act < len(WEAPONS) or act not in pl.slots:   # alle anderen sind verloren
-                act = next((wi for wi in pl.slots if wi is not None), START_WEAPON)
-            if not air:                                  # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
-                self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))   # 7b: mit Aufsätzen
-        worn = [gi for gi in pl.gear.values() if gi is not None]
-        if worn and not air:                             # dazu genau EIN zufälliges getragenes Teil
-            self.add_drop(pl.x + 0.8, pl.y + 0.4, pl.z, -1, self.mrng.choice(worn))
-        pl.gear = {sl: None for sl in GEAR_SLOTS}
+                pool = [("weapon", act)]
+            else:
+                self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
+                pool = [("melee", pl.melee)] if pl.melee != START_MELEE else []
+            if pl.grenades > 0:                          # ... und EIN zufälliges weiteres Teil
+                pool.append(("gren", pl.grenades))
+            pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
+            if pool:
+                kind, v = rng.choice(pool)
+                a = rng.uniform(0, 2 * math.pi)
+                x2, y2 = pl.x + math.cos(a) * 0.9, pl.y + math.sin(a) * 0.9
+                if self.in_solid(x2, y2, 0.3, pl.z):
+                    x2, y2 = pl.x, pl.y
+                if kind == "weapon":
+                    self.add_drop(x2, y2, pl.z, v, atts=pl.att.get(v), scope=pl.scopes.get(v, -1))
+                elif kind == "melee":
+                    self.add_drop(x2, y2, pl.z, -1, -1, v)
+                elif kind == "gren":
+                    self.add_drop(x2, y2, pl.z, -1, gren=v)
+                else:
+                    self.add_drop(x2, y2, pl.z, -1, v)
+        pl.gear = {sl: None for sl in GEAR_SLOTS}        # (10b: getragene Teile sind oben schon im Zufalls-Topf)
         pl.slots = [None] * N_SLOTS
         pl.loot_history, pl.last_loot = {}, None         # Kisten-Gedächtnis gilt nur für ein Leben
         pl.last_by = {}
@@ -5613,6 +5649,99 @@ class World:
         self.make_noise(r.x, r.y, NOISE_EXPLOSION * 0.5, r.z)
         self.area_damage(r.x, r.y, r.z, ROCK_R, 0.0, ROCK_DMG, WI_ROCK, cover=True)
 
+    def mob_loot(self, m, pl, extra=0):
+        """10b: Ein getötetes Monster lässt Beute fallen: MOB_LOOT[Art] = (Qualitätsstufe, Anzahl), jedes Teil aus
+        einer anderen Kategorie (LOOT_CATS; ab 6 Teilen jede Kategorie mindestens einmal, keine Doppelten).
+        Kategorie-Gedächtnis (cat_mul) und Kisten-Gedächtnis des Schützen gelten, Ausrüstung mit Set-Affinität.
+        extra: so viele Teile zusätzlich (Diebesdolch, 10d). -> Liste der Drops."""
+        tier, n = MOB_LOOT.get(m.kind, ("common", 0))
+        n += extra
+        if n <= 0:
+            return []
+        rng = self.mrng
+        hist = pl.loot_history if pl is not None else {}
+        last = getattr(pl, "last_by", {}) if pl is not None else {}
+        slots = pl.slots if pl is not None else ()
+        worn = worn_names(pl) if pl is not None else ()
+        mul = getattr(pl, "cat_mul", None) if pl is not None else None
+        items, used, names = [], [], set()
+        must = list(LOOT_CATS) if n >= len(LOOT_CATS) else []
+        rng.shuffle(must)
+        for k in range(n):
+            if must:
+                pool = [must.pop()]
+            else:
+                pool = [c for c in LOOT_CATS if c not in used] or list(LOOT_CATS)
+            got, tried = None, set()
+            for stage in (pool, [c for c in LOOT_CATS if c not in used], list(LOOT_CATS)):
+                tries = [c for c in stage if c not in tried]
+                while tries and got is None:
+                    ws = [LOOT_CAT_BASE[c] * (mul.get(c, 1.0) if mul else 1.0) for c in tries]
+                    cat = rng.choices(tries, weights=ws)[0]
+                    tries.remove(cat)
+                    tried.add(cat)
+                    got = self.loot_pick(cat, tier, pl, hist, last, slots, worn, names)
+                if got is not None:
+                    break
+            if got is None:
+                continue
+            items.append(got)
+            used.append(got[0])
+            if got[1]:
+                names.add(got[1])
+            if mul is not None:                          # Kategorie-Gedächtnis: gezogene seltener, andere häufiger
+                for c in LOOT_CATS:
+                    mul[c] = clampf(mul.get(c, 1.0) * (LOOT_CAT_DOWN if c == got[0] else LOOT_CAT_UP), LOOT_CAT_MIN, LOOT_CAT_MAX)
+            if pl is not None and got[1]:
+                hist[got[1]] = hist.get(got[1], 0) + 1
+                last[got[0]] = got[1]
+        out = []
+        R = MOB_LOOT_R * (2.0 if m.kind == "titan" else 1.0)
+        a0 = rng.uniform(0, 2 * math.pi)
+        for i, (cat, name, cnt) in enumerate(items):
+            a = a0 + 2 * math.pi * i / max(1, len(items))
+            x, y = m.x + math.cos(a) * R, m.y + math.sin(a) * R
+            if self.in_solid(x, y, 0.3, m.gz) or not self.los((m.x, m.y, m.gz + 0.6), (x, y, m.gz + 0.6)):
+                x, y = m.x + math.cos(a) * 0.3, m.y + math.sin(a) * 0.3
+            z = self.floor_at(x, y, m.gz + 0.5)
+            kw = {}
+            if cat == "weapon":
+                kw["wi"] = WEAPON_IDX[name]
+            elif cat == "melee":
+                kw["melee"] = MELEE_IDX[name]
+            elif cat == "gear":
+                kw["gear"] = GEAR_IDX[name]
+            elif cat == "att":
+                si, v = ATT_BY_NAME[name]
+                kw["att"] = si * ATT_CODE + v
+            else:
+                kw["gren"] = cnt
+            d = self.add_drop(x, y, z, kw.get("wi", -1), kw.get("gear", -1), kw.get("melee", -1), kw.get("att", -1),
+                              None, pl.pid if pl is not None else -1, LOOT_OWNER_T if pl is not None else 0.0,
+                              gren=kw.get("gren", 0))
+            d.life = MOB_LOOT_LIFE
+            out.append(d)
+            ki = CRATE_KINDS.index(tier) if tier in CRATE_KINDS else 0
+            self.events.append(("lootpop", pl.pid if pl is not None else -1, d.did, ki, round(m.x, 2), round(m.y, 2),
+                                round(m.gz + min(2.0, m.height * 0.5), 2)))
+        return out
+
+    def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude):
+        """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None."""
+        rng = self.mrng
+        if cat == "grenade":
+            return ("grenade", "", LOOT_GREN_COUNT.get(tier, 1))
+        ch = loot_chances(tier, slots, hist, last.get(cat), cat, worn)
+        if cat == "weapon":
+            ch = {nm: v for nm, v in ch.items() if WEAPON_IDX.get(nm) != START_WEAPON}
+        if cat == "gear" and pl is not None:
+            ch = set_affinity(pl, ch)
+        ch = {nm: v for nm, v in ch.items() if nm not in exclude and v > 0}
+        if not ch:
+            return None
+        nm = list(ch)
+        return (cat, rng.choices(nm, weights=[ch[k] for k in nm])[0], 1)
+
     def titan_loot(self, m):
         """Titan erlegt: an seiner Stelle eine goldene Kiste (gleicher Inhalt wie jede goldene Kiste, Kisten-
         Gedächtnis des Öffnenden gilt). Sie wird nach dem Öffnen nicht ersetzt."""
@@ -5736,7 +5865,9 @@ class World:
                     killer.stats["melee_kills"] += 1
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(self.players.get(owner))
-            if m.kind == "titan":                        # Boss erlegt: goldene Kiste an seiner Stelle
+            if m.kind in MOB_LOOT and not CRATES_ON_MAP:  # 10b: Beute von Monstern (Titan: 6 Teile)
+                self.mob_loot(m, killer)
+            elif m.kind == "titan":                      # Boss erlegt: goldene Kiste an seiner Stelle
                 self.titan_loot(m)
 
     def explode(self, pos, owner, r, dmg, wi):
@@ -5811,6 +5942,8 @@ class World:
         Die wertvollsten zuerst, damit sie sicher einen Platz bekommen."""
         self.crates = []
         self.crate_wait = []
+        if not CRATES_ON_MAP:                            # 10b: keine verteilten Kisten (Beute von Monstern)
+            return
         cnt = self.crate_counts()
         kinds = [k for k in reversed(CRATE_KINDS) for _ in range(int(cnt.get(k, 0)))]
         for k in kinds:
@@ -6304,11 +6437,11 @@ class World:
         self.events.append(("melee", pl.pid, mi, crate))
         return True
 
-    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1):
+    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0):
         while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
-                 scope)
+                 scope, gren)
         self.next_did += 1
         self.drops.append(d)
         return d
@@ -6466,9 +6599,15 @@ class World:
                 self.drops.remove(d)
                 self.give_attachment(pl, si, v)
             return
+        if d.gren > 0:                                   # 10b: Granaten
+            self.drops.remove(d)
+            pl.grenades += d.gren
+            self.events.append(("gren_n", pl.pid, pl.grenades, d.gren))
+            return
         if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
             if self.give_gear(pl, d.gear):
                 self.drops.remove(d)
+                note_set_pick(pl, d.gear)                # 10b: Set-Affinität
             return
         if d.melee >= 0:                                 # Nahkampfwaffe: gleiche -> bleibt liegen
             self.drops.remove(d)
@@ -7736,6 +7875,8 @@ class Player:
         self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
+        self.cat_mul = {c: 1.0 for c in LOOT_CATS}   # 10b: Kategorie-Gedächtnis der Monster-Beute (pro Leben)
+        self.set_aff, self.set_lvl = "", 0  # 10b: Set-Affinität (zuletzt aufgehobenes Set, Stufe)
         self.pan_pts = 0                  # 9c: Ladung der Bratpfanne (Punkte aus Kills mit ihr; beim Tod weg)
         self.eat_t, self.eat_dur, self.eat_stage, self.eat_k = 0.0, 0.0, 0, 1.0   # 9c: Essen läuft (Rest, Dauer, Stufe, Faktor)
         self.eat_bites = 0                # 9c: Stufe 3: schon genommene Bissen
@@ -8292,6 +8433,29 @@ def sg_pose(t, n):
     else:
         hand = lp(forend, rest, smoothstep(close_t, end_t, t))
     return ang, lift, hand, shell
+
+
+def note_set_pick(pl, gi):
+    """10b: Set-Teil aufgehoben: gleiches Set -> Affinität steigt, anderes Set -> dieses wird das neue (Stufe 1)."""
+    s = GEAR[gi].set if 0 <= gi < len(GEAR) else ""
+    if not s:
+        return
+    if s == getattr(pl, "set_aff", ""):
+        pl.set_lvl = min(SET_AFF_MAX, pl.set_lvl + 1)
+    else:
+        pl.set_aff, pl.set_lvl = s, 1
+
+
+def set_affinity(pl, ch):
+    """10b: Ausrüstungs-Chancen mit Set-Affinität: fehlende Teile des Affinitäts-Sets x(1 + SET_AFF_STEP * Stufe).
+    Jede weitere Ausrüstungs-Beute erhöht die Stufe (kein Garant, andere Teile bleiben möglich). -> normiert"""
+    s, lvl = getattr(pl, "set_aff", ""), getattr(pl, "set_lvl", 0)
+    if not s or lvl <= 0 or set_full(pl, s):
+        return ch
+    out = {nm: v * (1.0 + SET_AFF_STEP * lvl if GEAR[GEAR_IDX[nm]].set == s else 1.0) for nm, v in ch.items()}
+    pl.set_lvl = min(SET_AFF_MAX, lvl + 1)
+    tot = sum(out.values()) or 1.0
+    return {nm: v / tot for nm, v in out.items()}
 
 
 def noise_ground_r(world, x, y, z, r):
@@ -16485,7 +16649,7 @@ class HostSession:
                 "gr": [[g.gid, r2(g.x), r2(g.y), r2(g.z), r1(g.vx), r1(g.vy), r1(g.vz), r1(g.fuse)]
                        for g in w.grenades],
                 "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee, d.att,
-                        list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope] for d in w.drops],
+                        list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope, d.gren] for d in w.drops],
                 "gd": [[g.gid, g.kind, g.owner, r2(g.x), r2(g.y), r2(g.z), r2(g.nx), r2(g.ny), r2(g.nz), r1(g.yaw),
                         1 if g.arm > 0 else 0] for g in w.gadgets],
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
@@ -16825,6 +16989,8 @@ class ClientSession:
                 d.owner, d.lock = row[9], row[10]
             if len(row) > 11 and isinstance(row[11], int):
                 d.scope = row[11]
+            if len(row) > 12 and isinstance(row[12], int):
+                d.gren = row[12]
             seen.add(did)
         for did in [i for i in self.drops if i not in seen]:
             del self.drops[did]
@@ -117964,6 +118130,10 @@ class Game(ShowBase):
                 self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
                 if e[1] == self.my_id:
                     self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
+            elif kind == "gren_n":             # 10b: Granaten aufgehoben
+                if e[1] == self.my_id:
+                    self.player.grenades = e[2]
+                    self.toast(f"+{e[3]} Granate" + ("n" if e[3] > 1 else ""), (0.6, 1.0, 0.5), 1.4)
             elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
                 if e[1] == self.my_id:
                     self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
@@ -118546,7 +118716,13 @@ class Game(ShowBase):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.att >= 0 and d.att in self.att_drop_models:
+                if d.gren > 0:                                 # 10b: Granaten-Päckchen
+                    mdl = v.attachNewNode("gren")
+                    for k_ in range(min(3, d.gren)):
+                        gg = self.gren_np.copyTo(mdl)
+                        gg.setScale(2.2)
+                        gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0)
+                elif d.att >= 0 and d.att in self.att_drop_models:
                     mdl = self.att_drop_models[d.att].copyTo(v)
                 elif d.melee >= 0:
                     mdl = self.melee_drop_models[d.melee].copyTo(v)

@@ -2,6 +2,29 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10b: Beute von Monstern, Kategorie-Gedächtnis, Set-Affinität (2026-10-15)
+- Verteilte Kisten pausiert: `CRATES_ON_MAP = False`. Der Kisten-Code bleibt erhalten (Airdrops in 10e).
+- Jedes getötete Monster lässt Beute fallen, verteilt im Kreis um seine Stelle (`MOB_LOOT_R`). Die Teile fliegen sichtbar heraus und werden mit F aufgehoben; Name und Werte erscheinen beim Anschauen. Monster-Beute gehört 3 s dem Schützen und verschwindet nach `MOB_LOOT_LIFE` = 45 s.
+- Kategorien (`LOOT_CATS`): Fernkampfwaffe, Nahkampfwaffe, Granaten, Ausrüstung, Aufsatz/Visier. Aufsätze sind eine eigene Kategorie.
+- Seltenheit nach Monster (`MOB_LOOT`, nutzt die Kisten-Tabellen als Qualitätsstufe):
+
+  | Monster | Stufe | Teile |
+  |---|---|---|
+  | Grunt, Jägerin | braun | 2, aus verschiedenen Kategorien |
+  | Brute, Drohne | blau | 2, aus verschiedenen Kategorien |
+  | Koloss | gold | 2, aus verschiedenen Kategorien |
+  | Titan | gold | 6 – jede Kategorie mindestens einmal, keine Doppelten (ersetzt die goldene Titan-Kiste) |
+  | Fluchttier | – | keine Beute, bleibt beim Buff |
+
+- Granaten als Beute: Päckchen mit 1/2/3 Splittergranaten je Stufe (`LOOT_GREN_COUNT`). Neues Drop-Feld `gren` (im Snapshot), Ereignis "gren_n".
+- Kategorie-Gedächtnis pro Spieler und Leben (`cat_mul`): Die gerade bekommene Kategorie ×0,55 (`LOOT_CAT_DOWN`), alle anderen ×1,18 (`LOOT_CAT_UP`), Grenzen 0,15–4 (`LOOT_CAT_MIN`/`MAX`). Grundgewichte in `LOOT_CAT_BASE`. Das bisherige Gedächtnis innerhalb einer Kategorie bleibt.
+- Set-Affinität: Hebt man ein Set-Teil auf, steigen die Chancen der fehlenden Teile desselben Sets bei jeder weiteren Ausrüstungs-Beute stufenweise: ×(1 + `SET_AFF_STEP` × Stufe), `SET_AFF_STEP` = 0,5, höchstens `SET_AFF_MAX` = 6 Stufen. Ein Teil eines anderen Sets macht dieses zum neuen Ziel; das alte fällt zurück.
+- Simulation (60 Läufe, Monster-Mix wie auf der Karte, man hebt nur Teile seines Sets auf): komplettes Set im Median nach 16,5 Kills (Mittel 16,9; 90 % nach 27). Ohne Affinität im Median 27.
+- Waffen behalten ihre Aufsätze und ihr Visier beim Abwerfen, Tauschen und Tod; wer sie aufhebt, bekommt sie mit. Abnehmen über T ins eigene Lager.
+- Tod: Es fallen genau zwei Dinge – die aktive Waffe (mit Aufsätzen; ist die Nahkampfwaffe in der Hand, diese) und EIN zufälliges weiteres Teil aus Nahkampfwaffe, Granaten und den getragenen Ausrüstungsteilen. Ersetzt die bisherige Regel.
+- `MAX_DROPS` 40 -> 120.
+- NET_VERSION 32 -> 33 (Drop-Format).
+
 ## Experimental 10a: Echte Höhe – Lärm-Kugeln, KotH-Burg mit Kontrollturm, Strg = sinken (2026-10-15)
 - Lärm als Kugel statt Säule: `make_noise(x, y, r, z)` misst den Abstand zum Monster in 3D (Mitte des Monsters), Schalter `NOISE_SPHERE`. Gilt für alle Quellen: Schritte, Fahrzeuge, Heli (Höhe des Helis), Schüsse, Geschütze, Explosionen, Nahkampf und Sonderattacken, Stromstoß, Bodenschlag, Steinbrocken und Tomahawk. Ein hoch fliegender Heli alarmiert am Boden kaum noch etwas.
 - Minimap: Der eigene Lärmkreis und die Wellen zeigen den Schnitt der Lärm-Kugel mit dem Boden (`noise_ground_r`). Hoch in der Luft wird der Kreis kleiner oder verschwindet.
