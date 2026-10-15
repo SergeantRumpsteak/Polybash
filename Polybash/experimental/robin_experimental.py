@@ -113409,7 +113409,7 @@ class Game(ShowBase):
         self.setBackgroundColor(*SKY)
         self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
         st = load_settings()
-        self.gfx = st.get("gfx") if st.get("gfx") in GFX_MODES else "standard"
+        self.gfx = "standard"                    # überall Standardgrafik (alte Einstellung "hoch" wird ignoriert)
         vd = st.get("vd")
         self.view_pct = int(vd) if isinstance(vd, (int, float)) and not isinstance(vd, bool) and 25 <= vd <= 300 else 100   # Sichtweite in %
         self.fog, self.fog_dens, self.far_base = None, 0.012, 450.0
@@ -113775,7 +113775,6 @@ class Game(ShowBase):
                     ("Spiel beitreten", dig(2)), ("Zurück   (Esc)", back)]
         elif st == "settings":
             spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
-                    (f"Grafik:  {GFX_NAMES[self.gfx]}", dig(2)),
                     ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),
                     ("", None), ("", None),     # Platz für 5 Regler
                     ("Zurück   (Esc)", back)]
@@ -114221,10 +114220,6 @@ class Game(ShowBase):
                 if d == 1:
                     self.name_back = "settings"
                     self.show_menu("name")
-                elif d == 2:
-                    self.gfx = GFX_MODES[(GFX_MODES.index(self.gfx) + 1) % len(GFX_MODES)]
-                    self.save_prefs()
-                    self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
             elif st == "setup2":
@@ -114501,7 +114496,7 @@ class Game(ShowBase):
             self.close_loadscreen()
             return
         if self.quit_box is not None:
-            if self.mode == "play" and self.overlay_kind in ("settings_gfx", "settings_game", "settings_round"):
+            if self.mode == "play" and self.overlay_kind in ("settings_gfx", "settings_game", "settings_sound", "settings_round"):
                 self.show_pause("settings")        # Esc geht eine Ebene zurück
             elif self.mode == "play" and self.overlay_kind in ("settings", "leave"):
                 self.show_pause("main")
@@ -114591,7 +114586,7 @@ class Game(ShowBase):
             else:
                 self.on_escape()
             return
-        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "settings_round", "strike"):
+        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "settings_sound", "settings_round", "strike"):
             return
         if self.overlay_kind == "leave":
             if yes:
@@ -114874,7 +114869,8 @@ class Game(ShowBase):
         elif kind == "settings":
             self.open_overlay("settings", "Einstellungen", [
                 ("Grafikeinstellungen", lambda: self.show_pause("settings_gfx")),
-                ("Klangeinstellungen", lambda: self.show_pause("settings_game")),
+                ("Spieleinstellungen", lambda: self.show_pause("settings_game")),
+                ("Klangeinstellungen", lambda: self.show_pause("settings_sound")),
                 ("Zurück   (Esc)", lambda: self.show_pause("main"))], "")
         else:                                      # settings_gfx / settings_game / settings_round
             w = self.world
@@ -114894,15 +114890,19 @@ class Game(ShowBase):
 
             if kind == "settings_gfx":
                 self.open_overlay("settings_gfx", "Grafikeinstellungen", [
-                    (f"Grafik:  {GFX_NAMES[self.gfx]}", do(set_gfx)),
                     self.fps_slider(),
                     self.view_slider(),
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
-            if kind == "settings_game":                 # persönliche Einstellungen: Maus und Lautstärke
-                items = list(self.personal_sliders())
+            if kind == "settings_game":                 # persönliche Spieleinstellungen: Maus
+                items = list(self.personal_sliders()[:1])
                 items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
-                self.open_overlay("settings_game", "Klangeinstellungen", items, "", width=1.45)
+                self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
+                return
+            if kind == "settings_sound":                # Klang: Musik und Effekte
+                items = list(self.personal_sliders()[1:])
+                items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
+                self.open_overlay("settings_sound", "Klangeinstellungen", items, "", width=1.45)
                 return
             # settings_round: alles, was die laufende Runde betrifft
             if host_side:
