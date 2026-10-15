@@ -19,6 +19,7 @@ Steuerung:
   T              Waffe ansehen (9b): die Waffe wird von der Seite präsentiert, Markierungen an Visier, Lauf,
                  Magazin, Griff - Klick öffnet die passenden Aufsätze aus dem Lager; T / Esc schliesst.
                  Laufen geht weiter, Schiessen ist gesperrt. Mit der Bratpfanne in der Hand: essen (9c)
+  Linke Maus     (9c) Katana: 3 s halten = Rundumschlag; Schwert: 3 s halten = Sprungangriff
   Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
   Menüs          auch mit der Maus bedienbar (Hover = gelb, Klick = wählen)
   5              Gadget in die Hand (eigene Karte rechts neben den Waffen; Wahl im Hauptmenü "Ausrüstung"
@@ -30,7 +31,7 @@ Steuerung:
   Fahrzeug       W/S Gas/Rückwärts, A/D lenken, Leertaste Handbremse, Maus: Kamera
 
 Nahkampf: Jeder hat zusätzlich eine Nahkampfwaffe im eigenen Slot (Start/Respawn: Messer). Aus Kisten (Art "melee",
-LOOT_MELEE_TABLES): Kampfmesser, Machete, Schwert, Katana (stark) und die Bratpfanne (Kopftreffer = BONG). Werte in
+LOOT_MELEE_TABLES): Erschöpfungsdolch (9c, vorher Kampfmesser), Machete, Schwert, Katana (stark) und die Bratpfanne (Kopftreffer = BONG). Werte in
 MELEE (Schaden, Schläge, Reichweite, Kopf-Faktor, Schlagwinkel). Ein Schlag ist sehr leise (NOISE_MELEE ~ Ducken):
 nur das getroffene Monster merkt etwas, ahnungslose Monster nehmen MELEE_SNEAK-fachen Schaden - so erledigt man
 sie leise. Neue Nahkampfwaffe ersetzt die alte (die fällt, ausser dem Messer); gleiche: "Hast du schon". Stirbt man
@@ -70,6 +71,11 @@ mehr zwischen fein und grob unterteilten Geländezellen (Kanten werden angeglich
 9b: Drohnen: feste Zahl DRONE_COUNT (jede Dichte ausser "Aus", Respawn nie darüber), DRONE_SIZE-fach grösser
 (Modell + Trefferzone). Aufsätze/Visier über T (Inspektions-Ansicht der Waffe mit Markierungen, INSPECT_*), Tab ist
 nur noch Übersicht. Tomahawk: Sirene halb so laut (TOMA_SIREN_VOL), im Anflug leise die US-Hymne (TOMA_ANTHEM*).
+9c: Nahkampfwaffen detailliert (MELEE_SHAPES, Sinans Formsprache: Modell und Symbol). Erschöpfungsdolch (vorher
+Kampfmesser): Lebensraub DAGGER_LEECH; trifft er Spieler, gehen deren Fähigkeiten auf volle Abklingzeit, die eigenen
+sind sofort bereit und wirken beim nächsten Einsatz x DAGGER_AMP (apply_drain). Katana/Schwert: Schlagtaste
+MELEE_CHARGE_T s halten = Rundumschlag (KATANA_*) bzw. Sprungangriff (SWORD_*). Bratpfanne: Kills laden sie mit
+Essen (PAN_POINTS, PAN_STAGES), T = essen (Heilung, Stufe 3 mit Bissen und Rülpser PAN_BURP_R, kein Monster-Lärm).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -438,7 +444,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 29         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 30         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -863,7 +869,7 @@ class Melee:
 
 MELEE = (
     Melee("Messer", 25, 0.45, 1.6, short="Messer"),                       # Start (0815-Messer)
-    Melee("Kampfmesser", 34, 0.42, 1.7, short="Kampfmesser"),
+    Melee("Erschöpfungsdolch", 34, 0.42, 1.7, short="Dolch"),      # 9c: vorher Kampfmesser (Lebensraub, Erschöpfung)
     Melee("Machete", 46, 0.6, 2.0, short="Machete"),
     Melee("Schwert", 62, 0.75, 2.4, short="Schwert"),
     Melee("Katana", 75, 0.55, 2.5, head=1.6, arc=45.0, short="Katana"),
@@ -875,6 +881,30 @@ MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 4 / F ohne Z
 MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in MELEE
 MELEE_SNEAK = 2.0         # Faktor, wenn das Monster nichts ahnt (idle, nicht am Suchen/Jagen) - leise erledigen
 NOISE_MELEE = 3.0         # m Lärmradius eines Schlags/Treffers (etwa wie Ducken)
+# 9c: Sonderfähigkeiten der Nahkampfwaffen
+DAGGER_NAME = "Erschöpfungsdolch"
+DAGGER_LEECH = 0.5        # Erschöpfungsdolch: so viel des verursachten Schadens heilt den Träger (Monster und Spieler)
+DAGGER_AMP = 2.0          # ... nach einem Spieler-Treffer: der nächste Einsatz jeder eigenen Fähigkeit wirkt so viel stärker
+DAGGER_AMP_T = 20.0       # ... s: so lange bleibt dieser verstärkte Einsatz bereit
+DAGGER_PAN_LOCK = 8.0     # ... s: so lange kann der Getroffene nicht essen (Abklingzeit der Pfanne; laufendes Essen bricht ab)
+MELEE_HOLD_START = 0.3    # s: länger gehalten = Katana/Schwert laden auf (kurzer Klick = normaler Schlag)
+MELEE_CHARGE_T = 3.0      # s gedrückt halten bis zur Sonderattacke (Katana, Schwert)
+MELEE_SPECIAL = {"Katana": "spin", "Schwert": "slam"}
+KATANA_SPIN_R = 2.0       # Katana: Rundum-Schlag trifft alles in so viel m um einen ...
+KATANA_SPIN_MULT = 2.0    # ... mit so viel-fachem Schaden
+SWORD_JUMP_H = 1.5        # Schwert: Sprungangriff - so viel-fache Sprunghöhe ...
+SWORD_LEAP = 1.5          # ... m Satz nach vorn ...
+SWORD_SLAM_R = 5.0        # ... beim Aufkommen trifft er alles bis so viel m vor einem ...
+SWORD_SLAM_ARC = 50.0     # ... in diesem Winkel (Grad links und rechts der Blickrichtung) ...
+SWORD_SLAM_MULT = 2.0     # ... mit so viel-fachem Schaden
+PAN_NAME = "Bratpfanne"
+PAN_POINTS = {"grunt": 1, "critter": 1, "brute": 2, "huntress": 2, "drone": 2, "colossus": 5, "titan": 10, "player": 3}
+PAN_STAGES = ((3, 2.0, 15.0), (6, 3.0, 20.0), (10, 5.0, 20.0))   # (ab Punkten, Dauer s, HP je s; Stufe 3: je Bissen)
+PAN_MAX_PTS = 10          # mehr Punkte sammelt die Pfanne nicht
+PAN_STAGE3_ONLY_GRUNTS = False   # True: über Stufe 2 hinaus zählen nur noch Grunt-Kills
+PAN_EAT_SPEED = 0.5       # beim Essen: so langsam (Anteil vom Gehen), kein Rennen, kein Angriff
+PAN_BURP_R = 20.0         # m: so weit hören andere Spieler den Rülpser (Stufe 3; zählt nicht als Lärm für Monster)
+PAN_FP_ROLL = -70.0       # Grad: Pfanne in der Ego-Ansicht so gedreht, dass man das Essen sieht
 
 # ======================================================================== LOOT (zum Balancen)
 # --- Waffen-Slots
@@ -950,7 +980,7 @@ LOOT_GEAR_TABLES = {
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
 LOOT_MELEE_TABLES = {
     #  Nahkampf              braun  blau   gold   (das Start-Messer kommt nie aus Kisten)
-    "Kampfmesser":         (40.0, 15.0,  5.0),
+    "Erschöpfungsdolch":   (40.0, 15.0,  5.0),
     "Machete":             (30.0, 25.0, 10.0),
     "Schwert":             (12.0, 30.0, 30.0),
     "Katana":              ( 3.0, 15.0, 40.0),
@@ -1334,7 +1364,8 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
-              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"), ("T", "Waffe ansehen / Aufsätze"),
+              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
+              ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
               ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
 
@@ -1449,12 +1480,39 @@ def drop_info(d):
     return ""
 
 
-def melee_info(mi):
-    """Mausover-Info der Nahkampfwaffe - aus MELEE."""
+def melee_info(mi, pl=None):
+    """Mausover-Info der Nahkampfwaffe - aus MELEE (9c: mit Sonderfähigkeit)."""
     m = MELEE[mi]
-    return (f"{m.name}  (Nahkampf)\nSchaden: {m.dmg:.0f}  (Kopf x{m.head:g})\n"
-            f"Tempo: {60.0 / m.interval:.0f} Schläge/min\nReichweite: {m.reach:.1f} m, Winkel ±{m.arc:.0f}°\n"
-            f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
+    s = (f"{m.name}  (Nahkampf)\nSchaden: {m.dmg:.0f}  (Kopf x{m.head:g})\n"
+         f"Tempo: {60.0 / m.interval:.0f} Schläge/min\nReichweite: {m.reach:.1f} m, Winkel ±{m.arc:.0f}°\n"
+         f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
+    if m.name == DAGGER_NAME:
+        s += (f"\nLebensraub: heilt {DAGGER_LEECH * 100:.0f} % des Schadens\nTrifft er Spieler: deren Fähigkeiten auf volle "
+              f"Abklingzeit, deine sofort bereit,\nnächster Einsatz x{DAGGER_AMP:g} ({DAGGER_AMP_T:.0f} s)")
+    elif MELEE_SPECIAL.get(m.name) == "spin":
+        s += f"\n{MELEE_CHARGE_T:.0f} s halten: Rundum-Schlag ({KATANA_SPIN_R:g} m, Schaden x{KATANA_SPIN_MULT:g})"
+    elif MELEE_SPECIAL.get(m.name) == "slam":
+        s += (f"\n{MELEE_CHARGE_T:.0f} s halten: Sprungangriff (x{SWORD_JUMP_H:g} hoch, Aufschlag bis {SWORD_SLAM_R:g} m "
+              f"vor dir, Schaden x{SWORD_SLAM_MULT:g})")
+    elif m.name == PAN_NAME:
+        st = pan_stage(getattr(pl, "pan_pts", 0)) if pl is not None else 0
+        s += (f"\nKills laden sie mit Essen auf - T: essen\nStufe 1 ab {PAN_STAGES[0][0]}, 2 ab {PAN_STAGES[1][0]}, "
+              f"3 ab {PAN_STAGES[2][0]} Punkten" + (f"\nJetzt: Stufe {st}, {getattr(pl, 'pan_pts', 0)} Punkte" if pl is not None else ""))
+    return s
+
+
+def pan_stage(pts):
+    """9c: Essens-Stufe der Bratpfanne (0-3) aus den gesammelten Punkten."""
+    st = 0
+    for k, (need, _d, _hp) in enumerate(PAN_STAGES):
+        if pts >= need:
+            st = k + 1
+    return st
+
+
+def pan_food_count(pts):
+    """9c: so viele Essens-Stücke liegen in der Pfanne (je mehr Punkte, desto voller)."""
+    return 0 if pts <= 0 else min(len(FOOD_SHAPES), max(1, int(round(len(FOOD_SHAPES) * min(1.0, pts / PAN_MAX_PTS)))))
 
 
 SET_BONUS_TEXT = {
@@ -3251,6 +3309,7 @@ class World:
         self.shot_sink = None    # Client: Schüsse zum Host schicken statt selbst zu simulieren
         self.gren_sink = None    # Client: Granatenwürfe zum Host schicken
         self.melee_sink = None   # Client: Nahkampf-Schläge zum Host schicken
+        self.mspec_sink = None   # 9c: Client: Sonderattacken (Katana, Schwert) zum Host schicken
         self.gad_sink = None     # Client: Gadget-Aktionen (platzieren / C4 zünden) zum Host schicken
         self.next_gid = 1
         self.next_did = 1
@@ -5220,6 +5279,11 @@ class World:
             self.player_died(pl, attacker, wi)
 
     def player_died(self, pl, attacker, wi):
+        if wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99) and attacker != pl.pid:
+            self.pan_add(self.players.get(attacker), "player")   # 9c: Spieler-Kill mit der Pfanne
+        if pl.pan_pts or pl.eat_t > 0:                   # 9c: Ladung geht beim Tod verloren
+            pl.pan_pts, pl.eat_t = 0, 0.0
+            self.events.append(("pan", pl.pid, 0, 0))
         pl.deaths += 1
         pl.death_pos = (pl.x, pl.y)
         act = pl.cur                                     # die Waffe, die er gerade in der Hand hatte
@@ -5283,18 +5347,20 @@ class World:
                 or pl.vehicle >= 0 or pl.heli >= 0):
             return False
         pl.shock_cd = SHOCK_CD
+        k = DAGGER_AMP if "shock" in pl.amp else 1.0     # 9c: Erschöpfungsdolch: doppelter Radius und Betäubung
+        pl.amp.discard("shock")
         rng = self.mrng
         for q in self.players.values():
             if q is pl or q.hp <= 0:
                 continue
-            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R and abs(q.z - pl.z) < 2.5:
+            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R * k and abs(q.z - pl.z) < 2.5:
                 q.stun_lock = 0.0
-                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
         for m in self.mobs:
             if m.state == "dead":
                 continue
-            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
-                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX))
+            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R * k + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
+                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
                 m.state, m.atk_t, m.did_hit = "chase", 0.0, True
         self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
         self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
@@ -5529,6 +5595,8 @@ class World:
             self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
             self.events.append(("reward", owner))        # Munition für den Schützen
             killer = self.players.get(owner)
+            if killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99):
+                self.pan_add(killer, m.kind)              # 9c: Kill mit der Pfanne lädt sie auf
             if killer is not None:
                 killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
                 if 0 <= wi < len(WEAPONS):
@@ -5960,6 +6028,7 @@ class World:
         wi = MELEE_WI0 + mi
         snd = m.sound if (m.sound != "bong" or head) else "slash"
         self.events.append(("mhit", tuple(round(c, 2) for c in pos), snd, pl.pid))
+        before = t.hp + getattr(t, "shield_hp", 0.0)
         if isinstance(t, Mob):
             if t.aggressive() and t.state == "idle" and t.noise_at is None:
                 dmg *= MELEE_SNEAK                        # von hinten / ahnungslos: leise erledigen
@@ -5968,6 +6037,118 @@ class World:
         else:
             self.note_hit(pl.pid, head)
             self.hit_player(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
+        if m.name == DAGGER_NAME:                         # 9c: Erschöpfungsdolch
+            dealt = max(0.0, before - max(0.0, t.hp) - max(0.0, getattr(t, "shield_hp", 0.0)))
+            if dealt > 0 and pl.hp > 0:
+                heal = min(pl.max_hp - pl.hp, dealt * DAGGER_LEECH)
+                if heal > 0:
+                    pl.hp += heal
+                    self.events.append(("leech", pl.pid, round(heal, 1)))
+            if not isinstance(t, Mob):
+                self.dagger_drain(pl, t)
+
+    def dagger_drain(self, att, tgt):
+        """9c: Erschöpfungsdolch trifft einen Spieler: seine Fähigkeiten auf volle Abklingzeit (Dash, Jetpack leer,
+        Stromstoss, Essen gesperrt/abgebrochen), die des Angreifers sofort bereit und der nächste Einsatz jeder
+        Fähigkeit x DAGGER_AMP (DAGGER_AMP_T s lang). Bewegungs-Fähigkeiten rechnet der Rechner des Spielers - deshalb
+        geht das Ereignis "drain" an alle (apply_drain)."""
+        apply_drain(att, tgt)
+        self.events.append(("drain", att.pid, tgt.pid))
+
+    def pan_add(self, pl, kind):
+        """9c: Kill mit der Bratpfanne: Punkte je Art (PAN_POINTS) -> mehr Essen in der Pfanne."""
+        if pl is None or pl.melee != MELEE_IDX.get(PAN_NAME) or pl.hp <= 0:
+            return
+        n = PAN_POINTS.get(kind, 1)
+        cap = PAN_MAX_PTS
+        if PAN_STAGE3_ONLY_GRUNTS and kind != "grunt":
+            cap = max(pl.pan_pts, min(PAN_MAX_PTS, PAN_STAGES[1][0]))
+        new = min(cap, pl.pan_pts + n)
+        if new != pl.pan_pts:
+            pl.pan_pts = new
+            self.events.append(("pan", pl.pid, pl.pan_pts, n))
+
+    def pan_eat(self, pl):
+        """9c: T mit der Pfanne in der Hand: die erreichte Stufe essen (Host/Einzelspiel entscheidet). -> True"""
+        st = pan_stage(pl.pan_pts)
+        if (pl.hp <= 0 or self.phase != "play" or st == 0 or pl.eat_t > 0 or pl.pan_lock > 0
+                or pl.melee != MELEE_IDX.get(PAN_NAME) or not pl.melee_out or pl.vehicle >= 0 or pl.heli >= 0):
+            return False
+        need, dur, _hp = PAN_STAGES[st - 1]
+        k = DAGGER_AMP if "pan" in pl.amp else 1.0
+        pl.amp.discard("pan")
+        pl.eat_t, pl.eat_dur, pl.eat_stage, pl.eat_k, pl.eat_bites = dur, dur, st, k, 0
+        pl.pan_pts = 0
+        self.events.append(("eat", pl.pid, st, dur, k))
+        self.events.append(("pan", pl.pid, 0, 0))
+        return True
+
+    def update_eating(self, pl, dt):
+        """9c: Essen läuft: Stufe 1/2 heilen gleichmässig, Stufe 3 je Sekunde ein Bissen; danach (Stufe 3) Rülpser."""
+        if pl.eat_t <= 0:
+            return
+        if pl.hp <= 0:
+            pl.eat_t = 0.0
+            return
+        st = pl.eat_stage
+        hp_ = PAN_STAGES[st - 1][2] * pl.eat_k
+        el0 = pl.eat_dur - pl.eat_t
+        pl.eat_t = max(0.0, pl.eat_t - dt)
+        el1 = pl.eat_dur - pl.eat_t
+        if st < 3:
+            pl.hp = min(pl.max_hp, pl.hp + hp_ * (el1 - el0))
+        else:
+            while pl.eat_bites < int(el1 + 1e-6) and pl.eat_bites < int(round(pl.eat_dur)):
+                pl.eat_bites += 1
+                pl.hp = min(pl.max_hp, pl.hp + hp_)
+                self.events.append(("bite", pl.pid, pl.eat_bites))
+        if pl.eat_t <= 0 and st >= 3:
+            self.events.append(("burp", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z + 1.5, 2)))   # kein Lärm!
+
+    def melee_special(self, pl, kind, d):
+        """9c: Sonderattacke (Katana "spin", Schwert "slam"). Mitspieler schicken sie an den Host."""
+        if self.mspec_sink is not None:
+            self.mspec_sink(kind, d)
+            return
+        self.melee_special_hit(pl, kind, d)
+
+    def melee_special_hit(self, pl, kind, d):
+        """9c: Host/Einzelspiel: Katana-Rundumschlag (KATANA_SPIN_R um den Spieler) bzw. Schwert-Aufschlag (bis
+        SWORD_SLAM_R vor dem Spieler im Winkel SWORD_SLAM_ARC) - Flächenschaden mit Faktor, alle Gegner im Bereich."""
+        if pl.hp <= 0 or self.phase != "play" or not (0 <= pl.melee < len(MELEE)):
+            return
+        m = MELEE[pl.melee]
+        if MELEE_SPECIAL.get(m.name) != kind:
+            return
+        pl.protect = 0.0
+        hl = math.hypot(d[0], d[1]) or 1.0
+        fx, fy = d[0] / hl, d[1] / hl
+        R, mult = (KATANA_SPIN_R, KATANA_SPIN_MULT) if kind == "spin" else (SWORD_SLAM_R, SWORD_SLAM_MULT)
+        cos_arc = math.cos(math.radians(SWORD_SLAM_ARC))
+        self.events.append(("mspec", pl.pid, kind, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2), round(math.degrees(math.atan2(-fx, fy)), 1)))
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
+        chest = (pl.x, pl.y, pl.z + 1.0)
+        wi = MELEE_WI0 + pl.melee
+        cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
+        cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
+                  if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
+        for t, rad, z0, z1 in cands:
+            dx, dy = t.x - pl.x, t.y - pl.y
+            dist = math.hypot(dx, dy)
+            if dist - rad > R or z1 < pl.z - 1.0 or z0 > pl.z + 2.6:
+                continue
+            if kind == "slam" and dist > rad + 0.3 and (dx * fx + dy * fy) / max(dist, 1e-6) < cos_arc:
+                continue
+            if not self.los(chest, (t.x, t.y, min(max(chest[2], z0 + 0.3), z1 - 0.1))):
+                continue
+            dn = (dx / dist, dy / dist, 0.0) if dist > 0.05 else (fx, fy, 0.0)
+            pos = (t.x - dn[0] * rad * 0.8, t.y - dn[1] * rad * 0.8, min(z1 - 0.1, z0 + 1.0))
+            self.events.append(("mhit", tuple(round(c, 2) for c in pos), "slash", pl.pid))
+            self.note_hit(pl.pid, False)
+            if isinstance(t, Mob):
+                self.hurt_mob(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
+            else:
+                self.hit_player(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
 
     def give_melee(self, pl, mi, crate=-1):
         """Neue Nahkampfwaffe: ersetzt die alte (fällt als Drop, ausser dem Start-Messer). Gleiche Waffe:
@@ -5977,6 +6158,9 @@ class World:
             return False
         if pl.melee != START_MELEE:
             self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
+        if pl.pan_pts or pl.eat_t > 0:                   # 9c: die Ladung gehört zur Pfanne
+            pl.pan_pts, pl.eat_t = 0, 0.0
+            self.events.append(("pan", pl.pid, 0, 0))
         pl.melee = mi
         self.events.append(("melee", pl.pid, mi, crate))
         return True
@@ -7293,6 +7477,8 @@ class World:
                     rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
                     pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
             pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
+            tick_melee_timers(pl, dt)                    # 9c: Pfannen-Sperre, verstärkte Fähigkeiten
+            self.update_eating(pl, dt)                   # 9c: Essen (Heilung beim Host)
             if pl.buff is not None:
                 pl.buff_t -= dt
                 if pl.buff_t <= 0:
@@ -7411,6 +7597,16 @@ class Player:
         self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
+        self.pan_pts = 0                  # 9c: Ladung der Bratpfanne (Punkte aus Kills mit ihr; beim Tod weg)
+        self.eat_t, self.eat_dur, self.eat_stage, self.eat_k = 0.0, 0.0, 0, 1.0   # 9c: Essen läuft (Rest, Dauer, Stufe, Faktor)
+        self.eat_bites = 0                # 9c: Stufe 3: schon genommene Bissen
+        self.pan_lock = 0.0               # 9c: s, so lange kann er nicht essen (Erschöpfungsdolch)
+        self.amp, self.amp_t = set(), 0.0 # 9c: verstärkte nächste Einsätze ("dash", "jet", "shock", "pan"), Restzeit
+        self.dash_amp = self.jet_amp = 1.0   # 9c: Faktor des laufenden Dashs / Jetpack-Flugs
+        self.chg_hold = 0.0               # 9c: s, so lange die Schlagtaste gehalten wird (Katana/Schwert laden)
+        self.leap_t, self.leap_dir, self.leap_v = 0.0, (0.0, 0.0), 0.0   # 9c: Sprungangriff (Schwert): Satz nach vorn
+        self.slam_pending = self.slam_air = False   # 9c: beim Aufkommen schlägt das Schwert zu
+        self.last_spec = -99.0            # 9c: Host: Zeitpunkt der letzten Sonderattacke (gegen Spam)
 
 
 def note_hand(pl):
@@ -7507,10 +7703,14 @@ def step(pl, forward, strafe, run, jump, dt, world):
             pl.dash_t, pl.dash_cd = DASH_TIME / (HERMES_SET_DASH if hs else 1.0), DASH_CD
             pl.dash_dir = (dx / l, dy / l)
             pl.dash_dist = 0.0
+            amp = getattr(pl, "amp", None)
+            pl.dash_amp = DAGGER_AMP if amp and "dash" in amp else 1.0   # 9c: Erschöpfungsdolch: doppelt so weit
+            if amp:
+                amp.discard("dash")
         pl.run_edge = False
     if gear is not None and pl.dash_t > 0:
         hs = set_full(pl, "hermes")
-        sp = DASH_DIST / DASH_TIME * (HERMES_SET_DASH if hs else 1.0)
+        sp = DASH_DIST / DASH_TIME * (HERMES_SET_DASH if hs else 1.0) * getattr(pl, "dash_amp", 1.0)
         pl.dash_t -= dt
         pl.dash_dist += sp * dt
         if hs and run and pl.dash_dist < HERMES_GLIDE_MAX:     # 7c: Shift halten = weitergleiten (bis 30 m)
@@ -7525,6 +7725,8 @@ def step(pl, forward, strafe, run, jump, dt, world):
         speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
         if getattr(pl, "buff", None) == "speed" and pl.buff_t > 0:
             speed *= BUFF_SPEED
+        if getattr(pl, "eat_t", 0.0) > 0:
+            speed = min(speed, WALK * PAN_EAT_SPEED)            # 9c: beim Essen nur langsam gehen
         if gear is not None and set_full(pl, "hermes"):
             speed *= HERMES_SET_SPEED                              # 7c: Hermes-Set
         pl.x += dx / l * speed * dt
@@ -7532,6 +7734,10 @@ def step(pl, forward, strafe, run, jump, dt, world):
         if pl.on_ground:
             pl.phase += speed * dt * 1.6
 
+    if getattr(pl, "leap_t", 0.0) > 0:               # 9c: Schwert-Sprungangriff: Satz nach vorn
+        pl.leap_t -= dt
+        pl.x += pl.leap_dir[0] * pl.leap_v * dt
+        pl.y += pl.leap_dir[1] * pl.leap_v * dt
     pl.x, pl.y = push_out(pl.x, pl.y, PLAYER_R, world, pl.z)
     lo = edge_margin(world)                          # Kartenrand / Gebirgskamm: unsichtbare Wand
     pl.x = max(lo, min(WORLD - lo, pl.x))
@@ -7563,12 +7769,17 @@ def step(pl, forward, strafe, run, jump, dt, world):
         pl.vz = max(pl.vz, DOUBLE_JUMP_V)            # Jetpack-Schuhe: zweiter Sprung in der Luft
         pl.air_jump = True
         jedge = False
+        amp = getattr(pl, "amp", None)
+        if amp and "jet" in amp and wears(pl, "jetpack"):
+            amp.discard("jet")                       # 9c: Erschöpfungsdolch: dieser Flug mit doppeltem Schub
+            pl.jet_amp = DAGGER_AMP
     jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
            and pl.jet_fuel > 0 and pl.air_jump)               # 7c: Jetpack = erst Doppelsprung, dann Schub
     pl.jet_on = jet                                  # Jetpack: Leertaste in der Luft halten
     if jet:
-        pl.jet_fuel = max(0.0, pl.jet_fuel - dt)
-        pl.vz = min(JET_VMAX, pl.vz + JET_ACC * dt)
+        ja = getattr(pl, "jet_amp", 1.0)
+        pl.jet_fuel = max(0.0, pl.jet_fuel - dt / ja)
+        pl.vz = min(JET_VMAX * ja, pl.vz + JET_ACC * ja * dt)
     elif gear is not None:
         pl.jet_fuel = min(JET_FUEL, pl.jet_fuel + JET_FUEL / JET_REFILL_T * dt)
     pl.vz -= GRAVITY * dt
@@ -7579,9 +7790,10 @@ def step(pl, forward, strafe, run, jump, dt, world):
             pl.z, pl.vz = max(cap, ground), 0.0
     if pl.z <= ground:
         pl.air_jump = False
+        pl.jet_amp = 1.0
         if pl.vz < 0:                                # Aufprall: Fallhöhe aus der Aufprallgeschwindigkeit
             fall = pl.vz * pl.vz / (2.0 * GRAVITY)
-            if fall > FALL_SAFE:
+            if fall > FALL_SAFE and not getattr(pl, "slam_pending", False):   # 9c: Sprungangriff ohne Fallschaden
                 pl.fall_dmg = getattr(pl, "fall_dmg", 0.0) + (fall - FALL_SAFE) * FALL_DMG
                 pl.fall_h = fall
         pl.z, pl.vz, pl.on_ground = ground, 0.0, True
@@ -7938,6 +8150,69 @@ def sg_pose(t, n):
     return ang, lift, hand, shell
 
 
+def apply_drain(att, tgt):
+    """9c: Wirkung des Erschöpfungsdolchs auf beide Spieler (läuft beim Host UND auf den Rechnern der beiden)."""
+    if tgt is not None:
+        tgt.dash_cd, tgt.dash_t = DASH_CD, 0.0
+        tgt.jet_fuel, tgt.jet_on = 0.0, False
+        tgt.shock_cd = SHOCK_CD
+        tgt.pan_lock = DAGGER_PAN_LOCK
+        tgt.eat_t = 0.0
+        tgt.amp, tgt.amp_t = set(), 0.0
+    if att is not None:
+        att.dash_cd = 0.0
+        att.jet_fuel = JET_FUEL
+        att.shock_cd = 0.0
+        att.pan_lock = 0.0
+        att.amp, att.amp_t = {"dash", "jet", "shock", "pan"}, DAGGER_AMP_T
+
+
+def tick_melee_timers(pl, dt):
+    """9c: Pfannen-Sperre und verstärkte Fähigkeiten laufen ab."""
+    pl.pan_lock = max(0.0, pl.pan_lock - dt)
+    if pl.amp:
+        pl.amp_t -= dt
+        if pl.amp_t <= 0:
+            pl.amp, pl.amp_t = set(), 0.0
+
+
+def melee_charge(pl, world, trigger, dt):
+    """9c: Katana/Schwert: Schlagtaste halten lädt (ab MELEE_HOLD_START), nach MELEE_CHARGE_T s Loslassen = Sonderattacke.
+    Schwert: erst ein hoher Sprung mit Satz nach vorn, beim Aufkommen der Aufschlag. -> True, solange geladen wird
+    (dann keine normalen Schläge)."""
+    m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
+    kind = MELEE_SPECIAL.get(m.name)
+    hr = math.radians(pl.heading)
+    if pl.slam_pending:                                   # Schwert in der Luft: auf den Aufschlag warten
+        if not pl.on_ground:
+            pl.slam_air = True
+        elif pl.slam_air:
+            pl.slam_pending = pl.slam_air = False
+            pl.leap_t = 0.0
+            world.melee_special(pl, "slam", (-math.sin(hr), math.cos(hr), 0.0))
+        return True
+    if kind is None or pl.eat_t > 0:
+        pl.chg_hold = 0.0
+        return False
+    if trigger:
+        pl.chg_hold += dt
+        return pl.chg_hold >= MELEE_HOLD_START
+    held, pl.chg_hold = pl.chg_hold, 0.0
+    if held < MELEE_CHARGE_T:
+        return False
+    d = (-math.sin(hr), math.cos(hr), 0.0)
+    if kind == "spin":
+        world.melee_special(pl, "spin", d)
+        pl.swing_t = pl.melee_cd = 0.45
+    elif pl.on_ground:                                    # Sprungangriff
+        vz = JUMP_V * math.sqrt(SWORD_JUMP_H) * (SPRING_JUMP if wears(pl, "spring") else 1.0)
+        air = 2.0 * vz / GRAVITY
+        pl.vz, pl.on_ground = vz, False
+        pl.leap_t, pl.leap_dir, pl.leap_v = air, (d[0], d[1]), SWORD_LEAP / air
+        pl.slam_pending, pl.slam_air = True, False
+    return True
+
+
 def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
     """Schiessen, Nachladen, Waffenwechsel. trigger = Abzug gehalten,
     edge = Abzug in diesem Frame neu gedrückt (für Halbautomaten)."""
@@ -7950,6 +8225,8 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
         pl.trigger_buf = 0.18          # zu früh geklickt -> Schuss wird vorgemerkt
     pl.melee_cd = max(0.0, pl.melee_cd - dt)
     pl.swing_t = max(0.0, pl.swing_t - dt)
+    if getattr(pl, "eat_t", 0.0) > 0 or getattr(pl, "slam_pending", False):
+        select = None                      # 9c: beim Essen / im Sprungangriff kein Waffenwechsel
     if (select is not None and pl.switch_t <= 0
             and ((select == MELEE_SEL and not pl.melee_out) or (select != MELEE_SEL and (select != pl.cur or pl.melee_out)))):
         pl.switch_to, pl.switch_t, pl.reload_t = select, SWITCH_T, 0.0
@@ -7967,6 +8244,9 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
         return
     if pl.melee_out:                       # Nahkampf: Linke Maus = zuschlagen (gehalten = weiter schlagen)
         pl.ads = False
+        if melee_charge(pl, world, trigger, dt) or pl.eat_t > 0:     # 9c: Laden / Sprungangriff / Essen: kein Schlag
+            pl.trigger_buf = 0.0
+            return
         if (trigger or pl.trigger_buf > 0) and pl.melee_cd <= 0:
             m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
             pl.melee_cd = pl.swing_t = m.interval
@@ -12313,37 +12593,234 @@ SPRINT_POSE_DEFAULT = (-0.16, -0.08, -0.02, 52.0, 10.0, -14.0)
 
 
 STEEL, DSTEEL = (0.80, 0.82, 0.86), (0.52, 0.54, 0.58)
-MELEE_PARTS = {     # Quader (cx, cy, cz, sx, sy, sz, Farbe): Griff im Ursprung, Klinge nach +y
-    "Messer": [(0, 0, 0, 0.03, 0.11, 0.035, (0.28, 0.18, 0.1)), (0, 0.135, 0.004, 0.01, 0.16, 0.03, STEEL),
-               (0, 0.225, 0.0, 0.008, 0.03, 0.016, STEEL)],
-    "Kampfmesser": [(0, 0, 0, 0.034, 0.12, 0.04, (0.08, 0.08, 0.09)), (0, 0.066, 0, 0.05, 0.012, 0.062, (0.3, 0.3, 0.32)),
-                    (0, 0.17, 0.006, 0.012, 0.2, 0.042, DSTEEL), (0, 0.28, 0.014, 0.01, 0.03, 0.022, DSTEEL)],
-    "Machete": [(0, 0, 0, 0.035, 0.13, 0.04, (0.45, 0.3, 0.15)), (0, 0.27, 0.012, 0.01, 0.4, 0.06, STEEL),
-                (0, 0.46, 0.02, 0.01, 0.06, 0.072, STEEL)],
-    "Schwert": [(0, -0.09, 0, 0.042, 0.03, 0.042, (0.72, 0.6, 0.3)), (0, 0, 0, 0.035, 0.15, 0.035, (0.35, 0.2, 0.1)),
-                (0, 0.088, 0, 0.032, 0.026, 0.2, DSTEEL), (0, 0.42, 0, 0.012, 0.62, 0.05, STEEL),
-                (0, 0.75, 0, 0.01, 0.06, 0.024, STEEL)],
-    "Katana": [(0, 0, 0, 0.032, 0.22, 0.036, (0.12, 0.1, 0.14)), (0, 0.12, 0, 0.07, 0.012, 0.07, (0.75, 0.62, 0.25)),
-               (0, 0.35, 0.0, 0.009, 0.42, 0.034, (0.88, 0.9, 0.94)), (0, 0.67, 0.016, 0.009, 0.24, 0.03, (0.88, 0.9, 0.94)),
-               (0, 0.81, 0.028, 0.008, 0.05, 0.018, (0.88, 0.9, 0.94))],
-    "Bratpfanne": [(0, 0, 0, 0.03, 0.24, 0.03, (0.1, 0.1, 0.11)), (0, 0.33, 0, 0.03, 0.26, 0.16, (0.2, 0.2, 0.22)),
-                   (0, 0.33, 0, 0.03, 0.2, 0.24, (0.2, 0.2, 0.22)), (0, 0.33, 0, 0.032, 0.12, 0.28, (0.2, 0.2, 0.22)),
-                   (0.012, 0.33, 0, 0.012, 0.18, 0.2, (0.32, 0.32, 0.35))],
-}
+# ------------------------------------------------------------------ 9c: detaillierte Nahkampfwaffen
+# Gleiche Formsprache wie die Schusswaffen (siehe _gs_mk): Griff im Ursprung, Klinge nach +y, z oben, Klingenebene y/z.
+# Daraus entstehen 3D-Modell (Ego-Ansicht, Mitspieler, Drop) und HUD-Symbol (Seitenansicht).
+_MC = {"steel": (0.80, 0.82, 0.86), "edge": (0.95, 0.96, 0.99), "spine": (0.62, 0.64, 0.69), "fuller": (0.50, 0.52, 0.58),
+       "dark": (0.16, 0.16, 0.18), "brass": (0.80, 0.63, 0.28), "gold": (0.86, 0.70, 0.30), "wood": (0.46, 0.29, 0.15),
+       "wood2": (0.36, 0.22, 0.11), "leather": (0.34, 0.20, 0.11), "leather2": (0.22, 0.13, 0.07), "iron": (0.20, 0.20, 0.22),
+       "iron2": (0.30, 0.30, 0.33), "ito": (0.10, 0.09, 0.12), "same": (0.88, 0.85, 0.76), "rune": (0.78, 0.36, 1.0),
+       "ebony": (0.11, 0.06, 0.09), "dagger": (0.27, 0.26, 0.32)}
+
+
+def _mw_blade(y0, y1, half, tip, cz=lambda y: 0.0, top=None, edge_k=0.45, wcore=0.009, wedge=0.0035, ccore=None, cedge=None,
+              n=14):
+    """Klinge aus zwei Profilen: dicker Rücken (oben) und dünne Schneide (unten), damit man die Fase sieht.
+    half(t) = halbe Höhe (t 0..1 entlang der Klinge), cz(y) = Mittellinie (gebogene/gewellte Klingen), tip = Spitzenlänge."""
+    ccore, cedge = ccore or _MC["steel"], cedge or _MC["edge"]
+    top = top or half
+    ys = [y0 + (y1 - tip - y0) * i / n for i in range(n + 1)]
+    up = [(y, cz(y) + top((y - y0) / (y1 - y0))) for y in ys]
+    lo = [(y, cz(y) - half((y - y0) / (y1 - y0))) for y in ys]
+    mid = [(y, a[1] + (b[1] - a[1]) * edge_k) for y, a, b in zip(ys, lo, up)]       # Grenze Schneide/Rücken
+    tipp = (y1, cz(y1))
+    core = up + [tipp] + mid[::-1]
+    edge = mid + [tipp] + lo[::-1]
+    return [("p", 0, wcore, core, ccore), ("p", 0, wedge, edge, cedge)]
+
+
+def _mw_wrap(y0, y1, r, col, col2, n, sides=8):
+    """Gewickelter Griff: Röhre + n dunklere Wicklungsringe."""
+    out = [("t", [(0, y0, 0), (0, y1, 0)], [r, r], col, sides)]
+    for k in range(n):
+        y = y0 + (y1 - y0) * (k + 0.5) / n
+        rr = (r[0] * 1.12, r[1] * 1.12) if isinstance(r, tuple) else r * 1.12
+        out.append(("t", [(0, y - 0.004, 0), (0, y + 0.004, 0)], [rr, rr], col2, sides))
+    return out
+
+
+def _mw_circle(cy, cz, r, n=20, a0=0.0):
+    return [(cy + r * math.cos(a0 + 2 * math.pi * i / n), cz + r * math.sin(a0 + 2 * math.pi * i / n)) for i in range(n)]
+
+
+def _melee_shapes():
+    C = _MC
+    S = {}
+    # ---------------- Messer (Start): Tropfenspitze, Holzgriff mit Messingnieten
+    S["Messer"] = (
+        [("t", [(0, -0.016, 0), (0, -0.004, 0)], [(0.012, 0.016), (0.013, 0.018)], C["iron2"], 8)]
+        + [("t", [(0, -0.004, 0), (0, 0.098, 0)], [(0.013, 0.017), (0.012, 0.016)], C["wood"], 8)]
+        + [("e", 0, y, 0.0, 0.0155, 0.0045, 0.0045, C["brass"]) for y in (0.022, 0.07)]
+        + [("b", 0, 0.103, 0.003, 0.022, 0.008, 0.044, C["iron2"])]
+        + _mw_blade(0.107, 0.262, lambda t: 0.012 - 0.004 * t, 0.03, top=lambda t: 0.016 - 0.006 * t ** 2, wcore=0.008))
+    # ---------------- Erschöpfungsdolch (9c, vorher Kampfmesser): gewellte Ritualklinge, Runen, Ebenholz, Gold
+    wave = lambda y: 0.007 * math.sin((y - 0.12) * 52.0) * min(1.0, (y - 0.12) / 0.03)      # noqa: E731
+    S["Erschöpfungsdolch"] = (
+        [("e", 0, -0.034, 0.0, 0.009, 0.009, 0.009, C["rune"]),
+         ("e", 0, -0.018, 0.0, 0.019, 0.016, 0.02, C["gold"])]
+        + _mw_wrap(-0.004, 0.102, (0.0135, 0.016), C["ebony"], C["gold"], 3)
+        + [("p", 0, 0.03, [(0.104, 0.004), (0.11, -0.03), (0.122, -0.042), (0.118, -0.028), (0.116, 0.0), (0.118, 0.03),
+                            (0.124, 0.046), (0.11, 0.036)], C["gold"]),
+           ("e", 0, 0.112, 0.003, 0.018, 0.006, 0.006, C["rune"])]
+        + _mw_blade(0.118, 0.318, lambda t: 0.016 * (1 - t) ** 0.6 + 0.003, 0.03, cz=wave, wcore=0.009, wedge=0.0035,
+                    ccore=C["dagger"], cedge=(0.55, 0.52, 0.62))
+        + [("b", 0, y, wave(y) + 0.002, 0.0105, 0.009, 0.004, C["rune"]) for y in (0.15, 0.185, 0.22, 0.255)]
+        + [("b", 0, y + 0.006, wave(y + 0.006) - 0.003, 0.0105, 0.004, 0.006, C["rune"]) for y in (0.165, 0.2, 0.237)])
+    # ---------------- Machete: breite Klinge, schwarzer Rücken, Holzgriff mit drei Nieten und Fangriemenloch
+    S["Machete"] = (
+        [("p", 0, 0.028, [(-0.03, 0.004), (-0.02, -0.018), (0.112, -0.016), (0.122, 0.0), (0.112, 0.02), (-0.016, 0.024)], C["wood2"]),
+         ("e", 0, -0.016, 0.004, 0.0145, 0.006, 0.006, C["dark"])]
+        + [("e", 0, y, 0.002, 0.0145, 0.0045, 0.0045, C["brass"]) for y in (0.012, 0.05, 0.088)]
+        + [("b", 0, 0.124, 0.002, 0.03, 0.01, 0.048, C["iron"])]
+        + _mw_blade(0.129, 0.505, lambda t: 0.018 + 0.016 * t ** 1.5, 0.05, cz=lambda y: 0.006 * ((y - 0.13) / 0.37) ** 2,
+                    top=lambda t: 0.012 + 0.012 * t ** 2, edge_k=0.35, wcore=0.008, wedge=0.0035,
+                    ccore=(0.22, 0.22, 0.24), cedge=C["steel"]))
+    # ---------------- Schwert: Parierstange, Lederwicklung, Knauf, Hohlkehle, zweischneidig
+    blade = [("p", 0, 0.0105, [(0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, 0.0055), (0.096, 0.0085)], C["steel"]),
+             ("p", 0, 0.004, [(0.096, 0.0085), (0.096, 0.024), (0.70, 0.019), (0.80, 0.0), (0.70, 0.0055)], C["edge"]),
+             ("p", 0, 0.004, [(0.096, -0.024), (0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, -0.019)], C["edge"]),
+             ("p", 0, 0.0118, [(0.11, -0.0035), (0.58, -0.0025), (0.6, 0.0), (0.58, 0.0025), (0.11, 0.0035)], C["fuller"])]
+    S["Schwert"] = (
+        [("e", 0, -0.104, 0.0, 0.024, 0.02, 0.026, C["brass"]),
+         ("t", [(0, -0.088, 0), (0, -0.08, 0)], [(0.014, 0.014), (0.016, 0.016)], C["brass"], 10)]
+        + _mw_wrap(-0.08, 0.072, (0.0155, 0.0175), C["leather"], C["leather2"], 6)
+        + [("p", 0, 0.028, [(0.074, -0.004), (0.08, -0.10), (0.094, -0.112), (0.092, -0.094), (0.088, 0.0), (0.092, 0.094),
+                             (0.094, 0.112), (0.08, 0.10), (0.074, 0.004)], C["iron2"]),
+           ("e", 0, 0.084, 0.0, 0.019, 0.012, 0.014, C["brass"]),
+           ("b", 0, 0.09, 0.0, 0.016, 0.012, 0.05, C["iron2"])]
+        + blade)
+    # ---------------- Katana: Tsuka mit Rauten-Wicklung, runde Tsuba, Habaki, gebogene Klinge mit heller Härtelinie
+    curve = lambda y: 0.038 * max(0.0, (y - 0.13) / 0.70) ** 2     # noqa: E731
+    kat = [("t", [(0, -0.135, 0), (0, -0.124, 0)], [(0.016, 0.019), (0.017, 0.02)], C["iron"], 10),
+           ("t", [(0, -0.124, 0), (0, 0.108, 0)], [(0.0165, 0.0195), (0.016, 0.019)], C["ito"], 10)]
+    for k in range(8):                                             # Same-Haut-Rauten zwischen der Wicklung
+        y = -0.105 + k * 0.028
+        kat.append(("p", 0, 0.034, [(y - 0.011, 0.0), (y, 0.012), (y + 0.011, 0.0), (y, -0.012)], C["same"]))
+    kat += [("e", 0, -0.01, 0.006, 0.019, 0.014, 0.006, C["gold"]),             # Menuki
+            ("t", [(0, 0.108, 0), (0, 0.118, 0)], [(0.046, 0.05), (0.046, 0.05)], C["iron"], 14),   # Tsuba
+            ("b", 0, 0.128, 0.0, 0.014, 0.02, 0.034, C["brass"])]                # Habaki
+    kat += _mw_blade(0.12, 0.84, lambda t: 0.0135 - 0.004 * t, 0.06, cz=curve, top=lambda t: 0.0135 - 0.004 * t,
+                     edge_k=0.38, wcore=0.009, wedge=0.0035, ccore=C["spine"], cedge=(0.96, 0.97, 1.0))
+    S["Katana"] = kat
+    # ---------------- Bratpfanne (Gusseisen): Boden, Kochfläche, hoher Rand, Stiel mit Holzgriff und Aufhängeloch
+    PR, PC = 0.142, 0.33
+    pan = [("t", [(0, -0.05, 0), (0, 0.085, 0)], [(0.011, 0.015), (0.012, 0.016)], C["wood2"], 8),
+           ("t", [(0, 0.085, 0), (0, 0.11, 0), (0, PC - PR + 0.01, 0)], [(0.009, 0.012), (0.008, 0.011), (0.011, 0.016)], C["iron"], 8),
+           ("e", 0, -0.032, 0.0, 0.016, 0.006, 0.006, C["dark"]),
+           ("b", 0, 0.088, 0.0, 0.026, 0.006, 0.034, C["iron2"])]
+    pan.append(("p", -0.016, 0.01, _mw_circle(PC, 0.0, PR, 24), C["iron"]))                  # Boden (unten = -x)
+    pan.append(("p", -0.008, 0.006, _mw_circle(PC, 0.0, PR - 0.012, 24), (0.27, 0.27, 0.29)))   # Kochfläche
+    for i in range(24):                                                           # Rand: 24 Bogenstücke
+        a0, a1 = 2 * math.pi * i / 24, 2 * math.pi * (i + 1.05) / 24
+        pts = [(PC + PR * math.cos(a0), PR * math.sin(a0)), (PC + PR * math.cos(a1), PR * math.sin(a1)),
+               (PC + (PR - 0.012) * math.cos(a1), (PR - 0.012) * math.sin(a1)), (PC + (PR - 0.012) * math.cos(a0), (PR - 0.012) * math.sin(a0))]
+        pan.append(("p", 0.0, 0.034, pts, (0.18, 0.18, 0.2)))
+    S["Bratpfanne"] = pan
+    return S
+
+
+MELEE_SHAPES = _melee_shapes()
+PAN_CENTER = (-0.004, 0.33, 0.0)   # 9c: Mitte der Kochfläche (Pfannen-Koordinaten; Essen liegt in +x darauf)
+
+
+def _scale_shape(s, k):
+    if s[0] == "p":
+        return ("p", s[1] * k, s[2] * k, [(y * k, z * k) for y, z in s[3]], s[4])
+    if s[0] == "t":
+        return ("t", [(x * k, y * k, z * k) for x, y, z in s[1]],
+                [((r[0] * k, r[1] * k) if isinstance(r, tuple) else r * k) for r in s[2]], s[3], s[4])
+    return (s[0],) + tuple(v * k for v in s[1:7]) + (s[7],)
 
 
 def melee_model(mi, scale=1.0):
-    """Low-Poly-Modell einer Nahkampfwaffe (Griff im Ursprung, Klinge nach +y)."""
+    """9c: detailliertes Modell einer Nahkampfwaffe (Griff im Ursprung, Klinge nach +y) aus MELEE_SHAPES."""
     rng = random.Random(40 + mi)
     m = Mesh()
-    for cx, cy, cz, sx, sy, sz, col in MELEE_PARTS[MELEE[mi].name]:
-        box(m, cx * scale, cy * scale, cz * scale, sx * scale, sy * scale, sz * scale, col, rng)
+    build_shapes(m, [_scale_shape(s, scale) for s in MELEE_SHAPES[MELEE[mi].name]], rng)
     return m
 
 
 def melee_icon(mi, width=0.24, height=0.13):
-    """Seitenansicht der Nahkampfwaffe fürs HUD (wie weapon_icon)."""
-    return weapon_icon(None, width, height, MELEE_PARTS[MELEE[mi].name], "icon_" + MELEE[mi].name)
+    """9c: Seitenansicht der Nahkampfwaffe fürs HUD - aus denselben Formen wie das 3D-Modell (wie weapon_icon)."""
+    polys = [pp for s in MELEE_SHAPES[MELEE[mi].name] for pp in shape_polys(s)]
+    return polys_icon(polys, width, height, "icon9_" + MELEE[mi].name)
+
+
+def food_shapes():
+    """9c: Essen auf der Bratpfanne, in der Reihenfolge, in der es dazukommt (Pfannen-Koordinaten, Kochfläche bei
+    x = PAN_CENTER[0], Essen ragt nach +x). -> Liste von Formenlisten (je ein Stück)."""
+    cy0, cx0 = PAN_CENTER[1], PAN_CENTER[0] + 0.004
+    out = []
+
+    def bacon(y, z, ang, h=0.0):
+        pts = []
+        for i in range(8):
+            t = i / 7
+            pts.append((y + math.cos(ang) * (t - 0.5) * 0.11 - math.sin(ang) * 0.006 * math.sin(t * 9),
+                        z + math.sin(ang) * (t - 0.5) * 0.11 + math.cos(ang) * 0.006 * math.sin(t * 9)))
+        top = [(py - math.sin(ang) * 0.011, pz + math.cos(ang) * 0.011) for py, pz in pts]
+        mid = [(py - math.sin(ang) * 0.0045, pz + math.cos(ang) * 0.0045) for py, pz in pts]
+        return [("p", cx0 + 0.004 + h, 0.006, pts + mid[::-1], (0.72, 0.20, 0.16)),
+                ("p", cx0 + 0.0045 + h, 0.006, mid + top[::-1], (0.95, 0.82, 0.72))]
+
+    def egg(y, z, h=0.0):
+        wh = [(y + 0.032 * math.cos(a) * (1 + 0.12 * math.sin(3 * a)), z + 0.028 * math.sin(a) * (1 + 0.1 * math.cos(2 * a)))
+              for a in [2 * math.pi * i / 14 for i in range(14)]]
+        return [("p", cx0 + 0.003 + h, 0.004, wh, (0.98, 0.97, 0.93)),
+                ("e", cx0 + 0.008 + h, y + 0.003, z, 0.008, 0.012, 0.012, (1.0, 0.70, 0.08))]
+
+    def steak(y, z, h=0.0):
+        ol = [(y + 0.05 * math.cos(a) * (1 + 0.15 * math.sin(2 * a + 0.5)), z + 0.035 * math.sin(a)) for a in
+              [2 * math.pi * i / 16 for i in range(16)]]
+        return [("p", cx0 + 0.008 + h, 0.016, ol, (0.42, 0.20, 0.12)),
+                ("b", cx0 + 0.0165 + h, y - 0.012, z + 0.006, 0.002, 0.05, 0.004, (0.18, 0.08, 0.05)),
+                ("b", cx0 + 0.0165 + h, y + 0.006, z - 0.008, 0.002, 0.05, 0.004, (0.18, 0.08, 0.05)),
+                ("e", cx0 + 0.008 + h, y - 0.04, z + 0.006, 0.008, 0.01, 0.012, (0.95, 0.88, 0.75))]
+
+    def fries(y, z, h=0.0):
+        rr = random.Random(int(y * 1000 + z * 100))
+        out_ = []
+        for k in range(7):
+            a = rr.uniform(-0.8, 0.8)
+            out_.append(("t", [(cx0 + 0.008 + h + 0.004 * (k % 2), y + rr.uniform(-0.02, 0.02) - math.cos(a) * 0.03,
+                                z + rr.uniform(-0.02, 0.02) - math.sin(a) * 0.03),
+                               (cx0 + 0.008 + h + 0.004 * (k % 2), y + rr.uniform(-0.02, 0.02) + math.cos(a) * 0.03,
+                                z + rr.uniform(-0.02, 0.02) + math.sin(a) * 0.03)], [0.0045, 0.0045], (0.98, 0.80, 0.30), 4))
+        return out_
+
+    def pizza(y, z, h=0.0):
+        tri = [(y - 0.045, z - 0.03), (y + 0.05, z), (y - 0.045, z + 0.03)]
+        return [("p", cx0 + 0.006 + h, 0.008, tri, (0.98, 0.78, 0.30)),
+                ("p", cx0 + 0.006 + h, 0.012, [(y - 0.05, z - 0.034), (y - 0.04, z - 0.034), (y - 0.04, z + 0.034),
+                                               (y - 0.05, z + 0.034)], (0.78, 0.50, 0.20)),
+                ("e", cx0 + 0.011 + h, y - 0.012, z - 0.008, 0.003, 0.009, 0.009, (0.75, 0.12, 0.08)),
+                ("e", cx0 + 0.011 + h, y + 0.012, z + 0.004, 0.003, 0.008, 0.008, (0.75, 0.12, 0.08))]
+
+    out.append(bacon(cy0 - 0.03, 0.05, 0.2))
+    out.append(egg(cy0 + 0.05, -0.04))
+    out.append(bacon(cy0 + 0.02, 0.07, -0.15))
+    out.append(steak(cy0 - 0.02, -0.03))
+    out.append(egg(cy0 + 0.06, 0.04))
+    out.append(fries(cy0 - 0.075, -0.02))
+    out.append(pizza(cy0 + 0.0, 0.0, 0.016))
+    out.append(bacon(cy0 - 0.06, 0.06, 0.6, 0.012))
+    out.append(egg(cy0 + 0.03, -0.075, 0.004))
+    out.append(fries(cy0 + 0.07, 0.0, 0.016))
+    out.append(steak(cy0 + 0.02, 0.05, 0.022))
+    out.append(pizza(cy0 - 0.03, -0.06, 0.03))
+    out.append(bacon(cy0 + 0.0, -0.02, 1.2, 0.04))
+    out.append(egg(cy0 - 0.02, 0.03, 0.045))
+    return out
+
+
+FOOD_SHAPES = food_shapes()
+
+
+def food_nodes(parent, scale=1.0):
+    """9c: Essens-Stücke als Knoten unter parent (Pfannen-Koordinaten), alle versteckt -> Liste."""
+    out = []
+    for k, sh in enumerate(FOOD_SHAPES):
+        fm = Mesh()
+        build_shapes(fm, [_scale_shape(s, scale) for s in sh], random.Random(70 + k))
+        nd = parent.attachNewNode(fm.node("essen%d" % k))
+        nd.hide()
+        out.append(nd)
+    return out
+
+
+def show_food(nodes, n):
+    for k, nd in enumerate(nodes):
+        (nd.show if k < n else nd.hide)()
 
 
 # ---- Ausrüstungsteile als Quader (Waffen-Koordinaten wie GUN_PARTS; Magazin-Teile relativ zur Magazinmitte)
@@ -15252,6 +15729,18 @@ class HostSession:
             w.add_shot(pl, eye, dirs, wp)
         elif t == "shock":                        # 7c: Stromstoss (Schild-Set)
             w.shock(pl)
+        elif t == "mspec":                        # 9c: Sonderattacke (Katana/Schwert) - Treffer entscheidet der Host
+            d = m.get("d")
+            k = m.get("k")
+            now = time.time()
+            if (k in ("spin", "slam") and isinstance(d, list) and len(d) == 3 and finite(*d) and pl.stun_t <= 0.3
+                    and now - pl.last_spec >= MELEE_CHARGE_T * 0.8):
+                pl.last_spec = now
+                pl.melee_out = True
+                w.melee_special_hit(pl, k, (float(d[0]), float(d[1]), float(d[2])))
+        elif t == "eat":                          # 9c: Bratpfanne essen
+            pl.melee_out = True
+            w.pan_eat(pl)
         elif t == "atteq":                        # 7b: Aufsatz aus dem Lager aufstecken (Tab-Fenster)
             wi_, si_, v_ = m.get("w"), m.get("s"), m.get("v")
             if all(isinstance(q, int) and not isinstance(q, bool) for q in (wi_, si_, v_)) and 0 <= si_ <= ATT_SCOPE:
@@ -15826,6 +16315,16 @@ class ClientSession:
         self.conn.send({"t": "shock"})
         self.conn.flush()
 
+    def send_mspec(self, kind, d):
+        """9c: World.mspec_sink - Sonderattacke (Katana-Rundumschlag, Schwert-Aufschlag) dem Host melden."""
+        self.conn.send({"t": "mspec", "k": kind, "d": [round(v, 4) for v in d]})
+        self.conn.flush()
+
+    def send_eat(self):
+        """9c: Bratpfanne essen (T)."""
+        self.conn.send({"t": "eat"})
+        self.conn.flush()
+
     def send_atteq(self, wi, si, v):
         self.conn.send({"t": "atteq", "w": wi, "s": si, "v": v})
         self.conn.flush()
@@ -15964,6 +16463,8 @@ class PlayerView:
         self.melee_hand = self.torso.attachNewNode("melee_hand")       # Nahkampfwaffe (gezogen)
         self.melee_hand.setPos(0.24, 0.22, 0.42)
         self.melee_shown, self.melee_node, self.swing_t = None, None, 0.0
+        self.food, self.food_n = [], -1    # 9c: Essen auf der Pfanne
+        self.eat_t, self.spec = 0.0, None  # 9c: Essen-Animation, Sonderattacke (Art, Rest s)
         self.swing = 0.0
         self.bar.hide()                                               # keine Lebensbalken über Mitspielern
         # (und auch keine Namensschilder)
@@ -16101,12 +16602,35 @@ class PlayerView:
                 self.melee_node.removeNode()
             self.melee_node = self.melee_hand.attachNewNode(melee_model(mi, 1.4).node("m"))
             self.melee_shown = mi
+            self.food = food_nodes(self.melee_node, 1.4) if MELEE[mi].name == PAN_NAME else []
+            self.food_n = -1
+        if self.food:                                                    # 9c: so voll ist seine Pfanne
+            n_ = pan_food_count(getattr(p, "pan_pts", 0))
+            if self.eat_t > 0:
+                n_ = max(0, int(math.ceil(len(self.food) * 0.6 * self.eat_t / max(0.1, getattr(p, "eat_dur", 1.0)))))
+            if n_ != self.food_n:
+                show_food(self.food, n_)
+                self.food_n = n_
         (self.gun_node.hide if out else self.gun_node.show)()
         (self.melee_hand.show if out else self.melee_hand.hide)()
         self.swing_t = max(0.0, self.swing_t - dt)
         u = 1.0 - self.swing_t / 0.35 if self.swing_t > 0 else 1.0
         self.melee_hand.setHpr(-70.0 * math.sin(math.pi * u) if self.swing_t > 0 else 0.0,
                                35.0 - 60.0 * math.sin(math.pi * u) if self.swing_t > 0 else 35.0, 0)
+        self.eat_t = max(0.0, self.eat_t - dt)
+        if self.eat_t > 0:                                               # 9c: isst - Pfanne zum Mund
+            self.melee_hand.setHpr(0, 95.0 + 12.0 * math.sin(time.time() * 6.0), 0)
+        spin_h = 0.0
+        if self.spec is not None:                                        # 9c: Rundumschlag / Aufschlag
+            k_, t_ = self.spec
+            t_ -= dt
+            self.spec = (k_, t_) if t_ > 0 else None
+            u_ = 1.0 - max(0.0, t_) / 0.5
+            if k_ == "spin":
+                spin_h = 360.0 * u_
+                self.melee_hand.setHpr(-90, 10, 0)
+            else:
+                self.melee_hand.setHpr(0, 35.0 - 120.0 * math.sin(math.pi * min(1.0, u_ * 1.6)), 0)
         a = min(1.0, 15.0 * dt)
         self.x += (p.x - self.x) * a
         self.y += (p.y - self.y) * a
@@ -16134,7 +16658,7 @@ class PlayerView:
             r.setColorScale(0.5 + 0.4 * f, 0.7 + 0.3 * f, 1.6 + 0.6 * f, 1)
         else:
             r.clearColorScale()
-        r.setHpr(self.h, 0, 0)
+        r.setHpr(self.h + spin_h, 0, 0)
         r.setSz(1.0 - (1.0 - CROUCH_H / PLAYER_H) * p.crouch)               # geduckt
         self.bar.show()
         self.fg.setSx(max(min(1.0, p.hp / getattr(p, "max_hp", PLAYER_HP)), 0.001))
@@ -16379,6 +16903,20 @@ def synth_sounds():
     roll = mul(lowpass(noise(tot), 0.5), [0.10 + 0.06 * math.sin(tp * 13.0 * i / SR) ** 2 for i in range(tot)])
     an = lowpass(mix((an, 1.0), (roll, 0.5)), 0.35)
     out["anthem"] = norm([v * min(1.0, (tot - i) / (0.4 * SR)) for i, v in enumerate(an)], 0.8)
+    # 9c: Essen - Biss mit Kauen (knuspriges Knacken, dann dumpfes Kauen) und der grosse Rülpser
+    n = int(0.55 * SR)
+    ch = [0.0] * n
+    for k_, (t0_, g_, a_) in enumerate(((0.0, 1.0, 0.55), (0.18, 0.55, 0.25), (0.33, 0.5, 0.2), (0.45, 0.4, 0.18))):
+        o_ = int(t0_ * SR)
+        m_ = int(0.09 * SR)
+        bur = mul(lowpass(noise(m_), a_), env(m_, 45 if k_ == 0 else 30))
+        for i, v in enumerate(bur):
+            if o_ + i < n:
+                ch[o_ + i] += v * g_
+    out["chew"] = norm(ch, 0.75)
+    brp = voiced(0.95, 105, 62, 380, 820, 0.35)
+    flt = [0.55 + 0.45 * abs(math.sin(tp * 23.0 * i / SR + 0.3 * math.sin(tp * 3.0 * i / SR))) for i in range(len(brp))]
+    out["burp"] = norm(mul(brp, flt), 0.9)
     # Elektroschuss der Drohne: knisterndes Zischen mit hohem Summen
     n = int(0.45 * SR)
     crack = [(rng.uniform(-1, 1) if rng.random() < 0.35 else 0.0) for _ in range(n)]
@@ -110990,21 +111528,22 @@ class Sfx:
             "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "servo": 2, "whistle": 1, "zap": 3, "whiz": 4, "yeehaw": 1,
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
-            "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2}
+            "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
+            "chew": 2, "burp": 1}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
              "growl": 34.0, "growl_deep": 45.0, "hiss": 30.0, "mstep": 26.0, "mstep_heavy": 55.0, "mstep_giant": 140.0,
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
-             "falls": WF_RANGE}
+             "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
            "growl": 4.0, "growl_deep": 6.0, "hiss": 3.0, "mstep": 3.0, "mstep_heavy": 8.0, "mstep_giant": 25.0,
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
-           "falls": 6.0}
+           "falls": 6.0, "chew": 2.0, "burp": 4.0}
 
     def __init__(self, game):
         self.game = game
@@ -113515,6 +114054,7 @@ class Game(ShowBase):
             world.shot_sink = self.client.send_shot
             world.gren_sink = self.client.send_grenade
             world.melee_sink = self.client.send_melee
+            world.mspec_sink = self.client.send_mspec
             world.gad_sink = self.client.send_gadget
             self.attempt = None
 
@@ -113836,11 +114376,15 @@ class Game(ShowBase):
             self.scope_nodes.append(sn)
         # Nahkampfwaffen in der Hand (Ego-Ansicht), Klinge schräg nach vorn oben
         self.melee_models = []
+        self.pan_food_fp = []
         for mi in range(len(MELEE)):
             nd = self.gun_pivot.attachNewNode("melee_" + MELEE[mi].name)
-            nd.attachNewNode(melee_model(mi, 0.85).node("m"))
+            inner = nd.attachNewNode(melee_model(mi, 0.85).node("m"))
             nd.setPos(0.06, 0.08, -0.02)
             nd.setHpr(-20, 30, -25)
+            if MELEE[mi].name == PAN_NAME:                  # 9c: Kochfläche zur Kamera, darauf das Essen
+                inner.setR(PAN_FP_ROLL)
+                self.pan_food_fp = food_nodes(inner, 0.85)
             nd.hide()
             self.melee_models.append(nd)
         # linke Hand (Haut + Ärmel) für das Nachladen
@@ -114024,6 +114568,24 @@ class Game(ShowBase):
                                         scale=0.034, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft,
                                         mayChange=True)
         self.melee_label.setBin("fixed", 25)
+        self.pan_text = OnscreenText(text="", parent=self.bar_root, pos=(mx_ + 0.12, 0.05), scale=0.028,
+                                     fg=(1.0, 0.8, 0.4, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
+        self.pan_text.setBin("fixed", 25)                 # 9c: Ladestand der Bratpfanne an der Nahkampf-Kachel
+        self.chg_root = self.aspect2d.attachNewNode("ladebalken")      # 9c: Katana/Schwert laden
+        cm_ = CardMaker("chg")
+        cm_.setFrame(-0.16, 0.16, -0.205, -0.185)
+        self.chg_bg = self.chg_root.attachNewNode(cm_.generate())
+        self.chg_bg.setColor(0.05, 0.05, 0.08, 0.75)
+        self.chg_bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm_.setFrame(0.0, 0.32, -0.202, -0.188)
+        self.chg_fg = self.chg_root.attachNewNode(cm_.generate())
+        self.chg_fg.setX(-0.16)
+        self.chg_txt = OnscreenText(text="", parent=self.chg_root, pos=(0, -0.25), scale=0.04, fg=(1, 0.85, 0.3, 1),
+                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
+        self.chg_root.hide()
+        self.chg_full = False
+        self.amp_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.06, 0.88), scale=0.034,
+                                     fg=(0.85, 0.6, 1.0, 1), shadow=(0, 0, 0, 1), align=TextNode.ALeft, mayChange=True)
         gx_ = mx_ + 0.25
         self.gren_frame = hud_card(gx_, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(gx_, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
@@ -114926,6 +115488,37 @@ class Game(ShowBase):
     # ------------------------------------------------------------ 7b/9b: Aufsatz-Fenster (Inspektion mit T)
     ATT_PANEL_W, ATT_PANEL_Z0, ATT_PANEL_Z1 = 0.86, -0.64, -0.06   # Grösse/Lage des Fensters (aspect2d)
 
+    def ppos(self, pid):
+        """9c: Position (Kopfhöhe) eines Spielers für Geräusche."""
+        q = self.world.players.get(pid)
+        return (q.x, q.y, q.z + 1.5) if q is not None else None
+
+    def on_melee_ability(self):
+        """9c: T mit der Nahkampfwaffe in der Hand - Bratpfanne: die erreichte Stufe essen."""
+        pl = self.player
+        if pl.hp <= 0 or not pl.melee_out or self.world.phase != "play":
+            return
+        name = MELEE[pl.melee].name
+        if name != PAN_NAME:
+            hint = {"spin": "Linke Maus halten: Rundumschlag", "slam": "Linke Maus halten: Sprungangriff"}.get(
+                MELEE_SPECIAL.get(name), "Keine Fähigkeit auf T")
+            self.toast(f"{name}: {hint}", (0.9, 0.9, 0.95), 1.6)
+            return
+        if pl.eat_t > 0:
+            return
+        if pl.pan_lock > 0:
+            self.toast(f"Erschöpft - essen erst in {int(math.ceil(pl.pan_lock))} s", (0.8, 0.5, 1.0), 1.4)
+            return
+        if pan_stage(pl.pan_pts) == 0:
+            self.toast(f"Pfanne leer - Kills mit der Pfanne laden sie auf ({pl.pan_pts}/{PAN_STAGES[0][0]})",
+                       (0.95, 0.85, 0.6), 1.8)
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_eat()
+        else:
+            self.world.pan_eat(pl)
+
     def insp_ok(self):
         """9b: darf jetzt inspiziert werden (lebt, Schusswaffe in der Hand, nicht im Fahrzeug)?"""
         pl = self.player
@@ -115319,7 +115912,7 @@ class Game(ShowBase):
                 p = tl["tile"].getPos(a2)
                 out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
         p = self.melee_frame.getPos(a2)
-        out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee)))
+        out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee, pl)))
         b = getattr(pl, "buff", None)
         ic = self.ability_icons.get("buff")
         if b in BUFF_T and pl.buff_t > 0 and ic is not None:
@@ -115948,6 +116541,11 @@ class Game(ShowBase):
         pl, world = self.player, self.world
         if self.net_mode == "client" and getattr(pl, "shock_cd", 0.0) > 0:
             pl.shock_cd = max(0.0, pl.shock_cd - dt)          # 7c: beim Host zählt die Welt
+        if self.net_mode == "client":                         # 9c: Essen, Pfannen-Sperre, verstärkte Fähigkeiten
+            tick_melee_timers(pl, dt)
+            pl.eat_t = max(0.0, pl.eat_t - dt)
+            if pl.hp <= 0:
+                pl.eat_t, pl.slam_pending, pl.leap_t = 0.0, False, 0.0
         nsub = max(1, int(math.ceil(dt / 0.034)))
         dead = pl.hp <= 0
         if getattr(pl, "stun_t", 0.0) > 0 and not dead:   # betäubt (Drohne): nicht bewegen, schiessen, steuern;
@@ -116570,6 +117168,7 @@ class Game(ShowBase):
                 self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
                 if e[1] == self.my_id:
                     self.player.shock_cd = SHOCK_CD
+                    self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
             elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
                 self.zap_fx(e[1], e[2], bool(e[3]))
             elif kind == "stun":
@@ -116653,6 +117252,79 @@ class Game(ShowBase):
             elif kind == "hasmelee":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
+            elif kind == "pan":                # 9c: Ladung der Bratpfanne (für Anzeige und Essen in der Pfanne)
+                op = self.world.players.get(e[1])
+                if op is not None:
+                    old = op.pan_pts
+                    op.pan_pts = e[2]
+                    if e[1] == self.my_id and e[2] > old:
+                        st = pan_stage(e[2])
+                        self.toast(f"Pfanne +{e[3]}  ({e[2]} Punkte" + (f", Stufe {st} - T: essen)" if st else ")"),
+                                   (1.0, 0.8, 0.4), 1.6)
+                        self.sfx.play("chew", None, 0.35, 1.4)
+            elif kind == "eat":                # 9c: jemand isst (Stufe, Dauer)
+                op = self.world.players.get(e[1])
+                if op is not None:
+                    op.eat_stage, op.eat_dur, op.eat_k = e[2], e[3], e[4]
+                    if self.net_mode == "client" or e[1] != self.my_id:
+                        op.eat_t = e[3]
+                    op.eat_bites = 0
+                    if e[1] == self.my_id:
+                        self.player.amp.discard("pan")
+                        self.toast(f"Mahlzeit! Stufe {e[2]}" + (" (x2)" if e[4] > 1 else ""), (1.0, 0.8, 0.4), 1.6)
+                v = self.player_views.get(e[1])
+                if v is not None:
+                    v.eat_t = e[3]
+                if e[2] < 3:
+                    self.sfx.play("chew", self.ppos(e[1]), 0.9, 1.0)
+            elif kind == "bite":               # 9c: Stufe 3 - ein Bissen
+                self.sfx.play("chew", self.ppos(e[1]), 1.0, self.prng.uniform(0.92, 1.06))
+                if e[1] == self.my_id:
+                    self.bite_t = 0.0
+            elif kind == "burp":               # 9c: der Rülpser (nur für Spieler hörbar, kein Monster-Lärm)
+                self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
+                if e[1] == self.my_id:
+                    self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
+            elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
+                if e[1] == self.my_id:
+                    self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
+            elif kind == "drain":              # 9c: Erschöpfungsdolch trifft einen Spieler
+                me_a, me_t = e[1] == self.my_id, e[2] == self.my_id
+                if self.net_mode == "client" and (me_a or me_t):
+                    apply_drain(self.player if me_a else None, self.player if me_t else None)
+                if me_t:
+                    self.toast("Erschöpft! Alle Fähigkeiten auf Abklingzeit", (0.8, 0.45, 1.0), 2.0)
+                    self.sp_hurt.kick(3.0)
+                elif me_a:
+                    self.toast(f"Kraft entzogen: Fähigkeiten bereit, nächster Einsatz x{DAGGER_AMP:g}", (0.85, 0.6, 1.0), 2.0)
+                self.sfx.play("zap", self.ppos(e[2]), 0.5, 0.6)
+            elif kind == "mspec":              # 9c: Katana-Rundumschlag / Schwert-Aufschlag
+                pos = (e[3], e[4], e[5] + 0.3)
+                if e[2] == "spin":
+                    self.sfx.play("swoosh", pos, 1.0, 0.8)
+                    self.sfx.play("swing", pos, 0.8, 1.2)
+                    for k_ in range(24):
+                        a_ = k_ * math.tau / 24
+                        self.add_particle((pos[0] + math.cos(a_) * 0.6, pos[1] + math.sin(a_) * 0.6, pos[2] + 0.8),
+                                          (math.cos(a_) * KATANA_SPIN_R * 2.5, math.sin(a_) * KATANA_SPIN_R * 2.5, 0.2),
+                                          (0.85, 0.9, 1.0), 0.03, 0.3, 0.0)
+                else:
+                    self.sfx.play("thud", pos, 1.0, 0.9)
+                    self.sfx.play("explosion", pos, 0.25, 1.6)
+                    h_ = math.radians(e[6])
+                    for k_ in range(30):
+                        a_ = h_ + math.radians(self.prng.uniform(-SWORD_SLAM_ARC, SWORD_SLAM_ARC))
+                        dx_, dy_ = -math.sin(a_), math.cos(a_)
+                        self.add_particle((pos[0] + dx_ * 0.8, pos[1] + dy_ * 0.8, pos[2]),
+                                          (dx_ * SWORD_SLAM_R * 1.6, dy_ * SWORD_SLAM_R * 1.6, 1.5), (0.45, 0.36, 0.22),
+                                          0.06, 0.6, 0.3)
+                    if e[1] == self.my_id:
+                        self.sp_cam.kick(4.0)
+                v = self.player_views.get(e[1])
+                if v is not None:
+                    v.spec = (e[2], 0.5)
+                if e[1] == self.my_id:
+                    self.spec_fp = (e[2], 0.0)
             elif kind == "hasgear":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
@@ -116883,6 +117555,48 @@ class Game(ShowBase):
                 roll += 35 * k
                 px -= 0.14 * k
                 pz -= 0.05 * k
+        if pl.melee_out:                          # 9c: Laden, Sprungangriff, Sonderattacke, Essen
+            ch = clampf((pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START), 0.0, 1.0) \
+                if pl.chg_hold > MELEE_HOLD_START else 0.0
+            if ch > 0:
+                full = ch >= 1.0
+                py -= 0.10 * ch
+                pz += 0.06 * ch
+                pitch += 30 * ch
+                roll += 25 * ch
+                if full:
+                    hdg_add += 1.5 * math.sin(time.time() * 47.0)        # zittert vor Kraft
+            if pl.slam_pending:
+                pitch += 60.0
+                pz += 0.12
+            sp_ = getattr(self, "spec_fp", None)
+            if sp_ is not None:
+                k_, t_ = sp_
+                t_ += dt
+                self.spec_fp = (k_, t_) if t_ < 0.5 else None
+                u_ = min(1.0, t_ / 0.45)
+                if k_ == "spin":
+                    hdg_add += 360.0 * u_
+                    roll += 70.0 * math.sin(math.pi * u_)
+                    px += 0.12 * math.sin(math.pi * u_)
+                else:
+                    pitch -= 75.0 * math.sin(math.pi * min(1.0, u_ * 1.5))
+                    pz -= 0.08 * math.sin(math.pi * u_)
+            if pl.eat_t > 0:                      # Pfanne vor das Gesicht; Stufe 3: je Sekunde ein Bissen zum Mund
+                el = pl.eat_dur - pl.eat_t
+                bite = math.sin(math.pi * (el % 1.0)) ** 2 if pl.eat_stage >= 3 else 0.25 + 0.15 * math.sin(el * 7.0)
+                px += (-0.04 - px) * 0.8
+                py += (0.40 - 0.16 * bite - py) * 0.8
+                pz += (-0.10 + 0.06 * bite - pz) * 0.8
+                pitch += 20.0 + 18.0 * bite
+        if self.pan_food_fp:
+            n_ = pan_food_count(pl.pan_pts)
+            if pl.eat_t > 0:
+                n0 = pan_food_count(PAN_STAGES[max(0, pl.eat_stage - 1)][0])
+                n_ = int(math.ceil(n0 * pl.eat_t / max(0.1, pl.eat_dur)))
+            if n_ != getattr(self, "pan_food_n", -1):
+                show_food(self.pan_food_fp, n_)
+                self.pan_food_n = n_
         if self.gren_anim_t > 0:                  # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
             self.gren_anim_t = max(0.0, self.gren_anim_t - dt)
             ug = 1.0 - self.gren_anim_t / GREN_ANIM_T
@@ -117333,6 +118047,37 @@ class Game(ShowBase):
             nd.reparentTo(self.melee_holder)
             self.melee_icon_cur = pl.melee
         mact = want == MELEE_SEL and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
+        if MELEE[pl.melee].name == PAN_NAME:              # 9c: Pfannen-Ladung (Stufe, Punkte bis zur nächsten)
+            st = pan_stage(pl.pan_pts)
+            nxt = PAN_STAGES[st][0] if st < len(PAN_STAGES) else None
+            self.set_text(self.pan_text, ("Essen ..." if pl.eat_t > 0 else
+                                          f"St.{st}  {pl.pan_pts}/{nxt}" if nxt else f"St.{st}  voll - T"))
+        else:
+            self.set_text(self.pan_text, "")
+        ch = (pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START)
+        if pl.melee_out and pl.chg_hold > MELEE_HOLD_START and pl.hp > 0:       # 9c: Ladebalken
+            ch = min(1.0, ch)
+            self.chg_root.show()
+            self.chg_fg.setSx(max(0.001, ch))
+            full = ch >= 1.0
+            self.chg_fg.setColor(*((1.0, 0.85, 0.2, 1) if full else (0.6, 0.8, 1.0, 1)))
+            kind = MELEE_SPECIAL.get(MELEE[pl.melee].name)
+            self.set_text(self.chg_txt, ("Loslassen: " + ("Rundumschlag!" if kind == "spin" else "Sprungangriff!"))
+                          if full else "Aufladen ...")
+            if full and not self.chg_full:
+                self.sfx.play("click", None, 0.9, 1.4)
+            elif not full and not getattr(self, "chg_on", False):
+                self.sfx.play("charge", None, 0.5, 1.3)
+            self.chg_full, self.chg_on = full, True
+        else:
+            self.chg_root.hide()
+            self.chg_full = self.chg_on = False
+        if pl.amp and pl.hp > 0:                          # 9c: verstärkte Fähigkeiten (Erschöpfungsdolch)
+            nm = {"dash": "Dash", "jet": "Jetpack", "shock": "Stromstoss", "pan": "Pfanne"}
+            self.set_text(self.amp_text, f"x{DAGGER_AMP:g} bereit: " + ", ".join(nm[a] for a in ("dash", "jet", "shock", "pan")
+                                                                              if a in pl.amp) + f"  ({int(math.ceil(pl.amp_t))} s)")
+        else:
+            self.set_text(self.amp_text, "")
         self.melee_frame.setColor(*((1.0, 0.85, 0.2, 1.0) if mact else (0.4, 0.4, 0.4, 0.6)))
         self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
         for i in range(N_SLOTS):                     # Waffenleiste mit Bildern (Slot 3: Spezialwaffe)

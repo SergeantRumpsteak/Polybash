@@ -2,6 +2,25 @@
 
 Neueste Änderungen oben.
 
+## Experimental 9c: Nahkampfwaffen – neue Optik + Sonderfähigkeiten (2026-10-15)
+- Alle Nahkampfwaffen neu und detailliert modelliert, in Sinans Formsprache (`MELEE_SHAPES`): Klingen mit Rücken/Schneide-Fase, Hohlkehle, Parierstange, gewickelte Griffe, Knäufe, Nieten; Pfanne mit Boden, Kochfläche, Rand, Stiel und Holzgriff. Dieselben Formen ergeben Ego-Ansicht, Modell an Mitspielern, Drop und das neue HUD-Symbol (`melee_icon`). `MELEE_PARTS` entfällt.
+- Kampfmesser heißt jetzt "Erschöpfungsdolch" (`DAGGER_NAME`): Ritualdolch mit gewellter Klinge, leuchtenden Runen, Ebenholzgriff mit Goldringen und Edelstein-Knauf. Loot-Tabelle umbenannt, Werte gleich.
+- Erschöpfungsdolch, Lebensraub: jeder Treffer (Monster und Spieler) heilt den Träger um 50 % des verursachten Schadens (`DAGGER_LEECH`), höchstens bis Max-HP.
+- Erschöpfungsdolch, Treffer an Spielern: Beim Getroffenen gehen Dash, Stromstoß und Jetpack (Tank leer) auf volle Abklingzeit; laufendes Essen bricht ab, und er kann `DAGGER_PAN_LOCK` = 8 s nicht essen.
+- Erschöpfungsdolch, Angreifer: Seine Fähigkeiten sind sofort bereit. Der nächste Einsatz jeder Fähigkeit wirkt x2 (`DAGGER_AMP`), solange er innerhalb von `DAGGER_AMP_T` = 20 s kommt: Dash doppelt so weit, Jetpack mit doppeltem Schub, Stromstoß mit doppeltem Radius und doppelter Betäubung, Pfanne heilt doppelt. Der HUD zeigt "x2 bereit".
+- Katana: Schlagtaste `MELEE_CHARGE_T` = 3 s halten (Ladebalken, Ton, Zittern), dann loslassen = Rundumschlag im Umkreis `KATANA_SPIN_R` = 2 m mit `KATANA_SPIN_MULT` = doppeltem Schaden. Ein kurzer Klick bleibt ein normaler Schlag (`MELEE_HOLD_START` = 0,3 s).
+- Schwert: 3 s halten = Sprungangriff mit `SWORD_JUMP_H` = 1,5-facher Sprunghöhe und einem Satz von `SWORD_LEAP` = 1,5 m nach vorn, ohne Fallschaden. Beim Aufkommen trifft es alles bis `SWORD_SLAM_R` = 5 m vor einem (±`SWORD_SLAM_ARC` = 50°) mit doppeltem Schaden (`SWORD_SLAM_MULT`), dazu Staubwelle und Kamerastoß.
+- Bratpfanne, Laden: Kills mit der Pfanne bringen Punkte (`PAN_POINTS`: Grunt 1, Fluchttier 1, Brute 2, Jägerin 2, Drohne 2, Koloss 5, Titan 10, Spieler 3; höchstens `PAN_MAX_PTS` = 10).
+- Bratpfanne, Essen sichtbar: Die Pfanne füllt sich mit Bacon, Spiegeleiern, Steak, Pommes und Pizza (`FOOD_SHAPES`), je mehr Punkte, desto voller; auch bei Mitspielern sichtbar.
+- Bratpfanne, Essen mit T: Stufe 1 ab 3 Punkten (2 s, +15 HP/s), Stufe 2 ab 6 (3 s, +20 HP/s), Stufe 3 ab 10 (5 s, je Sekunde ein Bissen mit Kaugeräusch, +20 HP, danach Rülpser); Werte in `PAN_STAGES`. Die Heilung geht höchstens bis Max-HP.
+- Bratpfanne, beim Essen: kein Angriff, kein Waffenwechsel, nur langsames Gehen (`PAN_EAT_SPEED`). Die Ladung ist danach 0 und geht beim Tod oder beim Wechsel der Nahkampfwaffe verloren.
+- Bratpfanne, Rülpser: nur für Spieler im Umkreis `PAN_BURP_R` = 20 m hörbar, kein Lärm für Monster.
+- Bratpfanne, HUD und Optik: Der HUD zeigt die Stufe und die Punkte bis zur nächsten Stufe an der Nahkampf-Kachel. In der Ego-Ansicht ist die Pfanne zur Kamera gedreht (`PAN_FP_ROLL`).
+- Bratpfanne, Schalter `PAN_STAGE3_ONLY_GRUNTS` (Startwert False): Bei True zählen über Stufe 2 hinaus nur noch Grunt-Kills.
+- Tasten-Legende und Mausover-Infos um die Sonderfähigkeiten ergänzt. T mit Katana/Schwert zeigt einen Hinweis.
+- Multiplayer: Der Host entscheidet über Treffer, Heilung, Ladung und Essen. Neue Client-Nachrichten "mspec" und "eat", neue Ereignisse "pan", "eat", "bite", "burp", "leech", "drain", "mspec". Animationen (Rundumschlag, Aufschlag, Essen) und Töne sind bei allen sichtbar und hörbar.
+- NET_VERSION 29 -> 30.
+
 ## Experimental 9b: Drohnen, Waffen-Mods auf T, Tomahawk-Sound (2026-10-15)
 - Drohnen: feste Anzahl statt anteilig zur Monsterzahl – höchstens `DRONE_COUNT` = 4 gleichzeitig (jede Monsterdichte außer "Aus"); Respawn wie bisher, aber nie über `DRONE_COUNT`. `N_DRONE` wird nicht mehr verwendet.
 - Drohnen 1,4-mal so groß (`DRONE_SIZE`): Modell (scale) und Trefferzone (hit_r 0,42 -> 0,59, hit_h 0,5 -> 0,7) mitskaliert.
