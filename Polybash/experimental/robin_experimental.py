@@ -59,6 +59,12 @@ Monster-Tempo: Jägerin MOB_SPEED_HUNTRESS, Grunt MOB_SPEED_GRUNT, Brute MOB_SPE
 Bäume und Felsen (TITAN_PASS_PROPS); Titan und Koloss erkennen, wenn sie festhängen (MOB_STUCK_T) und nehmen einen
 Umweg (MOB_DETOUR_*). Drohnen fliegen je DRONE_FLY_MIN..MAX m hoch und steigen/sinken zu ihrem Ziel (bis
 DRONE_FLY_TOP, also auch zum Heli).
+9a: Gebirge im Alpen-Look (mountain(): unterschiedlich hohe Gipfel, Grate, Felsstufen; Farben von Almgrün über
+Geröll und Fels bis Schnee ab MTN_SNOW_Z, an steilen Stellen nur dünner Schnee) mit WATERFALL_COUNT Wasserfällen
+(Scharte mit Klippe, Wasserband, Gischt, Becken zum Waten, leises Rauschen; WF_*). Baumkronen, Büsche und Schilf
+sitzen auf der richtigen Höhe (Wind-Knoten auf zref). Bodennahe Quader und flache Deko bekommen ein Fundament bis
+unter das Gelände (ground_boxes, GROUND_*), Sandsäcke folgen dem Gelände, Felsen sitzen am Hang auf. Keine Ritzen
+mehr zwischen fein und grob unterteilten Geländezellen (Kanten werden angeglichen), Schürze am Geländerand.
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -372,6 +378,8 @@ WORLD = STD_WORLD        # Spielfeld: 0..WORLD in x und y (wird pro Karte gesetz
 CENTER = WORLD / 2       # Mitte der Karte = Burg
 MARGIN = 30.0            # Gelände wird über den Rand hinaus gezeichnet
 CELL = 4.0               # Gitterweite des Geländes
+TERRAIN_FINE_K = 4       # 9a: Unterteilung feiner Zellen (Wege, Graben); Eingänge nutzen ein Vielfaches davon
+TERRAIN_SKIRT_Z = -30.0  # 9a: bis hierhin reicht die Schürze am äusseren Geländerand
 EYE = 1.7                # Augenhöhe
 PLAYER_R = 0.4
 WALK, RUN = 4.0, 7.5     # m/s
@@ -422,7 +430,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 27         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 28         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -590,6 +598,32 @@ MTN_CLIMB = True         # True: Spieler UND Monster können das Gebirge hochlau
                          # False: alter Zustand - Felswände steiler als MTN_SLOPE sperren, jetzt auch für Monster
 MTN_SLOPE = 0.95         # (nur bei MTN_CLIMB = False) steiler als das (ca. 43 Grad) kommt man nicht hoch
 MTN_WALL = 4.0           # unsichtbare Wand: so weit vor dem Kartenrand (Gebirgskamm) ist Schluss - für alle
+# 9a: Alpen-Look (Form + Farben)
+MTN_PEAK_MIN, MTN_PEAK_MAX = 0.55, 1.30   # Gipfelhöhe relativ zu MTN_H: niedrige Sättel bis hohe Spitzen
+MTN_RIDGE = 0.24         # Stärke der Grate (scharfe Kämme, die zum Rand hin hochlaufen)
+MTN_TERRACE = 5.5        # m: Höhe der Felsstufen (steile Felsbänder mit flacheren Absätzen dazwischen)
+MTN_TERRACE_K = 0.45     # Anteil der Stufung (0 = glatte Hänge)
+MTN_FOREST_Z = 14.0      # m: bis hierhin dunkles Bergwald-/Almgrün am Hangfuss
+MTN_ROCK_Z = 16.0        # m: ab hier überwiegt Fels (grau bis braungrau, mit Gesteinsschichten)
+MTN_SNOW_Z = 34.0        # m: Schneegrenze (schwankt um +-5 m)
+MTN_SNOW_SOFT = 7.0      # m: weicher Übergang an der Schneegrenze
+MTN_SNOW_STEEP = 0.55    # Hangneigung (Normale z): steiler hält nur dünner Schnee
+MTN_SNOW_THIN = 0.62     # so viel Schnee bleibt an steilen Stellen über der Schneegrenze
+MTN_FOG = 0.0085         # 9a: Nebeldichte auf der Gebirgskarte (vorher 0.012 - die Alpen sollen sichtbar sein)
+# 9a: Wasserfälle im Gebirge (je Fall: Felsscharte mit Klippe, Wasserband, Gischt, Becken, leises Rauschen)
+WATERFALL_COUNT = 3      # 0..4 (die ersten aus WF_SPOTS)
+WF_SPOTS = (("N", 0.40), ("W", 0.62), ("S", 0.78), ("E", 0.22))   # Kartenrand + Lage entlang des Randes (0..1)
+WF_CLIFF_D = 9.0         # m: Abstand der Klippenkante vom Kartenrand
+WF_CLIFF_W = 1.5         # m: so schmal ist die Klippe (fast senkrecht)
+WF_HALF_W = 9.0          # m: halbe Breite der Scharte
+WF_FLOOR = 0.06          # Restanteil des Bergs am Grund der Scharte
+WF_POOL_R = 4.5          # m: Becken am Fuss
+WF_POOL_DEPTH = 0.9      # m: Tiefe des Beckens (zum Waten)
+WF_WIDTH = 3.2           # m: Breite des Wasserbands
+WF_SPEED = 1.6           # Texturdurchläufe pro Sekunde (fallendes Wasser)
+WF_SPRAY = 14            # Gischtflocken je Wasserfall
+WF_VOL = 0.35            # Lautstärke des Rauschens (leise)
+WF_RANGE = 70.0          # m: so weit hört man es
 VEH_SLOPE = 0.7          # ... mit dem Geländewagen
 
 # --- Helikopter, Flak
@@ -631,6 +665,10 @@ TUN_SEG = 8.0            # m: Wände/Decke in Stücken, deren Oberkante dem Gel�
 TUN_ENTRY_FLAT = 10.0    # m: so weit ist das Gelände um die neuen Eingänge ganz eben (keine Ritzen im Gelände)
 TUN_LAMP = 9.0           # m Abstand der Lampen in den neuen Gängen
 TUN_ROOF = -1.7          # Unterkante der Decke (Gang: 2,5 m hoch)
+GROUND_ANCHOR_Z = 0.6    # 9a: Quader mit Unterkante bis hierhin gelten als "steht auf dem Boden"
+GROUND_FOOT_SINK = 0.3   # 9a: so tief (m) reicht das Fundament unter den tiefsten Geländepunkt der Grundfläche
+GROUND_FOOT_MAX = 4.0    # 9a: höchstens so weit (m) wird ein Quader nach unten verlängert
+GROUND_FOLLOW_TOL = 0.15 # 9a: Sandsäcke u. Ä. folgen dem Gelände, wenn es hier um mehr als so viel von 0 abweicht
 
 STONE = (0.56, 0.54, 0.50)
 STONE_D = (0.44, 0.42, 0.40)
@@ -1516,9 +1554,57 @@ def hills(x, y):
             + math.sin((x + y) * 0.02) * 2.0)
 
 
+_WF_CACHE = {}
+
+
+def waterfall_spots():
+    """9a: [(Seite, Lage entlang des Randes in m)] der Wasserfälle für die aktuelle Kartengrösse."""
+    v = _WF_CACHE.get(WORLD)
+    if v is None:
+        v = _WF_CACHE[WORLD] = [(s, f * WORLD) for s, f in WF_SPOTS[:max(0, min(len(WF_SPOTS), WATERFALL_COUNT))]]
+    return v
+
+
+def wf_local(side, x, y):
+    """9a: (Abstand vom Kartenrand der Seite, Lage entlang des Randes)."""
+    if side == "N":
+        return WORLD - y, x
+    if side == "S":
+        return y, x
+    if side == "W":
+        return x, y
+    return WORLD - x, y
+
+
+def wf_world(side, d, u):
+    """9a: Umkehrung von wf_local -> (x, y)."""
+    if side == "N":
+        return u, WORLD - d
+    if side == "S":
+        return u, d
+    if side == "W":
+        return d, u
+    return WORLD - d, u
+
+
+def wf_pool_d():
+    return WF_CLIFF_D + WF_CLIFF_W + WF_POOL_R * 0.85
+
+
+def near_waterfall(x, y, pad=0.0):
+    """9a: liegt (x, y) in einer Wasserfall-Scharte (Klippe bis Becken, plus pad)?"""
+    for side, u0 in waterfall_spots():
+        d, u = wf_local(side, x, y)
+        if abs(u - u0) < WF_HALF_W + pad and WF_CLIFF_D - 2.0 - pad < d < wf_pool_d() + WF_POOL_R + pad:
+            return True
+    return False
+
+
 def mountain(x, y):
     """Gebirgszug am Rand der Standardkarte: 0 im Inneren, steigt zum Rand hin (erst sanfte Ausläufer,
-    dann steile Felswände) und hinter dem Rand weiter. Gipfel und Sättel wechseln sich ab."""
+    dann steile Felswände) und hinter dem Rand weiter. Gipfel und Sättel wechseln sich ab.
+    9a: Alpen-Form - unterschiedlich hohe Gipfel (MTN_PEAK_*), scharfe Grate (MTN_RIDGE), Felsstufen
+    (MTN_TERRACE) und Scharten mit Klippe + Becken für die Wasserfälle (WF_*)."""
     W = WORLD
     ex, ey = min(x, W - x), min(y, W - y)
     k = 16.0                                             # weiche Ecken (Soft-Minimum der Randabstände)
@@ -1529,14 +1615,39 @@ def mountain(x, y):
     t = (MTN_BAND + wob - d) / (MTN_BAND + wob)
     if t <= 0.0:
         return 0.0
-    peaks = 0.62 + 0.38 * (0.5 + 0.5 * math.sin(x * 0.061 + 0.8) * math.cos(y * 0.057 - 1.3))
+    pk = 0.5 + 0.5 * math.sin(x * 0.061 + 0.8) * math.cos(y * 0.057 - 1.3)
+    pk2 = 0.5 + 0.5 * math.sin(x * 0.023 - y * 0.019 + 2.1)
+    peaks = MTN_PEAK_MIN + (MTN_PEAK_MAX - MTN_PEAK_MIN) * (0.6 * pk + 0.4 * pk2) ** 1.3
     if t <= 1.0:
         h = MTN_H * peaks * t ** 3
     else:                                                # hinter dem Kartenrand: weiter bergauf, flacher
         h = MTN_H * peaks * (1.0 + 1.6 * (1.0 - math.exp(-(t - 1.0) * 1.5)))
+    wr = smoothstep(0.3, 0.8, t)
+    if wr > 0.0:                                         # Grate: scharfe Kämme (1 - |sin|), leicht verbogen
+        r = 0.5 * (1.0 - abs(math.sin(x * 0.046 + 2.0 * math.sin(y * 0.021 + 0.5))))
+        r += 0.5 * (1.0 - abs(math.sin(y * 0.043 + 2.0 * math.sin(x * 0.019 - 1.1))))
+        h *= 1.0 + wr * MTN_RIDGE * (2.0 * r ** 1.5 - 1.0)
+        q = h / MTN_TERRACE                              # Felsstufen: steile Bänder, flachere Absätze
+        fl = math.floor(q)
+        f = q - fl
+        f = f * f * (3.0 - 2.0 * f)
+        f = f * f * (3.0 - 2.0 * f)
+        h += MTN_TERRACE_K * wr * ((fl + f) * MTN_TERRACE - h)
     rug = (1.4 * math.sin(x * 0.19 + 0.3) * math.sin(y * 0.23 - 0.9)
            + 0.8 * math.sin(x * 0.47 + y * 0.31)) * min(1.0, t * 1.4)   # Felsstruktur
-    return max(0.0, h + rug * min(1.0, t * 2.0))
+    h = max(0.0, h + rug * min(1.0, t * 2.0))
+    if WATERFALL_COUNT > 0:                              # Wasserfall-Scharten: Klippe, dahinter (zur Mitte) tiefer Grund
+        for side, u0 in waterfall_spots():
+            d_, u_ = wf_local(side, x, y)
+            du = abs(u_ - u0)
+            if du >= WF_HALF_W or d_ < WF_CLIFF_D - 1.0:
+                continue
+            lat = 1.0 - smoothstep(WF_HALF_W * 0.55, WF_HALF_W, du)
+            h *= 1.0 - lat * smoothstep(WF_CLIFF_D, WF_CLIFF_D + WF_CLIFF_W, d_) * (1.0 - WF_FLOOR)
+            pr = math.hypot(d_ - wf_pool_d(), du)
+            if pr < WF_POOL_R:
+                h -= WF_POOL_DEPTH * (1.0 - smoothstep(WF_POOL_R * 0.45, WF_POOL_R, pr))
+    return h
 
 
 # ------------------------------------------------------------ Kartendateien (vom Karteneditor)
@@ -2995,6 +3106,7 @@ class World:
         self.voids = []   # (x0, y0, x1, y1): Löcher im Gelände = Tunneltreppen (Boden bei TUN_Z)
         self.tunnels = [] # (x0, y0, x1, y1): Tunnelgänge (ein Stockwerk unter dem Gelände)
         self.decor = []   # (x0, y0, x1, y1, z0, z1, Farbe, beleuchtet): nur Darstellung, nicht fest
+        self.follow_boxes = []   # 9a: Quader, die als Ganzes auf die Geländehöhe gesetzt werden (Sandsäcke)
         self.moats = []   # (mx, my, a, o0, o1, o2, o3, Tiefe): Wassergraben um das Quadrat mx±a (Abstände o* vom Quadrat)
         self.dams = []    # (x0, y0, x1, y1): Brücken/Dämme - hier ist der Graben überbrückt
         self.roads = []   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
@@ -3095,6 +3207,9 @@ class World:
             if mp.get("blocks") is None:
                 self.add_cover(rng)
             self.add_map_objects()
+            self.ground_boxes()                      # 9a: nichts schwebt über Senken und Hängen
+        if self.mtn and WATERFALL_COUNT > 0 and self.cm is None and self.hgrid is None:
+            self.props = [q for q in self.props if q.kind not in ("tree", "rock") or not near_waterfall(q.x, q.y, 2.0)]
         self.build_grids()
         self.last_spawn = {}
         self.spawns = self.make_spawns(rng)
@@ -4408,7 +4523,8 @@ class World:
         return [p for p in self.props if abs(p.x - x) < r + p.r and abs(p.y - y) < r + p.r]
 
     def sandbags(self, x0, y0, x1, y1, h=1.15):
-        self.add_box(x0, y0, x1, y1, -1.0, h, SANDBAG)
+        """Sandsackreihe; 9a: folgt dem Gelände (ground_boxes setzt sie auf die Bodenhöhe der Mitte)."""
+        self.follow_boxes.append(self.add_box(x0, y0, x1, y1, -1.0, h, SANDBAG))
 
     def shed_roof(self, x0, y0, x1, y1, z, col=ROOF, t=0.35, post=0.35, posts=None):
         """Dach auf Pfosten (offen): Deckung von oben. posts = Liste (x, y) oder automatisch an den Ecken."""
@@ -4658,6 +4774,48 @@ class World:
             h0 = self.height(x, y)
             self.add_box(x - sx / 2, y - sy / 2, x + sx / 2, y + sy / 2, h0 - 2.0, h0 + top, STONE_D)
             placed += 1
+
+    def ground_boxes(self):
+        """9a: Bodennahe Quader und flache Deko an das Gelände anpassen (läuft auf Host und Client gleich, weil
+        alles aus Seed + Karte folgt). follow_boxes werden als Ganzes auf die Geländehöhe ihrer Mitte gesetzt; alle
+        anderen bodennahen Quader bekommen ein Fundament bis unter den tiefsten Geländepunkt ihrer Grundfläche
+        (Oberkante bleibt). Ausgenommen: über Wasser, Graben, Tunnel und Löchern."""
+        def samples(x0, y0, x1, y1):
+            return [(x0 + (x1 - x0) * i / 3.0, y0 + (y1 - y0) * j / 3.0) for i in range(4) for j in range(4)]
+
+        def blocked(pts):
+            for x, y in pts:
+                if self.voids and self.in_void(x, y):
+                    return True
+                if self.tunnels and self.in_tunnel(x, y):
+                    return True
+                if self.moats and self.near_moat(x, y, 0.5):
+                    return True
+                if any(math.hypot(x - px, y - py) < r * 1.3 for px, py, r in self.ponds):
+                    return True
+            return False
+
+        for b in self.follow_boxes:
+            gz = self.surface_height((b.x0 + b.x1) * 0.5, (b.y0 + b.y1) * 0.5)
+            if abs(gz) > GROUND_FOLLOW_TOL and not blocked(samples(b.x0, b.y0, b.x1, b.y1)):
+                b.z0 += gz
+                b.z1 += gz
+        for b in self.boxes:
+            if not b.vis or b.z1 <= 0.05 or b.z0 > GROUND_ANCHOR_Z:
+                continue
+            pts = samples(b.x0, b.y0, b.x1, b.y1)
+            lo = min(self.surface_height(x, y) for x, y in pts)
+            if lo >= b.z0 - 0.05 or b.z0 - lo > GROUND_FOOT_MAX or blocked(pts):
+                continue
+            b.z0 = lo - GROUND_FOOT_SINK
+        for k, d in enumerate(self.decor):
+            x0, y0, x1, y1, z0, z1, col, lit = d
+            if not lit or not -0.05 <= z0 <= GROUND_ANCHOR_Z:
+                continue
+            pts = samples(x0, y0, x1, y1)
+            lo = min(self.surface_height(x, y) for x, y in pts)
+            if lo < z0 - 0.03 and z0 - lo <= GROUND_FOOT_MAX and not blocked(pts):
+                self.decor[k] = (x0, y0, x1, y1, lo - 0.1, z1, col, lit)
 
     def build_grids(self):
         c = self.GRID
@@ -8223,6 +8381,37 @@ def _t_cloth(S):
              for x in range(S)] for y in range(S)]
 
 
+def _t_snow(S):
+    """9a: Schnee - weich, leicht körnig, kühle Schatten."""
+    a, b = _fbm(S, 171, 5, 4), _fbm(S, 172, 70, 2, 0.6)
+    cols, h = [], []
+    for y in range(S):
+        crow, hrow = [], []
+        for x in range(S):
+            v = 0.95 + 0.10 * (a[y][x] - 0.5) + 0.05 * (b[y][x] - 0.5)
+            crow.append(_rgb(v, (0.97, 0.99, 1.0)))
+            hrow.append(0.7 * a[y][x] + 0.2 * b[y][x])
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.5)
+
+
+def _t_falls(S):
+    """9a: fallendes Wasser - senkrechte Schlieren mit Schaumstreifen (v läuft nach unten)."""
+    a, b = _fbm(S, 181, 12, 3), _fbm(S, 182, 3, 3)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            st = 0.5 + 0.5 * math.sin(2 * math.pi * (x * 9 / S + 0.35 * b[y][x]))
+            v = 0.74 + 0.22 * st * a[y][x] + 0.12 * (b[y][x] - 0.5)
+            if a[y][x] > 0.66:
+                v = 1.0 + (a[y][x] - 0.66) * 0.6                    # Schaum
+            row.append(_rgb(v, (0.92, 0.97, 1.0)))
+        out.append(row)
+    return out
+
+
 def _t_water(S):
     n = _fbm(S, 151, 6, 3)
     waves = ((3, 2, 0.0), (-2, 4, 1.7), (5, -1, 3.1), (1, 6, 0.6))
@@ -8318,6 +8507,7 @@ TEXGEN = {
     "plaster": (256, _t_plaster, False, True, 3.0), "concrete": (128, _t_concrete, False, True, 4.0),
     "metal": (128, _t_metal, False, True, 2.0), "cloth": (32, _t_cloth, False, True, 0.4),
     "water": (128, _t_water, False, True, 6.0), "fire": (64, _t_fire, False, True, 3.0),
+    "snow": (128, _t_snow, False, True, 5.0), "falls": (64, _t_falls, False, True, 4.0),
     "cloud": (128, _t_cloud, True, True, 200.0), "blob": (64, _t_blob, True, False, 1.0),
     "glow": (64, _t_glow, True, False, 1.0), "edge": (64, _t_edge, True, False, 1.0),
     "vignette": (96, _t_vignette, True, False, 1.0),
@@ -10031,6 +10221,12 @@ def fine_cells(world, cs, n0, n1):
                 o = math.hypot(max(abs((ix + 0.5) * cs - mx) - a, 0.0), max(abs((iy + 0.5) * cs - my) - a, 0.0))
                 if o0 - 3.5 < o < o3 + 3.5:
                     fine.add((ix, iy))
+    if world.mtn and WATERFALL_COUNT > 0:            # 9a: Klippe und Becken der Wasserfälle im 1-m-Raster
+        for side, u0 in waterfall_spots():
+            for dd in range(int(WF_CLIFF_D - 4), int(wf_pool_d() + WF_POOL_R + 4), 2):
+                for uu in range(int(u0 - WF_HALF_W - 3), int(u0 + WF_HALF_W + 4), 2):
+                    wx, wy = wf_world(side, dd, uu)
+                    fine.add((int(wx // cs), int(wy // cs)))
     if world.mtn:
         for fx0, fy0, fx1, fy1, _fc in world.floors:
             for ix in range(int(fx0 // cs), int(fx1 // cs) + 1):
@@ -10038,6 +10234,77 @@ def fine_cells(world, cs, n0, n1):
                     if not (fx0 <= ix * cs and (ix + 1) * cs <= fx1 and fy0 <= iy * cs and (iy + 1) * cs <= fy1):
                         fine.add((ix, iy))
     return fine, roadc
+
+
+def build_waterfalls(world):
+    """9a: Wasserfälle im Gebirge -> Liste von dicts: "sheet" (GeomNode: Wasserband die Klippe hinab, Textur
+    läuft nach unten), "pool" (GeomNode: Wasserspiegel im Becken), "rock" (GeomNode: Quellfels oben), "top"/"foot"
+    (Punkte für Gischt und Rauschen), "out" (Richtung zur Kartenmitte). Nur Darstellung - Gelände/Becken stecken
+    schon in mountain() und sind auf allen Rechnern gleich."""
+    out = []
+    if (not getattr(world, "mtn", False) or world.cm is not None or world.hgrid is not None or WATERFALL_COUNT <= 0
+            or getattr(world, "mc", False)):
+        return out
+    rng = random.Random(world.seed + 91)
+    for side, u0 in waterfall_spots():
+        sh = lambda d, u: world.surface_height(*wf_world(side, d, u))       # noqa: E731
+        pd = wf_pool_d()
+        pz = min(sh(pd + WF_POOL_R * math.cos(a), u0 + WF_POOL_R * math.sin(a))
+                 for a in [i * math.pi / 6 for i in range(12)]) - 0.12      # Wasserspiegel knapp unter dem Rand
+        prof = []
+        d = WF_CLIFF_D - 3.0
+        while d < pd:
+            prof.append((d, sh(d, u0)))
+            d += 0.25
+        pts = [(d_ + (0.45 if d_ > WF_CLIFF_D - 0.6 else 0.0), z_ + 0.22) for d_, z_ in prof if z_ > pz + 0.05]
+        if len(pts) < 3:
+            continue
+        pts = pts[::2] + [(pts[-1][0] + 0.7, pz + 0.02)]
+        ztop = pts[0][1]
+        sheet = Mesh(alpha=0.82, lit=False)
+        sheet.mat = "falls"
+        vlen = 0.0
+        foam = (0.96, 0.99, 1.0)
+        for i in range(len(pts) - 1):
+            (da, za), (db, zb) = pts[i], pts[i + 1]
+            fa, fb = i / (len(pts) - 1), (i + 1) / (len(pts) - 1)
+            wa, wb = WF_WIDTH * (0.55 + 0.45 * fa), WF_WIDTH * (0.55 + 0.45 * fb)
+            seg = math.hypot(db - da, zb - za)
+            va, vb = vlen / TILE["falls"], (vlen + seg) / TILE["falls"]
+            vlen += seg
+            ca = mix((0.62, 0.80, 0.95), foam, fa)
+            cb = mix((0.62, 0.80, 0.95), foam, fb)
+            for k in range(2):                                              # zwei Bahnen nebeneinander
+                ua0, ua1 = -0.5 + 0.5 * k, 0.5 * k
+                pa0, pa1 = wf_world(side, da, u0 + wa * ua0), wf_world(side, da, u0 + wa * ua1)
+                pb0, pb1 = wf_world(side, db, u0 + wb * ua0), wf_world(side, db, u0 + wb * ua1)
+                A, B = (pa0[0], pa0[1], za), (pa1[0], pa1[1], za)
+                C, D = (pb1[0], pb1[1], zb), (pb0[0], pb0[1], zb)
+                sheet.tri(A, B, C, (ca, ca, cb), uv=((0.5 * k, -va), (0.5 * k + 0.5, -va), (0.5 * k + 0.5, -vb)))
+                sheet.tri(A, C, D, (ca, cb, cb), uv=((0.5 * k, -va), (0.5 * k + 0.5, -vb), (0.5 * k, -vb)))
+        pool = Mesh(alpha=0.78, lit=False)
+        pool.mat = "water"
+        pc = wf_world(side, pd, u0)
+        ring = [(pc[0] + WF_POOL_R * 1.02 * math.cos(2 * math.pi * i / 18), pc[1] + WF_POOL_R * 1.02 * math.sin(2 * math.pi * i / 18))
+                for i in range(18)]
+        for i in range(18):
+            a_, b_ = ring[i], ring[(i + 1) % 18]
+            pool.tri((pc[0], pc[1], pz), (a_[0], a_[1], pz), (b_[0], b_[1], pz),
+                     ((0.30, 0.52, 0.70), (0.70, 0.86, 0.95), (0.70, 0.86, 0.95)), (pc[0], pc[1], pz - 1.0))
+        rk = Mesh()                                                          # Quellfels über dem Wasseraustritt
+        sx, sy = wf_world(side, pts[0][0] - 1.2, u0)
+        blob(rk, sx, sy, ztop + 0.4, 2.2, 2.0, 1.4, (0.44, 0.43, 0.42), rng, jitter=0.25, subdiv=2, moss=0.3, mat="rock")
+        for sgn in (-1, 1):                                                  # Felsen am Klippenrand neben dem Wasser
+            bx, by = wf_world(side, WF_CLIFF_D - 0.4, u0 + sgn * (WF_WIDTH * 0.5 + 1.0))
+            blob(rk, bx, by, sh(WF_CLIFF_D - 0.4, u0 + sgn * (WF_WIDTH * 0.5 + 1.0)) + 0.2, 1.1, 1.0, 0.8,
+                 (0.42, 0.41, 0.40), rng, jitter=0.3, subdiv=1, moss=0.2, mat="rock")
+        fx, fy = wf_world(side, pts[-1][0], u0)
+        tx, ty = wf_world(side, pts[0][0], u0)
+        ox, oy = wf_world(side, 1.0, u0)
+        ix, iy = wf_world(side, 0.0, u0)
+        out.append({"sheet": sheet.node("wasserfall"), "pool": pool.node("becken"), "rock": rk.node("quellfels"),
+                    "top": (tx, ty, ztop), "foot": (fx, fy, pz), "out": (ix - ox, iy - oy), "h": ztop - pz})
+    return out
 
 
 def build_scene(world, progress=None):
@@ -10085,15 +10352,60 @@ def build_scene(world, progress=None):
         if z < WATER_LEVEL + 0.4:
             col = mix(col, (0.45, 0.40, 0.28), 0.6)                       # nasser Boden
         if mtn:
-            mz = mountain(x, y)
-            if mz > 2.0:                                                  # Gebirge: Geröll, Fels, oben Schnee
-                g = 0.47 + 0.05 * math.sin(x * 0.3 + y * 0.17) + 0.04 * u
-                col = mix(col, (g * 1.02, g * 0.97, g * 0.88), smoothstep(2.0, 12.0, mz))
-                col = mix(col, (0.92, 0.93, 0.96), smoothstep(46.0, 58.0, z + 6.0 * t))
+            a = alp(x, y, z)
+            if a is not None:                                             # 9a: Alpen - Almgrün, Geröll, Fels, Schnee
+                fw, scw, rw, snw = a
+                col = mix(col, (0.17 + 0.04 * t, 0.34 + 0.06 * u, 0.14), fw)                 # Bergwald/Alm
+                col = mix(col, (0.62 + 0.04 * u, 0.58 + 0.03 * u, 0.50), scw)                # helles Geröll
+                band = 0.5 + 0.5 * math.sin(z * 0.9 + 0.6 * math.sin(x * 0.07 + y * 0.05))   # Gesteinsschichten
+                g = 0.32 + 0.11 * band + 0.05 * u
+                warm = 0.5 + 0.5 * math.sin(x * 0.021 + 1.0) * math.cos(y * 0.027)
+                rockc = mix((g * 0.98, g * 1.0, g * 1.06), (g * 1.2, g * 0.98, g * 0.76), warm)
+                col = mix(col, rockc, rw)
+                col = mix(col, (0.93 + 0.03 * u, 0.94 + 0.03 * u, 0.98), snw)              # Schnee
         return col
+
+    alc = {}
+
+    def alp(x, y, z):
+        """9a: Gewichte (Wald/Alm, Geröll, Fels, Schnee) im Gebirge oder None ausserhalb."""
+        key = (round(x, 2), round(y, 2))
+        v = alc.get(key, 0)
+        if v != 0:
+            return v
+        mz = mountain(x, y)
+        if mz <= 0.6:
+            alc[key] = None
+            return None
+        st = snormal(x, y)[2]                                             # 1 = eben, kleiner = steiler
+        n1 = math.sin(x * 0.13 + 0.7) * math.cos(y * 0.11 - 0.3)
+        fw = smoothstep(0.6, 4.0, mz) * (1.0 - smoothstep(MTN_FOREST_Z - 3.0, MTN_FOREST_Z + 3.0, z)) * 0.75
+        steep = smoothstep(0.70, 0.42, st) * (0.6 + 0.4 * smoothstep(4.0, MTN_ROCK_Z, z))   # steile Wände: Fels
+        rw = max(smoothstep(MTN_ROCK_Z - 8.0, MTN_ROCK_Z + 5.0, z + 3.0 * n1), steep) * smoothstep(1.5, 6.0, mz)
+        scw = (smoothstep(3.0, 9.0, mz) * smoothstep(0.62, 0.8, st) * (1.0 - smoothstep(MTN_ROCK_Z + 6.0, MTN_ROCK_Z + 16.0, z))
+               * smoothstep(0.1, 0.7, 0.5 + 0.5 * n1) * 0.5)
+        sl = MTN_SNOW_Z + 5.0 * n1
+        snw = smoothstep(sl - MTN_SNOW_SOFT * 0.5, sl + MTN_SNOW_SOFT * 0.5, z)
+        snw *= max(smoothstep(MTN_SNOW_STEEP - 0.12, MTN_SNOW_STEEP + 0.08, st), MTN_SNOW_THIN)
+        v = alc[key] = (fw, scw, rw, snw)
+        return v
 
     def rock_w(x, y):
         return smoothstep(5.0, 12.0, mountain(x, y)) if mtn else 0.0
+
+    def alp_mat(x, y, z):
+        """9a: Material im Gebirge: "snow", "rock", "dirt" (Geröll) oder None (normales Gelände)."""
+        a = alp(x, y, z) if mtn else None
+        if a is None:
+            return None
+        fw, scw, rw, snw = a
+        if snw > 0.5:
+            return "snow"
+        if rw > 0.5:
+            return "rock"
+        if scw > 0.45:
+            return "dirt"
+        return None
 
     pg(0.0, "Gelände wird geformt ...")
     # --- Gelände
@@ -10132,13 +10444,14 @@ def build_scene(world, progress=None):
                 for qa, qc, qb, qd in subs:
                     quadf(m, (qa, qc, zf), (qb, qc, zf), (qb, qd, zf), (qa, qd, zf), jc(fc, frng, 0.04), (qa, qc, zf - 1.0), fmat)
 
-    def cell(x0, y0, x1, y1, par, rc=False):
+    def cell(x0, y0, x1, y1, par, rc=False, hf=None):
         if world.voids and world.in_void((x0 + x1) / 2, (y0 + y1) / 2):
             return                                  # Tunneleingang: hier ist das Gelände offen
-        p00 = (x0, y0, sh(x0, y0))
-        p10 = (x1, y0, sh(x1, y0))
-        p11 = (x1, y1, sh(x1, y1))
-        p01 = (x0, y1, sh(x0, y1))
+        hf = hf or sh
+        p00 = (x0, y0, hf(x0, y0))
+        p10 = (x1, y0, hf(x1, y0))
+        p11 = (x1, y1, hf(x1, y1))
+        p01 = (x0, y1, hf(x0, y1))
         tris = ((p00, p10, p11), (p00, p11, p01)) if par % 2 else ((p00, p10, p01), (p10, p11, p01))
         for a, b, c in tris:
             n = norm(cross(sub(b, a), sub(c, a)))
@@ -10159,6 +10472,9 @@ def build_scene(world, progress=None):
                 if rd_ is not None and rd_[0] < rd_[1]:
                     rdk = rd_[2]
             k = smoothstep(0.86, 0.72, n[2]) if n[2] < 0.86 else 0.0      # steil: Erde/Fels
+            am = alp_mat(cx_, cy_, (a[2] + b[2] + c[2]) / 3) if mtn else None
+            if am is not None:
+                k = 0.0                                                     # 9a: Gebirge färbt terrain_col selbst
             cols, nds = [], []
             for p in (a, b, c):
                 col = terrain_col(p[0], p[1], p[2])
@@ -10174,32 +10490,81 @@ def build_scene(world, progress=None):
             mat = ("rock" if rock_w(cx_, cy_) > 0.5 else "dirt") if k > 0.5 else ("sand" if sw > 0.6 else "grass")
             if mtn and mat == "grass" and rock_w(cx_, cy_) > 0.6:
                 mat = "rock"
+            if am is not None and rdk is None:
+                mat = am
             if rdk is not None:
                 mat = "concrete" if rdk == "cobble" else "dirt"
             m.tri(a, b, c, cols, mat=mat, nd=nds)
 
     fine, roadc = fine_cells(world, cs, n0, n1) if (world.mtn and (world.roads or world.moats)) else (set(), set())
+    kv_ = int(round(cs / 0.2)) // TERRAIN_FINE_K * TERRAIN_FINE_K or TERRAIN_FINE_K   # Eingänge: Vielfaches des 1-m-Rasters
+    lvc = {}
+
+    def lvl(ix, iy):                                 # Unterteilung einer Zelle: 1 (grob), TERRAIN_FINE_K, kv_ (Eingang)
+        v = lvc.get((ix, iy))
+        if v is None:
+            x0, y0 = ix * cs, iy * cs
+            if any(vx0 < x0 + cs and vx1 > x0 and vy0 < y0 + cs and vy1 > y0 for vx0, vy0, vx1, vy1 in world.voids):
+                v = kv_
+            else:
+                v = TERRAIN_FINE_K if (ix, iy) in fine else 1
+            lvc[(ix, iy)] = v
+        return v
+
+    def stitched(ix, iy, k):
+        """9a: Höhenfunktion einer unterteilten Zelle ohne Ritzen: Punkte auf einer Kante zu einer gröber
+        unterteilten Nachbarzelle liegen genau auf deren Kantenlinie (sonst klaffen dort T-Spalten)."""
+        x0, y0 = ix * cs, iy * cs
+        x1, y1 = x0 + cs, y0 + cs
+        kw, ke, ks, kn = (min(k, lvl(ix - 1, iy)), min(k, lvl(ix + 1, iy)),
+                          min(k, lvl(ix, iy - 1)), min(k, lvl(ix, iy + 1)))
+        eps = cs * 1e-4
+
+        def along(xa, ya, xb, yb, t, kk):            # Kante a->b, Parameter t (0..1), Raster kk
+            s = min(int(t * kk), kk - 1)
+            u = t * kk - s
+            ha = sh(xa + (xb - xa) * s / kk, ya + (yb - ya) * s / kk)
+            hb = sh(xa + (xb - xa) * (s + 1) / kk, ya + (yb - ya) * (s + 1) / kk)
+            return ha + (hb - ha) * u
+
+        def h(x, y):
+            if abs(x - x0) < eps and kw < k:
+                return along(x0, y0, x0, y1, (y - y0) / cs, kw)
+            if abs(x - x1) < eps and ke < k:
+                return along(x1, y0, x1, y1, (y - y0) / cs, ke)
+            if abs(y - y0) < eps and ks < k:
+                return along(x0, y0, x1, y0, (x - x0) / cs, ks)
+            if abs(y - y1) < eps and kn < k:
+                return along(x0, y1, x1, y1, (x - x0) / cs, kn)
+            return sh(x, y)
+        return h
+
     for iy in range(n0, n1):
         if world.cm is not None:
             break
         for ix in range(n0, n1):
             x0, y0 = ix * cs, iy * cs
             x1, y1 = x0 + cs, y0 + cs
-            if any(vx0 < x1 and vx1 > x0 and vy0 < y1 and vy1 > y0 for vx0, vy0, vx1, vy1 in world.voids):
-                k = int(round(cs / 0.2))            # Zellen an Eingängen fein unterteilen
+            k = lvl(ix, iy)
+            if k > 1:                                # Eingänge (fein) bzw. Wege, Graben, Plätze (1-m-Raster)
+                rc_ = k == TERRAIN_FINE_K and (ix, iy) in roadc
+                hf_ = stitched(ix, iy, k)
                 for j in range(k):
                     for i in range(k):
                         cell(x0 + cs * i / k, y0 + cs * j / k, x0 + cs * (i + 1) / k,
-                             y0 + cs * (j + 1) / k, ix + iy)
-            elif (ix, iy) in fine:
-                k = 4                                # Wege, Graben, Plätze: 1-m-Raster
-                rc_ = (ix, iy) in roadc
-                for j in range(k):
-                    for i in range(k):
-                        cell(x0 + cs * i / k, y0 + cs * j / k, x0 + cs * (i + 1) / k,
-                             y0 + cs * (j + 1) / k, ix + iy, rc_)
+                             y0 + cs * (j + 1) / k, ix + iy, rc_, hf_)
             else:
                 cell(x0, y0, x1, y1, ix + iy)
+    if world.cm is None:                             # 9a: Schürze am äusseren Rand (kein Blick unter das Gelände)
+        lo_, hi_ = n0 * cs, n1 * cs
+        for t0 in range(n0, n1):
+            a_, b_ = t0 * cs, (t0 + 1) * cs
+            for (xa, ya), (xb, yb) in (((a_, lo_), (b_, lo_)), ((b_, hi_), (a_, hi_)), ((lo_, b_), (lo_, a_)),
+                                       ((hi_, a_), (hi_, b_))):
+                za, zb = sh(xa, ya), sh(xb, yb)
+                col = tuple(c_ * 0.6 for c_ in terrain_col(xa, ya, za))
+                quadf(m, (xa, ya, za), (xb, yb, zb), (xb, yb, TERRAIN_SKIRT_Z), (xa, ya, TERRAIN_SKIRT_Z), col,
+                      ((xa + xb) / 2 - (ya - yb), (ya + yb) / 2 - (xb - xa), (za + zb) / 2), "rock")   # Vorderseite nach innen
 
     if world.cm is not None:                          # Netz-Karte: die Dreiecke der Karte statt eines Höhenrasters
         ph = world.map["mesh"].get("photo")
@@ -10255,7 +10620,9 @@ def build_scene(world, progress=None):
         if p.kind == "rock":
             r = p.base_r
             g = rng.uniform(0.46, 0.62)
-            blob(m, p.x, p.y, p.z + r * 0.25, r, r * rng.uniform(0.8, 1.2), r * 0.7,
+            lo_ = min(sh(p.x + math.cos(a_) * r * 0.85, p.y + math.sin(a_) * r * 0.85) for a_ in (0, 1.05, 2.1, 3.14, 4.2, 5.24))
+            zr_ = min(p.z, lo_ + r * 0.3)                    # 9a: am Hang talseitig nicht schweben
+            blob(m, p.x, p.y, zr_ + r * 0.25, r, r * rng.uniform(0.8, 1.2), r * 0.7,
                  (g, g, g + 0.03), rng, jitter=0.25, subdiv=2, moss=0.55, mat="rock")
             decal_disc(shadows, world, p.x - SUN[0] * r * 0.3, p.y - SUN[1] * r * 0.3, r * 1.5, 0.42)
         elif p.kind == "tree" and world.map and world.map.get("tree_style") == "tropic":
@@ -10305,6 +10672,8 @@ def build_scene(world, progress=None):
             return None
         z = world.surface_height(x, y)
         if z < WATER_LEVEL + 0.5 or snormal(x, y)[2] < 0.93 or sand_w(x, y) > 0.35:
+            return None
+        if mtn and WATERFALL_COUNT > 0 and near_waterfall(x, y, 1.0):
             return None
         if world.moats and world.near_moat(x, y, 0.8):
             return None
@@ -16039,6 +16408,15 @@ def synth_sounds():
                            (mul(noise(n), env(n, 60)), 0.3)), 0.9)
     n = SR                                                          # fliegender Brocken: Rauschen (Schleife)
     out["whoosh"] = norm(mul(lowpass(noise(n), 0.09), [0.6 + 0.4 * math.sin(tp * 3 * i / SR) for i in range(n)]), 0.7)
+    n = 3 * SR                                                      # 9a: Wasserfall - Rauschen (nahtlose 3-s-Schleife)
+    wn_ = mix((lowpass(noise(n), 0.06), 1.0), (lowpass(noise(n), 0.25), 0.45), (noise(n), 0.08))
+    wv = [0.82 + 0.10 * math.sin(tp * 2 * i / n) + 0.08 * math.sin(tp * 5 * i / n + 1.0) for i in range(n)]
+    xf = int(0.25 * SR)                                             # Enden überblenden, damit die Schleife nicht knackt
+    wl = mul(wn_, wv)
+    for i in range(xf):
+        a_ = i / xf
+        wl[i] = wl[i] * a_ + wl[n - xf + i] * (1.0 - a_)
+    out["falls"] = norm(wl[:n - xf], 0.6)
     return out
 
 
@@ -110557,13 +110935,15 @@ class Sfx:
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
              "growl": 34.0, "growl_deep": 45.0, "hiss": 30.0, "mstep": 26.0, "mstep_heavy": 55.0, "mstep_giant": 140.0,
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
-             "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0}
+             "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
+             "falls": WF_RANGE}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
            "growl": 4.0, "growl_deep": 6.0, "hiss": 3.0, "mstep": 3.0, "mstep_heavy": 8.0, "mstep_giant": 25.0,
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
-           "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0}
+           "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
+           "falls": 6.0}
 
     def __init__(self, game):
         self.game = game
@@ -111103,6 +111483,13 @@ class Sfx:
                 key = ("rock", r.rid)
                 loops_on.add(key)
                 self.loop_at(key, "whoosh", (r.x, r.y, r.z), MOB_VOL["rock_fly"], 1.0)
+        for i, wf in enumerate(getattr(g, "falls", None) or ()):        # 9a: Wasserfälle rauschen leise
+            fp = wf["foot"]
+            pos = (fp[0], fp[1], fp[2] + min(6.0, wf["h"] * 0.4))
+            if math.dist(pos, cam) < WF_RANGE:
+                key = ("falls", i)
+                loops_on.add(key)
+                self.loop_at(key, "falls", pos, WF_VOL)
         for key in [k for k in self.loops if k not in loops_on]:
             snd, node, _n = self.loops.pop(key)
             try:
@@ -111282,6 +111669,7 @@ class Game(ShowBase):
         self.sky_root = self.sky_clouds = self.sun_np = self.filters = None
         self.vignette = self.land_np = None
         self.water_nps = []
+        self.falls = []                        # 9a: Wasserfälle (Knoten, Gischt, Punkte fürs Rauschen)
         self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.shadows = {}
@@ -112807,6 +113195,7 @@ class Game(ShowBase):
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
         self.strike_fx = None
         self.water_nps = []
+        self.falls = []
         self.town_np = None
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.land_np = None
@@ -113068,6 +113457,7 @@ class Game(ShowBase):
             for wd in extra[4]:
                 par = self.town_np if wd["lit"] else free_np
                 wnp = par.attachNewNode(wd["node"])
+                wnp.setZ(wd["z"])                                   # 9a: Eckpunkte liegen relativ zum Höhenband
                 if wd["kind"] in ("reed", "grass", "bush"):
                     wnp.setTwoSided(True)
                 self.wind_nodes.append((wnp, wd["x"], wd["y"], wd["z"], wd["kind"]))
@@ -113106,6 +113496,7 @@ class Game(ShowBase):
             if k:
                 wn.setTexScale(TextureStage.getDefault(), 1.7, 1.7)
             self.water_nps.append(wn)
+        self.setup_falls()
         if self.sky_root is None:
             self.build_sky_nodes()
         self.sky_root.show()
@@ -113117,7 +113508,7 @@ class Game(ShowBase):
             zp.setFogOff()
         fog = Fog("nebel")
         fog.setColor(*SKY)
-        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 and not world.mtn else 0.012))          # Minecraft-Karte: weite Sicht über das Meer
+        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 and not world.mtn else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
@@ -115079,6 +115470,8 @@ class Game(ShowBase):
         for i, wn in enumerate(self.water_nps):
             wn.setTexOffset(TextureStage.getDefault(), t * (0.021 if i == 0 else -0.016),
                             t * (0.012 if i == 0 else 0.019))
+        if self.falls:
+            self.update_falls(t, cp)
         self.update_wind(t, (self.player.x, self.player.y))
         self.update_shadows()
         if self.sun_np is not None:
@@ -115088,8 +115481,63 @@ class Game(ShowBase):
 
     WIND_AMP = {"tree": 0.022, "bush": 0.03, "reed": 0.12, "grass": 0.14}
 
+    def setup_falls(self):
+        """9a: Wasserfälle aufbauen (Wasserband, Becken, Quellfels, Gischtflocken)."""
+        self.falls = []
+        for wf in build_waterfalls(self.world):
+            sn = self.render.attachNewNode(wf["sheet"])
+            sn.setTransparency(TransparencyAttrib.MAlpha)
+            sn.setDepthWrite(False)
+            sn.setTwoSided(True)
+            sn.setLightOff()
+            sn.setBin("transparent", 12)
+            pn = self.render.attachNewNode(wf["pool"])
+            pn.setTransparency(TransparencyAttrib.MAlpha)
+            pn.setDepthWrite(False)
+            pn.setLightOff()
+            pn.setBin("transparent", 10)
+            self.render.attachNewNode(wf["rock"])
+            spray = []
+            tex = get_tex("blob")
+            for k in range(WF_SPRAY):
+                cm = CardMaker("gischt")
+                cm.setFrame(-0.5, 0.5, -0.5, 0.5)
+                c = self.render.attachNewNode(cm.generate())
+                c.setBillboardPointEye()
+                c.setTransparency(TransparencyAttrib.MAlpha)
+                c.setDepthWrite(False)
+                c.setLightOff()
+                c.setBin("transparent", 13)
+                if tex is not None:
+                    c.setTexture(tex)
+                spray.append((c, k / WF_SPRAY, 0.6 + 0.8 * ((k * 37) % 11) / 10.0, (k * 2.399) % (2 * math.pi)))
+            wf.update({"sn": sn, "pn": pn, "spray": spray})
+            self.falls.append(wf)
+
+    def update_falls(self, t, cp):
+        """9a: Wasser läuft nach unten (Textur), Gischt steigt am Fuss auf und verweht (nur in der Nähe)."""
+        for wf in self.falls:
+            fx, fy, fz = wf["foot"]
+            near = abs(fx - cp[0]) < 160 and abs(fy - cp[1]) < 160
+            wf["sn"].setTexOffset(TextureStage.getDefault(), 0.0, (t * WF_SPEED) % 1.0)      # % 1: genau bleiben
+            wf["pn"].setTexOffset(TextureStage.getDefault(), (t * 0.05) % 1.0, (t * 0.11) % 1.0)
+            ox, oy = wf["out"]
+            for c, ph, sz, ang in wf["spray"]:
+                if not near:
+                    c.hide()
+                    continue
+                c.show()
+                u = (t * 0.45 + ph) % 1.0                            # Lebenslauf einer Flocke 0..1
+                r = 0.4 + 2.2 * u
+                c.setPos(fx + math.cos(ang) * r * 0.8 + ox * u * 1.5, fy + math.sin(ang) * r * 0.8 + oy * u * 1.5,
+                         fz + 0.2 + 2.4 * u * (1.2 - u))
+                c.setScale(sz * (0.6 + 1.6 * u))
+                c.setColorScale(0.92, 0.96, 1.0, 0.42 * (1.0 - u) * min(1.0, u * 6.0))
+
     def update_wind(self, t, cp):
-        """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe)."""
+        """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe).
+        9a: Die Wind-Meshes haben ihre Eckpunkte relativ zur Bandhöhe zref – der Knoten sitzt daher auf zref
+        und schert um seinen eigenen Ursprung (vorher fehlte zref: Kronen schwebten in Senken, versanken auf Hügeln)."""
         for snp, spd, h0, sx_, sy_ in self.spin_nodes:                 # Radarantennen drehen sich immer (auch weit weg: sichtbar bis 400 m)
             snp.setH(h0 + (t * spd) % 360.0)
         if not self.wind_nodes and not self.flag_nodes:
@@ -115106,7 +115554,7 @@ class Game(ShowBase):
             a = g * self.WIND_AMP.get(kind, 0.03)
             sx, sy = dx * a, dy * a
             wnp.setShear(0, sx, sy)
-            wnp.setPos(-sx * zref, -sy * zref, 0)
+            wnp.setPos(0, 0, zref)
         for fnp, x, y, ang in self.flag_nodes:
             if abs(x - cx) > 200 or abs(y - cy) > 200:
                 continue
