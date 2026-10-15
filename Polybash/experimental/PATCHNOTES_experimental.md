@@ -2,6 +2,25 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10a: Echte Höhe – Lärm-Kugeln, KotH-Burg mit Kontrollturm, Strg = sinken (2026-10-15)
+- Lärm als Kugel statt Säule: `make_noise(x, y, r, z)` misst den Abstand zum Monster in 3D (Mitte des Monsters), Schalter `NOISE_SPHERE`. Gilt für alle Quellen: Schritte, Fahrzeuge, Heli (Höhe des Helis), Schüsse, Geschütze, Explosionen, Nahkampf und Sonderattacken, Stromstoß, Bodenschlag, Steinbrocken und Tomahawk. Ein hoch fliegender Heli alarmiert am Boden kaum noch etwas.
+- Minimap: Der eigene Lärmkreis und die Wellen zeigen den Schnitt der Lärm-Kugel mit dem Boden (`noise_ground_r`). Hoch in der Luft wird der Kreis kleiner oder verschwindet.
+- Monster erkennen Spieler mit dem 3D-Abstand (aggro). Ein Heli hoch über ihnen zieht sie nicht mehr an.
+- King of the Hill (Polytown): Die Zone ist jetzt das Burg-Volumen (`koth_box`): innerhalb der Mauern, auf den Mauern, im Kontrollturm und im Tunnel darunter. Sie zählt nicht im Heli oder Fahrzeug (auch nicht am Wagen-Geschütz) und nicht in der Luft über der höchsten Ebene + `KOTH_ZONE_TOL` = 1 m (z. B. Jetpack-Flug). Bodenmarkierung und Minimap zeigen das Burg-Quadrat statt des Kreises. Karten ohne diese Burg nutzen weiter den Kreis `ZONE_R`.
+- Neuer Kontrollturm in der Burgmitte statt Bergfried/Radarschüssel (`KOTH_TOWER`, `KT_*`):
+  - massiver Betonsockel ohne Zugang;
+  - zwei Stege mit Geländer von der Nord- und Südmauer (Wehrgang 5 m) zur Tür der mittleren Etage;
+  - im Schaft eine eckige Wendeltreppe mit 16 Stufen zu 0,45 m um einen Mittelpfeiler;
+  - auskragender Turmraum (8,4 × 8,4 m) mit 1 m Brüstung (geduckt volle Deckung), Fenstern rundum, Dach mit Antenne, Fahne und Kistenplatz.
+  - Begehbarkeit per Test geprüft: Steg → Tür → Treppe → Turmraum.
+- Weitere 3D-Prüfungen:
+  - Explosionen (Granate, Rakete, C4, Claymore, Fahrzeug) schaden nicht mehr durch Wände und Decken (`blast_los`).
+  - Koloss-/Titan-Bodenschlag mit 3D-Abstand und Deckung.
+  - Kisten und Drops lassen sich nicht mehr durch Decken oder Wände benutzen.
+- Bereits 3D und unverändert: Stromstoß, Nahkampf und Sonderattacken, Rülpser (Tonreichweite), Tomahawk-Säule, Fahrzeuge, Geschütze, Kugel-Vorbeiflug.
+- Einheitliche Steuerung hoch/runter: Heli Leertaste = steigen, Strg = sinken (vorher Shift). Jetpack: Leertaste = steigen, Strg in der Luft = kontrolliert sinken (`JET_DOWN_V` = 4 m/s, kein Fallschaden). Legende angepasst.
+- NET_VERSION 31 -> 32.
+
 ## Experimental 9d: Ausrüstung detailliert + Monster-Makeover (2026-10-15)
 - Alle Ausrüstungsteile neu modelliert (`gear_model`): Helme mit gerundeter Schale, Rand, Kinnriemen und Nieten; Westen mit Brust-/Rückenplatte, Schulterstücken, Taschen und Gurten; Jetpack mit Tanks, Düsen und Steuerkasten; Stiefel mit Sohle, Schaft und Schnürung. Gilt für Drops am Boden und für getragene Teile an der Figur (gleiche Maße wie vorher).
 - Sets optisch zusammengehörig (`GEAR_LOOK`): Rüstungs-Set oliv mit Tarnband, Taschen und Schablonen-Nummer; Schild-Set dunkles Blaugrau mit leuchtenden Cyan-Linien, Visier und Generator-Kern; Hermes-Set Gold mit weißen Federflügeln. Basic-Helm stahlgrau, Jetpack orange/alu, Springfeder-Schuhe grün mit Stahlfeder.

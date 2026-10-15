@@ -79,6 +79,10 @@ Essen (PAN_POINTS, PAN_STAGES), T = essen (Heilung, Stufe 3 mit Bissen und Rülp
 9d: Ausrüstung detailliert (gear_model, Set-Optik GEAR_LOOK, HUD-/Hover-Symbole gear_icon). Monster-Makeover: jede Art
 ein eigenes Modell (Zombie-Grunt, roter Brute, geduckte Jägerin, Stein-Koloss, Wald-Titan, technische Drohne, Hase);
 in der Entfernung das einfache Modell (LODNode, MOB_LOD_DIST); Trefferhöhen passend zum Kopf (hit_h).
+10a: Echte Höhe statt "Säulen": Lärm ist eine Kugel (make_noise mit z, NOISE_SPHERE; Minimap zeigt den Schnitt mit dem
+Boden), Monster sehen in 3D, Explosionen/Bodenschlag nicht durch Wände und Decken (blast_los), Kisten/Drops nicht durch
+Decken benutzen. KotH (Polytown): Zone = Burg-Volumen (koth_box) inkl. Mauern, Kontrollturm (koth_tower, KT_*) und
+Untergrund, nicht im Heli/Fahrzeug, nicht in der Luft darüber. Heli und Jetpack: Leertaste steigen, Strg sinken.
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -180,7 +184,7 @@ Der Wagen hat zwei Sitze: F = Fahrer (oder Schütze, wenn der Fahrersitz besetzt
 V = Schütze. Beide können gleichzeitig im Wagen sitzen.
 Helikopter (zwei Stück, je auf einem Helipad auf gegenüberliegenden Seiten der Karte,
 West und Ost): F einsteigen, WASD fliegen (relativ zur Blickrichtung), Leertaste steigen,
-Shift sinken, Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete -
+Strg sinken (10a), Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete -
 geschossen wird entlang der Sichtlinie. Munition ist begrenzt (300 Minigun-Schuss, 6 Raketen)
 und wird nur nachgeladen, wenn man auf einem Helipad aufsetzt. Normale Waffen richten am
 Helikopter wenig Schaden an (3 volle Sturmgewehr-Magazine zerstören ihn, die Pistole gar
@@ -447,7 +451,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 31         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 32         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -468,7 +472,18 @@ LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Min
 STD_MAP_NAME = "Polytown"                # Name der eingebauten Standardkarte
 MAP_ALIASES = {"9d7c83d12b8832f1": "Minecraft Insel"}    # Anzeigename einer .mcmap-Karte nach ihrer Kennung
 MAP_PREVIEW_IDS = {"9d7c83d12b8832f1": "mc_ttt"}       # eingebautes Vorschaubild dazu
-ZONE_R = 15.0            # Radius der King-of-the-Hill-Zone (Burghof)
+ZONE_R = 15.0            # Radius der King-of-the-Hill-Zone (Burghof; 10a: nur noch Karten ohne die Polytown-Burg)
+KOTH_ZONE_TOL = 1.0      # 10a: m über der höchsten Burg-/Turmebene zählt noch zur Zone (darüber: Luft, zählt nicht)
+KOTH_TOWER = True        # 10a: Polytown: Kontrollturm in der Burgmitte statt des offenen Bergfrieds
+KT_BASE = 3.0            # 10a: halbe Breite von Sockel und Schaft des Turms (m)
+KT_MID = 5.0             # 10a: mittlere Etage (= Wehrgang der Mauer, dort docken die Stege an)
+KT_STEP = 0.45           # 10a: Stufenhöhe der Wendeltreppe
+KT_STEPS = 16            # 10a: Stufen bis zum Turmraum
+KT_CAB = 4.2             # 10a: halbe Breite des Turmraums (kragt über den Schaft aus)
+KT_PARAPET = 1.0         # 10a: Brüstung im Turmraum (geduckt volle Deckung), darüber Fenster
+KT_WIN = 1.5             # 10a: Fensterhöhe
+NOISE_SPHERE = True      # 10a: Lärm breitet sich als Kugel aus (Abstand in 3D) - hoch in der Luft hört einen keiner
+JET_DOWN_V = 4.0         # 10a: Jetpack + Strg: kontrolliert sinken mit höchstens so viel m/s (kein Fallschaden)
 ZONE_PTS = 1.0           # Punkte pro Sekunde in der Zone (für jeden Spieler darin)
 KILL_PTS = 10.0          # Punkte pro Kill (in der Zone als Killer: doppelt)
 
@@ -1363,11 +1378,11 @@ GEAR_HUD_TEXT = 0.038                 # Schriftgrösse des getragenen Teils
 TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schaden 150 % - 15 s" in der Bildmitte
 
 
-KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / Jetpack"),
+KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
-              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
+              ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
               ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
               ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
@@ -2348,7 +2363,8 @@ class Mob:
         else:
             dx, dy = pl.x - self.x, pl.y - self.y
             d = math.hypot(dx, dy)
-        sees = pl is not None and (d < k["aggro"] or (self.alert_t > 0 and d < 90))
+        d3 = math.hypot(d, pl.z - self.z) if pl is not None else d          # 10a: Sichtweite in 3D (Heli hoch oben)
+        sees = pl is not None and (d3 < k["aggro"] or (self.alert_t > 0 and d3 < 90))
         reach = self.reach                                 # sitzt das Ziel im Fahrzeug: dessen Hülle angreifen
         if pl is not None and (pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0):
             occ = world.occupied_vehicle(pl)
@@ -3751,11 +3767,14 @@ class World:
         # Treppen im Hof hinauf zu den Wehrgängen West und Ost
         self.stairs(x0 + T, cy - 10, "N", 10, 2.5, 0, 0.5, 0.8)
         self.stairs(x1 - T - 2.5, cy + 10, "S", 10, 2.5, 0, 0.5, 0.8)
-        # Bergfried in der Mitte mit Treppe aufs Dach
-        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)
-        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
-        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
-        self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
+        if self.mtn and KOTH_TOWER:                     # 10a: Kontrollturm mit Stegen von der Nord- und Südmauer
+            top = self.koth_tower(cx, cy, H, T, ZW, WALL, WALL_D)
+            self.koth_box = (x0, y0, x1, y1, max(top, ZT + 1.2) + KOTH_ZONE_TOL)
+        else:                                           # Bergfried in der Mitte mit Treppe aufs Dach
+            B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)
+            B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
+            B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
+            self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
         # niedrige Deckung: vor den Toren aussen und im Hof
         for s in (-1, 1):
             for a, b in ((cx - 5, cx - 2), (cx + 2, cx + 5)):
@@ -3800,9 +3819,94 @@ class World:
         self.add_crate(cx - 12, cy + 8, 0.0)
         self.add_crate(cx + 12, cy - 8, 0.0)
         if self.mtn:
-            B(cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 6.0, 9.3, WALL_D, False, False)      # Sockel der Radarschüssel
+            if not KOTH_TOWER:
+                B(cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 6.0, 9.3, WALL_D, False, False)  # Sockel der Radarschüssel
             self.build_moat()
             self.castle_extras()
+
+    def koth_tower(self, cx, cy, H, T, ZW, WALL, WALL_D):
+        """10a: Kontrollturm (Flughafen-/Militär-Tower) in der Burgmitte: massiver Betonsockel ohne Zugang, zwei Stege
+        von Nord- und Südmauer (Wehrgang, KT_MID) auf die mittlere Etage, im Schaft eine Wendeltreppe (eckig um einen
+        Pfeiler, KT_STEPS Stufen) hinauf in den auskragenden Turmraum: Brüstung (geduckt Deckung), rundum Fenster,
+        Dach mit Antenne. -> Höhe der obersten Ebene (Dach)."""
+        B = self.add_box
+        S, wt, mid = KT_BASE, 0.4, KT_MID
+        B(cx - S, cy - S, cx + S, cy + S, -2, mid, WALL, True)                       # Sockel (kein Zugang)
+        floor = mid + KT_STEP * KT_STEPS                                             # Boden des Turmraums
+        shaft_top = floor - 0.3
+        dw = 0.85                                                                    # halbe Türbreite
+        for sy in (-1, 1):                                                           # Schaft: Nord/Süd mit Tür zum Steg
+            ya, yb = (cy + S - wt, cy + S) if sy > 0 else (cy - S, cy - S + wt)
+            B(cx - S, ya, cx - dw, yb, mid, shaft_top, WALL)
+            B(cx + dw, ya, cx + S, yb, mid, shaft_top, WALL)
+            B(cx - dw, ya, cx + dw, yb, mid + 2.4, shaft_top, WALL)
+        for sx in (-1, 1):                                                           # Ost/West mit schmalen Fenstern
+            xa, xb = (cx + S - wt, cx + S) if sx > 0 else (cx - S, cx - S + wt)
+            B(xa, cy - S + wt, xb, cy - 0.4, mid, shaft_top, WALL)
+            B(xa, cy + 0.4, xb, cy + S - wt, mid, shaft_top, WALL)
+            B(xa, cy - 0.4, xb, cy + 0.4, mid, mid + 2.2, WALL)
+            B(xa, cy - 0.4, xb, cy + 0.4, mid + 3.0, shaft_top, WALL)
+        inner = S - wt                                                               # Wendeltreppe: 3x3-Raster
+        cs = 2 * inner / 3.0
+        B(cx - cs / 2, cy - cs / 2, cx + cs / 2, cy + cs / 2, mid, floor + 2.5, WALL_D)   # Mittelpfeiler (bis unters Dach)
+        ring = ((1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (0, 1), (0, 0))
+        top_cells = set()
+        for k in range(KT_STEPS):
+            i, j = ring[k % 8]
+            xa, ya = cx - inner + i * cs, cy - inner + j * cs
+            z1 = mid + KT_STEP * (k + 1)
+            B(xa, ya, xa + cs, ya + cs, z1 - 0.3, z1, (0.42, 0.40, 0.37))
+            if z1 > floor - 2.1:
+                top_cells.add((i, j))
+        # Turmraum: Boden mit Treppenloch, Brüstung, Fensterpfosten, Dach
+        C, ft = KT_CAB, 0.3
+        hole = [(cx - inner + i * cs, cy - inner + j * cs, cx - inner + (i + 1) * cs, cy - inner + (j + 1) * cs)
+                for i, j in top_cells]
+        step = 0.5
+        nx = int(round(2 * C / step))
+        for a in range(nx):                                                          # Boden in Streifen um das Loch
+            for b in range(nx):
+                xa, ya = cx - C + a * step, cy - C + b * step
+                mx_, my_ = xa + step / 2, ya + step / 2
+                if any(h[0] <= mx_ <= h[2] and h[1] <= my_ <= h[3] for h in hole):
+                    continue
+                if abs(mx_ - cx) < cs / 2 and abs(my_ - cy) < cs / 2:
+                    continue                                                         # Pfeiler
+                B(xa, ya, xa + step, ya + step, floor - ft, floor, (0.36, 0.37, 0.40), False, False)
+        for h in hole:                                                               # Kante des Treppenlochs sichtbar
+            self.decor.append((h[0], h[1], h[2], h[3], floor - ft - 0.01, floor - ft, (0.2, 0.2, 0.22), True))
+        pw = 0.3
+        win0, win1 = floor + KT_PARAPET, floor + KT_PARAPET + KT_WIN
+        roof = win1
+        for sy in (-1, 1):
+            ya, yb = (cy + C - pw, cy + C) if sy > 0 else (cy - C, cy - C + pw)
+            B(cx - C, ya, cx + C, yb, floor, win0, WALL, True)                       # Brüstung
+            B(cx - C, ya, cx + C, yb, win1 - 0.15, roof, WALL_D)                     # Sturz
+        for sx in (-1, 1):
+            xa, xb = (cx + C - pw, cx + C) if sx > 0 else (cx - C, cx - C + pw)
+            B(xa, cy - C + pw, xb, cy + C - pw, floor, win0, WALL, True)
+            B(xa, cy - C + pw, xb, cy + C - pw, win1 - 0.15, roof, WALL_D)
+        for px in (-C + 0.2, -C / 3, C / 3, C - 0.2):                                # Fensterpfosten
+            for py in (-C + 0.2, C - 0.2):
+                B(cx + px - 0.15, cy + py - 0.15, cx + px + 0.15, cy + py + 0.15, win0, win1, WALL_D)
+                B(cx + py - 0.15, cy + px - 0.15, cx + py + 0.15, cy + px + 0.15, win0, win1, WALL_D)
+        B(cx - C - 0.4, cy - C - 0.4, cx + C + 0.4, cy + C + 0.4, roof, roof + 0.35, WALL_D, True)   # Dach (kragt aus)
+        B(cx - 0.1, cy - 0.1, cx + 0.1, cy + 0.1, roof + 0.35, roof + 3.5, (0.55, 0.55, 0.58), False, False)   # Antenne
+        self.decor.append((cx - 0.12, cy - 0.12, cx + 0.12, cy + 0.12, roof + 3.5, roof + 3.7, (1.0, 0.2, 0.15), False))
+        # Stege von der Nord- und Südmauer (Wehrgang auf KT_MID) zur Tür in der mittleren Etage
+        for sy in (-1, 1):
+            ya, yb = (cy + S, cy + H - T) if sy > 0 else (cy - H + T, cy - S)
+            B(cx - 1.1, ya, cx + 1.1, yb, mid - 0.4, mid, (0.40, 0.40, 0.42), True)
+            for sx in (-1, 1):                                                       # Geländer
+                B(cx + sx * 1.1 - sx * 0.08 - 0.04, ya, cx + sx * 1.1 - sx * 0.08 + 0.04, yb, mid + 0.95, mid + 1.05,
+                  (0.30, 0.30, 0.32), False)
+                for yy in range(int(min(ya, yb)) + 1, int(max(ya, yb)), 3):
+                    B(cx + sx * 1.02 - 0.04, yy - 0.04, cx + sx * 1.02 + 0.04, yy + 0.04, mid, mid + 0.95, (0.30, 0.30, 0.32), False)
+            for sx in (-1, 1):                                                       # Stützpfeiler zum Hof
+                B(cx + sx * 0.8 - 0.25, (ya + yb) / 2 - 0.25, cx + sx * 0.8 + 0.25, (ya + yb) / 2 + 0.25, -2, mid - 0.4, WALL_D)
+        self.flagpole(cx + C - 0.6, cy + C - 0.6, roof + 0.35, 3.0, (0.85, 0.84, 0.78), 2.0, 1.2, 0.0)
+        self.add_crate(cx + 2.4, cy - 2.4, floor)
+        return roof + 0.35
 
     def build_helipads(self, pads=None):
         """Zwei Helipads auf gegenüberliegenden Seiten der Karte (West und Ost), je mit einem Helikopter."""
@@ -4334,7 +4438,8 @@ class World:
         cols = {(-1, -1): OLIVE, (1, 1): (0.55, 0.45, 0.20)}
         for (sx, sy), fc in cols.items():
             self.flagpole(c + sx * H, c + sy * H - sy * 2.6, ZT + 1.2, 4.2, fc, 2.4, 1.4, 0.0)
-        self.flagpole(c + 3.4, c + 3.4, 7.2, 4.0, (0.85, 0.84, 0.78), 2.6, 1.5, 0.0)
+        if not KOTH_TOWER:
+            self.flagpole(c + 3.4, c + 3.4, 7.2, 4.0, (0.85, 0.84, 0.78), 2.6, 1.5, 0.0)
         # Löschwasserbehälter im Hof
         wx, wy = c + 8.0, c - 8.0
         for a, b, c2, d2 in ((wx - 1.1, wy - 1.1, wx + 1.1, wy - 0.7), (wx - 1.1, wy + 0.7, wx + 1.1, wy + 1.1),
@@ -4342,7 +4447,8 @@ class World:
             B(a, b, c2, d2, -1, 0.95, WALL_C)
         self.vis.append({"k": "well", "x": wx, "y": wy})
         # Drehende Antennen: grosse Schüssel (Würzburg-Riese) auf dem Betriebsgebäude, zwei Freya-Wände auf den freien Ecktürmen
-        self.vis.append({"k": "spin", "kind": "dish", "x": c, "y": c, "z": 6.3, "speed": 24.0, "h0": 20.0})
+        if not KOTH_TOWER:                                   # 10a: dort steht jetzt der Kontrollturm
+            self.vis.append({"k": "spin", "kind": "dish", "x": c, "y": c, "z": 6.3, "speed": 24.0, "h0": 20.0})
         for (sx, sy), spd in (((-1, -1), 34.0), ((1, 1), -34.0)):
             tx, ty = c + sx * H, c + sy * H
             B(tx - 0.4, ty - 0.4, tx + 0.4, ty + 0.4, ZT, ZT + 4.2, WALL_CD, False, False)
@@ -5183,18 +5289,30 @@ class World:
         return False
 
     # ------------------------------------------------------------ Lärm
-    def make_noise(self, x, y, r):
-        """Geräusch mit Radius r bei (x, y): alarmiert jedes Monster, das näher als r * hear ist
-        (nur beim Host bzw. im Einzelspiel - dort laufen die Monster)."""
+    def make_noise(self, x, y, r, z=None):
+        """Geräusch mit Radius r bei (x, y, z): alarmiert jedes Monster, das näher als r * hear ist (nur beim Host bzw.
+        im Einzelspiel - dort laufen die Monster). 10a: Kugel statt Säule - der Abstand zählt in 3D (Mitte des
+        Monsters); z = None: knapp über dem Boden an (x, y)."""
         if r <= 0:
             return
+        if z is None:
+            z = self.height(x, y) + 1.0
         if NOISE_DEBUG:
-            self.noise_log.append((x, y, r, 0.6))
+            self.noise_log.append((x, y, noise_ground_r(self, x, y, z, r), 0.6))
         for m in self.mobs:
             if m.state == "dead":
                 continue
-            if (m.x - x) ** 2 + (m.y - y) ** 2 <= (r * MOB_KINDS[m.kind].get("hear", 1.0)) ** 2:
+            dz = (m.z + m.height * 0.5 - z) if NOISE_SPHERE else 0.0
+            if (m.x - x) ** 2 + (m.y - y) ** 2 + dz * dz <= (r * MOB_KINDS[m.kind].get("hear", 1.0)) ** 2:
                 m.on_noise(x, y, self)
+
+    def noise_z(self, pl):
+        """10a: Höhe, von der der Lärm eines Spielers ausgeht (im Heli: der Heli)."""
+        if pl.heli >= 0:
+            hc = self.heli_by_id(pl.heli)
+            if hc is not None:
+                return hc.z + 1.0
+        return pl.z + 1.0
 
     def player_noise(self, pl):
         """Lärmradius, den ein Spieler gerade durch Bewegung/Fahrzeug macht."""
@@ -5225,7 +5343,7 @@ class World:
             for pl in players:
                 r = self.player_noise(pl)
                 if r > 0:
-                    self.make_noise(pl.x, pl.y, r)
+                    self.make_noise(pl.x, pl.y, r, self.noise_z(pl))
         if NOISE_DEBUG:
             self.noise_log = [(x, y, r, t - NOISE_TICK) for x, y, r, t in self.noise_log if t > NOISE_TICK]
 
@@ -5237,8 +5355,17 @@ class World:
         return pl.z < self.surface_height(pl.x, pl.y) - 2.0
 
     def in_zone(self, pl):
-        """In der King-of-the-Hill-Zone - wer darunter im Untergrund ist, zählt nicht."""
-        return math.hypot(pl.x - CENTER, pl.y - CENTER) <= ZONE_R and not self.underground(pl)
+        """In der King-of-the-Hill-Zone? 10a (Polytown): die Zone ist die Burg - innerhalb der Mauern, auf den Mauern,
+        im Kontrollturm und im Untergrund darunter; nicht im Heli/Fahrzeug und nicht in der Luft über der höchsten
+        Ebene (koth_box: x0, y0, x1, y1, Obergrenze). Andere Karten: Kreis ZONE_R ohne Untergrund."""
+        kb = getattr(self, "koth_box", None)
+        if kb is None:
+            return math.hypot(pl.x - CENTER, pl.y - CENTER) <= ZONE_R and not self.underground(pl)
+        if pl.heli >= 0 or pl.vehicle >= 0:
+            return False
+        if pl.mount >= 0 and 0 <= pl.mount < len(self.turrets) and self.turrets[pl.mount].kind == "car":
+            return False
+        return kb[0] <= pl.x <= kb[2] and kb[1] <= pl.y <= kb[3] and pl.z <= kb[4]
 
     def ranking(self):
         ps = list(self.players.values())
@@ -5365,7 +5492,7 @@ class World:
             if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R * k + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
                 m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
                 m.state, m.atk_t, m.did_hit = "chase", 0.0, True
-        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
         self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
         return True
 
@@ -5435,7 +5562,7 @@ class World:
         sx, sy = m.x + fx * m.radius * 1.2, m.y + fy * m.radius * 1.2
         sz = self.height(sx, sy) + 1.0
         self.events.append(("rockkick", (round(sx, 2), round(sy, 2), round(sz - 1.0, 2))))
-        self.make_noise(m.x, m.y, NOISE_EXPLOSION * 0.4)
+        self.make_noise(m.x, m.y, NOISE_EXPLOSION * 0.4, m.z + 1.0)
         if pl is None or pl.hp <= 0:
             return
         tx, ty, tz = pl.x, pl.y, pl.z + 1.0
@@ -5483,7 +5610,7 @@ class World:
     def rock_impact(self, r):
         pos = (round(r.x, 2), round(r.y, 2), round(r.z, 2))
         self.events.append(("rockhit", pos, ROCK_R))
-        self.make_noise(r.x, r.y, NOISE_EXPLOSION * 0.5)
+        self.make_noise(r.x, r.y, NOISE_EXPLOSION * 0.5, r.z)
         self.area_damage(r.x, r.y, r.z, ROCK_R, 0.0, ROCK_DMG, WI_ROCK, cover=True)
 
     def titan_loot(self, m):
@@ -5506,8 +5633,8 @@ class World:
         k = MOB_KINDS[m.kind]
         r = k["slam_r"]
         self.events.append(("slam", (round(m.x, 2), round(m.y, 2), round(m.gz, 2)), r))
-        self.make_noise(m.x, m.y, NOISE_EXPLOSION * 0.6)
-        self.area_damage(m.x, m.y, m.gz, r, k["slam_kill"], k["slam_dmg"], WI_SLAM)
+        self.make_noise(m.x, m.y, NOISE_EXPLOSION * 0.6, m.gz + 1.0)
+        self.area_damage(m.x, m.y, m.gz, r, k["slam_kill"], k["slam_dmg"], WI_SLAM, cover=True)   # 10a: nicht durch Wände/Decken
 
     def area_damage(self, x, y, z, r, kill_r, dmg_max, wi, cover=False):
         """Flächenangriff eines Monsters (Bodenschlag, Steinbrocken): im Umkreis kill_r tödlich, bis r linear
@@ -5616,7 +5743,7 @@ class World:
         """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
         Eine Rakete zerstört ein Fahrzeug in ROCKET_KILL_R Umkreis sofort."""
         self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, owner, wi))
-        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION)
+        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION, pos[2])
         for v in list(self.vehicles):
             if v.hp <= 0:
                 continue
@@ -5640,6 +5767,8 @@ class World:
             d = math.dist(pos, (pl.x, pl.y, pl.z + 0.9))
             if pl.pid == owner and pl.mount >= 0:      # Schütze am Geschütz bleibt unversehrt
                 continue
+            if d < r and not self.blast_los(pos, (pl.x, pl.y, pl.z + 0.9), (pl.x, pl.y, pl.z + 1.6)):
+                continue                               # 10a: Wand/Decke dazwischen - kein Schaden
             kr = {WI_GRENADE: GREN_KILL_R, WI_C4: C4_KILL_R, WI_CLAY: CLAY_KILL_R}.get(wi, 0.0)
             if kr > 0 and d < kr:                      # sofort tot
                 self.damage_player(pl, 9999.0, owner, wi)
@@ -5653,13 +5782,19 @@ class World:
                 continue
             mp = (m.x, m.y, m.z + m.height * 0.5)
             d = math.dist(pos, mp)
-            if d < r + m.radius:
+            if d < r + m.radius and self.blast_los(pos, mp, (m.x, m.y, m.z + m.height * 0.9)):
                 f = max(0.0, 1.0 - d / (r + m.radius))
                 if wi == WI_GRENADE and d < GREN_KILL_R + m.radius:
                     f = 9999.0 / max(dmg, 1.0)
                 dx, dy = m.x - pos[0], m.y - pos[1]
                 l = math.hypot(dx, dy) or 1.0
                 self.hurt_mob(m, dmg * f, mp, (dx / l, dy / l, 0.3), False, owner)
+
+    def blast_los(self, pos, *targets):
+        """10a: Erreicht eine Explosion bei pos das Ziel (einer der Punkte frei sichtbar)? Start leicht angehoben,
+        damit eine Rakete, die an einer Wand einschlägt, nicht in der Wand beginnt."""
+        p0 = (pos[0], pos[1], pos[2] + 0.25)
+        return any(self.los(p0, t) for t in targets)
 
     # ------------------------------------------------------------ Loot
     def crate_counts(self):
@@ -5912,8 +6047,9 @@ class World:
             for o in objs:
                 d = math.hypot(pl.x - o.x, pl.y - o.y) / rng
                 oz = o.z - o.seat if kind == "turret" else o.z
-                if d < bs and abs(pl.z - oz) < 2.5:
-                    best, bs = (kind, o), d
+                if d < bs and abs(pl.z - oz) < 2.5 and (kind not in ("crate", "drop") or
+                                                        self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
+                    best, bs = (kind, o), d                   # 10a: nicht durch Decken/Wände (Kisten, Drops)
         if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
             for kind, b in (("button", self.button),):
                 d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
@@ -6000,7 +6136,7 @@ class World:
         m = MELEE[mi]
         pl.protect = 0.0
         self.events.append(("mswing", pl.pid, mi))
-        self.make_noise(pl.x, pl.y, NOISE_MELEE)
+        self.make_noise(pl.x, pl.y, NOISE_MELEE, pl.z + 1.0)
         eye = (pl.x, pl.y, pl.z + eye_h(pl))
         hl = math.hypot(d[0], d[1]) or 1.0
         fx, fy = d[0] / hl, d[1] / hl
@@ -6129,7 +6265,7 @@ class World:
         R, mult = (KATANA_SPIN_R, KATANA_SPIN_MULT) if kind == "spin" else (SWORD_SLAM_R, SWORD_SLAM_MULT)
         cos_arc = math.cos(math.radians(SWORD_SLAM_ARC))
         self.events.append(("mspec", pl.pid, kind, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2), round(math.degrees(math.atan2(-fx, fy)), 1)))
-        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0)
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
         chest = (pl.x, pl.y, pl.z + 1.0)
         wi = MELEE_WI0 + pl.melee
         cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
@@ -6509,7 +6645,7 @@ class World:
             flak = t.kind == "flak"
             t.firing = True
             if getattr(t, "noise_t", 0.0) <= 0:            # Geschütz feuert: laut (alle 0,5 s gemeldet)
-                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2)
+                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2, getattr(t, "z", None))
                 t.noise_t = 0.5
             t.cd = FLAK_INTERVAL if flak else TUR_INTERVAL
             t.heat += FLAK_HEAT if flak else TUR_HEAT_SHOT
@@ -6849,7 +6985,7 @@ class World:
         self.strike_wait = self.strike_cd * self.mrng.uniform(1.0 - j, 1.0 + j)
         tx, ty = self.strike_x, self.strike_y
         cz = self.height(tx, ty)
-        self.make_noise(tx, ty, NOISE_TOMAHAWK)
+        self.make_noise(tx, ty, NOISE_TOMAHAWK, cz + 1.0)
         self.events.append(("tomahawk", round(tx, 1), round(ty, 1)))
         self.events.append(("explosion", (round(tx, 2), round(ty, 2), round(cz + 1.0, 2)), 16.0))
         n, rr = 8, STRIKE_R * 0.6
@@ -7149,7 +7285,7 @@ class World:
             return
         self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
-        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0))
+        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0), world_noise_z(self, pl))
         for d in dirs:
             self.bullets.append(Bullet(eye[0], eye[1], eye[2],
                                        d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
@@ -7778,8 +7914,13 @@ def step(pl, forward, strafe, run, jump, dt, world):
             pl.jet_amp = DAGGER_AMP
     jet = (gear is not None and jump and not pl.on_ground and not jedge and wears(pl, "jetpack")
            and pl.jet_fuel > 0 and pl.air_jump)               # 7c: Jetpack = erst Doppelsprung, dann Schub
-    pl.jet_on = jet                                  # Jetpack: Leertaste in der Luft halten
-    if jet:
+    sink = (gear is not None and not jet and getattr(pl, "duck", False) and not pl.on_ground and wears(pl, "jetpack")
+            and pl.jet_fuel > 0 and pl.vz < -JET_DOWN_V + 0.5)   # 10a: Strg in der Luft = kontrolliert sinken
+    pl.jet_on = jet or sink                          # Jetpack: Leertaste in der Luft halten
+    if sink:
+        pl.vz = -JET_DOWN_V + GRAVITY * dt           # (die Schwerkraft unten zieht es wieder ab)
+        pl.jet_fuel = max(0.0, pl.jet_fuel - dt * 0.5)
+    elif jet:
         ja = getattr(pl, "jet_amp", 1.0)
         pl.jet_fuel = max(0.0, pl.jet_fuel - dt / ja)
         pl.vz = min(JET_VMAX * ja, pl.vz + JET_ACC * ja * dt)
@@ -8151,6 +8292,16 @@ def sg_pose(t, n):
     else:
         hand = lp(forend, rest, smoothstep(close_t, end_t, t))
     return ang, lift, hand, shell
+
+
+def noise_ground_r(world, x, y, z, r):
+    """10a: Radius, in dem die Lärm-Kugel (Mitte x, y, z; Radius r) die Bodenhöhe (Monster-Mitte ~1 m) schneidet."""
+    dz = max(0.0, z - (world.height(x, y) + 1.0)) if NOISE_SPHERE else 0.0
+    return math.sqrt(max(0.0, r * r - dz * dz))
+
+
+def world_noise_z(world, pl):
+    return world.noise_z(pl) if hasattr(world, "noise_z") else pl.z + 1.0
 
 
 def apply_drain(att, tgt):
@@ -11194,7 +11345,21 @@ def build_scene(world, progress=None):
             spins.append({"node": sm_.node("radar"), "x": r_["x"], "y": r_["y"], "z": r_["z"], "speed": r_["speed"], "h0": r_["h0"]})
     # --- King-of-the-Hill-Zone: gelber Ring mit Pfosten und leicht getönter Boden
     zone = []
-    if world.mode == "koth":
+    kb = getattr(world, "koth_box", None)
+    if world.mode == "koth" and kb is not None:      # 10a: Zone = Burg - gelbe Linie innen an den Mauern, getönter Hof
+        fill, edge = Mesh(alpha=0.12, lit=False), Mesh(alpha=0.9, lit=False)
+        ia = 3.05
+        x0_, y0_, x1_, y1_ = kb[0] + ia, kb[1] + ia, kb[2] - ia, kb[3] - ia
+        zf = 0.09
+        quadf(fill, (x0_, y0_, zf), (x1_, y0_, zf), (x1_, y1_, zf), (x0_, y1_, zf), (1.0, 0.85, 0.2), (CENTER, CENTER, -5.0))
+        for a_, b_ in (((x0_, y0_), (x1_, y0_)), ((x1_, y0_), (x1_, y1_)), ((x1_, y1_), (x0_, y1_)), ((x0_, y1_), (x0_, y0_))):
+            dx_, dy_ = b_[0] - a_[0], b_[1] - a_[1]
+            ln_ = math.hypot(dx_, dy_)
+            nx_, ny_ = -dy_ / ln_ * 0.5, dx_ / ln_ * 0.5
+            quadf(edge, (a_[0], a_[1], zf + 0.01), (b_[0], b_[1], zf + 0.01), (b_[0] + nx_, b_[1] + ny_, zf + 0.01),
+                  (a_[0] + nx_, a_[1] + ny_, zf + 0.01), (1.0, 0.85, 0.15), (CENTER, CENTER, -5.0))
+        zone = [fill.node("zone_fill"), edge.node("zone_ring")]
+    elif world.mode == "koth":
         fill, edge = Mesh(alpha=0.16, lit=False), Mesh(alpha=0.9, lit=False)
         n, zc = 72, (CENTER, CENTER)
         below = (CENTER, CENTER, -5.0)
@@ -115698,10 +115863,10 @@ class Game(ShowBase):
         t.heading, t.pitch = pl.heading % 360.0, pl.pitch
 
     def fly_heli_ctl(self, hc, inp, dt, trigger, ads):
-        """Helikopter steuern: WASD fliegen, Leertaste steigen, Shift sinken, Maus zielt (der Rumpf dreht nach),
-        Linke Maus Minigun, Rechte Maus Rakete."""
+        """Helikopter steuern: WASD fliegen, Leertaste steigen, Strg sinken (10a: wie das Jetpack; vorher Shift),
+        Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete."""
         pl, world = self.player, self.world
-        up = (1 if inp.jump else 0) - (1 if inp.run else 0)
+        up = (1 if inp.jump else 0) - (1 if getattr(inp, "duck", False) else 0)
         pl.pitch = clampf(pl.pitch, -75.0, 25.0)
         fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
         if self.net_mode != "client" and hc.impact > 0:       # Einzelspiel/Host: Aufprall gleich auswerten
@@ -117155,7 +117320,7 @@ class Game(ShowBase):
                     pl.melee_out = False
             if pl.swing_t > getattr(self, "prev_swing", 0.0) + 0.01:     # eigener Schlag: Ton
                 self.sfx.melee(self.my_id, False, 0.85 if pl.melee >= 3 else 1.0)
-                self.noise_wave(pl.x, pl.y, NOISE_MELEE)
+                self.noise_wave(pl.x, pl.y, NOISE_MELEE, pl.z + 1.0)
             self.prev_swing = pl.swing_t
             if veh is not None or hc is not None or tur is not None:
                 pl.gad_out = False
@@ -117458,7 +117623,8 @@ class Game(ShowBase):
                 if e[2] == self.my_id:
                     self.sfx.shot(e[1], e[2])
                     if 0 <= e[1] < len(WEAPONS):
-                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud)
+                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud,
+                                        self.world.noise_z(self.player))
                 if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse
                     continue
                 w = WEAPONS[e[1]]
@@ -117487,7 +117653,7 @@ class Game(ShowBase):
                         v.start_throw()
             elif kind == "explosion":
                 if len(e) > 3 and e[3] == self.my_id:
-                    self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
+                    self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION, e[1][2])
                 self.explosion_fx(e[1], e[2])
                 self.sfx.explosion(e[1], e[2], e[3] if len(e) > 3 else None)
                 pl = self.player
@@ -118919,7 +119085,11 @@ class Game(ShowBase):
             for r_ in getattr(world, "vis", ()):
                 if r_.get("k") == "bridge":
                     rect(r_["x0"], r_["y0"], r_["x1"], r_["y1"], (0.55, 0.40, 0.24) if r_.get("style") == "wood" else (0.62, 0.60, 0.56))
-        if world.mode == "koth":
+        kb_ = getattr(world, "koth_box", None)
+        if world.mode == "koth" and kb_ is not None:     # 10a: Zone = Burg (Quadrat)
+            rect(kb_[0], kb_[1], kb_[2], kb_[3], (0.62, 0.55, 0.15))
+            rect(kb_[0] + 0.8, kb_[1] + 0.8, kb_[2] - 0.8, kb_[3] - 0.8, (0.28, 0.36, 0.16))
+        elif world.mode == "koth":
             disc(CENTER, CENTER, ZONE_R, (0.62, 0.55, 0.15))
             disc(CENTER, CENTER, ZONE_R - 0.6, (0.28, 0.36, 0.16))
         if world.runway is not None:
@@ -119213,8 +119383,11 @@ class Game(ShowBase):
             sx, sy = sx / d * lim, sy / d * lim
         return sx, sy
 
-    def noise_wave(self, x, y, r):
-        """Eigener Lärm (Schuss, Explosion, Schlag): Ring breitet sich auf der Minimap bis r m aus."""
+    def noise_wave(self, x, y, r, z=None):
+        """Eigener Lärm (Schuss, Explosion, Schlag): Ring breitet sich auf der Minimap bis r m aus.
+        10a: mit z der Schnitt der Lärm-Kugel mit dem Boden (hoch oben = kleiner Ring oder keiner)."""
+        if z is not None:
+            r = noise_ground_r(self.world, x, y, z, r)
         if not NOISE_MINIMAP or r <= 0 or not hasattr(self, "mm_waves"):
             return
         now = time.time()
@@ -119250,6 +119423,8 @@ class Game(ShowBase):
         self.mm_strike.setScale(self.MM_VIS / self.mm_vis)
         r = self.world.player_noise(pl) if NOISE_MINIMAP and pl.hp > 0 else 0.0
         if r > 0:
+            r = noise_ground_r(self.world, pl.x, pl.y, self.world.noise_z(pl), r)     # 10a: Kugel-Schnitt am Boden
+        if r > 0.3:
             self.mm_noise.setScale(min(r * k, self.mm_R * 0.97))
             self.mm_noise.show()
         else:
