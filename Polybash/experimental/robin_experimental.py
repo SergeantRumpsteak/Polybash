@@ -113415,6 +113415,9 @@ class Game(ShowBase):
         self.fog, self.fog_dens, self.far_base = None, 0.012, 450.0
         sv = st.get("sens")
         self.sens_mult = float(sv) if isinstance(sv, (int, float)) and not isinstance(sv, bool) and 0.5 <= sv <= 2.0 else 1.0
+        fv = st.get("fov")
+        self.fov_base = float(fv) if isinstance(fv, (int, float)) and not isinstance(fv, bool) and 60 <= fv <= 110 else FOV   # Sichtfeld
+        self.invert_y = bool(st.get("inv"))      # Maus hoch/runter invertiert
         vm = st.get("vm")
         self.vol_music = int(vm) if isinstance(vm, (int, float)) and not isinstance(vm, bool) and 0 <= vm <= 100 else 100      # Hintergrundmusik in %
         vs_ = st.get("vs")
@@ -113432,9 +113435,9 @@ class Game(ShowBase):
         self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.shadows = {}
-        self.camLens.setFov(FOV)
+        self.camLens.setFov(self.fov_base)
         self.camLens.setNearFar(0.1, 450)      # grosse Karten: siehe build_world (Fernsicht)
-        self.fov_cur = FOV
+        self.fov_cur = self.fov_base
         self.prng = random.Random()
 
         # Spielzustand: erst das Startmenü, Welt und HUD entstehen in start_game()
@@ -113775,8 +113778,9 @@ class Game(ShowBase):
                     ("Spiel beitreten", dig(2)), ("Zurück   (Esc)", back)]
         elif st == "settings":
             spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
+                    (self.invert_label(), dig(2)),
                     ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),
-                    ("", None), ("", None),     # Platz für 5 Regler
+                    ("", None), ("", None), ("", None), ("", None),     # Platz für 6 Regler
                     ("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
@@ -113889,7 +113893,8 @@ class Game(ShowBase):
                     self.menu_cards.append((hot, card))
             self.ui_sliders_clear()
             if self.menu_state == "settings":
-                for k, sp in enumerate([self.fps_slider(), self.view_slider()] + self.personal_sliders()):
+                ps_ = self.personal_sliders()
+                for k, sp in enumerate([self.fps_slider(), self.view_slider(), ps_[0], self.fov_slider()] + ps_[1:]):
                     self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
 
     # ------------------------------------------------------------ Maus im Menü
@@ -114220,6 +114225,9 @@ class Game(ShowBase):
                 if d == 1:
                     self.name_back = "settings"
                     self.show_menu("name")
+                elif d == 2:
+                    self.toggle_invert()
+                    self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
             elif st == "setup2":
@@ -114895,7 +114903,7 @@ class Game(ShowBase):
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
             if kind == "settings_game":                 # persönliche Spieleinstellungen: Maus
-                items = list(self.personal_sliders()[:1])
+                items = list(self.personal_sliders()[:1]) + [self.fov_slider(), (self.invert_label(), do(self.toggle_invert))]
                 items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
                 self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
                 return
@@ -115001,6 +115009,7 @@ class Game(ShowBase):
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
                        "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code,
+                       "fov": self.fov_base, "inv": 1 if self.invert_y else 0,
                        "fs": is_fullscreen(self)})
 
     def apply_volume(self):
@@ -115046,6 +115055,21 @@ class Game(ShowBase):
         idx = lambda: FPS_CHOICES.index(self.fps_limit) if self.fps_limit in FPS_CHOICES else 0      # noqa: E731
         return SliderSpec("Bildrate", 0, len(FPS_CHOICES) - 1, 1, idx, self.set_fps_index,
                           lambda i: fps_label(FPS_CHOICES[int(i)]))
+
+    def fov_slider(self):
+        return SliderSpec("Sichtfeld (FOV)", 60, 110, 5, lambda: self.fov_base, self.set_fov_value,
+                          lambda v: f"{int(v)}°" + ("  (normal)" if int(v) == int(FOV) else ""))
+
+    def set_fov_value(self, v):
+        self.fov_base = float(v)
+        self.prefs_dirty = True
+
+    def toggle_invert(self):
+        self.invert_y = not self.invert_y
+        self.save_prefs()
+
+    def invert_label(self):
+        return f"Maus invertieren (hoch/runter):  {'an' if self.invert_y else 'aus'}"
 
     def personal_sliders(self):
         """Regler, die nur dich betreffen (Hauptmenü- und Spiel-Einstellungen)."""
@@ -115152,8 +115176,8 @@ class Game(ShowBase):
             sp.x = sp.v = 0.0
         self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
         self.br = None                       # Atem im Sniper-Visier (scope_breath)
-        self.fov_cur = FOV
-        self.camLens.setFov(FOV)
+        self.fov_cur = self.fov_base
+        self.camLens.setFov(self.fov_base)
         self.heli_ads = True
         if self.sky_root is not None:
             self.sky_root.hide()
@@ -115223,7 +115247,7 @@ class Game(ShowBase):
         self.player.respawn(self.world, x, y, self.loadout)
         self.death_t = 0.0
         self.hurt_flash = 0.0
-        self.fov_cur = FOV
+        self.fov_cur = self.fov_base
 
     LOAD_TIPS = ("Im Einzelfeuer-Modus (V) streut das Sturmgewehr weniger - die Kugelabweichung sinkt.",
                  "Mit F steigst du in Fahrzeuge, Geschütze und Hubschrauber ein und wieder aus.",
@@ -117401,9 +117425,9 @@ class Game(ShowBase):
             self.warp_frames = 0
         if dx or dy:
             pl = self.player
-            sens = MOUSE_SENS * self.sens_mult * self.fov_cur / FOV      # beim Zoomen feinfühliger
+            sens = MOUSE_SENS * self.sens_mult * self.fov_cur / self.fov_base      # beim Zoomen feinfühliger
             pl.heading -= dx * sens
-            pl.pitch = clampf(pl.pitch - dy * sens, -85.0, 85.0)
+            pl.pitch = clampf(pl.pitch + (dy if self.invert_y else -dy) * sens, -85.0, 85.0)
         return dx, dy
 
     def build_turret_sight(self):
@@ -117516,7 +117540,7 @@ class Game(ShowBase):
                 tx.setFg(col)
             self.ts_ring.setColorScale(*col)
         self.set_text(self.ts_range, ("ZIEL  " if target else "") + (f"{int(dist)} m" if dist else "-- m"))
-        self.set_text(self.ts_tag, f"{TURRET_NAMES.get(t.kind, 'Geschütz')}   x{FOV / max(self.fov_cur, 1.0):.1f}")
+        self.set_text(self.ts_tag, f"{TURRET_NAMES.get(t.kind, 'Geschütz')}   x{self.fov_base / max(self.fov_cur, 1.0):.1f}")
         heat = clampf(t.heat, 0.0, 1.0)
         self.ts_heat.setScale(max(0.001, 0.29 * heat), 1, 1)
         self.ts_heat.setColor(*((0.45, 0.8, 1.0, 1) if t.over else
@@ -117551,7 +117575,7 @@ class Game(ShowBase):
                 dist = d
                 break
         self.set_text(self.rs_range, f"{int(dist)} m" if dist else "-- m")
-        self.set_text(self.rs_tag, f"RAKETENWERFER   x{FOV / max(self.fov_cur, 1.0):.1f}")
+        self.set_text(self.rs_tag, f"RAKETENWERFER   x{self.fov_base / max(self.fov_cur, 1.0):.1f}")
 
     # ------------------------------------------------------- Kamera / Schleife
     # ------------------------------------------------------------ Grafik
@@ -118908,7 +118932,7 @@ class Game(ShowBase):
 
         # Zoom
         sight = self.cur_sight()
-        target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) if pl.ads else FOV
+        target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) * (self.fov_base / FOV) if pl.ads else self.fov_base
         self.fov_cur += (target - self.fov_cur) * min(1.0, 14 * dt)
         self.camLens.setFov(self.fov_cur)
         self.gun_lens.setAspectRatio(self.getAspectRatio())
@@ -121146,6 +121170,9 @@ def _exp_autostart(g):
             g.gfx = spec["gfx"]
         if isinstance(spec.get("sens"), (int, float)) and 0.5 <= spec["sens"] <= 2.0:
             g.sens_mult = float(spec["sens"])
+        if isinstance(spec.get("fov"), (int, float)) and 60 <= spec["fov"] <= 110:
+            g.fov_base = float(spec["fov"])
+        g.invert_y = bool(spec.get("inv"))
         if spec.get("fps") in FPS_CHOICES:
             g.fps_limit = spec["fps"]
         g.apply_fps()
