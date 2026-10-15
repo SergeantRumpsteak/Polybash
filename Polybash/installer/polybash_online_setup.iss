@@ -243,6 +243,7 @@ begin
     else
       Py := SysPython;
 
+    SaveStringToFile(App + '\install.log', 'Verwendetes Python: ' + Py + #13#10, True);
     Prog.SetText('Eigene Umgebung wird angelegt ...', '');
     Prog.Animate;
     RC := RunLogged(Py, '-m venv "' + App + '\venv"');
@@ -258,6 +259,13 @@ begin
     if RC <> 0 then
     begin
       Fail('Panda3D konnte nicht installiert werden (Code ' + IntToStr(RC) + '). Ist der Rechner mit dem Internet verbunden?');
+      Exit;
+    end;
+    { Die Verknuepfungen zeigen auf venv\Scripts\pythonw.exe: ohne diese Datei laesst sich das Spiel nicht starten. }
+    if not FileExists(App + '\venv\Scripts\pythonw.exe') then
+    begin
+      RunCmd('dir /b "' + App + '\venv\Scripts" >> "' + App + '\install.log" 2>&1');
+      Fail('In der Python-Umgebung fehlt pythonw.exe (verwendetes Python: ' + Py + ').');
       Exit;
     end;
     Ok := True;

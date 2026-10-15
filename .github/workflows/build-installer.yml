@@ -53,12 +53,21 @@ jobs:
             $o = & "$dest\venv\Scripts\python.exe" -c "import panda3d; print('panda3d', panda3d.__version__)" 2>&1
             Ann "notice" "Panda3D" "$o"
             if ($LASTEXITCODE -ne 0) { throw "Panda3D nicht importierbar" }
+            if (-not (Test-Path "$dest\venv\Scripts\pythonw.exe")) { throw "venv\Scripts\pythonw.exe fehlt" }
             $r = netsh advfirewall firewall show rule name="Polybash" 2>&1
             Ann "notice" "Firewall-Regeln nach Installation" ($r -join "`n")
             if ($LASTEXITCODE -ne 0) { throw "Firewall-Regeln fehlen" }
             Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
             netsh advfirewall firewall show rule name="Polybash" | Out-Null
             if ($LASTEXITCODE -eq 0) { throw "Firewall-Regeln wurden beim Deinstallieren nicht entfernt" }
+            # zweiter Durchlauf ohne /forcepy: vorhandenes System-Python benutzen, danach Verknuepfungsziel pruefen
+            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup2.log" -Wait -PassThru
+            Ann "notice" "Zweiter Durchlauf (System-Python)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
+            if (-not (Test-Path "$dest\venv\Scripts\pythonw.exe")) { throw "2. Durchlauf: venv\Scripts\pythonw.exe fehlt" }
+            $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Polybash\Polybash.lnk")
+            Ann "notice" "Verknuepfung" "Ziel: $($lnk.TargetPath) | Argumente: $($lnk.Arguments) | existiert: $(Test-Path $lnk.TargetPath)"
+            if (-not (Test-Path $lnk.TargetPath)) { throw "Ziel der Startmenue-Verknuepfung fehlt: $($lnk.TargetPath)" }
+            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
             Ann "notice" "Test" "alles in Ordnung"
             $global:LASTEXITCODE = 0
           } catch {
