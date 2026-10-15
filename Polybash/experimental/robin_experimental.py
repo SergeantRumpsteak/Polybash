@@ -31,7 +31,7 @@ Steuerung:
   Fahrzeug       W/S Gas/Rückwärts, A/D lenken, Leertaste Handbremse, Maus: Kamera
 
 Nahkampf: Jeder hat zusätzlich eine Nahkampfwaffe im eigenen Slot (Start/Respawn: Messer). Aus Kisten (Art "melee",
-LOOT_MELEE_TABLES): Erschöpfungsdolch (9c, vorher Kampfmesser), Machete, Schwert, Katana (stark) und die Bratpfanne (Kopftreffer = BONG). Werte in
+LOOT_MELEE_TABLES): Diebesdolch (10d), Erschöpfungsklinge (10d, vorher Machete), Schwert, Katana (stark) und die Bratpfanne (Kopftreffer = BONG). Werte in
 MELEE (Schaden, Schläge, Reichweite, Kopf-Faktor, Schlagwinkel). Ein Schlag ist sehr leise (NOISE_MELEE ~ Ducken):
 nur das getroffene Monster merkt etwas, ahnungslose Monster nehmen MELEE_SNEAK-fachen Schaden - so erledigt man
 sie leise. Neue Nahkampfwaffe ersetzt die alte (die fällt, ausser dem Messer); gleiche: "Hast du schon". Stirbt man
@@ -72,7 +72,7 @@ mehr zwischen fein und grob unterteilten Geländezellen (Kanten werden angeglich
 (Modell + Trefferzone). Aufsätze/Visier über T (Inspektions-Ansicht der Waffe mit Markierungen, INSPECT_*), Tab ist
 nur noch Übersicht. Tomahawk: Sirene halb so laut (TOMA_SIREN_VOL), im Anflug leise die US-Hymne (TOMA_ANTHEM*).
 9c: Nahkampfwaffen detailliert (MELEE_SHAPES, Sinans Formsprache: Modell und Symbol). Erschöpfungsdolch (vorher
-Kampfmesser): Lebensraub DAGGER_LEECH; trifft er Spieler, gehen deren Fähigkeiten auf volle Abklingzeit, die eigenen
+Kampfmesser; 10d: liegt jetzt auf der Erschöpfungsklinge, vorher Machete): Lebensraub DAGGER_LEECH; trifft er Spieler, gehen deren Fähigkeiten auf volle Abklingzeit, die eigenen
 sind sofort bereit und wirken beim nächsten Einsatz x DAGGER_AMP (apply_drain). Katana/Schwert: Schlagtaste
 MELEE_CHARGE_T s halten = Rundumschlag (KATANA_*) bzw. Sprungangriff (SWORD_*). Bratpfanne: Kills laden sie mit
 Essen (PAN_POINTS, PAN_STAGES), T = essen (Heilung, Stufe 3 mit Bissen und Rülpser PAN_BURP_R, kein Monster-Lärm).
@@ -89,6 +89,9 @@ Waffe (mit Aufsätzen) + ein zufälliges weiteres Teil (Nahkampf, Granaten oder 
 10c: Neue Sets - Zweite Chance (Basic-Helm, Splitterweste, Druckwellen-Stiefel; SAVE_HP), Jetpack (Jetpack, Jet-Helm,
 Jetpack-Stiefel; JET_*), Springfeder (Springfeder-Schuhe, Sprungweste = Doppelsprung, Krallenhelm = an Wänden
 festkrallen; CLING_*). Hermes-Set stärker (HERMES_SET_*).
+10d: Katana-Rundumschlag mit Drehung (auch in der Ego-Ansicht) und Slash-Ring, Schwert-Sprungangriff mit Windstoss-Schnitt
+und Staubwelle (spawn_slash_fx). Machete -> Erschöpfungsklinge (Wirkung des alten Erschöpfungsdolchs), Dolch ->
+Diebesdolch (Monster-Kill: THIEF_EXTRA Gegenstand mehr).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -457,7 +460,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 34         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 35         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -893,8 +896,8 @@ class Melee:
 
 MELEE = (
     Melee("Messer", 25, 0.45, 1.6, short="Messer"),                       # Start (0815-Messer)
-    Melee("Erschöpfungsdolch", 34, 0.42, 1.7, short="Dolch"),      # 9c: vorher Kampfmesser (Lebensraub, Erschöpfung)
-    Melee("Machete", 46, 0.6, 2.0, short="Machete"),
+    Melee("Diebesdolch", 34, 0.42, 1.7, short="Diebesdolch"),      # 10d: vorher Erschöpfungsdolch - Monster-Kill = +1 Beute
+    Melee("Erschöpfungsklinge", 46, 0.6, 2.0, short="Klinge"),    # 10d: vorher Machete - Lebensraub, Erschöpfung
     Melee("Schwert", 62, 0.75, 2.4, short="Schwert"),
     Melee("Katana", 75, 0.55, 2.5, head=1.6, arc=45.0, short="Katana"),
     Melee("Bratpfanne", 38, 0.7, 1.9, head=2.6, arc=50.0, short="Pfanne", sound="bong"),   # Spass: Kopf = BONG
@@ -906,7 +909,10 @@ MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in
 MELEE_SNEAK = 2.0         # Faktor, wenn das Monster nichts ahnt (idle, nicht am Suchen/Jagen) - leise erledigen
 NOISE_MELEE = 3.0         # m Lärmradius eines Schlags/Treffers (etwa wie Ducken)
 # 9c: Sonderfähigkeiten der Nahkampfwaffen
-DAGGER_NAME = "Erschöpfungsdolch"
+DAGGER_NAME = "Erschöpfungsklinge"   # 10d: die Wirkung des Erschöpfungsdolchs liegt jetzt auf der Machete
+THIEF_NAME = "Diebesdolch"     # 10d: Monster mit dem Diebesdolch erlegt -> so viele Gegenstände zusätzlich (andere Kategorie)
+THIEF_EXTRA = 1
+SLASH_FX_T = 0.4               # 10d: s - Ring-Slash (Katana) bzw. Windstoss-Schnitt (Schwert) sichtbar
 DAGGER_LEECH = 0.5        # Erschöpfungsdolch: so viel des verursachten Schadens heilt den Träger (Monster und Spieler)
 DAGGER_AMP = 2.0          # ... nach einem Spieler-Treffer: der nächste Einsatz jeder eigenen Fähigkeit wirkt so viel stärker
 DAGGER_AMP_T = 20.0       # ... s: so lange bleibt dieser verstärkte Einsatz bereit
@@ -1010,8 +1016,8 @@ LOOT_GEAR_TABLES = {
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
 LOOT_MELEE_TABLES = {
     #  Nahkampf              braun  blau   gold   (das Start-Messer kommt nie aus Kisten)
-    "Erschöpfungsdolch":   (40.0, 15.0,  5.0),
-    "Machete":             (30.0, 25.0, 10.0),
+    "Diebesdolch":         (40.0, 15.0,  5.0),
+    "Erschöpfungsklinge":  (30.0, 25.0, 10.0),
     "Schwert":             (12.0, 30.0, 30.0),
     "Katana":              ( 3.0, 15.0, 40.0),
     "Bratpfanne":          (15.0, 15.0, 15.0),
@@ -1548,6 +1554,8 @@ def melee_info(mi, pl=None):
     s = (f"{m.name}  (Nahkampf)\nSchaden: {m.dmg:.0f}  (Kopf x{m.head:g})\n"
          f"Tempo: {60.0 / m.interval:.0f} Schläge/min\nReichweite: {m.reach:.1f} m, Winkel ±{m.arc:.0f}°\n"
          f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
+    if m.name == THIEF_NAME:
+        s += f"\nMonster damit erlegt: {THIEF_EXTRA} Gegenstand mehr (andere Kategorie)"
     if m.name == DAGGER_NAME:
         s += (f"\nLebensraub: heilt {DAGGER_LEECH * 100:.0f} % des Schadens\nTrifft er Spieler: deren Fähigkeiten auf volle "
               f"Abklingzeit, deine sofort bereit,\nnächster Einsatz x{DAGGER_AMP:g} ({DAGGER_AMP_T:.0f} s)")
@@ -5926,8 +5934,9 @@ class World:
                     killer.stats["melee_kills"] += 1
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(self.players.get(owner))
-            if m.kind in MOB_LOOT and not CRATES_ON_MAP:  # 10b: Beute von Monstern (Titan: 6 Teile)
-                self.mob_loot(m, killer)
+            extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
+            if (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
+                self.mob_loot(m, killer, extra)                         # 10d: Diebesdolch +1 (andere Kategorie)
             elif m.kind == "titan":                      # Boss erlegt: goldene Kiste an seiner Stelle
                 self.titan_loot(m)
 
@@ -13370,28 +13379,32 @@ def _melee_shapes():
         + [("e", 0, y, 0.0, 0.0155, 0.0045, 0.0045, C["brass"]) for y in (0.022, 0.07)]
         + [("b", 0, 0.103, 0.003, 0.022, 0.008, 0.044, C["iron2"])]
         + _mw_blade(0.107, 0.262, lambda t: 0.012 - 0.004 * t, 0.03, top=lambda t: 0.016 - 0.006 * t ** 2, wcore=0.008))
-    # ---------------- Erschöpfungsdolch (9c, vorher Kampfmesser): gewellte Ritualklinge, Runen, Ebenholz, Gold
-    wave = lambda y: 0.007 * math.sin((y - 0.12) * 52.0) * min(1.0, (y - 0.12) / 0.03)      # noqa: E731
-    S["Erschöpfungsdolch"] = (
-        [("e", 0, -0.034, 0.0, 0.009, 0.009, 0.009, C["rune"]),
-         ("e", 0, -0.018, 0.0, 0.019, 0.016, 0.02, C["gold"])]
-        + _mw_wrap(-0.004, 0.102, (0.0135, 0.016), C["ebony"], C["gold"], 3)
-        + [("p", 0, 0.03, [(0.104, 0.004), (0.11, -0.03), (0.122, -0.042), (0.118, -0.028), (0.116, 0.0), (0.118, 0.03),
-                            (0.124, 0.046), (0.11, 0.036)], C["gold"]),
-           ("e", 0, 0.112, 0.003, 0.018, 0.006, 0.006, C["rune"])]
-        + _mw_blade(0.118, 0.318, lambda t: 0.016 * (1 - t) ** 0.6 + 0.003, 0.03, cz=wave, wcore=0.009, wedge=0.0035,
-                    ccore=C["dagger"], cedge=(0.55, 0.52, 0.62))
-        + [("b", 0, y, wave(y) + 0.002, 0.0105, 0.009, 0.004, C["rune"]) for y in (0.15, 0.185, 0.22, 0.255)]
-        + [("b", 0, y + 0.006, wave(y + 0.006) - 0.003, 0.0105, 0.004, 0.006, C["rune"]) for y in (0.165, 0.2, 0.237)])
-    # ---------------- Machete: breite Klinge, schwarzer Rücken, Holzgriff mit drei Nieten und Fangriemenloch
-    S["Machete"] = (
-        [("p", 0, 0.028, [(-0.03, 0.004), (-0.02, -0.018), (0.112, -0.016), (0.122, 0.0), (0.112, 0.02), (-0.016, 0.024)], C["wood2"]),
-         ("e", 0, -0.016, 0.004, 0.0145, 0.006, 0.006, C["dark"])]
-        + [("e", 0, y, 0.002, 0.0145, 0.0045, 0.0045, C["brass"]) for y in (0.012, 0.05, 0.088)]
-        + [("b", 0, 0.124, 0.002, 0.03, 0.01, 0.048, C["iron"])]
+    # ---------------- Diebesdolch (10d): schlanke, leicht gebogene Schurkenklinge, schwarzes Leder, kleiner
+    # Haken-Parierbügel, Ring-Knauf (zum Drehen am Finger)
+    bend = lambda y: 0.012 * max(0.0, (y - 0.11) / 0.2) ** 2                                  # noqa: E731
+    S["Diebesdolch"] = (
+        [("t", [(0, -0.05, 0), (0, -0.034, 0.0)], [(0.004, 0.018), (0.004, 0.018)], C["iron"], 10),
+         ("e", 0, -0.026, 0.0, 0.012, 0.01, 0.012, C["iron2"])]
+        + _mw_wrap(-0.02, 0.098, (0.012, 0.0145), (0.07, 0.065, 0.07), (0.20, 0.13, 0.08), 5)
+        + [("p", 0, 0.022, [(0.098, -0.03), (0.104, -0.032), (0.108, 0.0), (0.104, 0.024), (0.112, 0.036), (0.106, 0.04),
+                             (0.098, 0.026)], C["iron"]),
+           ("e", 0, 0.06, 0.0, 0.0155, 0.006, 0.006, (0.55, 0.08, 0.1))]
+        + _mw_blade(0.108, 0.31, lambda t: 0.011 - 0.005 * t, 0.045, cz=bend, top=lambda t: 0.008 - 0.004 * t, edge_k=0.5,
+                    wcore=0.007, wedge=0.003, ccore=(0.30, 0.31, 0.34), cedge=(0.82, 0.84, 0.88)))
+    # ---------------- Erschöpfungsklinge (10d, vorher Machete): breite Klinge aus dunklem Stahl mit glimmenden Runen,
+    # Ebenholzgriff mit Goldringen, Edelstein-Knauf
+    S["Erschöpfungsklinge"] = (
+        [("e", 0, -0.04, 0.004, 0.012, 0.012, 0.012, C["rune"]),
+         ("e", 0, -0.024, 0.004, 0.02, 0.016, 0.022, C["gold"])]
+        + _mw_wrap(-0.014, 0.112, (0.0145, 0.018), C["ebony"], C["gold"], 4)
+        + [("p", 0, 0.032, [(0.114, 0.004), (0.12, -0.034), (0.132, -0.046), (0.128, -0.03), (0.126, 0.0), (0.128, 0.034),
+                             (0.134, 0.05), (0.12, 0.04)], C["gold"]),
+           ("e", 0, 0.124, 0.003, 0.02, 0.006, 0.006, C["rune"])]
         + _mw_blade(0.129, 0.505, lambda t: 0.018 + 0.016 * t ** 1.5, 0.05, cz=lambda y: 0.006 * ((y - 0.13) / 0.37) ** 2,
                     top=lambda t: 0.012 + 0.012 * t ** 2, edge_k=0.35, wcore=0.008, wedge=0.0035,
-                    ccore=(0.22, 0.22, 0.24), cedge=C["steel"]))
+                    ccore=C["dagger"], cedge=(0.55, 0.52, 0.62))
+        + [("b", 0, y, 0.006 * ((y - 0.13) / 0.37) ** 2 + 0.004, 0.0095, 0.012, 0.005, C["rune"]) for y in (0.17, 0.23, 0.29, 0.35, 0.41)]
+        + [("b", 0, y + 0.012, 0.006 * ((y - 0.13) / 0.37) ** 2 - 0.004, 0.0095, 0.005, 0.009, C["rune"]) for y in (0.2, 0.26, 0.32, 0.38)])
     # ---------------- Schwert: Parierstange, Lederwicklung, Knauf, Hohlkehle, zweischneidig
     blade = [("p", 0, 0.0105, [(0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, 0.0055), (0.096, 0.0085)], C["steel"]),
              ("p", 0, 0.004, [(0.096, 0.0085), (0.096, 0.024), (0.70, 0.019), (0.80, 0.0), (0.70, 0.0055)], C["edge"]),
@@ -117284,6 +117297,8 @@ class Game(ShowBase):
                             t * (0.012 if i == 0 else 0.019))
         if self.falls:
             self.update_falls(t, cp)
+        if getattr(self, "slash_fx", None):
+            self.update_slash_fx()
         self.update_wind(t, (self.player.x, self.player.y))
         self.update_shadows()
         if self.sun_np is not None:
@@ -117345,6 +117360,83 @@ class Game(ShowBase):
                          fz + 0.2 + 2.4 * u * (1.2 - u))
                 c.setScale(sz * (0.6 + 1.6 * u))
                 c.setColorScale(0.92, 0.96, 1.0, 0.42 * (1.0 - u) * min(1.0, u * 6.0))
+
+    def spawn_slash_fx(self, kind, pos, heading):
+        """10d: Katana: weisser Slash-Ring, der sich vom Spieler bis KATANA_SPIN_R ausbreitet. Schwert: weisser
+        Windstoss-Schnitt fährt von oben nach unten durch den Trefferbereich (bis SWORD_SLAM_R vor einem), dazu eine
+        Staub-/Schockwelle, die in der Mitte aufquillt und nach links und rechts ausläuft."""
+        m = Mesh(alpha=0.75, lit=False)
+        if kind == "spin":
+            n = 40
+            for i in range(n):
+                a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+                for r0, r1, z0, z1 in ((0.7, 1.0, 0.0, 0.0), (0.9, 1.0, -0.12, 0.12)):
+                    pa, pb = (math.cos(a0) * r0, math.sin(a0) * r0, z0), (math.cos(a1) * r0, math.sin(a1) * r0, z0)
+                    pc, pd = (math.cos(a1) * r1, math.sin(a1) * r1, z1), (math.cos(a0) * r1, math.sin(a0) * r1, z1)
+                    col = (0.92, 0.96, 1.0) if r0 > 0.9 else (0.6, 0.8, 1.0)
+                    m.tri(pa, pb, pc, col)
+                    m.tri(pa, pc, pd, col)
+        else:
+            n = 18                                                  # Halbmond-Schnitt (senkrecht, quer zur Blickrichtung)
+            for i in range(n):
+                a0, a1 = math.pi * i / n, math.pi * (i + 1) / n
+                for r0, r1 in ((0.82, 1.0),):
+                    pa = (math.cos(a0) * r0, 0.0, math.sin(a0) * r0 * 0.6)
+                    pb = (math.cos(a1) * r0, 0.0, math.sin(a1) * r0 * 0.6)
+                    pc = (math.cos(a1) * r1, 0.0, math.sin(a1) * r1 * 0.6)
+                    pd = (math.cos(a0) * r1, 0.0, math.sin(a0) * r1 * 0.6)
+                    m.tri(pa, pb, pc, (0.95, 0.97, 1.0))
+                    m.tri(pa, pc, pd, (0.95, 0.97, 1.0))
+        nd = self.render.attachNewNode(m.node("slash"))
+        nd.setTransparency(TransparencyAttrib.MAlpha)
+        nd.setTwoSided(True)
+        nd.setDepthWrite(False)
+        nd.setLightOff()
+        nd.setBin("transparent", 14)
+        nd.setPos(pos[0], pos[1], pos[2] + (1.0 if kind == "spin" else 0.0))
+        nd.setH(heading)
+        if not hasattr(self, "slash_fx"):
+            self.slash_fx = []
+        self.slash_fx.append([nd, time.time(), kind])
+        if kind == "slam":                                          # Staubwelle: Mitte quillt auf, läuft seitlich aus
+            hr = math.radians(heading)
+            fx, fy = -math.sin(hr), math.cos(hr)
+            rx, ry = math.cos(hr), math.sin(hr)
+            cx, cy = pos[0] + fx * SWORD_SLAM_R * 0.45, pos[1] + fy * SWORD_SLAM_R * 0.45
+            for k in range(36):
+                s = (k / 35.0) * 2 - 1
+                up = 3.5 * (1 - abs(s))
+                self.add_particle((cx + rx * s * 0.6, cy + ry * s * 0.6, pos[2] + 0.1),
+                                  (rx * s * 7.0 + fx * self.prng.uniform(-0.5, 1.5), ry * s * 7.0 + fy * self.prng.uniform(-0.5, 1.5),
+                                   up + self.prng.uniform(0, 1.5)), (0.55, 0.47, 0.34), 0.14, self.prng.uniform(0.5, 0.9), 0.2)
+
+    def update_slash_fx(self):
+        """10d: Slash-Effekte animieren (Ring wächst und verblasst; Windstoss fährt von oben nach unten)."""
+        now = time.time()
+        keep = []
+        for ent in getattr(self, "slash_fx", ()):
+            nd, t0, kind = ent
+            u = (now - t0) / SLASH_FX_T
+            if u >= 1.0:
+                nd.removeNode()
+                continue
+            if kind == "spin":
+                r = 0.5 + (KATANA_SPIN_R + 0.4) * (1 - (1 - u) ** 2)
+                nd.setScale(r, r, 1.0)
+            else:
+                d = 0.6 + SWORD_SLAM_R * 0.5                    # Mitte des Trefferbereichs vor dem Spieler
+                hr = math.radians(nd.getH())
+                base = nd.getPythonTag("base") if nd.hasPythonTag("base") else None
+                if base is None:
+                    p0 = nd.getPos()
+                    base = (p0[0], p0[1], p0[2])
+                    nd.setPythonTag("base", base)
+                nd.setPos(base[0] - math.sin(hr) * d, base[1] + math.cos(hr) * d, base[2] + 3.2 * (1 - u) + 0.1)
+                nd.setScale(SWORD_SLAM_R * 0.55, 1.0, 1.0 + 0.6 * (1 - u))
+                nd.setP(-25.0 * u)
+            nd.setColorScale(1, 1, 1, 0.85 * (1 - u))
+            keep.append(ent)
+        self.slash_fx = keep
 
     def update_wind(self, t, cp):
         """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe).
@@ -117462,7 +117554,9 @@ class Game(ShowBase):
             self.camera.setHpr(pl.heading, pitch, roll)
             return
         self.camera.setPos(pl.x, pl.y, eye)
-        self.camera.setHpr(pl.heading, pitch, roll)
+        sp_ = getattr(self, "spec_fp", None)                      # 10d: Katana - einmal um sich selbst drehen
+        spin = 360.0 * smoothstep(0.0, 0.45, sp_[1]) if sp_ is not None and sp_[0] == "spin" else 0.0
+        self.camera.setHpr(pl.heading + spin, pitch, roll)
 
     def update_task(self, task):
         dt = min(globalClock.getDt(), 0.1)  # noqa: F821  (von Panda3D bereitgestellt)
@@ -118308,6 +118402,7 @@ class Game(ShowBase):
                 self.sfx.play("zap", self.ppos(e[2]), 0.5, 0.6)
             elif kind == "mspec":              # 9c: Katana-Rundumschlag / Schwert-Aufschlag
                 pos = (e[3], e[4], e[5] + 0.3)
+                self.spawn_slash_fx(e[2], (e[3], e[4], e[5]), e[6])        # 10d: Ring / Windstoss + Schockwelle
                 if e[2] == "spin":
                     self.sfx.play("swoosh", pos, 1.0, 0.8)
                     self.sfx.play("swing", pos, 0.8, 1.2)

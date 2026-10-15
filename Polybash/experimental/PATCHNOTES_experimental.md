@@ -2,6 +2,14 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10d: Nahkampf – Effekte, Erschöpfungsklinge, Diebesdolch (2026-10-15)
+- Katana-Rundumschlag: Beim Auslösen dreht sich die Figur einmal um sich selbst – in der Ego-Ansicht dreht die Kamera 360°, Mitspieler sehen die Figur rotieren. Ein weißer Slash-Ring breitet sich vom Spieler bis zum Schadensradius (`KATANA_SPIN_R`) aus und verblasst (`SLASH_FX_T` = 0,4 s). Laufen beim Aufladen bleibt.
+- Schwert-Sprungangriff: Ein weißer Windstoß-Schnitt (Halbmond) fährt von oben nach unten durch den Trefferbereich vor dem Spieler. Beim Aufkommen quillt in der Mitte eine Staub-/Schockwelle auf und läuft nach links und rechts aus.
+- Machete heißt jetzt "Erschöpfungsklinge" und hat die komplette Wirkung des bisherigen Erschöpfungsdolchs (Lebensraub 50 %, bei Spielertreffern deren Fähigkeiten auf Abklingzeit, eigene sofort bereit und ×2). Optik: dunkler Stahl mit glimmenden Runen, Ebenholzgriff mit Goldringen, Edelstein-Knauf. Werte und Loot-Anteile wie die Machete.
+- Erschöpfungsdolch heißt jetzt "Diebesdolch" mit Schurken-Optik: schlanke, leicht gebogene Klinge, schwarzes Leder, Haken-Parierbügel, Ring-Knauf. Passiv: Monster damit erlegt = `THIEF_EXTRA` = 1 Gegenstand mehr aus einer weiteren, anderen Kategorie; gilt für alle Monsterarten, auch Fluchttiere.
+- Hover-Infos zeigen die Besonderheit jeder Nahkampfwaffe. Damit hat jede Nahkampfwaffe ihre Eigenheit: Messer Start, Diebesdolch Beute, Erschöpfungsklinge Lebensraub/Erschöpfung, Schwert Sprungangriff, Katana Rundumschlag, Bratpfanne Essen.
+- NET_VERSION 34 -> 35 (Waffennamen/Wirkung getauscht).
+
 ## Experimental 10c: Neue Sets – Zweite Chance, Jetpack, Springfeder; Hermes stärker (2026-10-15)
 - Neues Set "Zweite Chance" (`second`), Stahl mit roten Streifen. Jedes Teil rettet einmal vor tödlichem Schaden: man überlebt mit `SAVE_HP` = 50 HP (vorher 10), das Teil zerbricht mit Hinweis.
   - Basic-Helm (Kopf): Kopftreffer.
