@@ -120,7 +120,14 @@ Spielmodi (vom Host im Start-Menü gewählt, mit einstellbarem Zeitlimit):
                     bekommt 1 Punkt pro Sekunde (auch mehrere gleichzeitig).
                     Ein Kill gibt 10 Punkte, steht der Killer dabei in der Zone: 20.
   Deathmatch        Jeder gegen jeden. Das Ranking am Ende entscheidet die K/D.
-Standardkarte (300 x 300 m): ringsum ein Gebirgszug. Spieler UND Monster können ihn hochlaufen (MTN_CLIMB) -
+Standardkarte (7c: 450 x 450 m, EXP_MAP_SCALE; Sinans Polytown im 40er-Stil als Ortskern - Radarstation mit
+Wassergraben in der Mitte = King-of-the-Hill-Zone, Backsteinhäuser, Nissenhütten, Kommandantur - dazu der alte Ortsteil
+mit den ersten Polytown-Häusern, Lagerhalle und Ruine, ringsum Wälder mit Lichtungen und Hütten, ein Park im
+Nordwesten, ein Hof mit Scheune im Nordosten, das Ruinendorf im Westen, die Felsformation im Südwestwald und die
+Militärecke im Südosten mit Landebahn, Hangar, Containerlager, beiden Helipads und Bunker. Die Tunnel führen vom
+Kommandoraum zu vier versteckten Eingängen: Nordwald, Ostwald, mitten im Containerlager unter der Plane, Gasse im
+Ruinendorf. Bäume weit draussen und in den Wäldern sind Low-Poly (BIG_TREE_DETAIL_R) - die Karte hat insgesamt
+weniger Dreiecke als Sinans 300-m-Polytown.) Ringsum ein Gebirgszug. Spieler UND Monster können ihn hochlaufen (MTN_CLIMB) -
 oben hat man freies Schussfeld (z. B. mit der Sniper), ist aber selbst gut zu sehen. Am Kamm (MTN_WALL m vor dem
 Kartenrand) ist für alle Schluss (unsichtbare Wand); Fahrzeuge schaffen nur flache Hänge (VEH_SLOPE). Neben Burg, Häusern und Türmen gibt es Aussenposten mit Deckung am
 Boden UND gegen Beschuss aus der Luft: Containerlager (überdachter Gang, Aussichtspunkt auf den Stapeln),
@@ -334,7 +341,33 @@ def sticky_keys_restore():
 # ---------------------------------------------------------------- Konstanten
 SEED = 42
 MAP_WORLD = 200.0        # Kartendateien (Editor, Minecraft): Spielfeld 0..200 m
-STD_WORLD = 300.0        # Standardkarte: grösser, aussen ringsum ein Gebirgszug
+EXP_MAP_SCALE = 1.5      # 7c: Experimental-Standardkarte so viel grösser als Sinans 300-m-Polytown (Seitenlänge -> 450 m)
+STD_WORLD = 300.0 * EXP_MAP_SCALE   # Standardkarte: aussen ringsum ein Gebirgszug
+BIG_MAP = EXP_MAP_SCALE >= 1.25   # grosse Karte: Ortskern + Wälder, Park, Hütten, Militärecke (sonst Sinans Polytown)
+BIG_TREE_K = 1.8         # grosse Karte: so viel mehr Streubäume (dazu die Wälder BIG_FORESTS)
+BIG_TREE_DETAIL_R = 105.0  # m um die Mitte: Bäume im Detail (Sinans Bäume); weiter draussen und in den Wäldern Low-Poly-
+                           # Bäume (ca. 60 statt 1000-2000 Dreiecke) - so bleibt die grosse Karte flüssig
+BIG_ROCK_K = 1.8         # ... Felsen
+BIG_PONDS = 8            # ... Teiche
+BIG_COVER = 52           # ... verstreute Deckungsblöcke
+BIG_CRATE_K = 1.7        # ... Kisten je Art (CRATES_STD x das)
+BIG_MOB_K = 1.7          # ... Monster je Art
+# Wälder (Mitte relativ zur Kartenmitte, Radius, Bäume). Lichtungen bleiben frei (Bauwerke halten Abstand).
+BIG_FORESTS = (
+    (25.0, 136.0, 32.0, 190),     # Nordwald um den Tunneleingang Nord
+    (122.0, 52.0, 28.0, 150),     # Ostwald um den Tunneleingang Ost
+    (92.0, 140.0, 26.0, 120),     # Nordostwald mit Jagdhütte
+    (-148.0, 62.0, 22.0, 90),     # Westwald mit Hütte
+    (-150.0, -30.0, 18.0, 60),
+    (-98.0, -138.0, 32.0, 170),   # Südwestwald (Felsformation auf einer Lichtung)
+    (-30.0, -148.0, 24.0, 95),
+    (150.0, -22.0, 20.0, 75),     # Ostrand mit Hütte
+    (-40.0, 150.0, 22.0, 85),
+    (150.0, 120.0, 20.0, 70),
+    (-150.0, 140.0, 16.0, 45),
+    (-60.0, -90.0, 14.0, 40),     # Wäldchen zwischen Ort und Südwestwald
+)
+BIG_FOREST_GAP = 3.2     # m Mindestabstand der Waldbäume (Stamm zu Stamm) - dicht, aber begehbar
 WORLD = STD_WORLD        # Spielfeld: 0..WORLD in x und y (wird pro Karte gesetzt, siehe set_world_size)
 CENTER = WORLD / 2       # Mitte der Karte = Burg
 MARGIN = 30.0            # Gelände wird über den Rand hinaus gezeichnet
@@ -389,7 +422,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 26         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 27         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -489,6 +522,30 @@ TOMA_SPOTS = (
     (4.0, 60.0, None),      # Wiese nördlich der Burg
     (76.0, 56.0, None),     # Feld Nordost
 )
+TOMA_SPOTS_BIG = (       # 7c: grosse Karte (relativ zur Mitte; z = feste Höhe, None = Boden in der Nähe suchen)
+    (-57.1, 56.8, 9.0),     # Feldturm Nordwest (lange Treppe)
+    (57.1, -59.2, 9.0),     # Feldturm Südost
+    (75.0, -112.0, 3.5),    # Dach der Bunkerstellung (Militärecke)
+    (104.3, -92.2, 5.2),    # Aussichtspunkt auf den Containern
+    (105.0, 81.5, 2.4),     # Heuboden der Scheune (Hof im Nordosten)
+    (-128.0, -31.2, 3.3),   # Ruinendorf, Obergeschoss
+    (-105.0, -100.0, 5.4),  # Felsbogen im Südwestwald
+    (40.0, -100.0, 2.6),    # Dach eines Unterstands (Militärecke)
+    (-112.0, 107.0, 2.9),   # Pavillon im Park
+    (40.0, -40.0, None),    # freies Feld Südost
+    (-80.0, -56.0, None),   # Feld Südwest
+    (-40.0, 52.0, None),    # Wiese Nordwest
+    (76.0, 56.0, None),     # Feld Nordost
+    (-88.0, 82.0, None),    # Parkwiese
+    (-118.0, 118.0, None),  # Park, Nordwestecke
+    (98.0, -52.0, None),    # Militärecke, Exerzierplatz
+    (60.0, 105.0, None),    # Acker beim Hof
+    (-118.0, 20.0, None),   # Westwiese
+    (130.0, -10.0, None),   # Ostwiese
+    (-20.0, -112.0, None),  # Südwiese
+    (20.0, 112.0, None),    # Lichtung vor dem Nordwald
+    (-60.0, -125.0, None),  # Lichtung am Südwestwald
+)
 TOMA_GROUND_CLEAR = 9.0  # m: so viel Platz brauchen Bodenorte zu Wänden/Deckung (keine Engstellen für Fahrzeuge)
 TOMA_KEEP_FREE = 12.0    # m Abstand zu Rollbahn, Helipads und Fahrzeug-Startplätzen
 TOMA_SEE_R = 120.0       # Mitspieler erfahren vom Host (und sehen) die Säule nur in dieser Entfernung
@@ -584,6 +641,16 @@ COBBLE = (0.50, 0.48, 0.42)
 CONCRETE = (0.55, 0.55, 0.57)
 ROCK_C = (0.47, 0.45, 0.42)       # Felsformationen
 SANDBAG = (0.66, 0.59, 0.42)      # Sandsäcke
+WOOD_D = (0.30, 0.20, 0.12)        # dunkles Holz (Balken, Fensterläden, Regale)
+WOOD_M = (0.46, 0.31, 0.18)        # Möbelholz
+BRICK_R = (0.58, 0.30, 0.22)       # roter Backstein
+BRICK_Y = (0.68, 0.57, 0.38)       # gelber Backstein (London-Stock)
+HOUSE_COLS = (BRICK_R, BRICK_Y, (0.80, 0.76, 0.66), (0.64, 0.64, 0.60), (0.42, 0.45, 0.34))   # Backstein rot/gelb, Putz creme/grau, olivgrün
+ROOFS = ((0.52, 0.26, 0.19), (0.29, 0.30, 0.34), (0.23, 0.23, 0.25), (0.44, 0.33, 0.27))                      # Ziegel, Schiefer, Dachpappe, Betonstein
+AWN = ((0.40, 0.43, 0.30), (0.62, 0.57, 0.44), (0.30, 0.33, 0.26), (0.55, 0.52, 0.45))                         # Planen (olivgrün, khaki, ...)
+PAINT_W = (0.84, 0.83, 0.78)       # weiss gestrichene Rahmen und Fassadenbretter
+OLIVE = (0.36, 0.40, 0.28)         # Militär-Olivgrün
+STEEL = (0.46, 0.48, 0.50)         # Stahl, Radar
 CONT_COLS = ((0.22, 0.36, 0.55), (0.62, 0.27, 0.20), (0.27, 0.45, 0.33), (0.70, 0.52, 0.18))   # Container
 
 SKY = (0.70, 0.82, 0.93)          # Dunstfarbe am Horizont (Nebel und Hintergrund)
@@ -1231,7 +1298,7 @@ def end_tabs(koth):
     tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
              + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
                 ("K/D", lambda e: round(kd(e), 2), True)]
-             + ([("Zeit in der Burg", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
+             + ([("Zeit in der Radarstation", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
                   False)] if koth else []),
              "Sieger", None),
             ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
@@ -2321,14 +2388,15 @@ def seg_box(p0, p1, b):
 
 class Box:
     """Achsenparalleler Quader (Mauer, Turm, Treppenstufe, Dach ...)."""
-    __slots__ = ("x0", "y0", "x1", "y1", "z0", "z1", "col", "mm")
+    __slots__ = ("x0", "y0", "x1", "y1", "z0", "z1", "col", "mm", "vis")
 
-    def __init__(self, x0, y0, x1, y1, z0, z1, col, mm=False):
+    def __init__(self, x0, y0, x1, y1, z0, z1, col, mm=False, vis=True):
         self.x0, self.y0 = min(x0, x1), min(y0, y1)
         self.x1, self.y1 = max(x0, x1), max(y0, y1)
         self.z0, self.z1 = z0, z1
         self.col = col
         self.mm = mm              # auf der Minimap zeichnen?
+        self.vis = vis            # False: nur Kollision (z. B. Stufen unter einer glatten Dachfläche)
 
 
 def new_stats():
@@ -2505,8 +2573,9 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=()):
     (abzüglich STEP_H), und Quader über dem Kopf blockieren nicht.
     veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
     (Titan: TITAN_PASS_PROPS)."""
+    under = z is not None and z < TUN_ROOF - 0.5         # 7c: im Tunnel stören Bäume/Felsen darüber nicht
     for p in world.props:
-        if skip and p.kind in skip:
+        if under or (skip and p.kind in skip):
             continue
         ddx, ddy = x - p.x, y - p.y
         min_d = p.solid_r + r
@@ -2893,6 +2962,7 @@ class World:
         self.map = mapdata                   # bereinigte Kartendatei (sanitize_map) oder None = Standardkarte
         self.mc = mapdata.get("mc") if mapdata else None      # Minecraft-Welt (.mcmap) oder None
         self.mtn = mapdata is None           # Standardkarte: Gebirgszug ringsum
+        self.big = self.mtn and BIG_MAP      # 7c: grosse Experimental-Karte
         self.steep = self.mtn or bool(mapdata and mapdata.get("steep"))   # steile Hänge sperren den Weg
         if self.mc:
             spawn_mobs, mode = False, "dm"   # Minecraft-Karte: Deathmatch ohne Monster
@@ -2925,6 +2995,10 @@ class World:
         self.voids = []   # (x0, y0, x1, y1): Löcher im Gelände = Tunneltreppen (Boden bei TUN_Z)
         self.tunnels = [] # (x0, y0, x1, y1): Tunnelgänge (ein Stockwerk unter dem Gelände)
         self.decor = []   # (x0, y0, x1, y1, z0, z1, Farbe, beleuchtet): nur Darstellung, nicht fest
+        self.moats = []   # (mx, my, a, o0, o1, o2, o3, Tiefe): Wassergraben um das Quadrat mx±a (Abstände o* vom Quadrat)
+        self.dams = []    # (x0, y0, x1, y1): Brücken/Dämme - hier ist der Graben überbrückt
+        self.roads = []   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
+        self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
         self.vehicles = []
         self.grenades = []
         self.gadgets = []        # platzierte Gadgets (C4, Claymore, Funkbake)
@@ -2952,6 +3026,7 @@ class World:
             self.build_mc()
         else:
             self.build_structures()
+            self.build_grids()           # Kollisionsgitter schon jetzt, damit Bäume Gebäuden ausweichen können
 
         def free(x, y, r):
             for fx, fy, rin, _rout in self.flats:
@@ -2960,7 +3035,14 @@ class World:
             for p in self.props:
                 if math.hypot(x - p.x, y - p.y) < r + p.r + 0.4:
                     return False
-            return True
+            if self.moats and self.near_moat(x, y, r + 2.0):
+                return False
+            if self.roads:
+                rd = self.road_dist(x, y)
+                if rd is not None and rd[0] < rd[1] + r + 1.0:
+                    return False
+            return not any(b.x0 - r - 0.8 < x < b.x1 + r + 0.8 and b.y0 - r - 0.8 < y < b.y1 + r + 0.8 and b.z1 > 0.5
+                           for b in self.boxes_near(x - r - 1, y - r - 1, x + r + 1, y + r + 1))
 
         def scatter(count, kind, rmin, rmax, solid):
             placed = tries = 0
@@ -2977,6 +3059,9 @@ class World:
                         continue
                     if kind == "tree" and mz > 16.0:
                         continue
+                if kind == "pond" and any(x0 - r * 2.4 - 2 < x < x1 + r * 2.4 + 2 and y0 - r * 2.4 - 2 < y < y1 + r * 2.4 + 2
+                                          for x0, y0, x1, y1 in self.tunnels):
+                    continue                          # 7c: kein Teich über einem Tunnelgang (Decke bliebe stehen)
                 if free(x, y, vis * (1.6 if kind == "pond" else 1.0)):
                     p = Prop(kind, x, y, vis, solid(r))
                     p.base_r = r
@@ -2987,10 +3072,11 @@ class World:
 
         mp = self.map or {}
         big = 1.6 if self.mtn else 1.0             # Standardkarte: mehr Fläche, mehr Bäume und Felsen
+        tk, rk = (BIG_TREE_K, BIG_ROCK_K) if self.big else (1.0, 1.0)
         for kind, key, count, rmin, rmax, solid in (() if self.mc else
-                                                    (("pond", "ponds", 5 if self.mtn else 4, 4.5, 8.0, lambda r: r * 0.72),
-                                                     ("rock", "rocks", int(35 * big * 1.3), 0.7, 1.8, lambda r: r * 0.85),
-                                                     ("tree", "trees", int(110 * big), 1.6, 2.8, lambda r: 0.45))):
+                                                    (("pond", "ponds", BIG_PONDS if self.big else (5 if self.mtn else 4), 4.5, 8.0, lambda r: r * 0.72),
+                                                     ("rock", "rocks", int(35 * big * 1.3 * rk), 0.7, 1.8, lambda r: r * 0.85),
+                                                     ("tree", "trees", int(110 * big * tk), 1.6, 2.8, lambda r: 0.45))):
             if mp.get(key) is None:
                 scatter(count, kind, rmin, rmax, solid)
             else:                                    # Karte aus dem Editor: genau diese Objekte
@@ -3001,7 +3087,9 @@ class World:
                     self.props.append(p)
                     if kind == "pond":
                         self.ponds.append((x, y, r))
-        if self.mtn:
+        if self.big:
+            self.add_forests(rng)                    # 7c: Wälder statt der Wäldchen
+        elif self.mtn:
             self.add_groves(rng)
         if not self.mc:
             if mp.get("blocks") is None:
@@ -3047,8 +3135,8 @@ class World:
         return len(self.props) + len(self.boxes) + len(self.vehicles) + len(self.turrets) + len(self.helis)
 
     # ------------------------------------------------------------ Karte
-    def add_box(self, x0, y0, x1, y1, z0, z1, col, mm=False):
-        b = Box(x0, y0, x1, y1, z0, z1, col, mm)
+    def add_box(self, x0, y0, x1, y1, z0, z1, col, mm=False, vis=True):
+        b = Box(x0, y0, x1, y1, z0, z1, col, mm, vis)
         self.boxes.append(b)
         return b
 
@@ -3114,7 +3202,7 @@ class World:
         self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
 
     def build_structures(self):
-        """Burg in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
+        """Burg (Polytown: Radarstation) in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
         mp = self.map or {}
         keep = mp.get("keep", {})
         c = CENTER
@@ -3128,18 +3216,23 @@ class World:
         else:
             for t in mp["towers"]:
                 self.build_tower(t["x"], t["y"], t["side"], t["crate"])
-        if keep.get("runway", True):
+        if keep.get("runway", True) and not self.big:     # grosse Karte: Landebahn/Helipads in der Militärecke
             self.build_runway()
-        self.build_helipads(mp.get("pads"))
+        if not self.big:
+            self.build_helipads(mp.get("pads"))
         if mp.get("houses") is None:
-            self.default_houses()
+            if self.mtn:
+                self.build_town()
+            else:
+                self.default_houses()
         else:
             for h in mp["houses"]:
                 self.map_house(h)
         if self.mtn:
             self.build_outposts()
         if mp.get("ruins") is None:
-            self.build_ruin(c - 30, c + 35)
+            if not self.mtn:
+                self.build_ruin(c - 30, c + 35)
         else:
             for x, y in mp["ruins"]:
                 self.build_ruin(x, y)
@@ -3227,7 +3320,18 @@ class World:
                  (66.0, 72.4, 68.6, 76.4, "S"),      # Burghof Südwest
                  (89.0, 92.0, 91.6, 96.0, "N")]      # Burghof Nordost
         new = []
-        if self.mtn and TUN_LONG:                    # Standardkarte: lange Tunnel vom Kartenrand (Norden, Süden)
+        if self.big:                                 # 7c: grosse Karte - Eingänge in Deckung (Wald, Containerlager, Ruine)
+            new = [(104.0, 79.0, 106.6, 208.0),          # Nord: bis in den Nordwald
+                   (106.6, 129.0, 198.0, 131.6),         # Ost: bis in den Ostwald
+                   (81.2, -17.0, 83.8, 62.0),            # Süd: vom Kommandoraum ...
+                   (83.8, -17.0, 198.0, -14.4),          #   ... nach Osten ins Containerlager (Militärecke)
+                   (-43.3, 41.0, 81.2, 43.6)]            # West: bis ins Ruinendorf
+            corr += new
+            wells += [(104.0, 208.0, 106.6, 212.0, "N"),  # Nordwald (dichte Bäume ringsum)
+                      (198.0, 129.0, 202.0, 131.6, "E"),  # Ostwald
+                      (198.0, -17.0, 202.0, -14.4, "E"),  # mitten im Containerlager, unter der Plane
+                      (-43.3, 43.6, -40.7, 47.6, "N")]    # Ruinendorf: Gasse zwischen zwei Ruinenmauern
+        elif self.mtn and TUN_LONG:                  # Standardkarte: lange Tunnel vom Kartenrand (Norden, Süden)
             new = [(104.0, 79.0, 106.6, 178.0),          # Nord: vom Ost-West-Gang bis kurz vors Gebirge
                    (106.6, 129.0, 130.0, 131.6),         #   Abzweig nach Osten (zwischen den Aussenposten)
                    (81.2, -10.0, 83.8, 62.0),            # Süd: vom Kommandoraum unter der Landebahn durch
@@ -3386,12 +3490,12 @@ class World:
                 self.vehicles.append(Vehicle(k, x, y, z, hd))
                 self.turrets.append(Turret(len(self.turrets), x, y, z + 1.75, hd, "car", k))
             return
-        for k, base in enumerate((45.0, 225.0)):
+        for k, base in enumerate((315.0, 135.0) if self.big else (45.0, 225.0)):
             done = False
             for dr in (0, 1, 2, 3, 4, 5):
                 for da in (0, 1, -1, 2, -2):
                     a = math.radians(base + da * 6.0)
-                    r = 46.0 + dr * 2.5
+                    r = (68.0 if self.big else 46.0) + dr * 2.5
                     x, y = CENTER + math.cos(a) * r, CENTER + math.sin(a) * r
                     if (self.height(x, y) < WATER_LEVEL + 1.0 or self.in_solid(x, y, 2.6)
                             or any(math.hypot(x - px, y - py) < pr * 1.8 + 3 for px, py, pr in self.ponds)
@@ -3415,6 +3519,7 @@ class World:
 
     def build_castle(self):
         cx = cy = CENTER
+        WALL, WALL_D = (WALL_C, WALL_CD) if self.mtn else (STONE, STONE_D)      # Polytown: Betonbauten (Radarstation)
         H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
         x0, x1, y0, y1 = cx - H, cx + H, cy - H, cy + H
         g0, g1 = cx - 4.0, cx + 4.0                     # Tore im Süden und Norden
@@ -3422,19 +3527,19 @@ class World:
         for a, b, c, d in ((x0, y0, g0, y0 + T), (g1, y0, x1, y0 + T),
                            (x0, y1 - T, g0, y1), (g1, y1 - T, x1, y1),
                            (x0, y0, x0 + T, y1), (x1 - T, y0, x1, y1)):
-            B(a, b, c, d, -2, ZW, STONE, True)          # Mauern mit Wehrgang
+            B(a, b, c, d, -2, ZW, WALL, True)          # Mauern mit Wehrgang
         for a, b, c, d in ((x0, y0, g0, y0 + PW), (g1, y0, x1, y0 + PW),
                            (x0, y1 - PW, g0, y1), (g1, y1 - PW, x1, y1),
                            (x0, y0, x0 + PW, y1), (x1 - PW, y0, x1, y1)):
-            B(a, b, c, d, ZW, ZW + 1.2, STONE_D)        # Brüstung aussen
+            B(a, b, c, d, ZW, ZW + 1.2, WALL_D)        # Brüstung aussen
         n, sd = 6, 0.7
         for sx in (-1, 1):
             for sy in (-1, 1):
                 tx, ty = cx + sx * H, cy + sy * H
-                B(tx - 3.5, ty - 3.5, tx + 3.5, ty + 3.5, -2, ZT, STONE, True)       # Eckturm
+                B(tx - 3.5, ty - 3.5, tx + 3.5, ty + 3.5, -2, ZT, WALL, True)       # Eckturm
                 ex, ey = tx + sx * 3.5, ty + sy * 3.5
-                B(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT, ZT + 1.2, STONE_D)
-                B(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT, ZT + 1.2, STONE_D)
+                B(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT, ZT + 1.2, WALL_D)
+                B(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT, ZT + 1.2, WALL_D)
                 fx, fy = tx - sx * 3.5, ty - sy * 3.5   # Innenkanten des Turms
                 wy = (y0 + PW) if sy < 0 else (y1 - T)  # Wehrgang der Nord/Süd-Mauer
                 wxx = (x0 + PW) if sx < 0 else (x1 - T)  # Wehrgang der West/Ost-Mauer
@@ -3450,33 +3555,33 @@ class World:
         self.stairs(x0 + T, cy - 10, "N", 10, 2.5, 0, 0.5, 0.8)
         self.stairs(x1 - T - 2.5, cy + 10, "S", 10, 2.5, 0, 0.5, 0.8)
         # Bergfried in der Mitte mit Treppe aufs Dach
-        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, STONE, True)
-        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, STONE_D)
-        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, STONE_D)
+        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)
+        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
+        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
         self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
         # niedrige Deckung: vor den Toren aussen und im Hof
         for s in (-1, 1):
             for a, b in ((cx - 5, cx - 2), (cx + 2, cx + 5)):
-                B(a, cy + s * 27, b, cy + s * 27 + 0.7, -2, 1.2, STONE_D)
-                B(cx + s * 27, a - cx + cy, cx + s * 27 + 0.7, b - cx + cy, -2, 1.2, STONE_D)
-            B(cx - 5, cy + s * 14, cx + 5, cy + s * 14 + 0.7, -2, 1.2, STONE_D)
+                B(a, cy + s * 27, b, cy + s * 27 + 0.7, -2, 1.2, WALL_D)
+                B(cx + s * 27, a - cx + cy, cx + s * 27 + 0.7, b - cx + cy, -2, 1.2, WALL_D)
+            B(cx - 5, cy + s * 14, cx + 5, cy + s * 14 + 0.7, -2, 1.2, WALL_D)
         # Kasematten: überdachte Räume an der Innenseite der Mauern (Schutz vor Feuer von oben und aussen)
         def casemate(xa, ya, xb, yb, front):
-            B(xa, ya, xb, yb, 3.0, 3.5, STONE_D)                                 # Dach
+            B(xa, ya, xb, yb, 3.0, 3.5, WALL_D)                                 # Dach
             if front in "NS":
-                B(xa, ya, xa + PW, yb, -2, 3.0, STONE)
-                B(xb - PW, ya, xb, yb, -2, 3.0, STONE)
+                B(xa, ya, xa + PW, yb, -2, 3.0, WALL)
+                B(xb - PW, ya, xb, yb, -2, 3.0, WALL)
                 fy = yb - PW if front == "N" else ya
                 for k in (1 / 3, 2 / 3):
                     px = xa + (xb - xa) * k
-                    B(px - 0.35, fy, px + 0.35, fy + PW, -2, 3.0, STONE)
+                    B(px - 0.35, fy, px + 0.35, fy + PW, -2, 3.0, WALL)
             else:
-                B(xa, ya, xb, ya + PW, -2, 3.0, STONE)
-                B(xa, yb - PW, xb, yb, -2, 3.0, STONE)
+                B(xa, ya, xb, ya + PW, -2, 3.0, WALL)
+                B(xa, yb - PW, xb, yb, -2, 3.0, WALL)
                 fx_ = xb - PW if front == "E" else xa
                 for k in (1 / 3, 2 / 3):
                     py = ya + (yb - ya) * k
-                    B(fx_, py - 0.35, fx_ + PW, py + 0.35, -2, 3.0, STONE)
+                    B(fx_, py - 0.35, fx_ + PW, py + 0.35, -2, 3.0, WALL)
         casemate(cx - 14, cy - 19, cx - 6, cy - 14, "N")
         casemate(cx + 6, cy - 19, cx + 14, cy - 14, "N")
         casemate(cx - 14, cy + 14, cx - 6, cy + 19, "S")
@@ -3484,19 +3589,23 @@ class World:
         casemate(cx + 14, cy - 14, cx + 19, cy - 4, "W")
         # freistehende Mauerstücke (2 m, volle Deckung) um den Bergfried und Sprengschutz hinter den Toren
         for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-            B(cx + sx * 10 - 2.5, cy + sy * 10, cx + sx * 10 + 2.5, cy + sy * 10 + 0.6, -2, 2.0, STONE_D)
+            B(cx + sx * 10 - 2.5, cy + sy * 10, cx + sx * 10 + 2.5, cy + sy * 10 + 0.6, -2, 2.0, WALL_D)
         for sy in (-1, 1):
-            B(cx - 2, cy + sy * 17, cx + 2, cy + sy * 17 + 0.6, -2, 2.2, STONE_D)
+            B(cx - 2, cy + sy * 17, cx + 2, cy + sy * 17 + 0.6, -2, 2.2, WALL_D)
         # Flak auf zwei Ecktürmen der Burg (Bedienung per F)
         for sx, sy in ((-1, 1), (1, -1)):
             tx, ty = cx + sx * H, cy + sy * H
             B(tx - 0.45, ty - 0.45, tx + 0.45, ty + 0.45, ZT, ZT + 0.9, (0.30, 0.32, 0.34))
             self.turrets.append(Turret(len(self.turrets), tx, ty, ZT + 1.35,
                                        math.degrees(math.atan2(-(cx - tx), cy - ty)), "flak"))
-        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, COBBLE))
+        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, CONCRETE if self.mtn else COBBLE))
         self.flats.append((cx, cy, 36.0, 50.0))
         self.add_crate(cx - 12, cy + 8, 0.0)
         self.add_crate(cx + 12, cy - 8, 0.0)
+        if self.mtn:
+            B(cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 6.0, 9.3, WALL_D, False, False)      # Sockel der Radarschüssel
+            self.build_moat()
+            self.castle_extras()
 
     def build_helipads(self, pads=None):
         """Zwei Helipads auf gegenüberliegenden Seiten der Karte (West und Ost), je mit einem Helikopter."""
@@ -3516,11 +3625,11 @@ class World:
                                        0.0, 0.05, yel, True))
             self.helis.append(Heli(hid, x, y, 0.0, hd))
 
-    def build_runway(self):
-        """Landebahn im Süden (Ost-West)."""
+    def build_runway(self, y=None, x0=None, x1=None):
+        """Landebahn im Süden (Ost-West); grosse Karte: in der Militärecke (y, x0, x1)."""
         c = CENTER
-        y, hw = c - 76.0, 7.0
-        x0, x1 = c - 50.0, c + 50.0
+        y, hw = (c - 76.0 if y is None else y), 7.0
+        x0, x1 = (c - 50.0 if x0 is None else x0), (c + 50.0 if x1 is None else x1)
         self.runway = (x0, y - hw, x1, y + hw)
         for x in range(int(x0) - 6, int(x1) + 7, 8):
             self.flats.append((float(x), y, 10.0, 18.0))
@@ -3583,23 +3692,720 @@ class World:
         self.add_box(cx - 1, cy - 1, cx + 0.2, cy + 0.2, -2, 1.2, STONE_D)
         self.flats.append((cx, cy, 10.0, 20.0))
 
+    # ------------------------------------------------------------ Stadt, Graben, Strassen (nur Standardkarte)
+    def wall_gen(self, horiz, a0, a1, b0, b1, zb, zt, holes, col, mm=True):
+        """Wand von zb bis zt. horiz: entlang x (Dicke in y b0..b1), sonst entlang y (Dicke in x). Öffnungen:
+        holes = (von, bis, z unten, z oben) - auch mehrere übereinander (Stockwerke)."""
+        cuts = sorted({a0, a1} | {min(max(h[0], a0), a1) for h in holes} | {min(max(h[1], a0), a1) for h in holes})
+        runs = []
+        for p, q in zip(cuts, cuts[1:]):
+            if q - p < 1e-6:
+                continue
+            mid = (p + q) / 2
+            cur, segs = zb, []
+            for lo, hi in sorted((h[2], h[3]) for h in holes if h[0] < mid < h[1]):
+                if lo > cur:
+                    segs.append((cur, min(lo, zt)))
+                cur = max(cur, hi)
+            if cur < zt:
+                segs.append((cur, zt))
+            segs = tuple((s0, s1) for s0, s1 in segs if s1 - s0 > 1e-6)
+            if runs and runs[-1][2] == segs and abs(runs[-1][1] - p) < 1e-6:
+                runs[-1] = (runs[-1][0], q, segs)
+            else:
+                runs.append((p, q, segs))
+        for p, q, segs in runs:
+            for s0, s1 in segs:
+                if horiz:
+                    self.add_box(p, b0, q, b1, s0, s1, col, mm)
+                else:
+                    self.add_box(b0, p, b1, q, s0, s1, col, mm)
+
+    def slab(self, x0, y0, x1, y1, z, holes, col, t=0.25):
+        """Geschossdecke mit Oberkante z und rechteckigen Aussparungen holes = (x0, y0, x1, y1)."""
+        xs = sorted({x0, x1} | {min(max(h[0], x0), x1) for h in holes} | {min(max(h[2], x0), x1) for h in holes})
+        for p, q in zip(xs, xs[1:]):
+            if q - p < 1e-6:
+                continue
+            mid = (p + q) / 2
+            ys = sorted({y0, y1} | {min(max(h[1], y0), y1) for h in holes if h[0] < mid < h[2]}
+                        | {min(max(h[3], y0), y1) for h in holes if h[0] < mid < h[2]})
+            for a, b in zip(ys, ys[1:]):
+                if b - a < 1e-6:
+                    continue
+                m2 = (a + b) / 2
+                if any(h[0] < mid < h[2] and h[1] < m2 < h[3] for h in holes):
+                    continue
+                self.add_box(p, a, q, b, z - t, z, col)
+
+    def moat_offset(self, x, y):
+        """Abstand zum Burg-Quadrat (Eckturm-Aussenkante) - 0 innerhalb."""
+        for mx, my, a, *_r in self.moats:
+            return math.hypot(max(abs(x - mx) - a, 0.0), max(abs(y - my) - a, 0.0))
+        return 0.0
+
+    def near_moat(self, x, y, m=0.0):
+        for mx, my, a, o0, o1, o2, o3, _dp in self.moats:
+            if math.hypot(max(abs(x - mx) - a, 0.0), max(abs(y - my) - a, 0.0)) < o3 + m:
+                return True
+        return False
+
+    def road_dist(self, x, y):
+        """(Abstand zur Mittellinie, Halbbreite, Art) des nächsten Weges oder None."""
+        best = None
+        for x0, y0, x1, y1, hw, kind in self.roads:
+            dx, dy = x1 - x0, y1 - y0
+            ll = dx * dx + dy * dy
+            t = 0.0 if ll < 1e-9 else max(0.0, min(1.0, ((x - x0) * dx + (y - y0) * dy) / ll))
+            d = math.hypot(x - (x0 + dx * t), y - (y0 + dy * t))
+            if best is None or d - hw < best[0] - best[1]:
+                best = (d, hw, kind)
+        return best
+
+    def add_road(self, pts, hw=2.0, kind="dirt", closed=False):
+        n = len(pts)
+        for i in range(n if closed else n - 1):
+            a, b = pts[i], pts[(i + 1) % n]
+            self.roads.append((a[0], a[1], b[0], b[1], hw, kind))
+
+    def nearest_road_pt(self, x, y):
+        best = None
+        for x0, y0, x1, y1, hw, kind in self.roads:
+            dx, dy = x1 - x0, y1 - y0
+            ll = dx * dx + dy * dy
+            t = 0.0 if ll < 1e-9 else max(0.0, min(1.0, ((x - x0) * dx + (y - y0) * dy) / ll))
+            px, py = x0 + dx * t, y0 + dy * t
+            d = math.hypot(x - px, y - py)
+            if best is None or d < best[0]:
+                best = (d, px, py)
+        return best
+
+    def connect_road(self, x, y, hw=1.2, kind="dirt"):
+        """Weg von (x, y) zum nächsten Weg (Hauszugang): so führt jedes Gebäude irgendwohin."""
+        b = self.nearest_road_pt(x, y)
+        if b is not None and b[0] > 0.5:
+            self.roads.append((x, y, b[1], b[2], hw, kind))
+
+    def box_free(self, x0, y0, x1, y1, m=0.0):
+        return not any(b.x0 < x1 + m and b.x1 > x0 - m and b.y0 < y1 + m and b.y1 > y0 - m and b.z1 > 0.3
+                       for b in self.boxes)
+
+    def build_moat(self):
+        """Wassergraben um die Burg (Gelände-Mulde, siehe surface_height) mit Brücken: Zugbrücke im Norden,
+        Steinbrücke im Süden, zwei Dämme über dem Tunnelgang im Westen und Osten."""
+        c, a = CENTER, 25.5
+        self.moats.append((c, c, a, 0.8, 4.4, 6.0, 9.5, 2.0))
+        hwb = 4.0
+        self.dams.append((c - hwb, c + a + 0.5, c + hwb, c + a + 12.0))       # Norden: Zugbrücke
+        self.dams.append((c - hwb, c - a - 12.0, c + hwb, c - a - 0.5))       # Süden: Steinbrücke
+        self.dams.append((c - a - 12.0, c - 2.6, c - a - 0.5, c + 2.6))       # Westen: Damm über dem Tunnel
+        self.dams.append((c + a + 0.5, c - 2.6, c + a + 12.0, c + 2.6))       # Osten
+        W, T = CONCRETE, CONC_D
+        B = self.add_box
+        # Zugbrücke (Holz) nach Norden: Fahrbahn bündig mit dem Boden, Geländer als niedrige Deckung
+        yb0, yb1 = c + 22.0, c + a + 11.0
+        for sx in (-1, 1):
+            B(c + sx * hwb - (0.2 if sx > 0 else 0.0), yb0 + 2.6, c + sx * hwb + (0.0 if sx > 0 else 0.2), yb1 - 0.3,
+              -0.5, 1.0, STEEL)
+        self.vis.append({"k": "bridge", "style": "wood", "x0": c - hwb, "x1": c + hwb, "y0": yb0, "y1": yb1, "axis": "y",
+                         "dir": 1})
+        # Steinbrücke nach Süden
+        ys0, ys1 = c - a - 11.0, c - 22.0
+        for sx in (-1, 1):
+            B(c + sx * hwb - (0.35 if sx > 0 else 0.0), ys0 + 0.5, c + sx * hwb + (0.0 if sx > 0 else 0.35), ys1 - 2.6,
+              -3.0, 1.0, W)
+        self.vis.append({"k": "bridge", "style": "stone", "x0": c - hwb, "x1": c + hwb, "y0": ys0, "y1": ys1, "axis": "y",
+                         "dir": -1})
+        # Dämme (Steinstege) über dem Tunnel
+        for sgn in (-1, 1):
+            xa, xb = (c + sgn * (a + 0.8), c + sgn * (a + 9.2))
+            xa, xb = min(xa, xb), max(xa, xb)
+            for yy in (c - 2.5, c + 2.2):
+                B(xa, yy, xb, yy + 0.3, -3.0, 0.8, W)
+            self.vis.append({"k": "bridge", "style": "causeway", "x0": xa, "x1": xb, "y0": c - 2.6, "y1": c + 2.6,
+                             "axis": "x", "dir": sgn})
+        self.flats.append((c, c, 50.0, 64.0))
+
+    def stair_flights(self, spec_side, x0, y0, x1, y1, t, n_fl, fh, sd=0.65, sh=0.4):
+        """Treppenläufe (hin und her) an der Innenwand spec_side: Liste (Stockwerk, Quader-Anker, Richtung, Aussparung)."""
+        n = int(round(fh / sh))
+        run = n * sd
+        lw, gap = 1.3, 0.1
+        out = []
+        for f in range(n_fl - 1):
+            lane = f % 2
+            if spec_side in "NS":
+                xs = x0 + t + 1.0
+                ya = (y1 - t - lw) if spec_side == "N" else (y0 + t)
+                step = (lw + gap) * lane * (-1 if spec_side == "N" else 1)
+                yy = ya + step
+                if lane == 0:
+                    out.append((f, (xs, yy), "E", (xs, yy, xs + run, yy + lw)))
+                else:
+                    out.append((f, (xs + run, yy), "W", (xs, yy, xs + run, yy + lw)))
+            else:
+                ys = y0 + t + 1.0
+                xa = (x1 - t - lw) if spec_side == "E" else (x0 + t)
+                step = (lw + gap) * lane * (-1 if spec_side == "E" else 1)
+                xx = xa + step
+                if lane == 0:
+                    out.append((f, (xx, ys), "N", (xx, ys, xx + lw, ys + run)))
+                else:
+                    out.append((f, (xx, ys + run), "S", (xx, ys, xx + lw, ys + run)))
+        return n, out
+
+    def town_house(self, x, y, w, d, floors=2, door="S", col=PLASTER, roof=ROOF, fh=3.2, ridge=None, stairs="auto",
+                   doff=0.0, balcony=False, crate=None, chimney=True, tower=None, avoid=(), shop=False, wide=False,
+                   sign=None, extra_win=True, flat=False, trim=PAINT_W, seed=None):
+        """Wohnhaus mit mehreren Stockwerken: Türen, Fenster, innen Treppen, Decken, Möbel; Satteldach (unsichtbare
+        Stufen als Kollision, die glatte Dachform wird in build_scene darübergelegt)."""
+        rng = random.Random(seed if seed is not None else int(x * 31 + y * 17))
+        t = 0.5
+        x0, x1, y0, y1 = x - w / 2, x + w / 2, y - d / 2, y + d / 2
+        H = floors * fh
+        holes = {s: [] for s in "NSEW"}
+        opens = []
+        dc = x if door in "NS" else y
+        dpos = dc + doff
+        hwd = 1.5 if wide else 1.1
+        holes[door].append((dpos - hwd, dpos + hwd, 0.0, 2.5 if not wide else 2.8))
+        opens.append((door, dpos, hwd, 0.0, 2.5 if not wide else 2.8, "door", 0))
+        if stairs == "auto":
+            stairs = {"S": "N", "N": "S", "E": "W", "W": "E"}[door]
+        chim = None
+        if chimney and not flat:
+            rx = ridge or ("x" if w >= d else "y")
+            side = "E" if rx == "x" else "N"
+            if side == door:
+                side = {"E": "W", "N": "S"}[side]
+            chim = side
+        for s in "NSEW":
+            L = w if s in "NS" else d
+            c0 = x if s in "NS" else y
+            nwin = max(1, int((L - 1.6) // 3.1))
+            gp = L / nwin
+            for f in range(floors):
+                zb = f * fh
+                for k in range(nwin):
+                    c = c0 - L / 2 + gp * (k + 0.5)
+                    if s == door and f == 0 and abs(c - dpos) < hwd + 1.3:
+                        continue
+                    if chim == s and abs(c - c0) < 1.6:
+                        continue
+                    if s == door and f == 1 and balcony and abs(c - dpos) < 1.3:
+                        continue
+                    hwn = 0.55
+                    holes[s].append((c - hwn, c + hwn, zb + 0.95, zb + 2.25))
+                    opens.append((s, c, hwn, zb + 0.95, zb + 2.25, "win", f))
+        if balcony and floors > 1:
+            holes[door].append((dpos - 0.9, dpos + 0.9, fh, fh + 2.45))
+            opens.append((door, dpos, 0.9, fh, fh + 2.45, "door", 1))
+        self.wall_gen(True, x0, x1, y0, y0 + t, -2, H, holes["S"], col)
+        self.wall_gen(True, x0, x1, y1 - t, y1, -2, H, holes["N"], col)
+        self.wall_gen(False, y0 + t, y1 - t, x0, x0 + t, -2, H, holes["W"], col)
+        self.wall_gen(False, y0 + t, y1 - t, x1 - t, x1, -2, H, holes["E"], col)
+        n_st, flights = self.stair_flights(stairs, x0, y0, x1, y1, t, floors, fh)
+        for f in range(1, floors):
+            hl = [fl[3] for fl in flights if fl[0] + 1 == f]
+            self.slab(x0 + t, y0 + t, x1 - t, y1 - t, f * fh, hl, WOOD_F)
+        for f, (ax, ay), dr, _hl in flights:
+            self.stairs(ax, ay, dr, n_st, 1.3, f * fh, 0.4, 0.65, WOOD_F)
+        self.add_box(x0, y0, x1, y1, H - 0.25, H + 0.1, col)                       # Decke / Dachboden
+        self.floors.append((x0 + t, y0 + t, x1 - t, y1 - t, WOOD_F))        # nur der Innenraum (kein Überstand nach aussen)
+        self.flats.append((x, y, math.hypot(w, d) / 2 + 3.0, math.hypot(w, d) / 2 + 13.0))
+        # Dach (Kollision: hohle Stufen unter der glatten Dachfläche)
+        rx = ridge or ("x" if w >= d else "y")
+        span, ln = (d, w) if rx == "x" else (w, d)
+        rise = 0.0 if flat else min(2.8, span * 0.34)
+        if flat:
+            self.add_box(x0 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2, H + 0.1, H + 0.5, STONE_D)
+            for (a0, b0, a1, b1) in ((x0 - 0.2, y0 - 0.2, x1 + 0.2, y0 + 0.2), (x0 - 0.2, y1 - 0.2, x1 + 0.2, y1 + 0.2),
+                                     (x0 - 0.2, y0 - 0.2, x0 + 0.2, y1 + 0.2), (x1 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2)):
+                self.add_box(a0, b0, a1, b1, H + 0.5, H + 1.3, STONE_D)
+        else:
+            e = span / 2 + 0.55
+            for k in range(3):
+                z1 = H + 0.1 + (k + 1) * (rise - 0.1) / 3
+                hw_k = max(0.3, e * (1 - (z1 - (H - 0.15)) / (rise + 0.15)) - 0.12)
+                z0 = H + 0.1 + k * (rise - 0.1) / 3
+                if rx == "x":
+                    self.add_box(x0, y - hw_k, x1, y + hw_k, z0, z1, roof, False, False)
+                else:
+                    self.add_box(x - hw_k, y0, x + hw_k, y1, z0, z1, roof, False, False)
+        # Kamin
+        ch_rect = None
+        if chim:
+            if chim == "E":
+                ch_rect = (x1, y - 0.6, x1 + 0.9, y + 0.6)
+            elif chim == "W":
+                ch_rect = (x0 - 0.9, y - 0.6, x0, y + 0.6)
+            elif chim == "N":
+                ch_rect = (x - 0.6, y1, x + 0.6, y1 + 0.9)
+            else:
+                ch_rect = (x - 0.6, y0 - 0.9, x + 0.6, y0)
+            self.add_box(*ch_rect[:2], ch_rect[2], ch_rect[3], -2, H + rise + 1.1, (0.50, 0.26, 0.20))
+        # Eingangsstufe und Balkon
+        if door == "S":
+            self.add_box(dpos - hwd - 0.2, y0 - 0.55, dpos + hwd + 0.2, y0, -1, 0.22, STONE_D)
+        elif door == "N":
+            self.add_box(dpos - hwd - 0.2, y1, dpos + hwd + 0.2, y1 + 0.55, -1, 0.22, STONE_D)
+        elif door == "W":
+            self.add_box(x0 - 0.55, dpos - hwd - 0.2, x0, dpos + hwd + 0.2, -1, 0.22, STONE_D)
+        else:
+            self.add_box(x1, dpos - hwd - 0.2, x1 + 0.55, dpos + hwd + 0.2, -1, 0.22, STONE_D)
+        if balcony and floors > 1:
+            bd = 1.5
+            bw = 2.6
+            if door in "NS":
+                sgn = 1 if door == "N" else -1
+                ya = y1 if sgn > 0 else y0 - bd
+                self.add_box(dpos - bw, ya, dpos + bw, ya + bd, fh - 0.25, fh, WOOD_F)
+                yo = (ya + bd - 0.12) if sgn > 0 else ya
+                self.add_box(dpos - bw, yo, dpos + bw, yo + 0.12, fh, fh + 0.95, WOOD_D)
+                for xx in (dpos - bw, dpos + bw - 0.12):
+                    self.add_box(xx, ya, xx + 0.12, ya + bd, fh, fh + 0.95, WOOD_D)
+            else:
+                sgn = 1 if door == "E" else -1
+                xa = x1 if sgn > 0 else x0 - bd
+                self.add_box(xa, dpos - bw, xa + bd, dpos + bw, fh - 0.25, fh, WOOD_F)
+                xo = (xa + bd - 0.12) if sgn > 0 else xa
+                self.add_box(xo, dpos - bw, xo + 0.12, dpos + bw, fh, fh + 0.95, WOOD_D)
+                for yy in (dpos - bw, dpos + bw - 0.12):
+                    self.add_box(xa, yy, xa + bd, yy + 0.12, fh, fh + 0.95, WOOD_D)
+        if tower is not None:                                  # Uhrturm auf dem Dach
+            tx, ty, ts, th = tower
+            self.add_box(tx - ts / 2, ty - ts / 2, tx + ts / 2, ty + ts / 2, H - 0.25, H + th, STONE, True)
+        # Innenausstattung (Deckung)
+        lanes = [fl[3] for fl in flights]
+        for f in range(floors):
+            zb = f * fh
+            base = -1.0 if f == 0 else zb
+            blockers = [(a - 0.9, b - 0.9, c2 + 0.9, d2 + 0.9) for a, b, c2, d2 in lanes] + list(avoid)
+            if f == 0:
+                if door in "NS":
+                    blockers.append((dpos - 1.6, y0 if door == "S" else y1 - 2.2, dpos + 1.6, y0 + 2.2 if door == "S" else y1))
+                else:
+                    blockers.append((x0 if door == "W" else x1 - 2.2, dpos - 1.6, x0 + 2.2 if door == "W" else x1, dpos + 1.6))
+            self.furnish(rng, x0 + t, y0 + t, x1 - t, y1 - t, base, zb, blockers, f, floors, shop and f == 0)
+        if crate:
+            self.add_crate(crate[0], crate[1], 0.0)
+        rec = {"k": "house", "x": x, "y": y, "w": w, "d": d, "n": floors, "fh": fh, "H": H, "col": col, "roof": roof,
+               "ridge": rx, "rise": rise, "opens": opens, "chim": ch_rect, "door": door, "dpos": dpos, "flat": flat,
+               "trim": trim, "balcony": balcony, "tower": tower, "sign": sign, "seed": int(x * 3 + y * 5),
+               "flights": flights, "t": t}
+        self.vis.append(rec)
+        return rec
+
+    def furnish(self, rng, ix0, iy0, ix1, iy1, base, zb, blockers, f, floors, shop):
+        """Ein paar Möbel als feste Deckung (Tische, Regale, Betten ...)."""
+        kinds = (["counter", "shelf", "shelf", "table", "bench"] if shop else
+                 ["table", "bench", "shelf", "stove", "crate"] if f == 0 else ["bed", "bed", "wardrobe", "table", "shelf"])
+        dims = {"table": (1.6, 0.9, 0.8, WOOD_M), "bench": (1.5, 0.4, 0.5, WOOD_M), "shelf": (1.8, 0.45, 1.9, WOOD_D),
+                "stove": (1.0, 0.8, 1.15, STONE_D), "crate": (0.9, 0.9, 0.9, WOOD_M), "bed": (2.0, 1.0, 0.55, WOOD_M),
+                "wardrobe": (1.1, 0.55, 1.9, WOOD_D), "counter": (3.2, 0.8, 1.05, WOOD_M)}
+        placed = []
+        for kind in kinds:
+            a, b, hz, col = dims[kind]
+            wall = kind in ("shelf", "wardrobe", "stove", "bed", "counter")
+            for _ in range(30):
+                if wall:
+                    side = rng.choice("NSEW")
+                    if side in "NS":
+                        sx_, sy_ = a, b
+                        cx_ = rng.uniform(ix0 + sx_ / 2 + 0.1, ix1 - sx_ / 2 - 0.1)
+                        cy_ = (iy1 - sy_ / 2 - 0.02) if side == "N" else (iy0 + sy_ / 2 + 0.02)
+                    else:
+                        sx_, sy_ = b, a
+                        cy_ = rng.uniform(iy0 + sy_ / 2 + 0.1, iy1 - sy_ / 2 - 0.1)
+                        cx_ = (ix1 - sx_ / 2 - 0.02) if side == "E" else (ix0 + sx_ / 2 + 0.02)
+                else:
+                    sx_, sy_ = (a, b) if rng.random() < 0.5 else (b, a)
+                    cx_ = rng.uniform(ix0 + 1.6, ix1 - 1.6)
+                    cy_ = rng.uniform(iy0 + 1.6, iy1 - 1.6)
+                r = (cx_ - sx_ / 2, cy_ - sy_ / 2, cx_ + sx_ / 2, cy_ + sy_ / 2)
+                if r[0] < ix0 - 0.01 or r[2] > ix1 + 0.01 or r[1] < iy0 - 0.01 or r[3] > iy1 + 0.01:
+                    continue
+                if any(r[0] < q[2] and r[2] > q[0] and r[1] < q[3] and r[3] > q[1] for q in blockers + placed):
+                    continue
+                placed.append((r[0] - 0.55, r[1] - 0.55, r[2] + 0.55, r[3] + 0.55))
+                self.add_box(r[0], r[1], r[2], r[3], base, zb + hz, col)
+                break
+
+    NISSEN_U = (0.0, 1.0, 1.7, 2.2, 2.55, 2.8)            # Querschnitt der Nissenhütte: Stufen des Bogens (Abstand von der Mittellinie)
+
+    def nissen(self, x, y, door="E", L=11.0, seed=0):
+        """Nissenhütte (Wellblech-Halbtonne, Tür an der Stirnseite): Kollision als gestufter Bogen, Bodenplatte nur innen."""
+        R, H0 = 2.8, 2.9
+        sg = 1 if door == "E" else -1
+        xa, xb, ya, yb = x - L / 2, x + L / 2, y - R, y + R
+        zin = lambda u: H0 * math.sqrt(max(0.0, 1.0 - (u / R) ** 2))        # noqa: E731
+        U = self.NISSEN_U
+        for side in (-1, 1):
+            for i in range(len(U) - 1):
+                ua, ub = U[i], U[i + 1]
+                ylo, yhi = sorted((y + side * ua, y + side * ub))
+                z0, z1 = zin(ub), zin(ua) + 0.12
+                self.add_box(xa + 0.3, ylo, xb - 0.3, yhi, z0, z1, WOOD_F, False, False)            # Dachschale (Kollision)
+                # Stirnwände: unter dem Bogen bis zum Dach, Tür in der Mitte (Sturz darüber)
+                for xs0, xs1, dr in ((xa, xa + 0.3, door == "W"), (xb - 0.3, xb, door == "E")):
+                    zb_ = -2.0
+                    if dr and i == 0:
+                        zb_ = 2.3
+                    self.add_box(xs0, ylo, xs1, yhi, zb_, z1, WOOD_F, False, False)
+        self.add_box(xa + 0.3, y - 0.6, xb - 0.3, y + 0.6, 2.85, 3.02, WOOD_F, False, False)       # Firstbereich
+        self.floors.append((xa + 0.3, ya + 0.2, xb - 0.3, yb - 0.2, WOOD_F))
+        self.flats.append((x, y, L / 2 + 3.0, L / 2 + 12.0))
+        rng = random.Random(seed or int(x * 5 + y))
+        for k in range(3):                                                    # Feldbetten und Spind als Deckung
+            bx = xa + 1.6 + k * 2.6
+            self.add_box(bx, y - 2.0, bx + 1.0, y - 0.1 if k != 1 else y - 0.9, -1.0, 0.55, WOOD_M)
+        self.add_box(xa + 0.6, y + 1.8, xa + 1.6, y + 2.5, -1.0, 1.9, WOOD_D) if sg > 0 else \
+            self.add_box(xb - 1.6, y + 1.8, xb - 0.6, y + 2.5, -1.0, 1.9, WOOD_D)
+        self.add_crate(x - sg * 1.0, y + 1.7, 0.0)
+        self.vis.append({"k": "nissen", "x": x, "y": y, "L": L, "R": R, "H0": H0, "door": door, "seed": int(x * 3 + y)})
+        return xb if sg > 0 else xa
+
+    def market_stall(self, x, y, along_x, col_a, col_b):
+        """Marktstand: Pfosten, Tresen, Stoffdach in zwei Farben (Dach als Deckung von oben)."""
+        w, d = (3.4, 2.2) if along_x else (2.2, 3.4)
+        x0, x1, y0, y1 = x - w / 2, x + w / 2, y - d / 2, y + d / 2
+        for px, py in ((x0, y0), (x1 - 0.18, y0), (x0, y1 - 0.18), (x1 - 0.18, y1 - 0.18)):
+            self.add_box(px, py, px + 0.18, py + 0.18, -1, 2.5, WOOD_D)
+        if along_x:
+            self.add_box(x0 + 0.2, y0 + 0.1, x1 - 0.2, y0 + 0.85, -1, 1.0, WOOD_M)
+        else:
+            self.add_box(x0 + 0.1, y0 + 0.2, x0 + 0.85, y1 - 0.2, -1, 1.0, WOOD_M)
+        n = 6
+        for i in range(n):
+            col = col_a if i % 2 == 0 else col_b
+            if along_x:
+                self.add_box(x0 - 0.1 + (w + 0.2) * i / n, y0 - 0.3, x0 - 0.1 + (w + 0.2) * (i + 1) / n, y1 + 0.3, 2.5, 2.7, col)
+            else:
+                self.add_box(x0 - 0.3, y0 - 0.1 + (d + 0.2) * i / n, x1 + 0.3, y0 - 0.1 + (d + 0.2) * (i + 1) / n, 2.5, 2.7, col)
+        self.vis.append({"k": "stall", "x": x, "y": y, "w": w, "d": d, "along_x": along_x, "seed": int(x * 3 + y)})
+
+    def fountain(self, x, y):
+        s = 2.7
+        for a, b, c2, d2 in ((x - s, y - s, x + s, y - s + 0.5), (x - s, y + s - 0.5, x + s, y + s),
+                             (x - s, y - s + 0.5, x - s + 0.5, y + s - 0.5), (x + s - 0.5, y - s + 0.5, x + s, y + s - 0.5)):
+            self.add_box(a, b, c2, d2, -1, 0.85, CONCRETE)
+        self.add_box(x - 0.45, y - 0.45, x + 0.45, y + 0.45, -1, 2.3, CONC_D)
+        self.add_box(x - 0.9, y - 0.9, x + 0.9, y + 0.9, -1, 1.1, CONC_D)
+        self.vis.append({"k": "fountain", "x": x, "y": y, "s": s})
+        self.flagpole(x, y, 2.3, 7.5, (0.85, 0.84, 0.78), 3.2, 1.9, 35.0)                 # Fahnenmast in der Mitte
+
+    def flagpole(self, x, y, z, h, col, w=2.0, hh=1.2, ang=0.0):
+        self.add_box(x - 0.08, y - 0.08, x + 0.08, y + 0.08, z, z + h, (0.30, 0.22, 0.14))
+        self.vis.append({"k": "flag", "x": x, "y": y, "z": z + h - hh - 0.1, "w": w, "h": hh, "col": col, "ang": ang})
+
+    def merlons(self, x0, y0, x1, y1, z, h=0.6, step=2.0, mw=1.1):
+        """Zinnen entlang eines Mauerstücks (lange Seite)."""
+        if x1 - x0 >= y1 - y0:
+            n = max(1, int((x1 - x0) // step))
+            for i in range(n):
+                a = x0 + (x1 - x0) * (i + 0.5) / n
+                self.add_box(a - mw / 2, y0, a + mw / 2, y1, z, z + h, STONE_D)
+        else:
+            n = max(1, int((y1 - y0) // step))
+            for i in range(n):
+                a = y0 + (y1 - y0) * (i + 0.5) / n
+                self.add_box(x0, a - mw / 2, x1, a + mw / 2, z, z + h, STONE_D)
+
+    def castle_extras(self):
+        """Radarstation: Wachhäuser an den Toren, Fahnen, Löschwasserbehälter im Hof, drehende Antennen (Schüssel + zwei Freya)."""
+        c = CENTER
+        H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
+        g0, g1 = c - 4.0, c + 4.0
+        B = self.add_box
+        # Wachhäuser links und rechts der Tore (Nord = Stahlbrücke, Süd = Betonbrücke) und Sturz über dem Tor
+        for sgn in (1, -1):
+            yw = (c + H) if sgn > 0 else (c - H)                 # Aussenseite der Mauer
+            ya, yb = (yw, yw + 2.7) if sgn > 0 else (yw - 2.7, yw)
+            wy0, wy1 = (c + H - T, c + H) if sgn > 0 else (c - H, c - H + T)
+            B(g0, wy0, g1, wy1, 4.0, ZW, WALL_C, True)
+            for gx0, gx1 in ((g0 - 3.0, g0), (g1, g1 + 3.0)):
+                B(gx0, ya, gx1, yb, -2, 7.2, WALL_C, True)
+                B(gx0, ya, gx1, yb, 7.2, 7.5, WALL_CD)
+                outer = (yb - 0.45, yb) if sgn > 0 else (ya, ya + 0.45)
+                B(gx0, outer[0], gx1, outer[1], 7.5, 8.2, WALL_CD)
+                B(gx0 if gx0 < c else gx1 - 0.45, ya, gx0 + 0.45 if gx0 < c else gx1, yb, 7.5, 8.2, WALL_CD)
+            self.vis.append({"k": "gate", "x0": g0, "x1": g1, "y": yw, "sgn": sgn, "zt": 4.0, "zw": ZW})
+            for gx in (g0 - 1.5, g1 + 1.5):
+                self.flagpole(gx, (ya + yb) / 2, 8.2, 4.0, (0.85, 0.84, 0.78) if sgn > 0 else (0.55, 0.45, 0.20), 2.2, 1.3,
+                              90.0 if sgn > 0 else -90.0)
+        # Fahnen auf den Türmen und dem Betriebsgebäude
+        cols = {(-1, -1): OLIVE, (1, 1): (0.55, 0.45, 0.20)}
+        for (sx, sy), fc in cols.items():
+            self.flagpole(c + sx * H, c + sy * H - sy * 2.6, ZT + 1.2, 4.2, fc, 2.4, 1.4, 0.0)
+        self.flagpole(c + 3.4, c + 3.4, 7.2, 4.0, (0.85, 0.84, 0.78), 2.6, 1.5, 0.0)
+        # Löschwasserbehälter im Hof
+        wx, wy = c + 8.0, c - 8.0
+        for a, b, c2, d2 in ((wx - 1.1, wy - 1.1, wx + 1.1, wy - 0.7), (wx - 1.1, wy + 0.7, wx + 1.1, wy + 1.1),
+                             (wx - 1.1, wy - 0.7, wx - 0.7, wy + 0.7), (wx + 0.7, wy - 0.7, wx + 1.1, wy + 0.7)):
+            B(a, b, c2, d2, -1, 0.95, WALL_C)
+        self.vis.append({"k": "well", "x": wx, "y": wy})
+        # Drehende Antennen: grosse Schüssel (Würzburg-Riese) auf dem Betriebsgebäude, zwei Freya-Wände auf den freien Ecktürmen
+        self.vis.append({"k": "spin", "kind": "dish", "x": c, "y": c, "z": 6.3, "speed": 24.0, "h0": 20.0})
+        for (sx, sy), spd in (((-1, -1), 34.0), ((1, 1), -34.0)):
+            tx, ty = c + sx * H, c + sy * H
+            B(tx - 0.4, ty - 0.4, tx + 0.4, ty + 0.4, ZT, ZT + 4.2, WALL_CD, False, False)
+            self.vis.append({"k": "spin", "kind": "freya", "x": tx, "y": ty, "z": ZT, "speed": spd, "h0": 90.0 * sx})
+
+    def build_town(self):
+        """Polytown (Stützpunkt der 40er Jahre): Appellplatz mit Kommandantur im Norden (an der Brücke), Ringstrasse um die
+        Radarstation, Wohn- und Unterkunftshäuser, Flughafenstrasse im Süden. Jedes Gebäude hängt mit Weg(en) am Strassennetz."""
+        c = CENTER
+        R = 52.0
+        ring = [(c + R * math.cos(2 * math.pi * i / 28), c + R * math.sin(2 * math.pi * i / 28)) for i in range(28)]
+        self.add_road(ring, 2.3, "dirt", closed=True)
+        self.add_road([(c, c + 26.0), (c, c + 76.0)], 2.9, "cobble")             # Zufahrt zum Appellplatz
+        self.add_road([(c, c - 26.0), (c, c - 68.0)], 2.9, "cobble")             # zur Landebahn (Süd)
+        self.add_road([(c - R, c), (c - 70.0, c)], 2.4, "dirt")                  # zum Helipad West
+        self.add_road([(c + R, c), (c + 70.0, c)], 2.4, "dirt")                  # zum Helipad Ost
+        # Appellplatz mit Löschwasserbecken und Fahnenmast, Versorgungsständen
+        px, py = c, c + 64.0
+        self.floors.append((px - 15, py - 12, px + 15, py + 12, CONCRETE))
+        self.flats.append((px, py, 21.0, 31.0))
+        self.fountain(px, py)
+        for sx, sy, ax, ca, cb in ((-9.0, -7.0, True, AWN[0], AWN[1]), (9.0, -7.0, True, AWN[2], AWN[1]),
+                                   (-9.0, 8.0, True, AWN[3], AWN[1]), (9.0, 8.0, True, AWN[0], AWN[1])):
+            self.market_stall(px + sx, py + sy, ax, ca, cb)
+        # Häuser (Mitte x, y, Breite, Tiefe, Stockwerke, Tür, ...)
+        rathaus = self.town_house(c, c + 86.0, 20.0, 12.0, floors=3, door="S", col=(0.78, 0.74, 0.64), roof=ROOFS[2],
+                                  balcony=True, tower=(c, c + 86.0, 4.6, 7.4), wide=True, sign="KOMMANDANTUR", seed=11,
+                                  crate=(c - 6.0, c + 86.0))
+        self.town_house(c - 27.0, c + 64.0, 14.0, 12.0, floors=2, door="E", col=HOUSE_COLS[1], roof=ROOFS[1], balcony=True,
+                        sign="KANTINE", seed=12, shop=True, crate=(c - 31.0, c + 62.0))
+        self.town_house(c + 27.0, c + 64.0, 12.0, 10.0, floors=2, door="W", col=HOUSE_COLS[0], roof=ROOFS[0], sign="LAZARETT",
+                        seed=13, shop=True)
+        self.town_house(c - 27.0, c + 86.0, 10.0, 9.0, floors=2, door="E", col=HOUSE_COLS[3], roof=ROOFS[3], seed=14)
+        self.town_house(c + 27.0, c + 86.0, 10.0, 9.0, floors=2, door="W", col=HOUSE_COLS[2], roof=ROOFS[1], seed=15)
+        # Tunnelhäuser (hier liegen die Treppenschächte in den Tunnel)
+        self.town_house(c - 41.0, c, 12.0, 12.0, floors=2, door="W", col=HOUSE_COLS[4], roof=ROOFS[2], stairs="N", seed=16,
+                        avoid=[(c - 39.1, c - 1.6, c - 35.4, c + 3.6)], crate=(c - 38.0, c - 3.5))
+        self.town_house(c + 41.0, c, 12.0, 12.0, floors=2, door="E", col=HOUSE_COLS[0], roof=ROOFS[0], stairs="N", seed=17,
+                        avoid=[(c + 35.4, c - 1.6, c + 39.2, c + 3.6)])
+        # Streusiedlung ausserhalb der Ringstrasse
+        for hx, hy, dr, ci, ri in ((c - 49.0, c - 29.0, "E", 3, 3), (c + 49.0, c + 29.0, "W", 2, 2)):
+            self.town_house(hx, hy, 10.0, 9.0, floors=2, door=dr, col=HOUSE_COLS[ci], roof=ROOFS[ri],
+                            seed=int(hx * 3 + hy))
+        # Unterkünfte: Nissenhütten (Wellblech) an der Ringstrasse
+        for hx, hy, dr in ((c + 50.0, c - 29.0, "W"), (c - 50.0, c + 29.0, "E")):
+            ex = self.nissen(hx, hy, dr)
+            self.connect_road(ex + (1.4 if dr == "E" else -1.4), hy, 1.2, "dirt")
+        # Süden: Flugleitung und Werkstatt an der Flughafenstrasse
+        self.town_house(c - 25.0, c - 57.0, 13.0, 10.0, floors=2, door="E", col=(0.74, 0.74, 0.72), roof=ROOFS[2], seed=21,
+                        flat=True, balcony=False, sign="FLUGLEITUNG", crate=(c - 28.0, c - 57.0))
+        self.town_house(c + 26.0, c - 57.0, 14.0, 10.0, floors=1, door="W", col=(0.62, 0.64, 0.66), roof=ROOFS[2], seed=22,
+                        flat=True, wide=True, chimney=False, sign="WERKSTATT")
+        # Wege zu den Türen und zu allen Aussenposten
+        for r in list(self.vis):
+            if r["k"] != "house":
+                continue
+            dx, dy = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[r["door"]]
+            if r["door"] in "NS":
+                ex, ey = r["dpos"], r["y"] + dy * (r["d"] / 2 + 1.4)
+            else:
+                ex, ey = r["x"] + dx * (r["w"] / 2 + 1.4), r["dpos"]
+            self.connect_road(ex, ey, 1.2, "dirt")
+        for tx, ty in ((c - 54.2, c - 69.0), (c + 54.2, c - 46.6), (c - 54.2, c + 47.0), (c + 54.2, c + 67.6)):
+            self.connect_road(tx, ty, 1.2, "dirt")
+        # Alleebäume an der Burgstrasse und Bäume auf dem Marktplatz
+        for k in range(5):
+            for sx in (-1, 1):
+                self._add_tree(c + sx * 5.2, c + 30.0 + k * 7.0, 1.4, "poplar")
+        for tx, ty in ((px - 14, py - 11), (px + 14, py - 11), (px - 14, py + 11), (px + 14, py + 11)):
+            self._add_tree(tx, ty, 2.2, "oak")
+        for k in range(4):
+            for sx in (-1, 1):
+                self._add_tree(c + sx * 5.2, c - 32.0 - k * 8.0, 2.0, "oak")
+
+    def _add_tree(self, x, y, br, tk=None):
+        p = Prop("tree", x, y, br, 0.45)
+        p.base_r = br
+        p.tk = tk                      # Baumart: "fir", "oak", "birch", "poplar" (None = Zufall)
+        self.props.append(p)
+
     # ------------------------------------------------------------ Aussenposten (nur Standardkarte)
     def build_outposts(self):
         """Zusätzliche Deckung auf der grossen Standardkarte - am Boden UND gegen Beschuss aus der Luft
         (Dächer, Überhänge, überdachte Gassen): Containerlager, Bunkerstellung, Scheune, Felsformation,
         Ruinendorf, Hangar an der Landebahn, Splitterschutz an den Helipads, kleine Unterstände."""
         c = CENTER
+        if self.big:
+            self.build_big_outskirts()
+            return
         self.container_yard(c + 74, c - 36)
         self.bunker_post(c - 74, c - 36)
         self.barn(c + 76, c + 38)
         self.rock_outcrop(c - 76, c + 40)
-        self.ruin_village(c, c + 84)
         self.hangar(c - 66, c - 77)
         for sx in (-1, 1):
             self.pad_walls(c + sx * 78.0, c, sx)
-        for x, y, side in ((c + 48, c - 20, "W"), (c - 50, c + 18, "E"), (c + 20, c - 58, "N"),
-                           (c - 22, c + 62, "S"), (c + 52, c + 74, "S"), (c - 52, c - 70, "N")):
+        for x, y, side in ((c + 52, c + 74, "S"), (c - 52, c - 70, "N")):
             self.lean_to(x, y, side)
+        for ox, oy, st in ((c + 74, c - 36, 5.5), (c - 74, c - 36, 6.0), (c + 76, c + 38, 8.0), (c - 76, c + 40, 6.0),
+                           (c - 66, c - 77, 7.0)):
+            self.connect_road(ox - (st if ox > c else -st), oy, 1.4, "dirt")
+
+    # ------------------------------------------------------------ 7c: grosse Karte (Experimental)
+    def build_big_outskirts(self):
+        """Grosse Karte um Sinans Polytown herum: alte Häuser und Ruine an den früheren Helipads (alter Ortsteil),
+        Militärecke im Südosten (Landebahn, Hangar, Containerlager, Helipads, Bunker), Park im Nordwesten, Hof mit
+        Scheune im Nordosten, Ruinendorf im Westen, Felsformation im Südwestwald, Hütten in den Wäldern."""
+        c = CENTER
+        self.old_quarter()
+        self.military_zone()
+        self.park(c - 100.0, c + 95.0)
+        self.barn(c + 100.0, c + 80.0)
+        self.connect_road(c + 92.0, c + 80.0, 1.4, "dirt")
+        self.ruin_village(c - 130.0, c - 34.2)
+        self.connect_road(c - 112.0, c - 40.0, 1.4, "dirt")
+        self.rock_outcrop(c - 105.0, c - 100.0)
+        for x, y, door in ((c + 95.0, c + 141.0, "S"), (c - 146.0, c + 66.0, "E"), (c - 88.0, c - 146.0, "N"),
+                           (c + 150.0, c - 30.0, "W"), (c - 40.0, c + 152.0, "S"), (c + 136.0, c + 50.0, "W")):
+            self.forest_hut(x, y, door)
+        for x, y, side in ((c + 60.0, c + 112.0, "S"), (c - 62.0, c - 110.0, "N")):
+            self.lean_to(x, y, side)
+        self.add_road([(c, c + 92.0), (c + 12.0, c + 112.0), (c + 22.0, c + 124.0)], 1.4, "dirt")   # Pfad zum Nordwald
+        self.add_road([(c + 70.0, c), (c + 104.0, c + 18.0), (c + 128.0, c + 46.0)], 1.4, "dirt")   # Pfad zum Ostwald
+
+    def old_quarter(self):
+        """Alter Ortsteil (Häuser, Lagerhalle, Ruine der ersten Polytown) dort, wo früher die Helipads lagen."""
+        c = CENTER
+        door = lambda ctr: [(ctr, 1.1, 0.0, 2.4)]           # noqa: E731
+        win = lambda ctr: [(ctr, 0.9, 1.2, 2.2)]            # noqa: E731
+        for hy, cr in ((c + 10.0, (c - 87.0, c + 8.0)), (c - 10.0, None)):
+            hx = c - 84.0
+            self.build_house(hx, hy, 10, 8, 3.2, {"E": door(hy), "W": win(hy), "N": win(hx), "S": win(hx)},
+                             crate=cr, flat_r=8.0)
+        self.build_ruin(c - 100.0, c + 26.0)
+        wx, wy = c + 88.0, c + 4.0                            # Lagerhalle: Tore nach Westen und Süden
+        self.build_house(wx, wy, 16, 8, 4.2,
+                         {"W": [(wy, 1.6, 0.0, 3.2)], "S": [(wx - 4, 1.6, 0.0, 3.2), (wx + 4, 1.6, 0.0, 3.2)],
+                          "N": [(wx, 1.6, 0.0, 3.2), (wx - 6, 0.7, 1.5, 2.7), (wx + 6, 0.7, 1.5, 2.7)],
+                          "E": [(wy, 0.9, 1.5, 2.7)]},
+                         crate=(wx + 5.0, wy + 1.5), floor=CONCRETE, flat_r=12.0, col=(0.55, 0.57, 0.60))
+        self.add_crate(wx - 5.0, wy - 1.5, 0.0)
+        self.connect_road(c - 78.5, c + 10.0, 1.2, "dirt")
+        self.connect_road(c - 78.5, c - 10.0, 1.2, "dirt")
+        self.connect_road(wx - 9.0, wy, 1.4, "dirt")
+
+    def military_zone(self):
+        """Militärecke im Südosten: Landebahn mit Hangar, Containerlager (mit Tunneleingang), zwei Helipads mit
+        Splitterschutz, Bunkerstellung, Unterstände; Strasse vom Ortskern."""
+        c = CENTER
+        ry = c - 135.0
+        self.build_runway(ry, c + 25.0, c + 150.0)
+        self.hangar(c + 10.0, ry - 1.0)
+        self.container_yard(c + 112.0, c - 95.4)
+        pads = ((c + 60.0, c - 72.0, 270.0), (c + 150.0, c - 82.0, 90.0))
+        self.build_helipads(pads)
+        self.pad_walls(pads[0][0], pads[0][1], -1)
+        self.pad_walls(pads[1][0], pads[1][1], 1)
+        self.bunker_post(c + 75.0, c - 112.0)
+        self.lean_to(c + 40.0, c - 100.0, "W")
+        self.lean_to(c + 135.0, c - 112.0, "N")
+        for k in range(6):                                    # Sandsackreihe am Exerzierplatz
+            self.sandbags(c + 86.0 + k * 4.0, c - 42.0, c + 88.6 + k * 4.0, c - 41.2)
+        self.add_road([(c, c - 68.0), (c + 18.0, c - 96.0), (c + 46.0, c - 118.0), (c + 112.0, c - 118.0)], 2.4, "dirt")
+        self.add_road([(c + 46.0, c - 118.0), (c + 60.0, c - 82.0)], 2.0, "dirt")
+        self.add_road([(c + 112.0, c - 118.0), (c + 150.0, c - 92.0)], 2.0, "dirt")
+        self.connect_road(c + 112.0, c - 106.0, 1.6, "dirt")
+        self.connect_road(c + 79.0, c - 112.0, 1.2, "dirt")
+        self.connect_road(c + 18.0, c - 136.0, 1.6, "dirt")
+
+    def park(self, cx, cy):
+        """Park: Wege (Kreuz + Rundweg), Brunnen mit Fahne, Pavillon (Dach = Tomahawk-Ort), Bänke, Beete,
+        Baumreihen, kleiner Teich."""
+        self.flats.append((cx, cy, 24.0, 34.0))
+        R = 15.0
+        ring = [(cx + R * math.cos(2 * math.pi * i / 18), cy + R * math.sin(2 * math.pi * i / 18)) for i in range(18)]
+        self.add_road(ring, 1.3, "cobble", closed=True)
+        self.add_road([(cx - 26.0, cy), (cx + 26.0, cy)], 1.4, "cobble")
+        self.add_road([(cx, cy - 26.0), (cx, cy + 26.0)], 1.4, "cobble")
+        self.fountain(cx, cy)
+        px, py = cx - 12.0, cy + 12.0                         # Pavillon mit Treppe aufs Dach
+        self.shed_roof(px - 3.0, py - 3.0, px + 3.0, py + 3.0, 2.6, (0.36, 0.42, 0.30))
+        self.stairs(px + 3.3 + 6 * 0.7, py - 3.0, "W", 6, 1.2, 0, 0.5, 0.7, WOOD_F)    # Stufen von Osten aufs Dach
+        bench = (0.45, 0.32, 0.20)
+        for a in range(0, 360, 45):                           # Bänke am Rundweg
+            r = R + 2.6
+            bx, by = cx + r * math.cos(math.radians(a + 22.5)), cy + r * math.sin(math.radians(a + 22.5))
+            if math.hypot(bx - px, by - py) < 6.0:
+                continue
+            self.add_box(bx - 0.8, by - 0.8, bx + 0.8, by + 0.8, -0.5, 0.45, bench)
+        for sx in (-1, 1):                                    # Blumenbeete (flach)
+            for sy in (-1, 1):
+                fx, fy = cx + sx * 7.0, cy + sy * 7.0
+                col = (0.85, 0.25, 0.30) if sx * sy > 0 else (0.95, 0.80, 0.25)
+                self.decor.append((fx - 1.6, fy - 1.6, fx + 1.6, fy + 1.6, 0.0, 0.18, (0.33, 0.22, 0.14), True))
+                self.decor.append((fx - 1.3, fy - 1.3, fx + 1.3, fy + 1.3, 0.18, 0.32, col, True))
+        for k in range(-3, 4):                                # Pappelallee am Kreuzweg, Eichen in den Ecken
+            if k:
+                for sx in (-1, 1):
+                    self._add_tree(cx + k * 6.5, cy + sx * 3.6, 1.4, "poplar")
+        for sx, sy in ((-1, -1), (1, -1), (1, 1)):
+            self._add_tree(cx + sx * 21.0, cy + sy * 21.0, 2.4, "oak")
+            self._add_tree(cx + sx * 24.0, cy + sy * 12.0, 2.0, "birch")
+        tx, ty, tr = cx + 18.0, cy + 18.0, 4.6                # Teich
+        self.ponds.append((tx, ty, tr))
+        pp = Prop("pond", tx, ty, tr * 1.4, tr * 0.72)
+        pp.base_r = tr
+        self.props.append(pp)
+        self.add_crate(px - 1.5, py + 1.5, 0.0)
+        self.connect_road(cx + 26.0, cy, 1.4, "cobble")
+        self.connect_road(cx, cy - 26.0, 1.4, "cobble")
+
+    def forest_hut(self, x, y, door):
+        """Kleine Holzhütte im Wald (Tür, Fenster, Lootkiste innen, Holzstapel daneben)."""
+        dn = {"N": "S", "S": "N", "E": "W", "W": "E"}[door]
+        ctr = lambda s: x if s in "NS" else y                 # noqa: E731
+        ops = {s: [(ctr(s), 0.9, 1.2, 2.1)] for s in "NSEW" if s != door and s != dn}
+        ops[door] = [(ctr(door), 1.0, 0.0, 2.2)]
+        self.build_house(x, y, 6.0, 5.0, 2.8, ops, crate=(x - 1.4, y - 1.0), floor=WOOD_F, flat_r=6.5,
+                         col=(0.42, 0.30, 0.19))
+        ox, oy = {"N": (2.0, 3.2), "S": (-2.0, -3.2), "E": (3.6, -1.6), "W": (-3.6, 1.6)}[door]
+        self.add_box(x - ox - 0.6, y - oy - 0.5, x - ox + 0.6, y - oy + 0.5, -0.5, 1.0, (0.50, 0.36, 0.22))   # Holzstapel
+        self.connect_road(x + {"E": 3.6, "W": -3.6}.get(door, 0.0), y + {"N": 3.1, "S": -3.1}.get(door, 0.0), 1.0, "dirt")
+
+    def add_forests(self, rng):
+        """7c: Wälder (BIG_FORESTS): dicht stehende Bäume, aber begehbar; Lichtungen um Bauwerke, Wege, Tunneleingänge."""
+        c = CENTER
+        kinds = ("fir", "fir", "fir", "oak", "birch")
+        for fx, fy, R, n in BIG_FORESTS:
+            gx, gy = c + fx, c + fy
+            placed = 0
+            for _ in range(n * 14):
+                if placed >= n:
+                    break
+                a, r = rng.uniform(0, 2 * math.pi), R * math.sqrt(rng.random())
+                x, y = gx + math.cos(a) * r, gy + math.sin(a) * r
+                br = rng.uniform(1.6, 2.6)
+                if not (6 < x < WORLD - 6 and 6 < y < WORLD - 6) or mountain(x, y) > 10.0:
+                    continue
+                if any(math.hypot(x - qx, y - qy) < rin + 1.5 for qx, qy, rin, _ro in self.flats):
+                    continue
+                if any(x0 - 4.0 < x < x1 + 4.0 and y0 - 4.0 < y < y1 + 4.0 for x0, y0, x1, y1 in self.voids):
+                    continue                                   # Tunneleingang: Treppe frei lassen
+                if self.roads:
+                    rd = self.road_dist(x, y)
+                    if rd is not None and rd[0] < rd[1] + 1.8:
+                        continue
+                if any(math.hypot(x - px, y - py) < pr * 1.6 for px, py, pr in self.ponds):
+                    continue
+                if any(math.hypot(x - p.x, y - p.y) < (BIG_FOREST_GAP if p.kind == "tree" else p.r + 1.5)
+                       for p in self.props_near_xy(x, y, 6.0)):
+                    continue
+                if not self.box_free(x - 1.2, y - 1.2, x + 1.2, y + 1.2):
+                    continue
+                self._add_tree(x, y, br, rng.choice(kinds))
+                self.props[-1].lod = True                       # Waldbaum: Low-Poly
+                placed += 1
+
+    def props_near_xy(self, x, y, r):
+        """Props in der Nähe (ohne Gitter: beim Aufbau vor build_grids)."""
+        return [p for p in self.props if abs(p.x - x) < r + p.r and abs(p.y - y) < r + p.r]
 
     def sandbags(self, x0, y0, x1, y1, h=1.15):
         self.add_box(x0, y0, x1, y1, -1.0, h, SANDBAG)
@@ -3837,7 +4643,7 @@ class World:
     def add_cover(self, rng):
         """Verstreute Deckungsblöcke im Gelände (nach Bäumen und Felsen)."""
         placed = tries = 0
-        want = 30 if self.mtn else 12
+        want = BIG_COVER if self.big else (30 if self.mtn else 12)
         while placed < want and tries < want * 35:
             tries += 1
             x, y = rng.uniform(10, WORLD - 10), rng.uniform(10, WORLD - 10)
@@ -3915,7 +4721,7 @@ class World:
         """Viele Startpunkte (36 Sektoren um die Burg, verschiedene Radien). Die Liste ist so sortiert,
         dass die ersten Einträge möglichst weit auseinander liegen (so starten die ersten Spieler verteilt)."""
         pts = []
-        radii = (58.0, 70.0, 82.0, 64.0, 76.0) + ((92.0, 100.0) if self.mtn else ())
+        radii = (58.0, 70.0, 82.0, 64.0, 76.0) + ((92.0, 100.0) if self.mtn else ()) + ((112.0, 126.0, 140.0) if self.big else ())
         given = [p for p in (self.map.get("spawns") or ()) if self.spawn_ok(*p)] if self.map else []
         if self.cm is not None and self.map.get("spawn_zs"):
             for p in given:
@@ -4010,6 +4816,18 @@ class World:
                 continue
             m *= smoothstep(r * 1.0, r * 2.2, d)
             dip -= 3.0 * (1 - smoothstep(r * 0.3, r * 1.0, d))
+        for mx, my, a, o0, o1, o2, o3, dp in self.moats:   # Wassergraben ums Burg-Quadrat (Brücken sind ausgenommen)
+            ox, oy = abs(x - mx) - a, abs(y - my) - a
+            if ox >= o3 or oy >= o3:
+                continue
+            o = math.hypot(max(ox, 0.0), max(oy, 0.0))
+            if o <= o0 or o >= o3:
+                continue
+            tt = smoothstep(o0, o1, o) if o < o1 else ((1.0 - smoothstep(o2, o3, o)) if o > o2 else 1.0)
+            for bx0, by0, bx1, by1 in self.dams:
+                if bx0 - 0.8 < x < bx1 + 0.8 and by0 - 0.8 < y < by1 + 0.8:
+                    tt *= smoothstep(0.0, 0.8, math.hypot(max(bx0 - x, 0.0, x - bx1), max(by0 - y, 0.0, y - by1)))
+            dip -= dp * tt
         return h * m + dip
 
     def floor_at(self, x, y, z):
@@ -4083,7 +4901,7 @@ class World:
 
     # ------------------------------------------------------------ Mobs
     def populate_mobs(self):
-        k = 1.3 if self.mtn else 1.0                     # grössere Standardkarte: ein paar Monster mehr
+        k = (1.3 * BIG_MOB_K if self.big else 1.3) if self.mtn else 1.0   # grössere Standardkarte: mehr Monster
         k *= MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
         for kind, n in (("grunt", N_GRUNT), ("brute", N_BRUTE), ("huntress", N_HUNT),
                         ("colossus", N_COLOSSUS), ("drone", N_DRONE), ("critter", N_CRITTER), ("titan", N_TITAN)):
@@ -4594,7 +5412,9 @@ class World:
 
     # ------------------------------------------------------------ Loot
     def crate_counts(self):
-        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen."""
+        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen (grosse Karte: x BIG_CRATE_K)."""
+        if getattr(self, "big", False):
+            return {k: int(round(v * BIG_CRATE_K)) for k, v in CRATES_STD.items()}
         return CRATES_STD if self.mtn else CRATES_MAP
 
     def crate_target(self):
@@ -5537,7 +6357,7 @@ class World:
     def build_toma_spots(self):
         """Orte der Tomahawk-Säule (TOMA_SPOTS). Erhöhte Orte stehen fest; für Bodenorte wird in der Nähe ein
         freier, ebener Platz gesucht (kein Baum, Fels, Teich, keine Wand). Gleiches Ergebnis bei allen Spielern."""
-        for dx, dy, z in TOMA_SPOTS:
+        for dx, dy, z in (TOMA_SPOTS_BIG if self.big else TOMA_SPOTS):
             x, y = CENTER + dx, CENTER + dy
             if z is None:
                 best = None
@@ -7213,6 +8033,47 @@ def _t_roof(S):
     return _finish(S, cols, h, 0.6)
 
 
+def _t_brick(S):
+    """Backstein im Läuferverband: Fugen dunkel, Steine einzeln getönt (Farbe kommt aus den Vertexfarben)."""
+    n, n2 = _fbm(S, 81, 6, 3), _fbm(S, 82, 70, 2)
+    bh, bw = max(4, S // 16), max(8, S // 8)
+    cols, h = [], []
+    for y in range(S):
+        crow, hrow = [], []
+        r, ly = y // bh, y % bh
+        off = bw // 2 if r % 2 else 0
+        for x in range(S):
+            xo = (x + off) % S
+            lx = xo % bw
+            bid = r * 31 + xo // bw
+            v = 0.86 + 0.26 * (_hash01(bid + 7) - 0.5) + 0.22 * (n[y][x] - 0.5) + 0.14 * (n2[y][x] - 0.5)
+            joint = lx < 1 or ly < 1
+            if joint:
+                v = 0.52 + 0.1 * n2[y][x]                    # Mörtelfuge
+            crow.append(_rgb(v))
+            hrow.append(-1.2 if joint else 0.3 * n2[y][x])
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.55)
+
+
+def _t_corrug(S):
+    """Wellblech: senkrechte Wellen, leicht verrostet."""
+    n, n2 = _fbm(S, 91, 5, 3), _fbm(S, 92, 40, 2)
+    cols, h = [], []
+    wv = max(4, S // 10)
+    for y in range(S):
+        crow, hrow = [], []
+        for x in range(S):
+            ph = math.sin(2 * math.pi * x / wv)
+            v = 0.80 + 0.20 * ph + 0.26 * (n[y][x] - 0.5) + 0.10 * (n2[y][x] - 0.5)
+            crow.append(_rgb(v, (1.0, 0.99, 0.97)))
+            hrow.append(1.4 * ph + 0.3 * n2[y][x])
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.5)
+
+
 def _t_cobble(S):
     vor = _voronoi(S, 7, 61)
     n, n2 = _fbm(S, 62, 12, 3), _fbm(S, 63, 70, 2)
@@ -7453,6 +8314,7 @@ TEXGEN = {
     "roof": (128, _t_roof, False, True, 3.0), "cobble": (256, _t_cobble, False, True, 3.0),
     "rock": (256, _t_rock, False, True, 3.0), "wood": (128, _t_wood, False, True, 3.0),
     "bark": (64, _t_bark, False, True, 1.6), "leaves": (96, _t_leaves, False, True, 1.5),
+    "brick": (256, _t_brick, False, True, 3.0), "corrug": (128, _t_corrug, False, True, 2.0),
     "plaster": (256, _t_plaster, False, True, 3.0), "concrete": (128, _t_concrete, False, True, 4.0),
     "metal": (128, _t_metal, False, True, 2.0), "cloth": (32, _t_cloth, False, True, 0.4),
     "water": (128, _t_water, False, True, 6.0), "fire": (64, _t_fire, False, True, 3.0),
@@ -7617,6 +8479,16 @@ _MATC = {tuple(round(c, 3) for c in col): m for col, m in (
     (STONE, "stone"), (STONE_D, "stone"), (ROOF, "roof"), (PLASTER, "plaster"),
     (WOOD_F, "wood"), (COBBLE, "cobble"), (CONCRETE, "concrete"), (ROCK_C, "rock"), (SANDBAG, "cloth"))
     + tuple((c, "metal") for c in CONT_COLS)}
+for _c in HOUSE_COLS + ((0.78, 0.74, 0.64), (0.74, 0.74, 0.72), (0.62, 0.64, 0.66), PAINT_W, OLIVE):
+    _MATC[tuple(round(v, 3) for v in _c)] = "plaster"
+for _c in (BRICK_R, BRICK_Y, (0.50, 0.26, 0.20), (0.46, 0.38, 0.28)):
+    _MATC[tuple(round(v, 3) for v in _c)] = "brick"
+for _c in ROOFS:
+    _MATC[tuple(round(v, 3) for v in _c)] = "roof"
+for _c in AWN:
+    _MATC[tuple(round(v, 3) for v in _c)] = "cloth"
+for _c in (WOOD_D, WOOD_M):
+    _MATC[tuple(round(v, 3) for v in _c)] = "wood"
 
 
 def mat_for_color(col):
@@ -8018,6 +8890,1156 @@ def build_mc_scene(world):
     return land, water, [], [GeomNode("leer2"), [], GeomNode("leer3"), empty]
 
 
+# ------------------------------------------------------------ Stadt-Details (nur Darstellung)
+def obox(m, c, ux, uy, uz, hx, hy, hz, col, mat=None, ao=False):
+    """Orientierter Quader: Mitte c, Achsen ux, uy, uz (Einheitsvektoren), Halbmasse hx, hy, hz."""
+    pts = {}
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                pts[(sx, sy, sz)] = (c[0] + ux[0] * hx * sx + uy[0] * hy * sy + uz[0] * hz * sz,
+                                     c[1] + ux[1] * hx * sx + uy[1] * hy * sy + uz[1] * hz * sz,
+                                     c[2] + ux[2] * hx * sx + uy[2] * hy * sy + uz[2] * hz * sz)
+    faces = (((-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1)), ((-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)),
+             ((-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)), ((-1, 1, -1), (1, 1, -1), (1, 1, 1), (-1, 1, 1)),
+             ((-1, -1, -1), (-1, 1, -1), (-1, 1, 1), (-1, -1, 1)), ((1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)))
+    for f in faces:
+        a, b, c2, d = (pts[k] for k in f)
+        m.tri(a, b, c2, col, c, mat=mat)
+        m.tri(a, c2, d, col, c, mat=mat)
+
+
+def beam(m, a, b, w, t, col, mat=None, up=(0.0, 0.0, 1.0)):
+    """Balken von a nach b (Breite w, Dicke t)."""
+    d = sub(b, a)
+    ln = math.sqrt(dot(d, d))
+    if ln < 1e-6:
+        return
+    u = (d[0] / ln, d[1] / ln, d[2] / ln)
+    v = cross(up, u)
+    if dot(v, v) < 1e-6:
+        v = cross((1.0, 0.0, 0.0), u)
+    v = norm(v)
+    w2 = cross(u, v)
+    obox(m, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), u, v, w2, ln / 2, w / 2, t / 2, col, mat)
+
+
+def quadf(m, a, b, c, d, col, ref=None, mat=None, vk=None):
+    m.tri(a, b, c, col, ref, mat=mat, vk=vk)
+    m.tri(a, c, d, col, ref, mat=mat, vk=vk)
+
+
+_DOORC = ((0.20, 0.32, 0.22), (0.42, 0.18, 0.15), (0.18, 0.26, 0.40), (0.30, 0.24, 0.17))      # Türfarben (grün, weinrot, blau, braun)
+_SHUT = ((0.20, 0.38, 0.26), (0.55, 0.20, 0.18), (0.24, 0.34, 0.56), (0.36, 0.26, 0.14))
+_FLOW = ((0.95, 0.30, 0.35), (0.98, 0.85, 0.25), (0.95, 0.95, 0.95), (0.75, 0.45, 0.90), (0.98, 0.55, 0.20))
+
+
+class _Wall:
+    """Wandrahmen eines Hauses: Punkte/Quader relativ zur Wand (Seite, Position entlang, Höhe, Abstand nach aussen)."""
+
+    def __init__(self, x0, y0, x1, y1):
+        self.b = (x0, y0, x1, y1)
+
+    def box(self, m, s, c0, c1, z0, z1, o0, o1, col, mat=None):
+        x0, y0, x1, y1 = self.b
+        if s == "S":
+            bx = (c0, y0 - o1, c1, y0 - o0)
+        elif s == "N":
+            bx = (c0, y1 + o0, c1, y1 + o1)
+        elif s == "W":
+            bx = (x0 - o1, c0, x0 - o0, c1)
+        else:
+            bx = (x1 + o0, c0, x1 + o1, c1)
+        box(m, (bx[0] + bx[2]) / 2, (bx[1] + bx[3]) / 2, (z0 + z1) / 2, bx[2] - bx[0], bx[3] - bx[1], z1 - z0, col,
+            None, mat, False)
+
+    def pt(self, s, c, z, o):
+        x0, y0, x1, y1 = self.b
+        if s == "S":
+            return (c, y0 - o, z)
+        if s == "N":
+            return (c, y1 + o, z)
+        if s == "W":
+            return (x0 - o, c, z)
+        return (x1 + o, c, z)
+
+    def nrm(self, s):
+        return {"S": (0.0, -1.0, 0.0), "N": (0.0, 1.0, 0.0), "W": (-1.0, 0.0, 0.0), "E": (1.0, 0.0, 0.0)}[s]
+
+    def tan(self, s):
+        return (1.0, 0.0, 0.0) if s in "NS" else (0.0, 1.0, 0.0)
+
+
+def house_details(m, lamps, r, rng):
+    """Alles, was ein Haus lebendig macht: Sockel, Eckquader, Fachwerk, Fensterrahmen mit Läden und Blumenkästen, Türrahmen mit
+    offenem Türflügel und Vordach, glattes Satteldach mit Ziegelreihen, Giebel, Kamin, Schilder, Laternen."""
+    x, y, w, d, n, fh, H = r["x"], r["y"], r["w"], r["d"], r["n"], r["fh"], r["H"]
+    x0, x1, y0, y1 = x - w / 2, x + w / 2, y - d / 2, y + d / 2
+    col, roof, trim = r["col"], r["roof"], r["trim"]
+    WL = _Wall(x0, y0, x1, y1)
+    seed = r["seed"]
+    hr = random.Random(seed)
+    brick = mat_for_color(col) == "brick"
+    stone_c = (0.66, 0.65, 0.62)                          # Beton für Sockel, Sohlbänke, Stürze
+    door_c = _DOORC[seed % 4]
+    sides = "NSEW"
+    ext = {s: ((x0, x1) if s in "NS" else (y0, y1)) for s in sides}
+    # --- Sockel
+    for s in sides:
+        a, b = ext[s]
+        WL.box(m, s, a - 0.1, b + 0.1, -0.3, 0.55, 0.0, 0.1, (0.30, 0.18, 0.15) if brick else stone_c, "brick" if brick else "concrete")
+        WL.box(m, s, a - 0.1, b + 0.1, 0.55, 0.64, 0.0, 0.15, stone_c, "concrete")
+    # --- Ecken: Quader (Stein) oder Eckpfosten (Holz)
+    for sx, sy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
+        dxs = -1.0 if sx == x0 else 1.0
+        dys = -1.0 if sy == y0 else 1.0
+        if brick:
+            pass
+        else:
+            nb = int(H / 0.5)
+            for k in range(nb):
+                ln = 0.62 if k % 2 == 0 else 0.34
+                z0 = 0.64 + k * 0.5
+                if z0 + 0.46 > H:
+                    break
+                cc = jc((0.56, 0.30, 0.23), hr, 0.05)
+                box(m, sx + dxs * 0.04 - dxs * (ln / 2 - 0.2), sy + dys * 0.065, z0 + 0.23, ln, 0.13, 0.46, cc, None, "brick", False)
+                ln2 = 0.34 if k % 2 == 0 else 0.62
+                box(m, sx + dxs * 0.065, sy + dys * 0.04 - dys * (ln2 / 2 - 0.2), z0 + 0.23, 0.13, ln2, 0.46, cc, None,
+                    "brick", False)
+    # --- Gurtbalken auf Höhe der Decken (ausser vor Türen) und Fachwerk
+    opens = r["opens"]
+    for s in sides:
+        a, b = ext[s]
+        for f in range(1, n + 1):
+            z = f * fh
+            cuts = sorted((o[1] - o[2] - 0.1, o[1] + o[2] + 0.1) for o in opens
+                          if o[0] == s and o[3] - 0.05 <= z <= o[4] + 0.05 + 0.15)
+            cur = a - 0.17
+            segs = []
+            for lo, hi in cuts:
+                if lo > cur:
+                    segs.append((cur, lo))
+                cur = max(cur, hi)
+            if cur < b + 0.17:
+                segs.append((cur, b + 0.17))
+            for lo, hi in segs:
+                if hi - lo > 0.2:
+                    WL.box(m, s, lo, hi, z - 0.14, z + 0.14, 0.0, 0.1, stone_c, "concrete")
+    # --- Fenster und Türen
+    for s, c, hw, zlo, zhi, kind, fl in opens:
+        t_, nm = WL.tan(s), WL.nrm(s)
+        if kind == "win":
+            # Betonsturz und Sohlbank, weiss gestrichener Rahmen mit Sprossen (Stahl-/Holzfenster der 40er)
+            WL.box(m, s, c - hw - 0.14, c + hw + 0.14, zhi, zhi + 0.2, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.2, c + hw + 0.2, zlo - 0.1, zlo, 0.0, 0.2, stone_c, "concrete")
+            if brick:
+                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zhi + 0.2, zhi + 0.34, 0.0, 0.05, (0.40, 0.20, 0.15), "brick")   # Rollschicht
+            WL.box(m, s, c - hw - 0.1, c - hw, zlo, zhi, 0.0, 0.08, PAINT_W, "plaster")
+            WL.box(m, s, c + hw, c + hw + 0.1, zlo, zhi, 0.0, 0.08, PAINT_W, "plaster")
+            WL.box(m, s, c - hw, c + hw, zhi - 0.07, zhi, -0.3, -0.18, PAINT_W, "plaster")
+            WL.box(m, s, c - hw, c + hw, zlo, zlo + 0.07, -0.3, -0.18, PAINT_W, "plaster")
+            WL.box(m, s, c - 0.03, c + 0.03, zlo, zhi, -0.3, -0.2, PAINT_W, "plaster")
+            for k in (1, 2):
+                zz = zlo + (zhi - zlo) * k / 3
+                WL.box(m, s, c - hw, c + hw, zz - 0.025, zz + 0.025, -0.3, -0.2, PAINT_W, "plaster")
+            if fl == 0 and (seed + int(c * 7)) % 3 == 0:               # Verdunkelungsband (Papierstreifen) kreuz und quer
+                pa, pb = WL.pt(s, c - hw, zlo, 0.02), WL.pt(s, c + hw, zhi, 0.02)
+                beam(m, pa, pb, 0.07, 0.015, (0.78, 0.70, 0.52), None, up=nm)
+                pa, pb = WL.pt(s, c + hw, zlo, 0.02), WL.pt(s, c - hw, zhi, 0.02)
+                beam(m, pa, pb, 0.07, 0.015, (0.78, 0.70, 0.52), None, up=nm)
+        else:                                              # Tür
+            if zlo > 0.5:
+                WL.box(m, s, c - hw - 0.1, c + hw + 0.1, zlo - 0.1, zlo, 0.0, 0.18, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.16, c - hw, zlo, zhi + 0.1, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c + hw, c + hw + 0.16, zlo, zhi + 0.1, 0.0, 0.1, stone_c, "concrete")
+            WL.box(m, s, c - hw - 0.22, c + hw + 0.22, zhi, zhi + 0.24, 0.0, 0.14, stone_c, "concrete")
+            if zlo < 0.5:
+                WL.box(m, s, c - hw - 0.2, c + hw + 0.2, -0.1, 0.06, 0.0, 0.5, stone_c, "concrete")      # Schwelle
+            # offener Türflügel (Füllungstür, Oberlicht-Rahmen), an die Wand zurückgeschlagen
+            for sg in ((-1, 1) if hw > 1.2 else (1,)):
+                hinge = c + sg * (hw + 0.2)
+                lw = hw * (1.0 if hw > 1.2 else 0.9)
+                a_, b_ = min(hinge, hinge + sg * lw), max(hinge, hinge + sg * lw)
+                WL.box(m, s, a_, b_, zlo + 0.05, zhi - 0.08, 0.14, 0.21, door_c, "wood")
+                for kk in range(2):                                   # Füllungen
+                    zz = zlo + 0.35 + (zhi - zlo - 0.9) * kk / 1.0 * 0.5
+                    WL.box(m, s, a_ + 0.12, b_ - 0.12, zz, zz + (zhi - zlo - 0.9) * 0.45, 0.21, 0.235, tuple(v * 0.8 for v in door_c), "wood")
+                WL.box(m, s, a_ if sg < 0 else b_ - 0.1, b_ if sg > 0 else a_ + 0.1, zlo + 1.0, zlo + 1.12, 0.235, 0.27,
+                       (0.62, 0.56, 0.30), "metal")                   # Messinggriff
+            if fl == 0:                                       # freitragendes Betonvordach, Wandleuchten
+                WL.box(m, s, c - hw - 0.6, c + hw + 0.6, zhi + 0.45, zhi + 0.6, 0.0, 1.25, stone_c, "concrete")
+                WL.box(m, s, c - hw - 0.6, c + hw + 0.6, zhi + 0.6, zhi + 0.72, 1.15, 1.25, tuple(v * 0.8 for v in stone_c), "concrete")
+                for sg in (-1, 1):
+                    q = WL.pt(s, c + sg * (hw + 0.55), zhi - 0.2, 0.22)
+                    beam(m, WL.pt(s, c + sg * (hw + 0.55), zhi - 0.2, 0.0), q, 0.05, 0.05, (0.12, 0.12, 0.12), "metal")
+                    box(lamps, q[0], q[1], q[2] - 0.08, 0.16, 0.16, 0.2, (1.0, 0.82, 0.45))
+    # --- Schild über oder neben der Tür
+    if r.get("sign"):
+        s = r["door"]
+        c = r["dpos"] + (r["w" if s in "NS" else "d"] * 0.0)
+        hw = [o for o in opens if o[5] == "door" and o[0] == s][0][2]
+        cc = c + hw + 1.35
+        a, b = ext[s]
+        if cc + 0.8 > b:
+            cc = c - hw - 1.35
+        sgn = 1 if cc > c else -1
+        h0 = hash(r["sign"]) % 360
+        sc = {"KOMMANDANTUR": (0.30, 0.34, 0.24), "KANTINE": (0.55, 0.30, 0.16), "LAZARETT": (0.88, 0.88, 0.84),
+              "FLUGLEITUNG": (0.25, 0.32, 0.42), "WERKSTATT": (0.55, 0.28, 0.14)}.get(r["sign"], (0.5, 0.4, 0.3))
+        if r["sign"] in ("KANTINE", "LAZARETT", "KOMMANDANTUR"):
+            zc = 3.0
+            beam(m, WL.pt(s, cc - sgn * 0.7, zc + 0.45, 0.0), WL.pt(s, cc - sgn * 0.7, zc + 0.45, 1.25), 0.07, 0.07, (0.14, 0.12, 0.10),
+                 "metal", up=t_)
+            beam(m, WL.pt(s, cc - sgn * 0.7, zc + 0.45, 1.2), WL.pt(s, cc + sgn * 0.5, zc + 0.45, 1.2), 0.07, 0.07, (0.14, 0.12, 0.10),
+                 "metal", up=(0.0, 0.0, 1.0))
+            WL.box(m, s, min(cc - 0.1, cc + sgn * 0.5 - 0.1) - 0.0, max(cc - 0.1, cc + sgn * 0.5) + 0.0, zc - 0.4, zc + 0.4, 1.12, 1.2,
+                   sc, "wood")
+            WL.box(m, s, cc - 0.28, cc + 0.28, zc - 0.28, zc + 0.28, 1.2, 1.24, tuple(min(1, v * 1.3) for v in sc), "wood")
+            if r["sign"] == "LAZARETT":                                   # rotes Kreuz
+                WL.box(m, s, cc - 0.2, cc + 0.2, zc - 0.07, zc + 0.07, 1.24, 1.26, (0.75, 0.10, 0.10), "wood")
+                WL.box(m, s, cc - 0.07, cc + 0.07, zc - 0.2, zc + 0.2, 1.24, 1.26, (0.75, 0.10, 0.10), "wood")
+        else:
+            zc = 3.1
+            WL.box(m, s, cc - 1.3, cc + 1.3, zc - 0.28, zc + 0.28, 0.06, 0.14, sc, "metal")
+            WL.box(m, s, cc - 1.18, cc + 1.18, zc - 0.17, zc + 0.17, 0.14, 0.17, tuple(min(1, v * 1.5) for v in sc), "metal")
+    # --- Dach
+    rx, rise = r["ridge"], r["rise"]
+    if r["flat"]:
+        wd = (0.50, 0.52, 0.55)
+        for s in sides:
+            a, b = ext[s]
+            WL.box(m, s, a - 0.25, b + 0.25, H - 0.22, H + 0.02, 0.0, 0.25, stone_c, "stone")
+        box(m, x, y, H + 1.45, 1.6, 1.0, 0.7, (0.55, 0.57, 0.6), None, "metal", False)
+        beam(m, (x + 3.0, y + 1.0, H + 1.2), (x + 3.0, y + 1.0, H + 4.8), 0.12, 0.12, (0.30, 0.32, 0.35), "metal")
+        for k in range(3):
+            beam(m, (x + 3.0 - 0.8, y + 1.0, H + 3.0 + k * 0.5), (x + 3.0 + 0.8, y + 1.0, H + 3.0 + k * 0.5), 0.07, 0.07,
+                 (0.30, 0.32, 0.35), "metal")
+        if r.get("sign") == "FLUGLEITUNG":
+            ell(m, (x - 3.0, y - 1.0, H + 2.3), 1.2, 1.2, 0.35, (0.88, 0.88, 0.9), None, "metal")
+            beam(m, (x - 3.0, y - 1.0, H + 1.0), (x - 3.0, y - 1.0, H + 2.2), 0.14, 0.14, (0.4, 0.4, 0.42), "metal")
+    else:
+        roof_gable(m, r, rng, ext, roof, trim, col, hr)
+    if r["chim"]:
+        cx0, cy0, cx1, cy1 = r["chim"]
+        top = H + rise + 1.1
+        box(m, (cx0 + cx1) / 2, (cy0 + cy1) / 2, top + 0.12, cx1 - cx0 + 0.24, cy1 - cy0 + 0.24, 0.26, stone_c, None, "concrete", False)
+        for dx_, dy_ in ((-0.2, -0.2), (0.2, 0.2), (-0.2, 0.2), (0.2, -0.2)):
+            prism(m, (cx0 + cx1) / 2 + dx_ * (cx1 - cx0) * 0.6, (cy0 + cy1) / 2 + dy_ * (cy1 - cy0) * 0.6, top + 0.24, 0.1, 0.38, 6,
+                  (0.52, 0.30, 0.22), hr)
+    # --- Fässer / Kisten an Läden
+    if r.get("sign") in ("KANTINE", "LAZARETT", "WERKSTATT"):
+        s = r["door"]
+        a, b = ext[s]
+        c = r["dpos"]
+        for k, off in enumerate((-2.6, 2.8)):
+            cc = c + off
+            if not (a + 0.6 < cc < b - 0.6):
+                continue
+            p = WL.pt(s, cc, 0.0, 0.7)
+            if r["sign"] == "WERKSTATT":
+                box(m, p[0], p[1], 0.45, 0.9, 0.9, 0.9, WOOD_M, None, "wood", False)
+                box(m, p[0], p[1], 1.25, 0.7, 0.7, 0.7, WOOD_D, None, "wood", False)
+            else:
+                prism(m, p[0], p[1], 0.0, 0.3, 0.88, 10, (0.30, 0.37, 0.26), hr, 1.0)                    # Ölfass
+                for zz in (0.1, 0.42, 0.78):
+                    prism(m, p[0], p[1], zz, 0.32, 0.05, 10, (0.20, 0.24, 0.17), hr, 1.0)
+
+
+def roof_gable(m, r, rng, ext, roof, trim, col, hr):
+    x, y, w, d, H, rise = r["x"], r["y"], r["w"], r["d"], r["H"], r["rise"]
+    rx = r["ridge"]
+    u0, u1 = (x - w / 2, x + w / 2) if rx == "x" else (y - d / 2, y + d / 2)
+    span = d if rx == "x" else w
+    v0 = y if rx == "x" else x
+    ov = 0.55
+    e = span / 2 + 0.55
+    zb = H - 0.15
+
+    def P(u, v, z):
+        return (u, v0 + v, z) if rx == "x" else (v0 + v, u, z)
+
+    def plane(v):
+        return zb + (rise + 0.15) * (1.0 - abs(v) / e)
+
+    nrow = max(3, int(round(e / 0.42)))
+    ncol = max(3, int(round((u1 - u0 + 2 * ov) / 1.0)))
+    uu = [u0 - ov + (u1 - u0 + 2 * ov) * k / ncol for k in range(ncol + 1)]
+    for sg in (-1, 1):
+        ref = P((u0 + u1) / 2, sg * e * 0.5, H - 1.5)
+        for i in range(nrow):
+            va, vb = e * (1 - i / nrow) * sg, e * (1 - (i + 1) / nrow) * sg
+            za, zbb = plane(va), plane(vb)
+            lip = 0.05 if i < nrow - 1 else 0.0
+            shade = 0.86 + 0.14 * ((i * 7) % 3) / 2
+            for k in range(ncol):
+                cc = jc(tuple(v * shade for v in roof), hr, 0.05)
+                a, b2 = P(uu[k], va, za), P(uu[k + 1], va, za)
+                c2, d2 = P(uu[k + 1], vb, zbb + lip), P(uu[k], vb, zbb + lip)
+                quadf(m, a, b2, c2, d2, cc, ref, "roof")
+                if lip:
+                    quadf(m, P(uu[k], vb, zbb + lip), P(uu[k + 1], vb, zbb + lip), P(uu[k + 1], vb, zbb - 0.01),
+                          P(uu[k], vb, zbb - 0.01), tuple(v * 0.55 for v in cc), ref, "roof")
+        # Traufbrett und Untersicht
+        a0, a1 = P(u0 - ov, sg * e, plane(e)), P(u1 + ov, sg * e, plane(e))
+        beam(m, (a0[0], a0[1], a0[2] - 0.08), (a1[0], a1[1], a1[2] - 0.08), 0.16, 0.12, trim, "wood", up=(0.0, 0.0, 1.0))
+        so = P(u0 - ov, sg * span / 2, H - 0.1), P(u1 + ov, sg * span / 2, H - 0.1)
+        quadf(m, P(u0 - ov, sg * e, plane(e) - 0.12), P(u1 + ov, sg * e, plane(e) - 0.12), so[1], so[0], tuple(v * 0.5 for v in trim),
+              P((u0 + u1) / 2, sg * e, H + 4.0), "wood")
+        # Sparrenköpfe
+        nr = int((u1 - u0) / 0.9)
+        for k in range(nr + 1):
+            uc = u0 + (u1 - u0) * k / max(1, nr)
+            q = P(uc, sg * (e - 0.05), plane(e) - 0.2)
+            box(m, q[0], q[1], q[2], 0.1 if rx == "y" else 0.12, 0.12 if rx == "y" else 0.1, 0.1, trim, None, "wood", False)
+    # First
+    pa, pb = P(u0 - ov, 0.0, H + rise + 0.1), P(u1 + ov, 0.0, H + rise + 0.1)
+    beam(m, pa, pb, 0.46, 0.2, tuple(v * 0.75 for v in roof), "roof")
+    # Giebel
+    for u, sgn_u in ((u0, -1), (u1, 1)):
+        gc = col
+        hh = span / 2
+        zt = H + rise * (1.0 - 0.0)
+        a, b2, c2 = P(u, -hh, H - 0.1), P(u, hh, H - 0.1), P(u, 0.0, H + rise * 0.99)
+        ref = P(u - sgn_u * 3.0, 0.0, H)
+        m.tri(a, b2, c2, jc(gc, hr, 0.03), ref, mat=mat_for_color(col))
+        # Windbretter an den Dachkanten
+        for sg in (-1, 1):
+            q0, q1 = P(u + sgn_u * (ov + 0.04), sg * e, plane(e) - 0.05), P(u + sgn_u * (ov + 0.04), 0.0, H + rise + 0.2)
+            beam(m, q0, q1, 0.2, 0.08, trim, "wood", up=(0.0, 0.0, 1.0) if rx == "x" else (0.0, 0.0, 1.0))
+        # Dachbodenfenster
+        pw = P(u + sgn_u * 0.06, 0.0, H + rise * 0.42)
+        if rx == "x":
+            box(m, pw[0], pw[1], pw[2], 0.12, 1.1, 0.95, trim, None, "wood", False)
+            box(m, pw[0] + 0.02 * sgn_u, pw[1], pw[2], 0.08, 0.8, 0.75, (0.10, 0.11, 0.14), None, None, False)
+        else:
+            box(m, pw[0], pw[1], pw[2], 1.1, 0.12, 0.95, trim, None, "wood", False)
+            box(m, pw[0], pw[1] + 0.02 * sgn_u, pw[2], 0.8, 0.08, 0.75, (0.10, 0.11, 0.14), None, None, False)
+    # Gauben (Fassadenseite)
+    if r["n"] >= 2 and span >= 7.5 and hr.random() < 0.75:
+        for sg in (-1, 1):
+            if (sg == 1) == (r["door"] in "NE"):
+                continue
+            nd = 2 if (u1 - u0) > 11 else 1
+            for k in range(nd):
+                uc = (u0 + u1) / 2 + ((k - (nd - 1) / 2) * 5.0)
+                vv = sg * e * 0.52
+                zbase = plane(vv)
+                gw, gd, gh = 0.9, 1.1, 1.0
+                for sa in (-1, 1):
+                    q = P(uc + sa * gw, vv, zbase)
+                    box(m, q[0], q[1], zbase + gh / 2 - 0.1, 0.16, 0.16, gh + 0.2, col, None, mat_for_color(col), False)
+                fr = P(uc, vv + sg * 0.05, zbase + gh / 2 - 0.1)
+                box(m, fr[0], fr[1], fr[2], 2 * gw, 0.16, gh + 0.2, col, None, mat_for_color(col), False) if rx == "x" else \
+                    box(m, fr[0], fr[1], fr[2], 0.16, 2 * gw, gh + 0.2, col, None, mat_for_color(col), False)
+                wp = P(uc, vv + sg * 0.14, zbase + gh / 2 - 0.1)
+                if rx == "x":
+                    box(m, wp[0], wp[1], wp[2], 1.1, 0.06, 0.62, (0.10, 0.11, 0.14))
+                else:
+                    box(m, wp[0], wp[1], wp[2], 0.06, 1.1, 0.62, (0.10, 0.11, 0.14))
+                # kleines Satteldach der Gaube
+                ra = P(uc - gw - 0.25, vv + sg * 0.1, zbase + gh + 0.05)
+                rb = P(uc + gw + 0.25, vv + sg * 0.1, zbase + gh + 0.05)
+                rr = P(uc, vv - sg * 0.5, zbase + gh + 0.7)
+                m.tri(ra, rb, rr, tuple(v * 0.9 for v in roof), P(uc, vv, zbase - 1.0), mat="roof")
+                m.tri(rb, ra, P(uc + 0, vv - sg * 0.5, zbase + gh + 0.7), tuple(v * 0.7 for v in roof), P(uc, vv, zbase + 3.0), mat="roof")
+
+
+def _spire(m, cx, cy, z0, r, h, col, hr, sides=4):
+    ap = (cx, cy, z0 + h)
+    rg = [(cx + math.cos(2 * math.pi * i / sides + math.pi / 4) * r, cy + math.sin(2 * math.pi * i / sides + math.pi / 4) * r, z0)
+          for i in range(sides)]
+    for i in range(sides):
+        j = (i + 1) % sides
+        m.tri(rg[i], rg[j], ap, jc(col, hr, 0.04), (cx, cy, z0 + h * 0.3), mat="roof")
+
+
+CONC_D = (0.47, 0.47, 0.49)          # dunkler Beton (Brüstungen, Sockel)
+WALL_C = (0.64, 0.62, 0.57)          # Radarstation: helles Betongrau mit warmem Stich
+WALL_CD = (0.52, 0.50, 0.46)
+WIRE_C = (0.16, 0.16, 0.17)
+for _c in (CONC_D, WALL_C, WALL_CD):
+    _MATC[tuple(round(v, 3) for v in _c)] = "concrete"
+
+
+class _SpinMesh(Mesh):
+    """Mesh für drehende Teile: die Beleuchtung ist nicht an die Drehlage gebunden (gleichmässig, ohne Sonnenrichtung)."""
+
+    def tri(self, a, b, c, col, ref=None, vk=None, mat=None, uv=None, nd=None):
+        super().tri(a, b, c, col, ref, vk, mat, uv, nd if nd is not None else (0.45, 0.45, 0.45))
+
+
+def radar_dish(m, R=5.9, depth=1.8, elev=50.0, hz=4.4):
+    """Grosse Parabolschüssel (Würzburg-Riese) auf Drehkranz: Koordinaten relativ zum Drehpunkt auf dem Dach (Blickrichtung +y)."""
+    e = math.radians(elev)
+    d = (0.0, math.cos(e), math.sin(e))
+    u = (1.0, 0.0, 0.0)
+    v = (0.0, -math.sin(e), math.cos(e))
+    f = R * R / (4.0 * depth)
+    C = (0.0, 0.8, hz)
+
+    def P(r, phi, off=0.0):
+        z_ = r * r / (4.0 * f)
+        rc, rs = r * math.cos(phi), r * math.sin(phi)
+        return (C[0] + u[0] * rc + v[0] * rs + d[0] * (z_ + off), C[1] + u[1] * rc + v[1] * rs + d[1] * (z_ + off),
+                C[2] + u[2] * rc + v[2] * rs + d[2] * (z_ + off))
+
+    N, K = 28, 6
+    back = (C[0] - d[0] * 4.0, C[1] - d[1] * 4.0, C[2] - d[2] * 4.0)
+    front = (C[0] + d[0] * f, C[1] + d[1] * f, C[2] + d[2] * f)
+    inner_c, outer_c, rim_c = (0.80, 0.82, 0.84), (0.55, 0.57, 0.59), (0.36, 0.38, 0.40)
+    for k in range(K):
+        r0, r1 = R * k / K, R * (k + 1) / K
+        for i in range(N):
+            p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+            sh = 0.92 + 0.08 * ((i + k) % 2)
+            ci = tuple(c * sh for c in inner_c)
+            co = tuple(c * sh for c in outer_c)
+            if k == 0:
+                m.tri(P(0, 0), P(r1, p0), P(r1, p1), ci, back, mat="metal")
+                m.tri(P(0, 0, -0.12), P(r1, p0, -0.12), P(r1, p1, -0.12), co, front, mat="metal")
+            else:
+                a, b, c2, d2 = P(r0, p0), P(r1, p0), P(r1, p1), P(r0, p1)
+                quadf(m, a, b, c2, d2, ci, back, "metal")
+                a, b, c2, d2 = P(r0, p0, -0.12), P(r1, p0, -0.12), P(r1, p1, -0.12), P(r0, p1, -0.12)
+                quadf(m, a, b, c2, d2, co, front, "metal")
+    for i in range(N):                                         # Randwulst
+        p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+        beam(m, P(R, p0, -0.05), P(R, p1, -0.05), 0.2, 0.2, rim_c, "metal", up=d)
+        quadf(m, P(R, p0), P(R, p1), P(R, p1, -0.12), P(R, p0, -0.12), outer_c, (C[0], C[1], C[2]), "metal")
+    for i in range(8):                                         # Rippen auf der Rückseite
+        phi = 2 * math.pi * i / 8
+        beam(m, P(0.3, phi, -0.2), P(R * 0.97, phi, -0.2), 0.16, 0.16, rim_c, "metal", up=d)
+    for r_ in (R * 0.35, R * 0.68):
+        for i in range(N):
+            p0, p1 = 2 * math.pi * i / N, 2 * math.pi * (i + 1) / N
+            beam(m, P(r_, p0, -0.2), P(r_, p1, -0.2), 0.1, 0.1, rim_c, "metal", up=d)
+    # Dipol-Erreger im Brennpunkt, Streben vom Rand
+    fh = P(0, 0, f)
+    for i in range(4):
+        phi = math.pi / 4 + i * math.pi / 2
+        beam(m, P(R, phi, -0.05), fh, 0.12, 0.12, rim_c, "metal", up=d)
+    obox(m, fh, u, d, v, 0.28, 0.32, 0.28, (0.30, 0.31, 0.33), "metal")
+    beam(m, (fh[0] - 0.5, fh[1], fh[2]), (fh[0] + 0.5, fh[1], fh[2]), 0.07, 0.07, (0.85, 0.85, 0.85), "metal")
+    # Drehgestell: Plattform, zwei Böcke, Achse, Kabine
+    for sx in (-1, 1):
+        beam(m, (sx * 1.25, 0.8, 0.45), (sx * 1.25, 0.8, hz + 0.1), 0.34, 0.34, (0.40, 0.42, 0.40), "metal")
+        beam(m, (sx * 1.25, 0.8, hz), (sx * 0.2, 0.8 + 0.2, hz - 0.1), 0.16, 0.16, rim_c, "metal")
+        beam(m, (sx * 1.25, 0.1, 0.45), (sx * 1.25, 0.8, hz - 0.6), 0.2, 0.2, (0.40, 0.42, 0.40), "metal")
+        beam(m, (sx * 1.25, 1.5, 0.45), (sx * 1.25, 0.8, hz - 0.6), 0.2, 0.2, (0.40, 0.42, 0.40), "metal")
+    beam(m, (-1.4, 0.8, hz), (1.4, 0.8, hz), 0.3, 0.3, (0.34, 0.35, 0.37), "metal")
+    box(m, 0.0, 0.8, 0.28, 3.4, 2.2, 0.5, (0.38, 0.40, 0.38), None, "metal", False)
+    prism(m, 0.0, 0.8, -0.05, 1.7, 0.2, 14, (0.34, 0.35, 0.36), random.Random(3), 1.0)
+    box(m, 0.0, -1.2, 1.15, 1.9, 1.6, 1.5, OLIVE, None, "metal", False)             # Gerätekabine hinter der Schüssel
+    box(m, 0.0, -2.05, 1.15, 1.4, 0.08, 1.0, (0.20, 0.22, 0.20), None, "metal", False)
+
+
+def freya_array(m, W=5.4, Hh=3.2, mast=4.2):
+    """Frühwarn-Antenne (Freya): Gittermast mit Dipolwand, dreht sich auf dem Turm."""
+    leg = 0.9
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            beam(m, (sx * leg, sy * leg, 0.0), (sx * 0.28, sy * 0.28, mast), 0.13, 0.13, (0.55, 0.57, 0.58), "metal")
+    for k in range(1, 4):
+        z = mast * k / 4
+        rr = leg - (leg - 0.28) * k / 4
+        for a, b in (((-1, -1), (1, -1)), ((1, -1), (1, 1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1))):
+            beam(m, (a[0] * rr, a[1] * rr, z), (b[0] * rr, b[1] * rr, z), 0.07, 0.07, (0.5, 0.52, 0.53), "metal")
+    z0 = mast + 0.2
+    beam(m, (0, 0, 0), (0, 0, z0 + Hh / 2), 0.18, 0.18, (0.45, 0.46, 0.48), "metal")
+    fr = (0.62, 0.64, 0.66)
+    for sx in (-1, 1):
+        beam(m, (sx * W / 2, 0.0, z0), (sx * W / 2, 0.0, z0 + Hh), 0.14, 0.14, fr, "metal")
+    for zz in (z0, z0 + Hh):
+        beam(m, (-W / 2, 0.0, zz), (W / 2, 0.0, zz), 0.14, 0.14, fr, "metal")
+    nrow, ncol = 4, 7
+    for r_ in range(nrow):
+        zz = z0 + Hh * (r_ + 0.5) / nrow
+        beam(m, (-W / 2, 0.0, zz), (W / 2, 0.0, zz), 0.05, 0.05, (0.55, 0.57, 0.58), "metal")
+        for c_ in range(ncol):
+            xx = -W / 2 + W * (c_ + 0.5) / ncol
+            beam(m, (xx - 0.28, 0.35, zz), (xx + 0.28, 0.35, zz), 0.06, 0.06, (0.88, 0.88, 0.86), "metal")
+            beam(m, (xx, 0.0, zz), (xx, 0.35, zz), 0.04, 0.04, (0.5, 0.5, 0.5), "metal")
+    for c_ in range(ncol + 1):                                  # Reflektorgitter dahinter
+        xx = -W / 2 + W * c_ / ncol
+        beam(m, (xx, -0.12, z0), (xx, -0.12, z0 + Hh), 0.03, 0.03, (0.36, 0.38, 0.40), "metal")
+    for r_ in range(nrow * 2 + 1):
+        zz = z0 + Hh * r_ / (nrow * 2)
+        beam(m, (-W / 2, -0.12, zz), (W / 2, -0.12, zz), 0.03, 0.03, (0.36, 0.38, 0.40), "metal")
+    box(m, 0.0, -0.9, z0 + 0.7, 1.2, 0.9, 1.1, OLIVE, None, "metal", False)     # Gegengewicht / Gerät
+
+
+def tower_details(m, r, hr):
+    """Uhrenturm der Kommandantur: Zifferblätter, Schallöffnungen, flaches Betonkapitell, Funkmast."""
+    tx, ty, ts, th = r["tower"]
+    H = r["H"]
+    hs = ts / 2
+    z_clock = H + th * 0.5
+    for sx, sy, ax in ((0, -1, "y"), (0, 1, "y"), (-1, 0, "x"), (1, 0, "x")):
+        pc = (tx + sx * (hs + 0.05), ty + sy * (hs + 0.05), z_clock)
+        ux = (1.0, 0.0, 0.0) if sy else (0.0, 1.0, 0.0)
+        nn = (float(sx), float(sy), 0.0)
+        obox(m, pc, ux, nn, (0.0, 0.0, 1.0), 1.15, 0.05, 1.15, (0.14, 0.14, 0.15), "metal")
+        obox(m, (pc[0] + nn[0] * 0.04, pc[1] + nn[1] * 0.04, pc[2]), ux, nn, (0.0, 0.0, 1.0), 0.98, 0.04, 0.98, (0.93, 0.92, 0.86))
+        for k in range(12):
+            a = k * math.pi / 6
+            q = (pc[0] + nn[0] * 0.1 + ux[0] * math.sin(a) * 0.82, pc[1] + nn[1] * 0.1 + ux[1] * math.sin(a) * 0.82,
+                 pc[2] + math.cos(a) * 0.82)
+            obox(m, q, ux, nn, (0.0, 0.0, 1.0), 0.05, 0.03, 0.1 if k % 3 == 0 else 0.06, (0.1, 0.1, 0.1))
+        beam(m, (pc[0] + nn[0] * 0.12, pc[1] + nn[1] * 0.12, pc[2]),
+             (pc[0] + nn[0] * 0.12 + ux[0] * 0.3, pc[1] + nn[1] * 0.12 + ux[1] * 0.3, pc[2] + 0.62), 0.07, 0.03, (0.08, 0.08, 0.08),
+             up=nn)
+        beam(m, (pc[0] + nn[0] * 0.12, pc[1] + nn[1] * 0.12, pc[2]),
+             (pc[0] + nn[0] * 0.12 - ux[0] * 0.45, pc[1] + nn[1] * 0.12 - ux[1] * 0.45, pc[2] - 0.25), 0.06, 0.03, (0.08, 0.08, 0.08),
+             up=nn)
+        # Lamellenfenster
+        pb = (tx + sx * (hs + 0.03), ty + sy * (hs + 0.03), H + th - 1.5)
+        obox(m, pb, ux, nn, (0.0, 0.0, 1.0), 0.55, 0.04, 0.8, (0.08, 0.08, 0.10), "metal")
+        for k in range(6):
+            obox(m, (pb[0] + nn[0] * 0.07, pb[1] + nn[1] * 0.07, pb[2] - 0.65 + k * 0.26), ux, nn, (0.0, 0.0, 1.0), 0.6, 0.06, 0.04,
+                 (0.66, 0.65, 0.62), "concrete")
+    box(m, tx, ty, H + th - 0.2, ts + 0.5, ts + 0.5, 0.4, (0.66, 0.65, 0.62), None, "concrete", False)
+    box(m, tx, ty, H + th + 0.1, ts + 0.7, ts + 0.7, 0.2, (0.66, 0.65, 0.62), None, "concrete", False)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            beam(m, (tx + sx * hs * 1.15, ty + sy * hs * 1.15, H + th + 0.2), (tx + sx * hs * 1.15, ty + sy * hs * 1.15, H + th + 0.9),
+                 0.1, 0.1, WIRE_C, "metal")
+    for a_, b_ in (((-1, -1), (1, -1)), ((1, -1), (1, 1)), ((1, 1), (-1, 1)), ((-1, 1), (-1, -1))):
+        beam(m, (tx + a_[0] * hs * 1.15, ty + a_[1] * hs * 1.15, H + th + 0.85), (tx + b_[0] * hs * 1.15, ty + b_[1] * hs * 1.15, H + th + 0.85),
+             0.06, 0.06, (0.55, 0.57, 0.58), "metal")
+    # Funkmast mit Querträgern
+    beam(m, (tx, ty, H + th + 0.3), (tx, ty, H + th + 7.5), 0.14, 0.14, (0.55, 0.57, 0.58), "metal")
+    for k, ln in enumerate((1.8, 1.3, 0.9)):
+        zz = H + th + 4.0 + k * 1.4
+        beam(m, (tx - ln, ty, zz), (tx + ln, ty, zz), 0.06, 0.06, (0.55, 0.57, 0.58), "metal")
+    for dx_, dy_ in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        beam(m, (tx + dx_ * hs * 1.1, ty + dy_ * hs * 1.1, H + th + 0.3), (tx, ty, H + th + 5.5), 0.03, 0.03, WIRE_C, "metal")
+    box(m, tx, ty, H + th + 7.6, 0.2, 0.2, 0.2, (0.95, 0.15, 0.1), None, None, False)
+
+
+def nissen_details(m, lamps, r, hr):
+    """Nissenhütte: Wellblech-Halbtonne mit Rippen, Stirnwände mit Tür und Fenster, Ofenrohr."""
+    x, y, L, R, H0, door = r["x"], r["y"], r["L"], r["R"], r["H0"], r["door"]
+    xa, xb = x - L / 2, x + L / 2
+    N = 16
+    zin = lambda u: H0 * math.sqrt(max(0.0, 1.0 - (u / R) ** 2))        # noqa: E731
+    shell = (0.50, 0.53, 0.48)
+    nl = int(L / 1.0)
+    inside = (x, y, 0.8)
+    for j in range(N):
+        a0, a1 = math.pi * j / N, math.pi * (j + 1) / N
+        u0, z0 = R * math.cos(a0), H0 * math.sin(a0)
+        u1, z1 = R * math.cos(a1), H0 * math.sin(a1)
+        sh = 0.92 + 0.08 * (j % 2)
+        for k in range(nl):
+            xs0, xs1 = xa + L * k / nl, xa + L * (k + 1) / nl
+            quadf(m, (xs0, y + u0, z0), (xs1, y + u0, z0), (xs1, y + u1, z1), (xs0, y + u1, z1), jc(tuple(c * sh for c in shell), hr, 0.03),
+                  inside, "corrug")
+    for k in range(int(L / 1.6) + 1):                                          # Spanten aussen
+        xx = xa + L * k / int(L / 1.6)
+        for j in range(N):
+            a0, a1 = math.pi * j / N, math.pi * (j + 1) / N
+            beam(m, (xx, y + (R + 0.04) * math.cos(a0), (H0 + 0.04) * math.sin(a0)),
+                 (xx, y + (R + 0.04) * math.cos(a1), (H0 + 0.04) * math.sin(a1)), 0.12, 0.07, (0.24, 0.26, 0.22), "metal", up=(1.0, 0.0, 0.0))
+    for sd in (-1, 1):                                                         # Fundamentstreifen
+        box(m, x, y + sd * (R + 0.05), 0.12, L, 0.2, 0.35, (0.55, 0.54, 0.52), None, "concrete", False)
+    # Stirnseiten: Fläche aus Streifen, Tür-Öffnung freilassen
+    for xe, dr in ((xa, door == "W"), (xb, door == "E")):
+        nstr = 16
+        sx_ = -1 if xe == xa else 1
+        for i in range(nstr):
+            ua, ub = -R + 2 * R * i / nstr, -R + 2 * R * (i + 1) / nstr
+            zb = 2.3 if (dr and abs((ua + ub) / 2) < 1.0) else 0.0
+            za, zb2 = zin(abs(ua)), zin(abs(ub))
+            if za <= zb and zb2 <= zb:
+                continue
+            col = jc((0.58, 0.30, 0.22), hr, 0.04)
+            quadf(m, (xe, y + ua, zb), (xe, y + ub, zb), (xe, y + ub, max(zb, zb2)), (xe, y + ua, max(zb, za)), col,
+                  (xe - sx_ * 2.0, y, 1.0), "brick")
+        if dr:
+            hx = xe + sx_ * 0.04
+            fc = _DOORC[r["seed"] % 4]
+            for dy_ in (-1.0, 1.0):
+                box(m, hx, y + dy_, 1.15, 0.12, 0.14, 2.3, PAINT_W, None, "plaster", False)
+            box(m, hx, y, 2.35, 0.12, 2.3, 0.14, PAINT_W, None, "plaster", False)
+            box(m, xe + sx_ * 0.05, y + 0.7, 1.15, 0.1, 0.9, 2.2, fc, None, "wood", False)           # angelehnter Türflügel
+            box(m, xe + sx_ * 0.4, y, 0.06, 1.0, 2.4, 0.12, (0.60, 0.58, 0.55), None, "concrete", False)
+            box(lamps, xe + sx_ * 0.12, y - 1.35, 2.2, 0.16, 0.16, 0.2, (1.0, 0.82, 0.45))
+        else:
+            for dy_ in (-0.9, 0.9):                                                                   # kleine Fenster
+                box(m, xe + sx_ * 0.04, y + dy_, 1.5, 0.08, 0.8, 0.9, (0.07, 0.09, 0.11), None, None, False)
+                box(m, xe + sx_ * 0.06, y + dy_, 1.5, 0.06, 0.95, 1.05, PAINT_W, None, "plaster", False)
+    # Ofenrohr
+    px = x + (L * 0.2 if door == "E" else -L * 0.2)
+    beam(m, (px, y + 0.4, H0 - 0.2), (px, y + 0.4, H0 + 1.1), 0.22, 0.22, (0.12, 0.12, 0.12), "metal")
+    prism(m, px, y + 0.4, H0 + 1.1, 0.22, 0.12, 8, (0.10, 0.10, 0.10), hr, 1.0)
+
+
+def stall_details(m, rec, hr):
+    """Versorgungsstand: Planen, Munitions- und Benzinkanister, Sandsäcke vorn."""
+    x, y, w, d, ax = rec["x"], rec["y"], rec["w"], rec["d"], rec["along_x"]
+    n = 4
+    for k in range(n):
+        if ax:
+            px, py = x - w / 2 + 0.5 + (w - 1.0) * (k + 0.5) / n, y - d / 2 + 0.5
+        else:
+            px, py = x - w / 2 + 0.5, y - d / 2 + 0.5 + (d - 1.0) * (k + 0.5) / n
+        if (k + int(x)) % 2 == 0:
+            box(m, px, py, 1.2, 0.5, 0.3, 0.38, OLIVE, None, "metal", False)                 # Munitionskiste
+            box(m, px, py, 1.4, 0.54, 0.34, 0.04, (0.20, 0.24, 0.17), None, "metal", False)
+        else:
+            box(m, px, py, 1.2, 0.42, 0.14, 0.4, (0.40, 0.34, 0.16), None, "metal", False)   # Kanister
+            box(m, px, py, 1.42, 0.14, 0.08, 0.08, (0.2, 0.2, 0.2), None, "metal", False)
+    if ax:                                                  # Sandsack-Reihe vor dem Tresen
+        for k in range(8):
+            px = x - w / 2 + w * (k + 0.5) / 8
+            box(m, px, y - d / 2 - 0.15, 0.2, 0.42, 0.3, 0.3, jc(SANDBAG, hr, 0.05), None, "cloth", False)
+
+
+def fountain_details(m, rec, hr, water):
+    """Löschwasserbecken mit Betonrand, Pumpe und Fahnenmast in der Mitte."""
+    x, y, s = rec["x"], rec["y"], rec["s"]
+    quadf(water, (x - s + 0.5, y - s + 0.5, 0.62), (x + s - 0.5, y - s + 0.5, 0.62), (x + s - 0.5, y + s - 0.5, 0.62),
+          (x - s + 0.5, y + s - 0.5, 0.62), (0.16, 0.40, 0.55, 0.85), (x, y, -1.0))
+    box(m, x, y, 0.92, 2 * s + 0.4, 2 * s + 0.4, 0.14, (0.66, 0.65, 0.62), None, "concrete", False)
+    prism(m, x, y, 0.0, 1.15, 0.6, 12, CONC_D, hr, 0.9)                 # Sockel um den Mast
+    prism(m, x, y, 0.6, 0.55, 0.5, 10, (0.66, 0.65, 0.62), hr, 0.9)
+    for dx_, dy_ in ((-1.6, -1.6), (1.6, 1.6)):                         # Handpumpen
+        beam(m, (x + dx_, y + dy_, 0.9), (x + dx_, y + dy_, 1.9), 0.14, 0.14, (0.22, 0.30, 0.22), "metal")
+        beam(m, (x + dx_, y + dy_, 1.8), (x + dx_ + 0.5, y + dy_, 1.7), 0.07, 0.07, (0.2, 0.2, 0.2), "metal")
+    for k in range(8):                                                   # Betonpoller am Becken
+        a = k * math.pi / 4 + math.pi / 8
+        prism(m, x + math.cos(a) * (s * 1.5), y + math.sin(a) * (s * 1.5), 0.0, 0.2, 0.55, 6, CONC_D, hr, 0.85)
+
+
+def well_details(m, rec, hr):
+    """Löschwasserbehälter im Hof: Betonrand, Wasserfläche, Deckel, Handpumpe."""
+    x, y = rec["x"], rec["y"]
+    quadf(m, (x - 0.7, y - 0.7, 0.55), (x + 0.7, y - 0.7, 0.55), (x + 0.7, y + 0.7, 0.55), (x - 0.7, y + 0.7, 0.55), (0.08, 0.18, 0.26),
+          (x, y, -1.0))
+    box(m, x, y, 0.97, 2.4, 2.4, 0.08, (0.66, 0.65, 0.62), None, "concrete", False)
+    box(m, x - 0.45, y, 1.02, 0.9, 1.2, 0.07, (0.30, 0.34, 0.28), None, "metal", False)              # Stahldeckel
+    beam(m, (x + 0.6, y + 0.6, 0.95), (x + 0.6, y + 0.6, 2.0), 0.14, 0.14, (0.22, 0.30, 0.22), "metal")
+    beam(m, (x + 0.6, y + 0.6, 1.9), (x + 1.2, y + 0.6, 1.75), 0.07, 0.07, (0.2, 0.2, 0.2), "metal")
+    for dx_ in (-1, 1):
+        box(m, x + dx_ * 1.0, y - 1.25, 0.5, 0.45, 0.45, 0.9, (0.30, 0.37, 0.26), None, "metal", False)   # Fässer
+
+
+def _truss(m, xa, xb, y_a, y_b, ht, col, nseg, side):
+    """Fachwerkträger (Bailey) entlang y von y_a nach y_b bei x=xa..xb (Breite des Trägers), Höhe ht."""
+    L = y_b - y_a
+    xm = (xa + xb) / 2
+    wd = abs(xb - xa)
+    beam(m, (xm, y_a, 0.02), (xm, y_b, 0.02), wd, 0.22, col, "metal", up=(1.0, 0.0, 0.0))
+    beam(m, (xm, y_a, ht), (xm, y_b, ht), wd, 0.2, col, "metal", up=(1.0, 0.0, 0.0))
+    for k in range(nseg + 1):
+        yy = y_a + L * k / nseg
+        beam(m, (xm, yy, 0.0), (xm, yy, ht), wd, 0.16, col, "metal", up=(1.0, 0.0, 0.0))
+    for k in range(nseg):
+        y0_, y1_ = y_a + L * k / nseg, y_a + L * (k + 1) / nseg
+        a, b = ((y0_, 0.1), (y1_, ht - 0.1)) if (k + side) % 2 == 0 else ((y0_, ht - 0.1), (y1_, 0.1))
+        beam(m, (xm, a[0], a[1]), (xm, b[0], b[1]), wd * 0.85, 0.11, col, "metal", up=(1.0, 0.0, 0.0))
+
+
+def bridge_details(m, lamps, rec, hr, world):
+    """Brücken über den Graben: Bailey-Fachwerkbrücke (Nord), Betonbrücke (Süd), Betondämme über dem Tunnel (West/Ost)."""
+    st = rec["style"]
+    x0, x1, y0, y1 = rec["x0"], rec["x1"], rec["y0"], rec["y1"]
+    steel, deck_c = (0.36, 0.40, 0.34), (0.33, 0.33, 0.34)
+    if rec["axis"] == "y":
+        sgn = rec["dir"]
+        cx = (x0 + x1) / 2
+        ya, yb = (y0 + 2.6, y1) if sgn > 0 else (y0, y1 - 2.6)
+        if st == "wood":                                              # Bailey-Brücke aus Stahl
+            n = int((yb - ya) / 0.6)
+            for k in range(n):
+                zz = ya + (yb - ya) * (k + 0.5) / n
+                box(m, cx, zz, 0.025, x1 - x0 - 0.5, (yb - ya) / n - 0.04, 0.1, jc((0.30, 0.31, 0.30), hr, 0.05), None, "metal", False)
+            nseg = max(3, int(round((yb - ya) / 1.5)))
+            for sx_, side in ((x0 + 0.25, 0), (x1 - 0.25, 1)):
+                _truss(m, sx_ - 0.1, sx_ + 0.1, ya, yb, 1.5, steel, nseg, side)
+            for k in range(nseg + 1):                                 # Querträger unter der Fahrbahn
+                yy = ya + (yb - ya) * k / nseg
+                beam(m, (x0 + 0.1, yy, -0.2), (x1 - 0.1, yy, -0.2), 0.22, 0.28, (0.30, 0.31, 0.30), "metal", up=(0.0, 0.0, 1.0))
+            for sx_ in (x0 + 0.25, x1 - 0.25):
+                for yy in (ya + 0.2, yb - 0.2):
+                    box(lamps, sx_, yy, 1.78, 0.2, 0.2, 0.24, (1.0, 0.82, 0.45))
+            for sx_ in (x0 + 0.35, x1 - 0.35):                        # Widerlager
+                box(m, sx_, yb + sgn * 0.1, -0.35, 1.2, 1.3, 0.9, (0.58, 0.58, 0.58), None, "concrete", False)
+            box(m, cx, world_castle_wall(world, sgn) + sgn * 0.5, 0.1, x1 - x0, 0.9, 0.28, CONC_D, None, "concrete", False)
+        else:                                                         # Betonbrücke mit Brüstung
+            for sx in (x0, x1):
+                s2 = -1 if sx == x0 else 1
+                px = sx + s2 * -0.2
+                box(m, px, (ya + yb) / 2, 0.8, 0.55, yb - ya + 0.2, 0.9, (0.64, 0.63, 0.60), None, "concrete", False)
+                box(m, px, (ya + yb) / 2, 1.3, 0.7, yb - ya + 0.3, 0.12, CONC_D, None, "concrete", False)
+                for yy in (ya + 0.6, yb - 0.6):
+                    box(m, px, yy, 0.8, 0.8, 0.8, 1.8, CONC_D, None, "concrete", False)
+                    box(lamps, px, yy, 1.95, 0.28, 0.28, 0.36, (1.0, 0.82, 0.45))
+            n = int((yb - ya) / 0.7)
+            for k in range(n):
+                zz = ya + (yb - ya) * (k + 0.5) / n
+                box(m, cx, zz, 0.03, x1 - x0 - 0.9, (yb - ya) / n - 0.05, 0.1, jc(deck_c, hr, 0.05), None, "concrete", False)
+            for k in range(0, n, 3):                                  # Fahrbahnmarkierung (Mittelstreifen)
+                zz = ya + (yb - ya) * (k + 0.5) / n
+                box(m, cx, zz, 0.09, 0.14, 0.9, 0.02, (0.9, 0.9, 0.8), None, None, False)
+    else:
+        ya, yb = x0, x1
+        cy = (y0 + y1) / 2
+        for yy in (y0 + 0.1, y1 - 0.1):
+            box(m, (x0 + x1) / 2, yy, 0.93, x1 - x0 + 0.2, 0.5, 0.14, (0.64, 0.63, 0.60), None, "concrete", False)
+        for xx in (x0 + 0.3, x1 - 0.3):
+            for yy in (y0 + 0.15, y1 - 0.15):
+                box(m, xx, yy, 1.0, 0.5, 0.5, 2.0, CONC_D, None, "concrete", False)
+                beam(m, (xx, yy, 2.0), (xx, yy, 2.4), 0.08, 0.08, WIRE_C, "metal")
+        n = int((x1 - x0) / 0.7)
+        for k in range(n):
+            xx = x0 + (x1 - x0) * (k + 0.5) / n
+            box(m, xx, cy, 0.03, (x1 - x0) / n - 0.05, y1 - y0 - 1.0, 0.1, jc(deck_c, hr, 0.05), None, "concrete", False)
+        for yy in (y0 + 0.2, y1 - 0.2):                               # Stacheldraht-Bügel am Damm
+            for k in range(3):
+                xx = x0 + (x1 - x0) * (k + 0.5) / 3
+                beam(m, (xx, yy, 1.0), (xx, yy, 1.6), 0.05, 0.05, WIRE_C, "metal")
+
+
+def world_castle_wall(world, sgn):
+    return CENTER + 22.0 * sgn
+
+
+def gate_details(m, lamps, rec, hr):
+    """Wachhäuser am Tor: Schranke, Warnstreifen am Sturz, Fensterbänder, Suchscheinwerfer."""
+    x0, x1, yw, sgn, zt = rec["x0"], rec["x1"], rec["y"], rec["sgn"], rec["zt"]
+    # Warnstreifen (rot/weiss) an der Aussenseite des Sturzes
+    nst = 16
+    wst = (x1 - x0) / nst
+    for k in range(nst):
+        xa = x0 + wst * k
+        col = (0.80, 0.12, 0.10) if k % 2 == 0 else (0.90, 0.90, 0.86)
+        yy = yw + sgn * 0.03
+        quadf(m, (xa, yy, zt + 0.05), (xa + wst, yy, zt + 0.05), (xa + wst, yy, zt + 0.95), (xa, yy, zt + 0.95), col,
+              (xa, yy - sgn * 3.0, zt + 0.5), "metal")
+    # Hochgeklappte Schranken (rot/weiss), Gegengewicht
+    for sx_, dx_ in ((x0 + 0.5, 1), (x1 - 0.5, -1)):
+        yy = yw - sgn * 0.8
+        box(m, sx_, yy, 0.55, 0.45, 0.45, 1.1, (0.30, 0.32, 0.30), None, "metal", False)
+        L = 3.8
+        ang = math.radians(68.0)
+        tip = (sx_ + dx_ * L * math.cos(ang), yy, 1.0 + L * math.sin(ang))
+        nseg = 7
+        for k in range(nseg):
+            a_ = tuple((sx_, yy, 1.0)[i] + (tip[i] - (sx_, yy, 1.0)[i]) * k / nseg for i in range(3))
+            b_ = tuple((sx_, yy, 1.0)[i] + (tip[i] - (sx_, yy, 1.0)[i]) * (k + 1) / nseg for i in range(3))
+            beam(m, a_, b_, 0.13, 0.13, (0.82, 0.12, 0.10) if k % 2 == 0 else (0.92, 0.92, 0.88), "metal", up=(0.0, 1.0, 0.0))
+        beam(m, (sx_, yy, 1.0), (sx_ - dx_ * 0.9, yy, 1.0 - 0.9 * math.sin(ang) + 0.4), 0.13, 0.13, (0.2, 0.2, 0.2), "metal")
+        box(m, sx_ - dx_ * 0.9, yy, 0.75, 0.3, 0.3, 0.3, (0.18, 0.18, 0.2), None, "metal", False)
+    # Wachhäuser: Fensterbänder, Betonkranz, Suchscheinwerfer auf dem Dach
+    for gx0, gx1 in ((x0 - 3.0, x0), (x1, x1 + 3.0)):
+        ya_ = yw + sgn * 2.7
+        cxm = (gx0 + gx1) / 2
+        for zz0 in (2.4, 4.8):
+            box(m, cxm, ya_ + sgn * 0.02, zz0 + 0.6, 2.0, 0.06, 0.9, PAINT_W, None, "plaster", False)
+            box(m, cxm, ya_ + sgn * 0.045, zz0 + 0.6, 1.8, 0.05, 0.7, (0.07, 0.09, 0.11), None, None, False)
+            box(m, cxm, ya_ + sgn * 0.07, zz0 + 0.6, 0.06, 0.04, 0.7, PAINT_W, None, "plaster", False)
+        box(m, cxm, yw + sgn * 1.4, 7.3, 3.2, 2.9, 0.12, (0.66, 0.65, 0.62), None, "concrete", False)
+        px, py = cxm, yw + sgn * 1.4
+        prism(m, px, py, 7.5, 0.35, 0.5, 8, (0.28, 0.30, 0.28), hr, 1.0)                   # Scheinwerfer
+        ell(m, (px + 0.0, py + sgn * 0.3, 8.25), 0.5, 0.35, 0.45, (0.30, 0.32, 0.30), None, "metal")
+        box(lamps, px, py + sgn * 0.7, 8.3, 0.5, 0.1, 0.45, (1.0, 0.95, 0.75))
+
+
+def castle_details(m, lamps, world, hr):
+    """Radarstation: Betonmauer mit Stacheldraht, Bunkertürme, Betriebsgebäude mit Eingang, Laternen im Hof."""
+    c = CENTER
+    H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
+    g0, g1 = c - 4.0, c + 4.0
+    conc, concd = WALL_C, WALL_CD
+    walls = [("S", c - H, [(c - H, g0), (g1, c + H)]), ("N", c + H, [(c - H, g0), (g1, c + H)]),
+             ("W", c - H, [(c - H, c + H)]), ("E", c + H, [(c - H, c + H)])]
+    for s, pos, spans in walls:
+        for a0, a1 in spans:
+            L = a1 - a0
+            nrm = {"S": (0, -1), "N": (0, 1), "W": (-1, 0), "E": (1, 0)}[s]
+
+            def wb(c0, c1, z0, z1, o0, o1, col, mat="concrete"):
+                if s in "NS":
+                    ya_, yb_ = (pos + nrm[1] * o0, pos + nrm[1] * o1)
+                    box(m, (c0 + c1) / 2, (ya_ + yb_) / 2, (z0 + z1) / 2, c1 - c0, abs(yb_ - ya_), z1 - z0, col, None, mat, False)
+                else:
+                    xa_, xb_ = (pos + nrm[0] * o0, pos + nrm[0] * o1)
+                    box(m, (xa_ + xb_) / 2, (c0 + c1) / 2, (z0 + z1) / 2, abs(xb_ - xa_), c1 - c0, z1 - z0, col, None, mat, False)
+
+            wb(a0, a1, -0.4, 1.0, 0.0, 0.2, concd)                          # Sockel
+            wb(a0, a1, ZW - 0.35, ZW, 0.0, 0.22, conc)                      # Kranzgesims
+            ns = max(2, int(L // 4.0))
+            for k in range(1, ns):                                          # Dehnungsfugen
+                cc = a0 + L * k / ns
+                wb(cc - 0.04, cc + 0.04, 1.0, ZW - 0.35, 0.0, 0.03, (0.20, 0.20, 0.22), None)
+            for k in range(ns):                                             # liegende Schlitzfenster
+                cc = a0 + L * (k + 0.5) / ns
+                wb(cc - 0.7, cc + 0.7, 2.5, 2.85, 0.0, 0.03, (0.04, 0.04, 0.05), None)
+                wb(cc - 0.8, cc + 0.8, 2.45, 2.9, 0.0, 0.02, conc)
+            for k in range(0, ns + 1):                                      # Pfeiler
+                cc = a0 + L * k / ns
+                if k in (0, ns) and s in "NS" and (a0 == c - H and k == 0 or a1 == c + H and k == ns):
+                    continue
+                wb(cc - 0.3, cc + 0.3, -0.4, ZW - 0.35, 0.0, 0.4, concd)
+            # Stacheldraht auf der Brüstung: Y-Pfosten und drei Drähte
+            zt_ = ZW + 1.2
+            nposts = max(2, int(L // 2.0))
+            for k in range(nposts + 1):
+                cc = a0 + L * k / nposts
+                wb(cc - 0.04, cc + 0.04, zt_, zt_ + 0.95, -0.35, -0.27, WIRE_C, "metal")
+                wb(cc - 0.04, cc + 0.04, zt_ + 0.95, zt_ + 1.15, -0.15, -0.05, WIRE_C, "metal")
+            for zz in (zt_ + 0.4, zt_ + 0.7, zt_ + 1.0):
+                wb(a0, a1, zz, zz + 0.03, -0.32, -0.29, WIRE_C, "metal")
+            wb(a0, a1, zt_ + 1.1, zt_ + 1.13, -0.12, -0.08, WIRE_C, "metal")
+    # Ecktürme: Bunkertürme mit Schlitzbändern, Dachrand, Leiter
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            tx, ty = c + sx * H, c + sy * H
+            for side in ((sx, 0), (0, sy)):
+                for zz in (3.2, 5.6):
+                    if side[0]:
+                        box(m, tx + side[0] * 3.52, ty, zz, 0.06, 5.2, 0.5, (0.04, 0.04, 0.05), None, None, False)
+                        box(m, tx + side[0] * 3.51, ty, zz, 0.05, 5.5, 0.7, conc, None, "concrete", False)
+                        box(m, tx + side[0] * 3.53, ty, zz, 0.06, 5.2, 0.45, (0.04, 0.04, 0.05), None, None, False)
+                    else:
+                        box(m, tx, ty + side[1] * 3.52, zz, 5.2, 0.06, 0.5, (0.04, 0.04, 0.05), None, None, False)
+                        box(m, tx, ty + side[1] * 3.51, zz, 5.5, 0.05, 0.7, conc, None, "concrete", False)
+                        box(m, tx, ty + side[1] * 3.53, zz, 5.2, 0.06, 0.45, (0.04, 0.04, 0.05), None, None, False)
+                if side[0]:
+                    box(m, tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, conc, None, "concrete", False)
+                else:
+                    box(m, tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, conc, None, "concrete", False)
+    # Betriebsgebäude (Mitte): Eingang, Fensterbänder, Dachaufbauten
+    kx, ky = c, c - 4.0
+    box(m, kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, conc, None, "concrete", False)
+    box(m, kx, ky - 0.2, 1.15, 1.7, 0.1, 2.3, OLIVE, None, "metal", False)
+    box(m, kx, ky - 0.27, 1.15, 0.05, 0.05, 2.3, (0.1, 0.1, 0.1), None, None, False)
+    box(m, kx, ky - 0.7, 2.75, 3.4, 1.2, 0.18, conc, None, "concrete", False)            # Vordach
+    box(lamps, kx - 1.0, ky - 0.2, 2.5, 0.2, 0.2, 0.24, (1.0, 0.82, 0.45))
+    for dx in (-2.6, 2.6):
+        for dz in (2.6,):
+            box(m, kx + dx, ky - 0.04, dz + 0.6, 1.5, 0.06, 1.2, PAINT_W, None, "plaster", False)
+            box(m, kx + dx, ky - 0.07, dz + 0.6, 1.3, 0.05, 1.0, (0.07, 0.09, 0.11), None, None, False)
+    for sidx, (ox_, oy_, ux_) in enumerate(((4.04, 0.0, 0), (-4.04, 0.0, 0), (0.0, 4.04, 1))):
+        for dd in (-2.0, 2.0):
+            if ux_ == 0:
+                box(m, c + ox_, c + dd, 3.0, 0.06, 1.6, 1.3, (0.07, 0.09, 0.11), None, None, False)
+                box(m, c + ox_ * 0.999, c + dd, 3.0, 0.05, 1.8, 1.5, PAINT_W, None, "plaster", False)
+            else:
+                box(m, c + dd, c + oy_, 3.0, 1.6, 0.06, 1.3, (0.07, 0.09, 0.11), None, None, False)
+                box(m, c + dd, c + oy_ * 0.999, 3.0, 1.8, 0.05, 1.5, PAINT_W, None, "plaster", False)
+    # Dach: Lüfter, Antennenkabel, Auslass
+    for dx, dy, hh in ((-2.4, -2.4, 0.9), (2.5, 2.4, 0.7)):
+        box(m, c + dx, c + dy, 6.0 + hh / 2, 1.0, 1.0, hh, (0.40, 0.42, 0.40), None, "metal", False)
+        prism(m, c + dx, c + dy, 6.0 + hh, 0.3, 0.25, 8, (0.30, 0.32, 0.30), hr, 1.0)
+    box(m, c, c, 6.15, 3.2, 3.2, 0.3, concd, None, "concrete", False)                   # Fundament des Drehkranzes
+    # Lampenmasten im Hof
+    for fx, fy in ((c - 6.0, c - 16.0), (c + 6.0, c - 16.0), (c - 6.0, c + 16.0), (c + 6.0, c + 16.0)):
+        beam(m, (fx, fy, -0.2), (fx, fy, 4.6), 0.14, 0.14, (0.30, 0.32, 0.32), "metal")
+        beam(m, (fx, fy, 4.5), (fx + 0.7, fy, 4.75), 0.1, 0.1, (0.30, 0.32, 0.32), "metal")
+        box(lamps, fx + 0.8, fy, 4.62, 0.5, 0.3, 0.14, (1.0, 0.95, 0.8))
+
+
+# ------------------------------------------------------------ Bäume (detailliert, Kronen schwingen im Wind)
+def _bark_trunk(m, x, y, z, h, r0, r1, bend, col, rng, sides=8, roots=3):
+    """Gebogener Stamm mit Wurzelansatz."""
+    a = rng.uniform(0, 2 * math.pi)
+    n = 6
+    cs, rxs, rys = [], [], []
+    for i in range(n):
+        t = i / (n - 1)
+        off = bend * t * t
+        cs.append((x + math.cos(a) * off, y + math.sin(a) * off, z - 0.3 + (h + 0.3) * t))
+        rr = r0 + (r1 - r0) * t ** 0.8 + (0.18 * (1 - t) ** 4)
+        rxs.append(rr)
+        rys.append(rr * rng.uniform(0.93, 1.07))
+    loft(m, cs, rxs, rys, col, rng, "bark", None, (False, True), 0.05, sides)
+    for k in range(roots):
+        b = a + rng.uniform(0, 2 * math.pi)
+        ln = r0 * rng.uniform(2.4, 3.4)
+        pts = [(x + math.cos(b) * r0 * 0.5, y + math.sin(b) * r0 * 0.5, z + 0.45),
+               (x + math.cos(b) * ln * 0.6, y + math.sin(b) * ln * 0.6, z + 0.12),
+               (x + math.cos(b) * ln, y + math.sin(b) * ln, z - 0.12)]
+        loft(m, pts, [r0 * 0.38, r0 * 0.24, r0 * 0.1], [r0 * 0.36, r0 * 0.22, r0 * 0.09], col, rng, "bark", None, (False, True), 0.05, 5)
+    return a, cs[-1]
+
+
+def tree_lowpoly(m, fm, x, y, z, zo, r, rng, tk=None):
+    """7c: sparsamer Baum für Wälder und den Kartenrand (Stamm als Prisma, Krone aus Kegeln bzw. Klumpen; ca. 60
+    Dreiecke). Krone im Wind-Mesh fm (Höhen relativ zu zo). -> Höhe"""
+    u = {"fir": 0.1, "oak": 0.5, "birch": 0.8, "poplar": 0.95}.get(tk, rng.random())
+    bark = (0.42 + rng.uniform(-0.04, 0.04), 0.30, 0.20)
+    if u < 0.5:                                             # Nadelbaum: drei gestapelte Kegel
+        h = rng.uniform(7.0, 11.0) * (0.85 + 0.15 * r / 2.2)
+        prism(m, x, y, z - 0.3, 0.26, h * 0.35 + 0.3, 6, bark, rng, taper=0.75)
+        g0 = (rng.uniform(0.09, 0.15), rng.uniform(0.30, 0.40), rng.uniform(0.13, 0.19))
+        fm.mat = "leaves"
+        for i, (zf, rf, hf) in enumerate(((0.22, 1.15, 0.42), (0.45, 0.9, 0.36), (0.66, 0.62, 0.34))):
+            col = (g0[0], g0[1] * (1.0 + 0.12 * i), g0[2])
+            cone(fm, x, y, z - zo + h * zf, r * rf, h * hf, 8, col, rng, 0.12)
+        fm.mat = None
+        return h
+    h1 = rng.uniform(2.4, 3.4)                              # Laubbaum: Stamm + zwei Klumpen
+    prism(m, x, y, z - 0.3, 0.3, h1 + 0.8, 6, bark if u < 0.8 else (0.85, 0.84, 0.80), rng, taper=0.7)
+    col = (rng.uniform(0.14, 0.24), rng.uniform(0.40, 0.54), rng.uniform(0.13, 0.20))
+    if rng.random() < 0.1:
+        col = (rng.uniform(0.62, 0.74), rng.uniform(0.38, 0.5), rng.uniform(0.08, 0.14))
+    tall = 1.5 if u >= 0.86 else 1.0
+    fm.mat = "leaves"
+    blob(fm, x, y, z - zo + h1 + r * 0.8 * tall, r * (0.75 if tall > 1 else 1.1), r * (0.75 if tall > 1 else 1.05),
+         r * 0.95 * tall, col, rng, jitter=0.22, subdiv=1)
+    blob(fm, x + rng.uniform(-0.6, 0.6), y + rng.uniform(-0.6, 0.6), z - zo + h1 + r * 1.5 * tall, r * 0.7, r * 0.7,
+         r * 0.6 * tall, tuple(min(1.0, c * 1.12) for c in col), rng, jitter=0.2, subdiv=1)
+    fm.mat = None
+    return h1 + r * 2.0 * tall
+
+
+def tree_conifer(m, fm, x, y, z, zo, r, rng):
+    h = rng.uniform(7.5, 12.0) * (0.85 + 0.15 * r / 2.2)
+    g0 = (rng.uniform(0.09, 0.15), rng.uniform(0.30, 0.40), rng.uniform(0.13, 0.19))
+    ta, ttop = _bark_trunk(m, x, y, z, h * 0.86, 0.32, 0.06, rng.uniform(-0.4, 0.4), (0.42, 0.30, 0.20), rng, 9, 5)
+    for k in range(4):                                       # abgestorbene Aststummel am unteren Stamm
+        b = rng.uniform(0, 2 * math.pi)
+        zz = z + h * rng.uniform(0.05, 0.16)
+        loft(m, [(x + math.cos(b) * 0.1, y + math.sin(b) * 0.1, zz), (x + math.cos(b) * 0.6, y + math.sin(b) * 0.6, zz + 0.18),
+                 (x + math.cos(b) * 1.05, y + math.sin(b) * 1.05, zz + 0.08)], [0.07, 0.05, 0.02], [0.07, 0.05, 0.02], (0.36, 0.26, 0.18),
+             rng, "bark", None, (False, True), 0.04, 5)
+    n = 13
+    fm.mat = "leaves"
+    for i in range(n):
+        t = i / (n - 1)
+        zi = z - zo + h * (0.14 + 0.78 * t)
+        ri = r * (1.18 - 0.98 * t) * rng.uniform(0.92, 1.08)
+        hi = h * (0.19 - 0.04 * t)
+        M = 16
+        ph = rng.uniform(0, 6.28)
+        col = (g0[0] * (1 - 0.15 * t) + 0.02 * t, g0[1] * (1 + 0.28 * t), g0[2])
+        outer = []
+        for j in range(M):
+            a = ph + 2 * math.pi * j / M
+            rr = ri * (1.0 if j % 2 == 0 else 0.76) * rng.uniform(0.94, 1.06)
+            outer.append((x + math.cos(a) * rr, y + math.sin(a) * rr, zi - 0.1 - (0.22 if j % 2 else 0.0) * ri * 0.35))
+        apex = (x + rng.uniform(-0.05, 0.05), y + rng.uniform(-0.05, 0.05), zi + hi)
+        mid = [(x + (p[0] - x) * 0.62, y + (p[1] - y) * 0.62, zi + hi * 0.34) for p in outer]
+        low = (x, y, zi - 0.3 - ri * 0.1)
+        for j in range(M):
+            k = (j + 1) % M
+            fm.tri(outer[j], outer[k], mid[k], jc(col, rng, 0.07), (x, y, zi), vk=(0.8, 0.8, 0.95))
+            fm.tri(outer[j], mid[k], mid[j], jc(col, rng, 0.07), (x, y, zi), vk=(0.8, 0.95, 0.95))
+            fm.tri(mid[j], mid[k], apex, jc(col, rng, 0.07), (x, y, zi), vk=(0.95, 0.95, 1.0))
+            fm.tri(outer[j], outer[k], low, tuple(v * 0.8 for v in col), (x, y, zi + 1.0), vk=(0.7, 0.7, 0.62))
+    fm.mat = None
+    return h
+
+
+def tree_oak(m, fm, x, y, z, zo, r, rng, autumn=False):
+    h1 = rng.uniform(2.3, 3.4)
+    a, top = _bark_trunk(m, x, y, z, h1, 0.42, 0.22, rng.uniform(-0.3, 0.3), (0.40, 0.29, 0.20), rng, 11, 5)
+    col = (rng.uniform(0.14, 0.23), rng.uniform(0.40, 0.52), rng.uniform(0.13, 0.20))
+    if autumn:
+        col = (rng.uniform(0.62, 0.74), rng.uniform(0.38, 0.5), rng.uniform(0.08, 0.14))
+    cz = z + h1 + r * 0.7
+    nl = 6
+    clumps = [(x + math.cos(a) * 0.3, y + math.sin(a) * 0.3, cz + r * 0.25, r * 1.12, r * 1.0)]
+    for k in range(nl):
+        b = rng.uniform(0, 2 * math.pi) if k else a + 0.5
+        b = a + 2 * math.pi * k / nl + rng.uniform(-0.4, 0.4)
+        d_ = r * rng.uniform(0.75, 0.95)
+        cc = (x + math.cos(b) * d_, y + math.sin(b) * d_, cz - r * 0.15 + rng.uniform(0, r * 0.5), r * rng.uniform(0.62, 0.78),
+              r * rng.uniform(0.55, 0.65))
+        clumps.append(cc)
+        # Ast zum Kronenteil
+        p0 = (top[0], top[1], z + h1 * 0.8)
+        pm = (top[0] + (cc[0] - top[0]) * 0.5, top[1] + (cc[1] - top[1]) * 0.5, p0[2] + (cc[2] - p0[2]) * 0.4 + 0.2)
+        p1 = (cc[0], cc[1], cc[2] - cc[4] * 0.4)
+        loft(m, [p0, pm, p1], [0.17, 0.12, 0.07], [0.17, 0.12, 0.07], (0.38, 0.28, 0.19), rng, "bark", None, (False, True), 0.05, 6)
+        for q in range(2):                                   # Zweige innerhalb der Krone
+            t_ = rng.uniform(0.45, 0.8)
+            ps = (pm[0] + (p1[0] - pm[0]) * t_, pm[1] + (p1[1] - pm[1]) * t_, pm[2] + (p1[2] - pm[2]) * t_)
+            bb = rng.uniform(0, 2 * math.pi)
+            loft(m, [ps, (ps[0] + math.cos(bb) * 0.5, ps[1] + math.sin(bb) * 0.5, ps[2] + 0.35),
+                     (ps[0] + math.cos(bb) * 1.0, ps[1] + math.sin(bb) * 1.0, ps[2] + 0.6)], [0.06, 0.04, 0.02], [0.06, 0.04, 0.02],
+                 (0.36, 0.27, 0.18), rng, "bark", None, (False, True), 0.04, 5)
+    clumps.append((x + rng.uniform(-0.3, 0.3), y + rng.uniform(-0.3, 0.3), cz + r * 0.95, r * 0.7, r * 0.55))
+    for cx_, cy_, cz_, rx_, rz_ in clumps:
+        blob(fm, cx_, cy_, cz_ - zo, rx_, rx_, rz_, jc(col, rng, 0.08), rng, jitter=0.2, subdiv=2 if rx_ > r else 1, mat="leaves")
+        for _ in range(4):                      # kleine Laubbüschel am Rand
+            aa = rng.uniform(0, 2 * math.pi)
+            blob(fm, cx_ + math.cos(aa) * rx_ * 0.85, cy_ + math.sin(aa) * rx_ * 0.85, cz_ - zo + rng.uniform(-0.3, 0.4) * rz_,
+                 rx_ * 0.38, rx_ * 0.38, rz_ * 0.36, jc(col, rng, 0.1), rng, jitter=0.2, subdiv=1, mat="leaves")
+    return cz + r * 1.4 - z
+
+
+def tree_birch(m, fm, x, y, z, zo, r, rng):
+    h = rng.uniform(6.5, 9.0)
+    a, top = _bark_trunk(m, x, y, z, h * 0.78, 0.17, 0.07, rng.uniform(-0.6, 0.6), (0.84, 0.82, 0.75), rng, 7, 3)
+    for k in range(int(h * 0.78 / 0.9)):                          # dunkle Birkenmale (kurze Ringe)
+        zz = z + 0.6 + k * 0.9 + rng.uniform(-0.15, 0.15)
+        t = (zz - z) / (h * 0.78)
+        ps = (x + (top[0] - x) * t * t, y + (top[1] - y) * t * t)
+        prism(m, ps[0], ps[1], zz, (0.17 + (0.07 - 0.17) * t) * 1.04, 0.08, 7, (0.18, 0.17, 0.16), rng, 1.0)
+    col = (rng.uniform(0.34, 0.45), rng.uniform(0.55, 0.65), rng.uniform(0.16, 0.24))
+    n = 15
+    for k in range(n):
+        t = k / (n - 1)
+        b = rng.uniform(0, 2 * math.pi)
+        d_ = r * 0.62 * (1.0 - 0.5 * abs(t - 0.4))
+        zz = z + h * (0.36 + 0.6 * t)
+        rr = r * (0.78 - 0.3 * t) * rng.uniform(0.85, 1.1)
+        blob(fm, top[0] + math.cos(b) * d_, top[1] + math.sin(b) * d_, zz - zo, rr, rr, rr * 0.85, jc(col, rng, 0.07), rng,
+             jitter=0.22, subdiv=2 if k % 2 == 0 else 1, mat="leaves")
+        if k in (1, 3, 6, 9):
+            p0 = (top[0], top[1], z + h * 0.55)
+            p1 = (top[0] + math.cos(b) * d_, top[1] + math.sin(b) * d_, zz)
+            loft(m, [p0, p1], [0.06, 0.03], [0.06, 0.03], (0.80, 0.78, 0.72), rng, "bark", None, (False, True), 0.05, 5)
+    return h
+
+
+def tree_poplar(m, fm, x, y, z, zo, r, rng):
+    h = rng.uniform(9.0, 13.0)
+    a, top = _bark_trunk(m, x, y, z, h * 0.35, 0.2, 0.1, rng.uniform(-0.2, 0.2), (0.42, 0.34, 0.24), rng, 7, 3)
+    col = (rng.uniform(0.16, 0.24), rng.uniform(0.42, 0.52), rng.uniform(0.14, 0.2))
+    n = 10
+    for k in range(n):
+        t = k / (n - 1)
+        rr = r * (0.55 - 0.3 * abs(t - 0.35)) * rng.uniform(0.9, 1.1)
+        blob(fm, top[0] + rng.uniform(-0.2, 0.2), top[1] + rng.uniform(-0.2, 0.2), z + h * (0.3 + 0.65 * t) - zo, rr, rr,
+             h * 0.12, jc(col, rng, 0.07), rng, jitter=0.2, subdiv=2 if k % 2 == 0 else 1, mat="leaves")
+    return h
+
+
+def bush(fm, x, y, z, zo, r, rng, col=None):
+    col = col or (rng.uniform(0.14, 0.24), rng.uniform(0.38, 0.5), rng.uniform(0.12, 0.2))
+    n = rng.randint(3, 5)
+    for k in range(n):
+        b = rng.uniform(0, 2 * math.pi)
+        d_ = r * rng.uniform(0.0, 0.7)
+        rr = r * rng.uniform(0.5, 0.8)
+        blob(fm, x + math.cos(b) * d_, y + math.sin(b) * d_, z + rr * 0.55 - zo, rr, rr, rr * 0.75, jc(col, rng, 0.08), rng,
+             jitter=0.22, subdiv=1, mat="leaves")
+    if rng.random() < 0.3:
+        fc = rng.choice(_FLOW)
+        for _ in range(5):
+            b = rng.uniform(0, 2 * math.pi)
+            q = (x + math.cos(b) * r * 0.7, y + math.sin(b) * r * 0.7, z + r * rng.uniform(0.5, 1.1) - zo)
+            box(fm, q[0], q[1], q[2], 0.1, 0.1, 0.1, fc, None, None, False)
+
+
+def reed_clump(gm, x, y, z, zo, rng, tall=1.6, col=None):
+    """Büschel Schilf/Gras: schmale, geneigte Halme (je 2 Dreiecke) in einem Wind-Mesh (unbeleuchtet, Farbverlauf)."""
+    base = col or (0.30, 0.46, 0.20)
+    lo = tuple(c * 0.55 for c in base)
+    hi = tuple(min(1.0, c * 1.3 + 0.05) for c in base)
+    nb = rng.randint(4, 8)
+    for _ in range(nb):
+        a = rng.uniform(0, 2 * math.pi)
+        bx, by = x + rng.uniform(-0.25, 0.25), y + rng.uniform(-0.25, 0.25)
+        h = tall * rng.uniform(0.6, 1.1)
+        lean = rng.uniform(0.04, 0.22) * h
+        w = 0.05 * rng.uniform(0.8, 1.4)
+        dx, dy = -math.sin(a) * w, math.cos(a) * w
+        zb = z - zo - 0.03
+        mid = (bx + math.cos(a) * lean * 0.45, by + math.sin(a) * lean * 0.45, zb + h * 0.55)
+        tip = (bx + math.cos(a) * lean, by + math.sin(a) * lean, zb + h)
+        gm.tri((bx - dx, by - dy, zb), (bx + dx, by + dy, zb), (mid[0] + dx * 0.6, mid[1] + dy * 0.6, mid[2]), (lo, lo, base))
+        gm.tri((bx - dx, by - dy, zb), (mid[0] + dx * 0.6, mid[1] + dy * 0.6, mid[2]), (mid[0] - dx * 0.6, mid[1] - dy * 0.6, mid[2]),
+               (lo, base, base))
+        gm.tri((mid[0] - dx * 0.6, mid[1] - dy * 0.6, mid[2]), (mid[0] + dx * 0.6, mid[1] + dy * 0.6, mid[2]), tip, (base, base, hi))
+    if tall > 1.2 and rng.random() < 0.5:                 # Rohrkolben
+        a = rng.uniform(0, 2 * math.pi)
+        bx, by = x + rng.uniform(-0.2, 0.2), y + rng.uniform(-0.2, 0.2)
+        zb = z - zo
+        tipz = zb + tall * 1.15
+        beam(gm, (bx, by, zb), (bx, by, tipz), 0.04, 0.04, (0.35, 0.45, 0.22), None)
+        prism(gm, bx, by, tipz - 0.32, 0.055, 0.32, 5, (0.30, 0.18, 0.10), rng, 0.9)
+
+
+class _WindSet:
+    """Sammelt Wind-Meshes: je Zelle (24 m), Art und Höhenband ein eigenes Mesh, das später als Knoten schwingt."""
+    CELLS = {"tree": 28.0, "bush": 56.0, "grass": 48.0, "reed": 56.0}
+
+    def __init__(self):
+        self.meshes = {}
+
+    def get(self, x, y, z, kind, lit=True, band=1.5):
+        cl = self.CELLS.get(kind, 30.0)
+        k = (int(x // cl), int(y // cl), int(round(z / band)), kind, lit)
+        e = self.meshes.get(k)
+        if e is None:
+            e = self.meshes[k] = (Mesh(lit=lit), k[2] * band)
+        return e
+
+    def nodes(self):
+        out = []
+        for (ix, iy, band, kind, lit), (mesh, zref) in self.meshes.items():
+            cl = self.CELLS.get(kind, 30.0)
+            out.append({"node": mesh.node("wind"), "x": (ix + 0.5) * cl, "y": (iy + 0.5) * cl, "z": zref,
+                        "kind": kind, "lit": lit})
+        return out
+
+
+def moat_contour(a, o, n_arc=7):
+    """Punkte des Konturs mit Abstand o um das Quadrat [-a, a] (abgerundete Ecken), gegen den Uhrzeigersinn."""
+    pts = []
+    for qa in range(4):
+        cx_, cy_ = (a, a) if qa == 0 else ((-a, a) if qa == 1 else ((-a, -a) if qa == 2 else (a, -a)))
+        for k in range(n_arc + 1):
+            ang = math.radians(qa * 90 + 90.0 * k / n_arc)
+            pts.append((cx_ + math.cos(ang) * o, cy_ + math.sin(ang) * o))
+    return pts
+
+
+def flag_mesh(m, w, h, col, rng):
+    """Fahne: ein Stoffstreifen (zweiseitig), vom Mast (x = 0) nach +x, leicht gewellt, mit Rand und Zierstreifen."""
+    nseg = 6
+    edge = tuple(min(1.0, c * 1.35 + 0.1) for c in col)
+    dark = tuple(c * 0.75 for c in col)
+
+    def P(i, v):
+        t = i / nseg
+        return (w * t, math.sin(t * 5.0 + 0.6) * 0.12 * t * w * 0.5, -h * v)
+
+    for i in range(nseg):
+        for a, b, cc_ in ((0.0, 0.14, edge), (0.14, 0.5, col), (0.5, 0.86, dark if i % 2 else col), (0.86, 1.0, edge)):
+            p0, p1, p2, p3 = P(i, a), P(i + 1, a), P(i + 1, b), P(i, b)
+            quadf(m, p0, p1, p2, p3, cc_, (w * 0.5, -3.0, -h * 0.5), "cloth")
+            quadf(m, p0, p3, p2, p1, cc_, (w * 0.5, 3.0, -h * 0.5), "cloth")
+
+
+# ------------------------------------------------------------ Terrain-Hilfen für die Stadt
+def fine_cells(world, cs, n0, n1):
+    """(fein zu unterteilende Zellen, davon Zellen mit Wegen): Wege, Graben, Plätze und Kanten von Fussböden."""
+    fine, roadc = set(), set()
+
+    def mark(x, y, rad, into):
+        for jx in range(int((x - rad) // cs), int((x + rad) // cs) + 1):
+            for jy in range(int((y - rad) // cs), int((y + rad) // cs) + 1):
+                into.add((jx, jy))
+
+    for x0, y0, x1, y1, hw, _k in world.roads:
+        ln = math.hypot(x1 - x0, y1 - y0)
+        st = max(1, int(ln / 2.0))
+        for i in range(st + 1):
+            mark(x0 + (x1 - x0) * i / st, y0 + (y1 - y0) * i / st, hw + 0.9, roadc)
+    fine |= roadc
+    for mx, my, a, o0, o1, o2, o3, _dp in world.moats:
+        rr = a + o3 + 4.0
+        for ix in range(int((mx - rr) // cs), int((mx + rr) // cs) + 1):
+            for iy in range(int((my - rr) // cs), int((my + rr) // cs) + 1):
+                o = math.hypot(max(abs((ix + 0.5) * cs - mx) - a, 0.0), max(abs((iy + 0.5) * cs - my) - a, 0.0))
+                if o0 - 3.5 < o < o3 + 3.5:
+                    fine.add((ix, iy))
+    if world.mtn:
+        for fx0, fy0, fx1, fy1, _fc in world.floors:
+            for ix in range(int(fx0 // cs), int(fx1 // cs) + 1):
+                for iy in range(int(fy0 // cs), int(fy1 // cs) + 1):
+                    if not (fx0 <= ix * cs and (ix + 1) * cs <= fx1 and fy0 <= iy * cs and (iy + 1) * cs <= fy1):
+                        fine.add((ix, iy))
+    return fine, roadc
+
+
 def build_scene(world, progress=None):
     """Baut Gelände, Bäume, Felsen, Gebäude (ein Mesh) und das Wasser (zweites Mesh).
     extra = [Lampen, Gras, Schattenflächen, zweite Wasserschicht]."""
@@ -8082,7 +10104,35 @@ def build_scene(world, progress=None):
     n0 = int(-marg // cs)
     n1 = int((WORLD + marg) // cs) + 1
 
-    def cell(x0, y0, x1, y1, par):
+    # Fussböden ebener Flächen (Innenräume, Höfe, Plätze) als eigene Platten exakt im Rechteck - so schwappt keine Bodenfarbe
+    # über die Gebäudekante hinaus; Aussparungen (Treppenschächte in den Tunnel) bleiben offen
+    flat_floors = set()
+    frng = random.Random(world.seed + 5)
+    for fi, (fx0, fy0, fx1, fy1, fc) in enumerate(world.floors):
+        if world.cm is not None or fx1 - fx0 < 1.0 or fy1 - fy0 < 1.0:
+            continue
+        hs_ = [sh(fx0 + (fx1 - fx0) * i / 4.0, fy0 + (fy1 - fy0) * j / 4.0) for i in range(5) for j in range(5)]
+        if max(hs_) - min(hs_) > 0.03:
+            continue
+        flat_floors.add(fi)
+        zf = max(hs_) + 0.03
+        nx_ = max(1, int(round((fx1 - fx0) / (1.0 if fx1 - fx0 < 14.0 else 2.0))))
+        ny_ = max(1, int(round((fy1 - fy0) / (1.0 if fy1 - fy0 < 14.0 else 2.0))))
+        fmat = mat_for_color(fc)
+        for i in range(nx_):
+            for j in range(ny_):
+                ta, tb = fx0 + (fx1 - fx0) * i / nx_, fx0 + (fx1 - fx0) * (i + 1) / nx_
+                tc, td = fy0 + (fy1 - fy0) * j / ny_, fy0 + (fy1 - fy0) * (j + 1) / ny_
+                subs = [(ta, tc, tb, td)]
+                if any(vx0 < tb and vx1 > ta and vy0 < td and vy1 > tc for vx0, vy0, vx1, vy1 in world.voids):
+                    subs = [(ta + (tb - ta) * a_ / 2, tc + (td - tc) * b_ / 2, ta + (tb - ta) * (a_ + 1) / 2,
+                             tc + (td - tc) * (b_ + 1) / 2) for a_ in range(2) for b_ in range(2)]
+                    subs = [q for q in subs if not any(vx0 < q[2] and vx1 > q[0] and vy0 < q[3] and vy1 > q[1]
+                                                       for vx0, vy0, vx1, vy1 in world.voids)]
+                for qa, qc, qb, qd in subs:
+                    quadf(m, (qa, qc, zf), (qb, qc, zf), (qb, qd, zf), (qa, qd, zf), jc(fc, frng, 0.04), (qa, qc, zf - 1.0), fmat)
+
+    def cell(x0, y0, x1, y1, par, rc=False):
         if world.voids and world.in_void((x0 + x1) / 2, (y0 + y1) / 2):
             return                                  # Tunneleingang: hier ist das Gelände offen
         p00 = (x0, y0, sh(x0, y0))
@@ -8097,19 +10147,26 @@ def build_scene(world, progress=None):
                 n = (-n[0], -n[1], -n[2])
             cx_, cy_ = (a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3
             floor = None
-            for fx0, fy0, fx1, fy1, fc in world.floors:    # Hof und Fussböden in Gebäuden
-                if fx0 <= cx_ <= fx1 and fy0 <= cy_ <= fy1:
+            for fi_, (fx0, fy0, fx1, fy1, fc) in enumerate(world.floors):    # Hof und Fussböden (unebene; ebene = Platten oben)
+                if fi_ not in flat_floors and fx0 <= cx_ <= fx1 and fy0 <= cy_ <= fy1:
                     floor = fc
             if floor is not None:
                 m.tri(a, b, c, jc(floor, rng, 0.04), mat=mat_for_color(floor))
                 continue
+            rdk = None
+            if rc:                                                          # Weg: Pflaster oder festgetretene Erde
+                rd_ = world.road_dist(cx_, cy_)
+                if rd_ is not None and rd_[0] < rd_[1]:
+                    rdk = rd_[2]
             k = smoothstep(0.86, 0.72, n[2]) if n[2] < 0.86 else 0.0      # steil: Erde/Fels
             cols, nds = [], []
             for p in (a, b, c):
                 col = terrain_col(p[0], p[1], p[2])
-                if k > 0:
+                if rdk is not None:
+                    col = (0.50, 0.50, 0.52) if rdk == "cobble" else (0.58, 0.47, 0.34)
+                elif k > 0:
                     col = mix(col, (0.50, 0.44, 0.36), k)
-                cols.append(jc(col, rng, 0.03))
+                cols.append(jc(col, rng, 0.04 if rdk else 0.03))
                 sn = snormal(p[0], p[1])
                 nb = norm((n[0] * 0.55 + sn[0] * 0.45, n[1] * 0.55 + sn[1] * 0.45, n[2] * 0.55 + sn[2] * 0.45))
                 nds.append(dot(nb, SUN))
@@ -8117,8 +10174,11 @@ def build_scene(world, progress=None):
             mat = ("rock" if rock_w(cx_, cy_) > 0.5 else "dirt") if k > 0.5 else ("sand" if sw > 0.6 else "grass")
             if mtn and mat == "grass" and rock_w(cx_, cy_) > 0.6:
                 mat = "rock"
+            if rdk is not None:
+                mat = "concrete" if rdk == "cobble" else "dirt"
             m.tri(a, b, c, cols, mat=mat, nd=nds)
 
+    fine, roadc = fine_cells(world, cs, n0, n1) if (world.mtn and (world.roads or world.moats)) else (set(), set())
     for iy in range(n0, n1):
         if world.cm is not None:
             break
@@ -8131,6 +10191,13 @@ def build_scene(world, progress=None):
                     for i in range(k):
                         cell(x0 + cs * i / k, y0 + cs * j / k, x0 + cs * (i + 1) / k,
                              y0 + cs * (j + 1) / k, ix + iy)
+            elif (ix, iy) in fine:
+                k = 4                                # Wege, Graben, Plätze: 1-m-Raster
+                rc_ = (ix, iy) in roadc
+                for j in range(k):
+                    for i in range(k):
+                        cell(x0 + cs * i / k, y0 + cs * j / k, x0 + cs * (i + 1) / k,
+                             y0 + cs * (j + 1) / k, ix + iy, rc_)
             else:
                 cell(x0, y0, x1, y1, ix + iy)
 
@@ -8172,6 +10239,16 @@ def build_scene(world, progress=None):
 
     shadows = Mesh(lit=False)
 
+    winds = _WindSet()                                 # alles, was im Wind schwingt (Kronen, Büsche, Schilf, Gras)
+    chunks = {}                                        # Gebäude in 40-m-Blöcken: so kann die Grafik Ferneres weglassen
+
+    def chunk(x, y):
+        k_ = (int(x // 40.0), int(y // 40.0))
+        c_ = chunks.get(k_)
+        if c_ is None:
+            c_ = chunks[k_] = Mesh()
+        return c_
+
     pg(0.45, "Bäume und Felsen werden gesetzt ...")
     # --- Bäume und Felsen
     for p in world.props:
@@ -8189,31 +10266,26 @@ def build_scene(world, progress=None):
                 south_tree(m, p.x, p.y, p.z, p.base_r, rng)
                 h = 7.0
             decal_disc(shadows, world, p.x - SUN[0] * h * 0.25, p.y - SUN[1] * h * 0.25, p.base_r * 1.2 + h * 0.15, 0.40)
+        elif p.kind == "tree" and getattr(world, "big", False) and (
+                getattr(p, "lod", False) or math.hypot(p.x - CENTER, p.y - CENTER) > BIG_TREE_DETAIL_R):
+            fm, zo = winds.get(p.x, p.y, p.z, "tree")          # 7c: grosse Karte, aussen/Wald: Low-Poly-Baum
+            h = tree_lowpoly(m, fm, p.x, p.y, p.z, zo, p.base_r, rng, getattr(p, "tk", None))
+            decal_disc(shadows, world, p.x - SUN[0] * h * 0.25, p.y - SUN[1] * h * 0.25, p.base_r * 1.3 + h * 0.16, 0.40)
         elif p.kind == "tree":
             r = p.base_r
-            h = rng.uniform(5.0, 9.0)
-            trunk_h = h * 0.3
-            green = (rng.uniform(0.12, 0.22), rng.uniform(0.38, 0.52), rng.uniform(0.15, 0.25))
-            if rng.random() < 0.12:                                    # gelegentlich Herbstlaub
-                green = (rng.uniform(0.55, 0.7), rng.uniform(0.38, 0.5), rng.uniform(0.1, 0.16))
-            prism(m, p.x, p.y, p.z - 0.3, 0.3, trunk_h + 0.5, 7, (0.46, 0.33, 0.22), rng, taper=0.8)
-            prism(m, p.x, p.y, p.z - 0.3, 0.52, 0.55, 7, (0.42, 0.30, 0.20), rng, taper=0.6)   # Wurzelansatz
-            m.mat = "leaves"
-            if rng.random() < 0.6:       # Nadelbaum: vier gestapelte Kegel
-                for i in range(4):
-                    z0 = p.z + trunk_h * 0.65 + i * h * 0.17
-                    cone(m, p.x, p.y, z0, r * (1.05 - 0.2 * i), h * 0.34, 9,
-                         (green[0] * (1 - 0.08 * i), green[1] * (1 + 0.07 * i), green[2]), rng)
-            else:                        # Laubbaum: Hauptkrone mit zwei Nebenkronen
-                cz = p.z + trunk_h + r * 0.9
-                col = (green[0] + 0.12, green[1] + 0.06, green[2])
-                blob(m, p.x, p.y, cz, r * 1.1, r * 1.1, r * 1.0, col, rng, jitter=0.16)
-                for _ in range(2):
-                    a = rng.uniform(0, 2 * math.pi)
-                    blob(m, p.x + math.cos(a) * r * 0.7, p.y + math.sin(a) * r * 0.7,
-                         cz - r * 0.15 + rng.uniform(0, r * 0.4), r * 0.7, r * 0.7, r * 0.65,
-                         jc(col, rng, 0.06), rng, jitter=0.18)
-            m.mat = None
+            fm, zo = winds.get(p.x, p.y, p.z, "tree")
+            u_ = rng.random()
+            tk_ = getattr(p, "tk", None)
+            if tk_:
+                u_ = {"fir": 0.1, "oak": 0.5, "birch": 0.8, "poplar": 0.95}[tk_]
+            if u_ < 0.42:
+                h = tree_conifer(m, fm, p.x, p.y, p.z, zo, r, rng)
+            elif u_ < 0.70:
+                h = tree_oak(m, fm, p.x, p.y, p.z, zo, r, rng, rng.random() < 0.12)
+            elif u_ < 0.86:
+                h = tree_birch(m, fm, p.x, p.y, p.z, zo, r, rng)
+            else:
+                h = tree_poplar(m, fm, p.x, p.y, p.z, zo, r, rng)
             decal_disc(shadows, world, p.x - SUN[0] * h * 0.25, p.y - SUN[1] * h * 0.25, r * 1.35 + h * 0.18, 0.40)
 
     pg(0.62, "Gras und Büsche wachsen ...")
@@ -8234,6 +10306,12 @@ def build_scene(world, progress=None):
         z = world.surface_height(x, y)
         if z < WATER_LEVEL + 0.5 or snormal(x, y)[2] < 0.93 or sand_w(x, y) > 0.35:
             return None
+        if world.moats and world.near_moat(x, y, 0.8):
+            return None
+        if world.roads:
+            rd_ = world.road_dist(x, y)
+            if rd_ is not None and rd_[0] < rd_[1] + 0.6:
+                return None
         if any(fx0 - clear <= x <= fx1 + clear and fy0 - clear <= y <= fy1 + clear
                for fx0, fy0, fx1, fy1, _fc in world.floors):
             return None
@@ -8242,20 +10320,18 @@ def build_scene(world, progress=None):
         return z
 
     nb = 0
-    for _ in range(300):
-        if nb >= 40:
+    for _ in range(400):
+        if nb >= 55:
             break
         x, y = rng.uniform(0, WORLD), rng.uniform(0, WORLD)
         z = free_spot(x, y, 2.0)
         if z is None or any(math.hypot(x - q.x, y - q.y) < q.base_r + 1.5 for q in world.props):
             continue
         nb += 1
-        r = rng.uniform(0.45, 0.8)
-        g = rng.uniform(0.0, 0.08)
-        m.mat = "leaves"
-        blob(m, x, y, z + r * 0.45, r, r, r * 0.7, (0.16 + g, 0.40 + g, 0.15), rng, jitter=0.2)
-        m.mat = None
-        decal_disc(shadows, world, x - SUN[0] * r * 0.3, y - SUN[1] * r * 0.3, r * 1.4, 0.35)
+        r = rng.uniform(0.6, 1.0)
+        fm_, zo_ = winds.get(x, y, z, "bush")
+        bush(fm_, x, y, z, zo_, r, rng)
+        decal_disc(shadows, world, x - SUN[0] * r * 0.3, y - SUN[1] * r * 0.3, r * 1.6, 0.35)
 
     ntuft = 0
     for _ in range(9000):
@@ -8286,11 +10362,52 @@ def build_scene(world, progress=None):
             for sx, sy in ((1, 0), (0, 1), (-1, 0), (0, -1)):
                 gm_at(x, y).tri((x, y, fz + 0.04), (x + sx * s, y + sy * s, fz), (x - sy * s, y + sx * s, fz), fc)
 
+    # --- Schilf an Graben und Teichen, hohes Gras auf ebenem Boden (alles schwingt im Wind)
+    def reed_at(x, y, tall):
+        z = world.surface_height(x, y)
+        if not (WATER_LEVEL - 0.9 < z < WATER_LEVEL + 0.45):
+            return
+        if any(bx0 - 1.5 < x < bx1 + 1.5 and by0 - 1.5 < y < by1 + 1.5 for bx0, by0, bx1, by1 in world.dams):
+            return
+        gm_, zo_ = winds.get(x, y, z, "reed", False, 1.0)
+        reed_clump(gm_, x, y, z, zo_, rng, tall * rng.uniform(0.8, 1.2))
+
+    for mx_, my_, a_, o0, o1, o2, o3, _dp in world.moats:
+        for oo in (o0 + (o1 - o0) * 0.5 + 0.25, o2 + (o3 - o2) * 0.5 - 0.25):
+            cp = [(mx_ + px_, my_ + py_) for px_, py_ in moat_contour(a_, oo)]
+            for i in range(len(cp)):
+                (ax_, ay_), (bx_, by_) = cp[i], cp[(i + 1) % len(cp)]
+                ln = math.hypot(bx_ - ax_, by_ - ay_)
+                for q in range(max(1, int(ln / 1.8))):
+                    if rng.random() < 0.3:
+                        t_ = (q + rng.random()) / max(1, int(ln / 1.8))
+                        reed_at(ax_ + (bx_ - ax_) * t_ + rng.uniform(-0.3, 0.3), ay_ + (by_ - ay_) * t_ + rng.uniform(-0.3, 0.3),
+                                1.7)
+    for px_, py_, pr_ in ponds:
+        for _ in range(int(pr_ * 5)):
+            aa_ = rng.uniform(0, 2 * math.pi)
+            rr_ = pr_ * rng.uniform(0.9, 1.45)
+            reed_at(px_ + math.cos(aa_) * rr_, py_ + math.sin(aa_) * rr_, 1.7)
+    ng_ = 0
+    for _ in range(4200 if mtn else 0):
+        if ng_ >= 1100:
+            break
+        x, y = rng.uniform(0, WORLD), rng.uniform(0, WORLD)
+        z = free_spot(x, y, 0.6)
+        if z is None or not -0.5 < z < 0.9:
+            continue
+        gm_, zo_ = winds.get(x, y, z, "grass", False, 2.0)
+        tc_ = terrain_col(x, y, z)
+        reed_clump(gm_, x, y, z, zo_, rng, rng.uniform(0.6, 1.1), (tc_[0] * 1.05, tc_[1] * 1.1, tc_[2] * 0.95))
+        ng_ += 1
+
     pg(0.82, "Gebäude werden errichtet ...")
     # --- Gebäude (Burg, Türme, Häuser, Treppen, Deckung)
     for b in world.boxes:
+        if not b.vis:
+            continue
         cx_, cy_ = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
-        box(m, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
+        box(chunk(cx_, cy_) if mtn else m, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
             mat=mat_for_color(b.col))
         dx, dy = b.x1 - b.x0, b.y1 - b.y0
         gz = world.surface_height(cx_, cy_)
@@ -8333,6 +10450,72 @@ def build_scene(world, progress=None):
             w2.tri((px, py, WATER_LEVEL + 0.03), pts[2][i], pts[2][j], cc, below)
             w2.tri(pts[2][i], pts[3][i], pts[3][j], (cc, (cc[0], cc[1], cc[2], 0.0), (cc[0], cc[1], cc[2], 0.0)), below)
             w2.tri(pts[2][i], pts[3][j], pts[2][j], (cc, (cc[0], cc[1], cc[2], 0.0), cc), below)
+    pg(0.97, "Stadt wird möbliert ...")
+    hr_ = random.Random(world.seed + 77)
+    for mx_, my_, a_, o0, o1, o2, o3, _dp in world.moats:                    # Wassergraben (gerundetes Quadrat)
+        o_in = o0 + (o1 - o0) * 0.567 - 0.15
+        o_out = o2 + (o3 - o2) * 0.433 + 0.15
+        offs = ((o_in - 0.45, (0.75, 0.88, 0.92, 0.0)), (o_in + 0.15, (0.62, 0.80, 0.88, 0.6)),
+                (o_in + 0.9, (0.16, 0.42, 0.68, 0.86)), ((o_in + o_out) / 2, (0.10, 0.34, 0.58, 0.90)),
+                (o_out - 0.9, (0.16, 0.42, 0.68, 0.86)), (o_out - 0.15, (0.62, 0.80, 0.88, 0.6)),
+                (o_out + 0.45, (0.75, 0.88, 0.92, 0.0)))
+        rings = [([(mx_ + px_, my_ + py_) for px_, py_ in moat_contour(a_, o)], col_) for o, col_ in offs]
+        below = (mx_, my_, WATER_LEVEL - 1.0)
+        for k in range(len(rings) - 1):
+            (A_, ca), (B_, cb) = rings[k], rings[k + 1]
+            for i in range(len(A_)):
+                j = (i + 1) % len(A_)
+                pa, pb, pc_, pd = ((A_[i][0], A_[i][1], WATER_LEVEL), (B_[i][0], B_[i][1], WATER_LEVEL),
+                                   (B_[j][0], B_[j][1], WATER_LEVEL), (A_[j][0], A_[j][1], WATER_LEVEL))
+                w.tri(pa, pb, pc_, (ca, cb, cb), below)
+                w.tri(pa, pc_, pd, (ca, cb, ca), below)
+        cc2 = (0.85, 0.95, 1.0, 0.22)
+        for (ia, ib) in ((1, 2), (5, 4)):
+            (A_, _c1), (B_, _c2) = rings[ia], rings[ib]
+            for i in range(len(A_)):
+                j = (i + 1) % len(A_)
+                z2 = WATER_LEVEL + 0.03
+                w2.tri((A_[i][0], A_[i][1], z2), (B_[i][0], B_[i][1], z2), (B_[j][0], B_[j][1], z2),
+                       (cc2, (cc2[0], cc2[1], cc2[2], 0.0), (cc2[0], cc2[1], cc2[2], 0.0)), below)
+                w2.tri((A_[i][0], A_[i][1], z2), (B_[j][0], B_[j][1], z2), (A_[j][0], A_[j][1], z2),
+                       (cc2, (cc2[0], cc2[1], cc2[2], 0.0), cc2), below)
+    for r_ in world.vis:                                                       # Häuser, Brücken, Tor, Stände, Brunnen
+        k_ = r_["k"]
+        px_, py_ = r_.get("x", r_.get("x0", 0.0)), r_.get("y", r_.get("y0", 0.0))
+        cm_ = chunk(px_, py_)
+        if k_ == "house":
+            house_details(cm_, lamps, r_, hr_)
+            if r_.get("tower"):
+                tower_details(cm_, r_, hr_)
+        elif k_ == "stall":
+            stall_details(cm_, r_, hr_)
+        elif k_ == "nissen":
+            nissen_details(cm_, lamps, r_, hr_)
+        elif k_ == "fountain":
+            fountain_details(cm_, r_, hr_, w)
+        elif k_ == "well":
+            well_details(cm_, r_, hr_)
+        elif k_ == "bridge":
+            bridge_details(chunk((r_["x0"] + r_["x1"]) / 2, (r_["y0"] + r_["y1"]) / 2), lamps, r_, hr_, world)
+        elif k_ == "gate":
+            gate_details(chunk((r_["x0"] + r_["x1"]) / 2, r_["y"]), lamps, r_, hr_)
+    if world.moats:
+        castle_details(chunk(CENTER, CENTER), lamps, world, hr_)
+    flags = []
+    for r_ in world.vis:
+        if r_["k"] == "flag":
+            fmesh = Mesh()
+            flag_mesh(fmesh, r_["w"], r_["h"], r_["col"], hr_)
+            flags.append({"node": fmesh.node("flag"), "x": r_["x"], "y": r_["y"], "z": r_["z"] + r_["h"], "ang": r_["ang"]})
+    spins = []                                                        # drehende Radarantennen (Knoten drehen im Spiel)
+    for r_ in world.vis:
+        if r_["k"] == "spin":
+            sm_ = _SpinMesh()
+            if r_["kind"] == "dish":
+                radar_dish(sm_)
+            else:
+                freya_array(sm_)
+            spins.append({"node": sm_.node("radar"), "x": r_["x"], "y": r_["y"], "z": r_["z"], "speed": r_["speed"], "h0": r_["h0"]})
     # --- King-of-the-Hill-Zone: gelber Ring mit Pfosten und leicht getönter Boden
     zone = []
     if world.mode == "koth":
@@ -8354,7 +10537,8 @@ def build_scene(world, progress=None):
             px, py, _pz = zp(ZONE_R - 0.25, 2 * math.pi * i / 8)
             box(edge, px, py, 1.6, 0.25, 0.25, 3.2, (1.0, 0.85, 0.15))
         zone = [fill.node("zone_fill"), edge.node("zone_ring")]
-    extra = [lamps.node("lamps"), [c.node("grass") for c in gcells.values()], shadows.node("decals"), w2.node("water2")]
+    extra = [lamps.node("lamps"), [c.node("grass") for c in gcells.values()], shadows.node("decals"), w2.node("water2"),
+             winds.nodes(), flags, [c_.node("block") for c_ in chunks.values()], spins]
     return m.node("land"), w.node("water"), zone, extra
 
 
@@ -109098,6 +111282,8 @@ class Game(ShowBase):
         self.sky_root = self.sky_clouds = self.sun_np = self.filters = None
         self.vignette = self.land_np = None
         self.water_nps = []
+        self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.shadows = {}
         self.camLens.setFov(FOV)
         self.camLens.setNearFar(0.1, 450)      # grosse Karten: siehe build_world (Fernsicht)
@@ -110573,9 +112759,10 @@ class Game(ShowBase):
             self.filters = None
         if self.sun_np is not None:
             try:
-                if self.land_np is not None:
-                    self.land_np.clearLight()
-                    self.land_np.clearShader()
+                for npx in (self.land_np, self.town_np):
+                    if npx is not None:
+                        npx.clearLight()
+                        npx.clearShader()
                 self.sun_np.removeNode()
                 if self.amb_np is not None:
                     self.amb_np.removeNode()
@@ -110620,6 +112807,8 @@ class Game(ShowBase):
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
         self.strike_fx = None
         self.water_nps = []
+        self.town_np = None
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
@@ -110867,7 +113056,36 @@ class Game(ShowBase):
         self.land_np = self.render.attachNewNode(land)
         if world.mc:
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
-        lamps, grass, decals, water2 = extra
+        lamps, grass, decals, water2 = extra[:4]
+        self.town_np = None
+        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
+        if len(extra) >= 7:
+            self.town_np = self.render.attachNewNode("stadt")
+            for bn in extra[6]:
+                self.town_np.attachNewNode(bn)
+            free_np = self.render.attachNewNode("wind_frei")      # ohne Licht (Gras, Schilf)
+            free_np.setTwoSided(True)
+            for wd in extra[4]:
+                par = self.town_np if wd["lit"] else free_np
+                wnp = par.attachNewNode(wd["node"])
+                if wd["kind"] in ("reed", "grass", "bush"):
+                    wnp.setTwoSided(True)
+                self.wind_nodes.append((wnp, wd["x"], wd["y"], wd["z"], wd["kind"]))
+            self.spin_nodes = []
+            for sd in (extra[7] if len(extra) > 7 else ()):
+                snp = self.town_np.attachNewNode(sd["node"])
+                snp.setTwoSided(True)
+                snp.setPos(sd["x"], sd["y"], sd["z"])
+                snp.setH(sd["h0"])
+                self.spin_nodes.append((snp, sd["speed"], sd["h0"], sd["x"], sd["y"]))
+            for fd in extra[5]:
+                fnp = self.town_np.attachNewNode(fd["node"])
+                fnp.setTwoSided(True)
+                fnp.setPos(fd["x"], fd["y"], fd["z"])
+                fnp.setH(fd["ang"])
+                self.flag_nodes.append((fnp, fd["x"], fd["y"], fd["ang"]))
+            if world.mc:
+                self.town_np.setLightOff()
         self.render.attachNewNode(lamps).setTwoSided(True)
         gr = self.render.attachNewNode("grass")
         for gn in grass:
@@ -112833,9 +115051,11 @@ class Game(ShowBase):
             amb.setColor((0.72, 0.72, 0.74, 1))
             self.amb_np = amb_np = self.render.attachNewNode(amb)
             if not getattr(getattr(self, "world", None), "mc", None):      # Minecraft-Karte: Licht steckt schon in den Vertexfarben
-                self.land_np.setLight(self.sun_np)
-                self.land_np.setLight(amb_np)
-                self.land_np.setShaderAuto()
+                for npx in (self.land_np, self.town_np):
+                    if npx is not None:
+                        npx.setLight(self.sun_np)
+                        npx.setLight(amb_np)
+                        npx.setShaderAuto()
         except Exception as e:
             print("Schatten nicht verfügbar:", e)
             self.sun_np = None
@@ -112859,11 +115079,39 @@ class Game(ShowBase):
         for i, wn in enumerate(self.water_nps):
             wn.setTexOffset(TextureStage.getDefault(), t * (0.021 if i == 0 else -0.016),
                             t * (0.012 if i == 0 else 0.019))
+        self.update_wind(t, (self.player.x, self.player.y))
         self.update_shadows()
         if self.sun_np is not None:
             pl = self.player
             self.sun_np.setPos(pl.x + SUN[0] * 100, pl.y + SUN[1] * 100, pl.z + SUN[2] * 100)
             self.sun_np.lookAt(pl.x, pl.y, pl.z)
+
+    WIND_AMP = {"tree": 0.022, "bush": 0.03, "reed": 0.12, "grass": 0.14}
+
+    def update_wind(self, t, cp):
+        """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe)."""
+        for snp, spd, h0, sx_, sy_ in self.spin_nodes:                 # Radarantennen drehen sich immer (auch weit weg: sichtbar bis 400 m)
+            snp.setH(h0 + (t * spd) % 360.0)
+        if not self.wind_nodes and not self.flag_nodes:
+            return
+        cx, cy = cp[0], cp[1]
+        wd = math.radians(35.0)
+        dx, dy = math.cos(wd), math.sin(wd)
+        for wnp, x, y, zref, kind in self.wind_nodes:
+            if abs(x - cx) > 150 or abs(y - cy) > 150:
+                continue
+            ph = (x + y) * 0.045
+            g = (0.55 + 0.30 * math.sin(t * 0.9 + ph) + 0.22 * math.sin(t * 2.3 + ph * 1.7)
+                 + 0.12 * math.sin(t * 5.1 + ph * 0.6))
+            a = g * self.WIND_AMP.get(kind, 0.03)
+            sx, sy = dx * a, dy * a
+            wnp.setShear(0, sx, sy)
+            wnp.setPos(-sx * zref, -sy * zref, 0)
+        for fnp, x, y, ang in self.flag_nodes:
+            if abs(x - cx) > 200 or abs(y - cy) > 200:
+                continue
+            ph = (x + y) * 0.05
+            fnp.setH(ang + 10.0 * math.sin(t * 2.1 + ph) + 5.0 * math.sin(t * 4.3 + ph * 1.3))
 
     def update_shadows(self):
         """Runde bzw. längliche weiche Schatten unter Figuren, Fahrzeugen und Helikoptern."""
@@ -114722,6 +116970,23 @@ class Game(ShowBase):
                 rect(0, g - 0.15, WORLD, g + 0.15, grid)
         for ppx, ppy, r in world.ponds:
             disc(ppx, ppy, r * 1.3, (0.20, 0.42, 0.70))
+        for x0, y0, x1, y1, hw, _k in getattr(world, "roads", ()):      # Wege der Stadt
+            ln = math.hypot(x1 - x0, y1 - y0)
+            for i in range(max(1, int(ln / 1.5)) + 1):
+                t = i / max(1, int(ln / 1.5))
+                rx, ry = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+                rect(rx - hw, ry - hw, rx + hw, ry + hw, (0.50, 0.45, 0.34))
+        for mx, my, a, o0, _o1, _o2, o3, _dp in getattr(world, "moats", ()):   # Wassergraben mit Brücken
+            ro = 8.0
+            rect(mx - a - ro, my - a, mx + a + ro, my + a, (0.20, 0.42, 0.70))
+            rect(mx - a, my - a - ro, mx + a, my + a + ro, (0.20, 0.42, 0.70))
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    disc(mx + sx * a, my + sy * a, ro, (0.20, 0.42, 0.70))
+            rect(mx - a - o0, my - a - o0, mx + a + o0, my + a + o0, (0.30, 0.38, 0.22))
+            for r_ in getattr(world, "vis", ()):
+                if r_.get("k") == "bridge":
+                    rect(r_["x0"], r_["y0"], r_["x1"], r_["y1"], (0.55, 0.40, 0.24) if r_.get("style") == "wood" else (0.62, 0.60, 0.56))
         if world.mode == "koth":
             disc(CENTER, CENTER, ZONE_R, (0.62, 0.55, 0.15))
             disc(CENTER, CENTER, ZONE_R - 0.6, (0.28, 0.36, 0.16))
