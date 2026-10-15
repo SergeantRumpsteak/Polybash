@@ -245,9 +245,9 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-EXP_NET_VERSION = 36    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
-NET_VERSION = 15         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 95               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+EXP_NET_VERSION = 37    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
+NET_VERSION = 16         # Protokollversion: nur gleiche Versionen spielen zusammen
+BUILD = 96               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -4198,6 +4198,8 @@ class World:
             return
         h.hp -= dmg
         self.events.append(("veh_hit", attacker, h.hp <= 0))
+        if h.driver >= 0 and h.hp > 0:                   # Pilot sieht den Treffer rot (Schaden nimmt nur der Heli)
+            self.events.append(("player_hurt", min(dmg, 25.0), h.driver))
         if h.hp <= 0:
             self.destroy_heli(h, attacker)
 
@@ -4333,7 +4335,7 @@ class World:
             hc.firing = False
             if hc.driver < 0:
                 hc.speed = hc.vx = hc.vy = 0.0
-            elif drv is not None and drv.trig and not hc.ground and self.phase == "play":
+            elif drv is not None and drv.trig and self.phase == "play":
                 for _ in range(3):                       # Minigun
                     if hc.mg_cd > 0 or hc.mg < 1:
                         break
@@ -4894,6 +4896,21 @@ class World:
                         "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
         return out
 
+    def players_ready(self):
+        """Haben alle Mitspieler (ausser dem Host) 'Bereit' gedrückt? Nur dann darf der Host starten."""
+        return all(p.ready for p in self.players.values() if p.pid != 0)
+
+    def ready_counts(self):
+        guests = [p for p in self.players.values() if p.pid != 0]
+        return sum(1 for p in guests if p.ready), len(guests)
+
+    def start_next_match(self):
+        """Host: im Rundenendmenü die nächste Runde starten (erst, wenn alle bereit sind)."""
+        if self.phase != "over" or not self.players_ready():
+            return False
+        self.new_match()
+        return True
+
     def new_match(self):
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
         self.bullets, self.mobs, self.pending = [], [], []
@@ -4918,6 +4935,7 @@ class World:
             pl.loot = -1
             pl.death_pos = None
             pl.stats = new_stats()
+            pl.ready = False
         for pl in list(self.players.values()):
             if getattr(pl, "prespawn", False):
                 continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
@@ -4927,7 +4945,7 @@ class World:
     def start_round(self):
         """Host: die Lobby beenden. Alle Spieler (auch die, die noch nicht gespawnt waren) werden aufgestellt;
         die gewählte Ausrüstung setzt jeder Spieler bei sich selbst (Ereignis 'respawn')."""
-        if not self.lobby:
+        if not self.lobby or not self.players_ready():
             return
         self.lobby = False
         self.time_left = self.limit
@@ -4935,6 +4953,7 @@ class World:
             pl.kills = pl.deaths = 0
             pl.score = 0.0
             pl.stats = new_stats()
+            pl.ready = False
             self.respawn_player(pl)
         self.events.append(("newmatch",))
         netlog(f"Host: Lobby beendet, Runde startet mit {len(self.players)} Spielern")
@@ -5005,9 +5024,7 @@ class World:
             if self.time_left <= 0:
                 self.end_match()
         else:
-            self.over_t -= dt
-            if self.over_t <= 0:
-                self.new_match()
+            self.over_t = 0.0                            # keine automatische neue Runde: der Host startet sie, sobald alle bereit sind
 
 
 class GunState:
@@ -5027,6 +5044,9 @@ class Player:
         self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
         self.dead_age = 0.0               # Sekunden seit dem Tod (Wartezeit bis zum Respawn)
         self.prespawn = False             # Host/Beitritt: im Spiel, aber noch nicht gespawnt (Ausrüstungsbildschirm)
+        self.ready = False                # 'Bereit' in der Lobby / im Rundenendmenü (Mitspieler)
+        self.hold_gad = -1                # Gadget-Art in der Hand (-1 = keins), für die Ansicht der anderen
+        self.ready_set = 0.0              # Zeitpunkt der letzten eigenen Änderung (Snapshots überschreiben nicht sofort)
         self.stats = new_stats()          # Rundenstatistik (Host)
         self.sb = None                    # Mitspieler: (Monster, Kisten) aus dem Snapshot
         self.respawn(world, x, y, DEFAULT_LOADOUT)
@@ -12072,6 +12092,7 @@ class HostSession:
             w.players[pid].look = lk if look_valid(lk) else ""
             npl = w.players[pid]
             npl.hp, npl.dead_age, npl.prespawn = 0.0, 1e9, True      # noch nicht gespawnt: wartet im Ausrüstungsbildschirm
+            npl.ready = bool(w.phase == "over" and not w.lobby)       # im Rundenende beigetreten: kein Bereit nötig
             c.pid = pid
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
@@ -12101,6 +12122,8 @@ class HostSession:
             pl.lean = clampf(float(ln), -LEAN_MAX, LEAN_MAX) if finite(ln) else 0.0
             cr = m.get("cr", 0.0)
             pl.crouch = clampf(float(cr), 0.0, 1.0) if finite(cr) else 0.0
+            gd_ = m.get("gd", -1)
+            pl.hold_gad = gd_ if (isinstance(gd_, int) and -1 <= gd_ < len(GADGETS)) else -1
             pl.trig = bool(m.get("tg")) and (pl.mount >= 0 or pl.heli >= 0)
             pn_m = m.get("hc")                    # Pilot meldet seinen Helikopter
             if isinstance(pn_m, list) and len(pn_m) == 9 and finite(*pn_m):
@@ -12181,6 +12204,13 @@ class HostSession:
         elif t == "respawn":
             if w.can_respawn(pl):
                 w.respawn_player(pl)              # Ereignis 'respawn' sagt dem Client, wohin
+        elif t == "ready":                        # 'Bereit' in der Lobby / im Rundenendmenü
+            if w.lobby or w.phase == "over":
+                pl.ready = bool(m.get("v"))
+        elif t == "rl":                           # Nachladen: die anderen sollen die Animation sehen
+            idx = m.get("w")
+            if pl.hp > 0 and isinstance(idx, int) and 0 <= idx < len(WEAPONS):
+                w.events.append(("wreload", pl.pid, idx, 1))
 
     def send(self, dt):
         """Snapshot an alle Mitspieler (mit SNAP_RATE) und Host-Suche rufen."""
@@ -12198,7 +12228,7 @@ class HostSession:
         self.snap_t -= dt
         if self.snap_t > 0:
             return
-        self.snap_t = 1.0 / SNAP_RATE
+        self.snap_t = max(self.snap_t + 1.0 / SNAP_RATE, -1.0 / SNAP_RATE)     # gleichmässiger Takt statt Zeitverlust
         if not clients:
             self.events.clear()
             return
@@ -12206,7 +12236,9 @@ class HostSession:
         snap = {"t": "snap", "rd": w.respawn_delay,
                 "pl": [[p.pid, r2(-5.0 if p.prespawn else p.x), r2(-5.0 if p.prespawn else p.y), r2(-20.0 if p.prespawn else p.z), r1(p.heading), r1(p.pitch), r1(p.hp),
                         p.cur, 1 if p.moving else 0, p.name, p.kills, p.deaths, r1(p.score),
-                        r1(p.protect), r2(p.lean), r2(p.crouch), p.look] for p in w.players.values()],
+                        r1(p.protect), r2(p.lean), r2(p.crouch), p.look, 1 if p.ready else 0,
+                        ((p.gadget if p.gad_out and p.hp > 0 else -1) if p.pid == 0 else p.hold_gad)]
+                       for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
                         r2(m.hurt_t), r2(m.dead_t)] for m in w.mobs],
@@ -12393,11 +12425,15 @@ class ClientSession:
         for row in m["pl"]:
             pid, x, y, z, h, p, hp, cur, mv, name, kl, de, sc, prot, ln, cr = row[:16]
             lk = row[16] if len(row) > 16 else ""
+            rdy = bool(row[17]) if len(row) > 17 else False
+            hg = row[18] if len(row) > 18 else -1
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
                 me = w.players.get(pid)
                 if me is not None:
                     me.kills, me.deaths, me.score, me.protect = kl, de, sc, prot
+                    if time.time() - me.ready_set > 0.7:
+                        me.ready = rdy             # der Host bestimmt (z.B. Zurücksetzen bei Rundenstart)
                 continue
             pl = w.players.get(pid)
             if pl is None:
@@ -12407,6 +12443,7 @@ class ClientSession:
             pl.crouch = cr
             pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
+            pl.ready, pl.hold_gad = rdy, (hg if isinstance(hg, int) else -1)
             seen.add(pid)
         for pid in [pid for pid in w.players if pid != self.my_id and pid not in seen]:
             del w.players[pid]
@@ -12551,10 +12588,11 @@ class ClientSession:
         self.send_t -= dt
         if self.send_t > 0:
             return
-        self.send_t = 1.0 / INPUT_RATE
+        self.send_t = max(self.send_t + 1.0 / INPUT_RATE, -1.0 / INPUT_RATE)
         msg = {"t": "st", "p": [r2(pl.x), r2(pl.y), r2(pl.z), r1(pl.heading), r1(pl.pitch)],
                "mv": 1 if pl.moving else 0, "cur": pl.cur, "ln": r2(pl.lean),
-               "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0}
+               "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0,
+               "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1}
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
             msg["vh"] = [v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed)]
@@ -12611,6 +12649,13 @@ class ClientSession:
 
     def request_respawn(self):
         self.conn.send({"t": "respawn"})
+
+    def send_ready(self, v):
+        self.conn.send({"t": "ready", "v": 1 if v else 0})
+        self.conn.flush()
+
+    def send_reload(self, wi):
+        self.conn.send({"t": "rl", "w": int(wi)})
 
 
 def melee_curve(u):
@@ -12698,6 +12743,25 @@ def held_hands(name):
     return s_, (hr[0], hr[1] + s_ * (lg[0] - rg[0]), hr[2] + s_ * (lg[1] - rg[1]))
 
 
+_FLASH_GEOM = None
+
+
+def flash_geom():
+    """Mündungsfeuer als Stern (ein GeomNode, von allen Figuren geteilt)."""
+    global _FLASH_GEOM
+    if _FLASH_GEOM is None:
+        m = Mesh(lit=False)
+        pts = []
+        for i in range(8):
+            a = 2 * math.pi * i / 8
+            rr = 0.11 if i % 2 == 0 else 0.045
+            pts.append((math.cos(a) * rr, 0.0, math.sin(a) * rr))
+        for i in range(8):
+            m.tri((0, 0, 0), pts[i], pts[(i + 1) % 8], (1.0, 0.85, 0.4))
+        _FLASH_GEOM = m.node("flash")
+    return _FLASH_GEOM
+
+
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
@@ -12710,6 +12774,9 @@ class PlayerView:
         self.gun = self.armR.attachNewNode("gun")                         # Halter am rechten Arm; darin die gehaltene Waffe
         self.gun.setPos(-sr[0], -sr[1], -sr[2])
         self.held, self.held_cur = {}, -1
+        self.flash, self.flash_t, self.kick = {}, 0.0, 0.0                 # Mündungsfeuer und Rückstoss der anderen
+        self.gadn, self.gad_cur = {}, -1                                   # Gadget in der Hand (je Art ein Modell)
+        self.src, self.src_t, self.vel = None, 0.0, (0.0, 0.0)             # Empfangsposition / Geschwindigkeit (Vorausberechnung)
         self.hl = SOLDIER_HAND[0]                                         # Ruheposition der linken Hand (je Waffe)
         mm = Mesh()
         box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
@@ -12748,9 +12815,44 @@ class PlayerView:
             nd.setScale(s_)
             nd.setPos(hr[0], hr[1] - s_ * rg[0], hr[2] - s_ * rg[1])
             self.held[wi] = nd
+            fl = nd.attachNewNode("mflash")                               # Mündungsfeuer: zwei gekreuzte Sterne am Laufende
+            for hh in (0, 90):
+                fl.attachNewNode(flash_geom()).setH(hh)
+            fl.setPos(*GUN_PARTS[name][1])
+            fl.setScale(2.2)
+            fl.setTwoSided(True)
+            fl.setLightOff()
+            fl.hide()
+            self.flash[wi] = fl
         for k, nd in self.held.items():
             (nd.show if k == wi else nd.hide)()
         self.hl = held_hands(name)[1]
+
+    def fire(self, wi):
+        """Ein Schuss dieses Spielers: Mündungsfeuer blitzt kurz auf, die Waffe schlägt zurück."""
+        if not (0 <= wi < len(WEAPONS)):
+            return
+        self.show_held(wi)
+        fl = self.flash.get(wi)
+        if fl is not None:
+            fl.setR(random.uniform(0, 360))
+            fl.setScale(random.uniform(1.7, 2.6) * (1.5 if WEAPONS[wi].pellets > 1 else 1.0))
+        self.flash_t = 0.06
+        self.kick = 1.0
+
+    def show_gadget(self, k):
+        """Gadget (C4, Claymore, Funkbake) statt der Waffe in der Hand zeigen; k = -1: Waffe."""
+        if k == self.gad_cur:
+            return
+        self.gad_cur = k
+        if k >= 0 and k not in self.gadn:
+            hr = SOLDIER_HAND[1]
+            nd = self.gun.attachNewNode(gadget_mesh(k).node("hand_gadget%d" % k))
+            nd.setPos(hr[0], hr[1] + 0.06, hr[2] - 0.02)
+            nd.setScale(1.2)
+            self.gadn[k] = nd
+        for kk, nd in self.gadn.items():
+            (nd.show if kk == k else nd.hide)()
 
     def start_reload(self, wi):
         if not (0 <= wi < len(WEAPONS)) or self.th_t > 0:
@@ -12822,9 +12924,24 @@ class PlayerView:
     def update(self, p, dt):
         if math.hypot(p.x - self.x, p.y - self.y) > 8.0:                 # Sprung (Respawn)
             self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
+        now = time.time()                                                # Vorausberechnung: kein Stehenbleiben zwischen verspäteten Paketen
+        if self.src is None or math.hypot(p.x - self.src[0], p.y - self.src[1]) > 8.0:
+            self.src, self.src_t, self.vel = (p.x, p.y), now, (0.0, 0.0)
+        elif (p.x, p.y) != self.src:
+            dts = now - self.src_t
+            if 0.004 < dts < 0.6 and p.moving:
+                nv = ((p.x - self.src[0]) / dts, (p.y - self.src[1]) / dts)
+                self.vel = (self.vel[0] * 0.65 + nv[0] * 0.35, self.vel[1] * 0.65 + nv[1] * 0.35)
+            else:
+                self.vel = (0.0, 0.0)
+            self.src, self.src_t = (p.x, p.y), now
+        ahead = min(0.18, now - self.src_t) if (p.moving and p.hp > 0) else 0.0
+        if not p.moving:
+            self.vel = (0.0, 0.0)
+        tx, ty = p.x + self.vel[0] * ahead, p.y + self.vel[1] * ahead
         a = min(1.0, 15.0 * dt)
-        self.x += (p.x - self.x) * a
-        self.y += (p.y - self.y) * a
+        self.x += (tx - self.x) * a
+        self.y += (ty - self.y) * a
         self.z += (p.z - self.z) * a
         self.h += ((p.heading - self.h + 180.0) % 360.0 - 180.0) * a
         r = self.root
@@ -12841,7 +12958,16 @@ class PlayerView:
             self.pose_arms(0.0)
             return
         self.dead_t = 0.0
+        hg = getattr(p, "hold_gad", -1)
         self.show_held(getattr(p, "cur", 0))
+        self.show_gadget(hg)
+        for k_, nd_ in self.held.items():                                # Gadget in der Hand: Waffe verschwindet
+            if hg >= 0:
+                nd_.hide()
+        self.flash_t = max(0.0, self.flash_t - dt)
+        self.kick = max(0.0, self.kick - 9.0 * dt)
+        for k_, fl_ in self.flash.items():
+            (fl_.show if (self.flash_t > 0 and k_ == self.held_cur and hg < 0) else fl_.hide)()
         r.clearColorScale()
         r.setHpr(self.h, 0, 0)
         r.setSz(1.0 - (1.0 - CROUCH_H / PLAYER_H) * p.crouch)               # geduckt
@@ -12853,6 +12979,10 @@ class PlayerView:
         self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * mv)
         self.torso.setR(p.lean / LEAN_MAX * 14.0)          # Lehnen: Oberkörper kippt zur Seite
         self.pose_arms(dt)
+        if not self.slung:                                  # Rückstoss: Waffe ruckt nach hinten und kippt hoch
+            sr_ = SOLDIER_SH[1]
+            self.gun.setPos(-sr_[0], -sr_[1] - 0.07 * self.kick, -sr_[2])
+            self.gun.setP(7.0 * self.kick)
 
 
 # --------------------------------------------------------------- Ton
@@ -109162,6 +109292,27 @@ class Game(ShowBase):
         elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             self.do_respawn()
 
+    def toggle_ready(self):
+        """Mitspieler: 'Bereit' ein-/ausschalten (Lobby und Rundenendmenü)."""
+        pl = self.player
+        if self.net_mode != "client" or self.client is None or self.client.lost or pl is None:
+            return
+        pl.ready = not pl.ready
+        pl.ready_set = time.time()
+        self.client.send_ready(pl.ready)
+
+    def end_next_match(self):
+        """Rundenendmenü, Host/Einzelspiel: nächste Runde starten, wenn alle bereit sind."""
+        if self.net_mode in ("host", "single") and self.world.phase == "over":
+            self.world.start_next_match()
+
+    def end_round_now(self):
+        """Esc-Menü, Host: Runde vorzeitig beenden - alle springen in den Spielendbildschirm."""
+        self.close_quit_box()
+        w = self.world
+        if self.net_mode != "client" and w is not None and w.phase == "play" and not w.lobby:
+            w.end_match()
+
     def right_btn_rect(self):
         """Grosser Knopf unten rechts (Respawn bzw. 'Spiel starten'), folgt dem Bildschirmrand."""
         a = float(self.getAspectRatio())
@@ -109193,7 +109344,11 @@ class Game(ShowBase):
                 self.open_loadscreen()
         elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             if self.net_mode == "host" and self.world.lobby:
-                self.world.start_round()            # nur der Host darf die Runde starten
+                if self.world.players_ready():      # nur der Host startet, und erst wenn alle 'Bereit' gedrückt haben
+                    self.fire_lock = True
+                    self.world.start_round()
+            elif self.net_mode == "client":
+                self.toggle_ready()
         elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
             self.lobby_equip = True                 # erst das Waffenmenü
 
@@ -109252,7 +109407,8 @@ class Game(ShowBase):
         for i, (nm, tg) in enumerate(ui["rows"]):
             if i < len(pls):
                 p = pls[i]
-                tags = (["HOST"] if p.pid == 0 else []) + (["DU"] if p.pid == self.my_id else [])
+                tags = ((["HOST"] if p.pid == 0 else (["BEREIT"] if p.ready else ["wartet ..."]))
+                        + (["DU"] if p.pid == self.my_id else []))
                 self.set_text(nm, f"{i + 1}   {p.name}")
                 nm.setFg((1.0, 0.85, 0.3, 1) if p.pid == self.my_id else (1, 1, 1, 1))
                 self.set_text(tg, "   ".join(tags))
@@ -109262,20 +109418,35 @@ class Game(ShowBase):
         if host:
             ip = getattr(getattr(self, "host", None), "ip_label", "")
             self.set_text(ui["addr"], f"Mitspieler beitreten unter: {ip}" if ip else "")
-            self.set_text(ui["hint"], "Warte, bis deine Freunde da sind. Mit 'Spiel starten' beginnt die Runde für alle.")
+            n_r, n_g = w.ready_counts()
+            self.set_text(ui["hint"], "Warte, bis deine Freunde da sind und 'Bereit' gedrückt haben." if n_r < n_g
+                          else "Alle sind bereit - mit 'Spiel starten' beginnt die Runde für alle.")
         else:
             self.set_text(ui["addr"], "")
-            self.set_text(ui["hint"], "Warte, bis der Host die Runde startet." + (" Du kannst schon deine Ausrüstung wählen." if self.LOBBY_EQUIP else ""))
+            self.set_text(ui["hint"], "Drücke 'Bereit', wenn du losspielen willst. Der Host startet die Runde." +
+                          (" Du kannst vorher deine Ausrüstung wählen." if self.LOBBY_EQUIP else ""))
         rb = self.right_btn_rect()
         hov_s = host and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
         ui["start"].setPos(rb[0], 0, rb[2])
         ui["start_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
         if host:
-            ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_s else ui["start"].setColor(*START_BTN)
-            self.set_text(ui["start_t"], "Spiel starten")
+            n_r, n_g = w.ready_counts()
+            if n_r >= n_g:
+                ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_s else ui["start"].setColor(*START_BTN)
+                self.set_text(ui["start_t"], "Spiel starten")
+            else:
+                ui["start"].setColor(0.16, 0.19, 0.24, 0.9)
+                self.set_text(ui["start_t"], f"Warte auf Bereit ({n_r}/{n_g})")
         else:
-            ui["start"].setColor(0.16, 0.19, 0.24, 0.9)
-            self.set_text(ui["start_t"], "Warte auf den Host ...")
+            me_ = self.player
+            on_ = bool(me_ is not None and me_.ready)
+            hov_c = mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
+            if on_:
+                ui["start"].setColor(0.12, 0.45, 0.2, 0.98)
+                self.set_text(ui["start_t"], "Bereit  (zum Abbrechen klicken)")
+            else:
+                ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_c else ui["start"].setColor(*START_BTN)
+                self.set_text(ui["start_t"], "Bereit")
         e = self.LOBBY_EQ_BTN
         hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
         for nd in (ui["eq"], ui["eq_t"]):
@@ -109288,7 +109459,7 @@ class Game(ShowBase):
         self.resp_btn = self.aspect2d.attachNewNode(cm.generate())
         self.resp_btn.setColor(*START_BTN)
         self.resp_btn.setTransparency(TransparencyAttrib.MAlpha)
-        self.resp_btn_text = OnscreenText(text="Respawn", pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
+        self.resp_btn_text = OnscreenText(text="Spawn", pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.resp_btn.hide()
         self.resp_btn_text.hide()
@@ -109386,7 +109557,8 @@ class Game(ShowBase):
         txt.destroy()
         for h in hots:
             h.destroy()
-        if recapture and self.mode == "play" and self.player is not None and not self.dead_free:   # Respawn-Menue/Lobby: Maus bleibt frei
+        if (recapture and self.mode == "play" and self.player is not None and not self.dead_free
+                and getattr(self, "end", None) is None):   # Respawn-Menue/Lobby/Endmenü: Maus bleibt frei
             self.set_capture(True)
 
     def on_confirm(self, yes):
@@ -109630,9 +109802,12 @@ class Game(ShowBase):
         net = self.net_mode
         if kind == "main":
             leave = "Zum Hauptmenü"
+            w_ = self.world
+            can_end = net != "client" and w_ is not None and w_.phase == "play" and not w_.lobby
             self.open_overlay("pause", "Pause", [
                 ("Weiterspielen   (Esc)", self.close_quit_box),
-                ("Einstellungen", lambda: self.show_pause("settings")),
+                ("Einstellungen", lambda: self.show_pause("settings"))]
+                + ([("Runde beenden", self.end_round_now)] if can_end else []) + [
                 (leave, lambda: self.show_pause("leave")),
                 ("Spiel beenden", self.pause_quit)],
                 "Das Spiel läuft im Hintergrund weiter" if net != "single" else "")
@@ -110804,6 +110979,12 @@ class Game(ShowBase):
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
         self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.9), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
                                          mayChange=True)
+        cmb = CardMaker("endbtn")
+        cmb.setFrame(0, 0.68, 0, 0.18)
+        self.end["btn"] = root.attachNewNode(cmb.generate())
+        self.end["btn"].setTransparency(TransparencyAttrib.MAlpha)
+        self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, fg=(1, 1, 1, 1),
+                                         shadow=(0, 0, 0, 0.8), mayChange=True)
         self.show_end_tab(0)
         self.set_capture(False)
 
@@ -110855,6 +111036,13 @@ class Game(ShowBase):
         p = self.mouse_2d()
         if p is None or self.end is None:
             return
+        rb = self.right_btn_rect()
+        if rb[0] <= p[0] <= rb[1] and rb[2] <= p[1] <= rb[3]:
+            if self.net_mode == "client":
+                self.toggle_ready()
+            else:
+                self.end_next_match()
+            return
         for i, (x0, x1, z0, z1, _t) in enumerate(self.end["rects"]):
             if x0 <= p[0] <= x1 and z0 <= p[1] <= z1:
                 self.show_end_tab(i)
@@ -110871,9 +111059,22 @@ class Game(ShowBase):
         if world.phase == "play":                         # neue Runde hat begonnen
             self.close_end_screen()
             return
-        left = int(math.ceil(max(0.0, world.over_t)))
-        self.set_text(e["count"], f"Nächste Runde in {left} s" + ("   (Esc: Menü)" if left > 0 else ""))
         p = self.mouse_2d()
+        n_r, n_g = world.ready_counts()
+        rb = self.right_btn_rect()
+        hov = p is not None and rb[0] <= p[0] <= rb[1] and rb[2] <= p[1] <= rb[3]
+        e["btn"].setPos(rb[0], 0, rb[2])
+        e["btn_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.06)
+        if self.net_mode == "client":
+            on_ = bool(self.player is not None and self.player.ready)
+            e["btn"].setColor(*((0.12, 0.45, 0.2, 0.98) if on_ else ((0.20, 0.62, 0.28, 0.98) if hov else START_BTN)))
+            self.set_text(e["btn_t"], "Bereit  (zum Abbrechen klicken)" if on_ else "Bereit")
+            self.set_text(e["count"], "Drücke 'Bereit' - der Host startet dann die nächste Runde   (Esc: Menü)")
+        else:
+            ok_ = n_r >= n_g
+            e["btn"].setColor(*(((0.20, 0.62, 0.28, 0.98) if hov else START_BTN) if ok_ else (0.16, 0.19, 0.24, 0.9)))
+            self.set_text(e["btn_t"], "Neue Runde starten" if ok_ else f"Warte auf Bereit ({n_r}/{n_g})")
+            self.set_text(e["count"], ("Alle sind bereit" if ok_ else f"Bereit: {n_r} von {n_g} Mitspielern") + "   (Esc: Menü)")
         for i, (x0, x1, z0, z1, t) in enumerate(e["rects"]):   # Hover wie im Hauptmenü
             if i != e["tab"]:
                 on = p is not None and x0 <= p[0] <= x1 and z0 <= p[1] <= z1
@@ -111339,12 +111540,13 @@ class Game(ShowBase):
             self.reload_req = True                  # (Respawn nur noch über den grünen Knopf im Respawn-Menü)
 
     def do_respawn(self):
-        """Klick auf den grünen Respawn-Knopf."""
+        """Klick auf den grünen Spawn-Knopf."""
         if self.mode != "play" or self.quit_box is not None:
             return
         pl = self.player
         if pl.hp > 0 or self.world.phase != "play" or getattr(self.world, "lobby", False):
             return
+        self.fire_lock = True                       # der Klick auf den Knopf darf nicht gleich als Schuss zählen
         if self.net_mode == "client":
             waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
             if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
@@ -111973,6 +112175,15 @@ class Game(ShowBase):
         trig = down(MouseButton.one())
         edge = trig and not self.prev_trig
         self.prev_trig = trig
+        if getattr(self, "fire_lock", False):  # nach dem Klick auf 'Spawn' / 'Spiel starten': erst Maustaste loslassen
+            if trig:
+                trig = edge = False
+            else:
+                self.fire_lock = False
+        if getattr(self, "end", None) is not None:     # Rundenendmenü: Maus bleibt frei, kein Schiessen
+            trig = edge = False
+            if self.captured and self.quit_box is None:
+                self.set_capture(False)
         if self.quit_box is not None:         # Abfrage offen: das Spiel läuft, die Eingaben ruhen
             trig = edge = False
         elif not self.captured and edge and not self.dead_free:      # Klick fängt die Maus wieder ein
@@ -112340,7 +112551,7 @@ class Game(ShowBase):
                     self.sfx.shot(e[1], e[2])
                     if 0 <= e[1] < len(WEAPONS):
                         self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud)
-                if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse
+                if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse (fremde: siehe 'shotpos')
                     continue
                 w = WEAPONS[e[1]]
                 rr = self.prng
@@ -112433,7 +112644,10 @@ class Game(ShowBase):
                     self.hitmark.setFg((1, 0.15, 0.1, 1))
             elif kind == "wreload":
                 if e[1] == self.my_id:
-                    self.sfx.reload(e[2])
+                    if len(e) <= 3:                 # (Echo vom Host ignorieren)
+                        self.sfx.reload(e[2])
+                        if self.net_mode == "client" and self.client is not None and not self.client.lost:
+                            self.client.send_reload(e[2])      # damit der Host (und alle) die Animation sehen
                 else:
                     v = self.player_views.get(e[1])
                     if v is not None:
@@ -112443,6 +112657,9 @@ class Game(ShowBase):
                     op = self.world.players.get(e[1])
                     if op is not None:
                         self.sfx.shot(op.cur, e[1])
+                        v_ = self.player_views.get(e[1])
+                        if v_ is not None:          # Mündungsfeuer und Rückstoss an der fremden Figur
+                            v_.fire(op.cur)
                     self.pings[e[1]] = (time.time(), e[2], e[3])
             elif kind == "loot":
                 if e[1] == self.my_id:
@@ -113237,7 +113454,7 @@ class Game(ShowBase):
             self.resp_btn.setPos(rb[0], 0, rb[2])
             self.resp_btn_text.setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
             self.resp_btn.setColor(*((0.20, 0.62, 0.28, 0.98) if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
-            self.set_text(self.resp_btn_text, "Respawn" if ready else f"Respawn in {int(math.ceil(wait))} s")
+            self.set_text(self.resp_btn_text, "Spawn" if ready else f"Spawn in {int(math.ceil(wait))} s")
             self.resp_btn.show()
             self.resp_btn_text.show()
         else:
