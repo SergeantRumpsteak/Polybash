@@ -130,6 +130,7 @@ def _exp_path():
 import base64
 import json
 import math
+import re
 import os
 import random
 import socket
@@ -247,7 +248,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 37    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 16         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 102               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 103               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -11863,6 +11864,9 @@ class JoinAttempt:
                 elif m.get("t") == "refuse":
                     self.state, self.msg = "failed", str(m.get("why", "Abgelehnt"))
                     netlog(f"Client: vom Host abgelehnt: {self.msg}")
+                    hv = re.search(r"Host: v(\d+)\.", self.msg)       # "Andere Spielversion (Host: v37.xx)"
+                    if (hv and int(hv.group(1)) == EXP_NET_VERSION) or (not hv and "Andere Spielversion" in self.msg):
+                        self.state = "exp"                            # Host läuft in Experimental -> dorthin wechseln
                     break
             if self.state == "waiting":
                 if self.conn.closed:
@@ -11871,7 +11875,7 @@ class JoinAttempt:
                 elif time.time() - self.t0 > 20.0:
                     self.state, self.msg = "failed", "Keine Antwort vom Host"
                     netlog(f"Client: kein welcome nach 20 s ({self.conn.rx_bytes} B empfangen)")
-            if self.state == "failed":
+            if self.state in ("failed", "exp"):
                 self.close()
         return self.state
 
@@ -110163,6 +110167,10 @@ class Game(ShowBase):
             res = self.attempt.poll()
             if res == "ready":
                 self.start_game("client", self.attempt)
+            elif res == "exp":                         # per IP beigetreten, aber der Host spielt Experimental
+                a = self.attempt
+                netlog(f"Client: Host {a.host} läuft in Experimental - wechsle in Robins Version")
+                self.launch_experimental({"do": "connect", "ip": a.host, "port": a.thread.addr[1]})
             elif res == "failed":
                 self.show_menu("join", self.attempt.msg)
             else:

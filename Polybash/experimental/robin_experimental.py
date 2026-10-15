@@ -16651,7 +16651,7 @@ class HostSession:
                 return
             netlog(f"Host: hello empfangen: Name {m.get('name')!r}, Version {m.get('v')} (Host {NET_VERSION})")
             if m.get("v") != NET_VERSION:
-                return self.refuse(c, "Andere Spielversion")
+                return self.refuse(c, f"Andere Spielversion (Host: v{NET_VERSION}.exp)")
             if len(w.players) >= MAX_PLAYERS:
                 return self.refuse(c, "Das Spiel ist voll")
             pid = self.next_pid
