@@ -114587,7 +114587,7 @@ class Game(ShowBase):
         return (a - 0.76, a - 0.08, -0.94, -0.76)
 
     LOBBY_EQ_BTN = (-0.42, 0.42, -0.90, -0.76)
-    LOBBY_EQUIP = False          # Ausrüstungsmenü-Knopf in der Lobby (im Experimental gibt es keins: immer Pistole)
+    LOBBY_EQUIP = True           # Ausrüstungsmenü-Knopf in der Lobby (Experimental: Aufsätze, Visier, Gadget - Waffen nur aus Kisten)
 
     def back_btn_rect(self):
         a = float(self.getAspectRatio())
@@ -114618,7 +114618,7 @@ class Game(ShowBase):
             elif self.net_mode == "client":
                 self.toggle_ready()
         elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
-            self.lobby_equip = True                 # erst das Waffenmenü
+            self.open_loadscreen()                  # Experimental: gleich 'Loadout konfigurieren' (Waffen gibt es nur in Kisten)
 
     def build_lobby_ui(self):
         """Runden-Lobby (vor dem ersten Spawn von Host und Mitspielern): Spielerliste, 'Spiel starten', Ausrüstungsmenü."""
