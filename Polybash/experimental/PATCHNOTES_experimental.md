@@ -2,6 +2,22 @@
 
 Neueste Änderungen oben.
 
+## Experimental 9d: Ausrüstung detailliert + Monster-Makeover (2026-10-15)
+- Alle Ausrüstungsteile neu modelliert (`gear_model`): Helme mit gerundeter Schale, Rand, Kinnriemen und Nieten; Westen mit Brust-/Rückenplatte, Schulterstücken, Taschen und Gurten; Jetpack mit Tanks, Düsen und Steuerkasten; Stiefel mit Sohle, Schaft und Schnürung. Gilt für Drops am Boden und für getragene Teile an der Figur (gleiche Maße wie vorher).
+- Sets optisch zusammengehörig (`GEAR_LOOK`): Rüstungs-Set oliv mit Tarnband, Taschen und Schablonen-Nummer; Schild-Set dunkles Blaugrau mit leuchtenden Cyan-Linien, Visier und Generator-Kern; Hermes-Set Gold mit weißen Federflügeln. Basic-Helm stahlgrau, Jetpack orange/alu, Springfeder-Schuhe grün mit Stahlfeder.
+- Neue Ausrüstungssymbole (`gear_icon`, Sinans Formsprache wie die Waffensymbole) in den HUD-Kacheln (mit kleinem Namen darunter) und in den Tab-Hover-Infos.
+- Monster-Makeover, jede Art mit eigenem, detailliertem Modell:
+  - Grunt: ausgemergelter, gebeugter Zombie mit zerrissenem, blutfleckigem Hemd, Rippen, hängendem Kiefer, einem greifenden und einem baumelnden Arm und einem nackten Fuß; schwankt beim Gehen.
+  - Brute: massig, rote Haut, gebogene Hörner, Hauer, Stiernacken, riesige Arme mit Stachel-Armschienen, Lendenschurz.
+  - Jägerin: schlank und tief geduckt, langer Zopf, Klingen-Finnen am Rücken, Maske mit glühenden Schlitzen, lange Krallen, Sprungbeine.
+  - Koloss: Steinriese mit Felsplatten auf Brust, Schultern, Armen und Knien, glühenden Fugen und Felsbrocken-Fäusten.
+  - Titan: Wald-/Berg-Riese mit Rindenhaut und Moos, Geweih aus Ästen, Wurzelbart, Bäumchen und Kristallen auf den Schultern, Kristallkern, langen Armen – ganz andere Silhouette als der Koloss.
+  - Drohne: gerundeter Rumpf, Ausleger mit Rotorschutz-Ringen, Kamera-Auge mit Linse und LED, Elektro-Spulen mit Polen, Antenne, Positionslichter.
+  - Hase: runder Körper, heller Bauch, Ohren mit rosa Innenseite, glänzende Augen, Schnurrhaare, Blume, lange Hinterläufe.
+- Leistung: Die Geometrie wird je Art einmal gebaut und geteilt. Ab `MOB_LOD_DIST` = 45 m (bei großen Monstern × Größe) zeigt ein LODNode das alte einfache Modell, dessen Farben zum neuen Look passen. Animationen (Laufen, Ausholen, Bodenschlag, Tritt) laufen unverändert über Rumpf und Beine.
+- Trefferzonen: Die Kopfzone (obere 22 %) passt zum sichtbaren Kopf – `hit_h` Grunt 1,78, Brute 1,85 × 1,55, Jägerin 1,62 (geduckt); Koloss, Titan und Drohne bleiben.
+- NET_VERSION 30 -> 31 (Trefferhöhen).
+
 ## Experimental 9c: Nahkampfwaffen – neue Optik + Sonderfähigkeiten (2026-10-15)
 - Alle Nahkampfwaffen neu und detailliert modelliert, in Sinans Formsprache (`MELEE_SHAPES`): Klingen mit Rücken/Schneide-Fase, Hohlkehle, Parierstange, gewickelte Griffe, Knäufe, Nieten; Pfanne mit Boden, Kochfläche, Rand, Stiel und Holzgriff. Dieselben Formen ergeben Ego-Ansicht, Modell an Mitspielern, Drop und das neue HUD-Symbol (`melee_icon`). `MELEE_PARTS` entfällt.
 - Kampfmesser heißt jetzt "Erschöpfungsdolch" (`DAGGER_NAME`): Ritualdolch mit gewellter Klinge, leuchtenden Runen, Ebenholzgriff mit Goldringen und Edelstein-Knauf. Loot-Tabelle umbenannt, Werte gleich.

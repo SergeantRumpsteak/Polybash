@@ -76,6 +76,9 @@ Kampfmesser): Lebensraub DAGGER_LEECH; trifft er Spieler, gehen deren Fähigkeit
 sind sofort bereit und wirken beim nächsten Einsatz x DAGGER_AMP (apply_drain). Katana/Schwert: Schlagtaste
 MELEE_CHARGE_T s halten = Rundumschlag (KATANA_*) bzw. Sprungangriff (SWORD_*). Bratpfanne: Kills laden sie mit
 Essen (PAN_POINTS, PAN_STAGES), T = essen (Heilung, Stufe 3 mit Bissen und Rülpser PAN_BURP_R, kein Monster-Lärm).
+9d: Ausrüstung detailliert (gear_model, Set-Optik GEAR_LOOK, HUD-/Hover-Symbole gear_icon). Monster-Makeover: jede Art
+ein eigenes Modell (Zombie-Grunt, roter Brute, geduckte Jägerin, Stein-Koloss, Wald-Titan, technische Drohne, Hase);
+in der Entfernung das einfache Modell (LODNode, MOB_LOD_DIST); Trefferhöhen passend zum Kopf (hit_h).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -297,7 +300,7 @@ import dataclasses
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, ColorBlendAttrib,
+from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, ColorBlendAttrib, LODNode,
                           CullFaceAttrib, DepthOffsetAttrib, DirectionalLight, Fog, Geom, GeomNode, GeomTriangles, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter, KeyboardButton, LineSegs, MouseButton,
                           NodePath, PerspectiveLens, PNMImage, Point2, Point3, RenderState, Texture,
@@ -444,7 +447,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 30         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 31         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -1304,11 +1307,11 @@ PLAYER_Z_MAX = 95.0        # m: Host nimmt Spielerhöhen bis hierher an (Heli-Pi
 
 MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     "grunt": dict(hp=60.0, speed=MOB_SPEED_GRUNT, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
-                  aggro=24.0, scale=1.0, hear=1.0),
+                  aggro=24.0, scale=1.0, hear=1.0, hit_h=1.78),     # 9d: gebeugter Zombie (Kopf oben 22 %)
     "brute": dict(hp=220.0, speed=MOB_SPEED_BRUTE, wander=0.9, dmg=22.0, cooldown=1.5, windup=0.55,
-                  aggro=18.0, scale=1.55, hear=0.8),                # schwerhörig
+                  aggro=18.0, scale=1.55, hear=0.8, hit_h=1.85 * 1.55),   # schwerhörig; 9d: Kopf tief zwischen den Schultern
     "huntress": dict(hp=45.0, speed=MOB_SPEED_HUNTRESS, wander=1.3, dmg=8.0, cooldown=0.65, windup=0.28,
-                     aggro=30.0, scale=0.96, hear=1.3),             # flink, zerbrechlich, gute Ohren
+                     aggro=30.0, scale=0.96, hear=1.3, hit_h=1.62),   # flink, zerbrechlich, gute Ohren; 9d: geduckt
     # Koloss: 3x so gross, 780 HP (3,5x Brute). Leichter Schlag: holt 1,2 s sichtbar aus, 85 Schaden (fast
     # One-Hit). Bodenschlag: holt 2,4 s aus, Flächenschaden im Umkreis slam_r - im Zentrum (slam_kill) tödlich,
     # nach aussen linear weniger. Bodenschlag, wenn 2+ Spieler in slam_crowd m sind, sonst mit slam_chance.
@@ -11276,87 +11279,17 @@ def build_sky():
 
 # ------------------------------------------------------- Modelle: Mobs, Waffen
 MOB_LOOK = {
-    "grunt": dict(skin=(0.35, 0.62, 0.28), cloth=(0.45, 0.32, 0.18), eye=(1.0, 0.9, 0.2),
+    "grunt": dict(skin=(0.52, 0.60, 0.46), cloth=(0.46, 0.43, 0.34), eye=(0.95, 0.92, 0.55),
                   w=0.5, horns=False),
-    "brute": dict(skin=(0.62, 0.30, 0.25), cloth=(0.25, 0.22, 0.24), eye=(1.0, 0.35, 0.1),
+    "brute": dict(skin=(0.72, 0.21, 0.15), cloth=(0.26, 0.18, 0.11), eye=(1.0, 0.55, 0.1),
                   w=0.72, horns=True),
-    "huntress": dict(skin=(0.88, 0.74, 0.66), cloth=(0.62, 0.10, 0.22), eye=(1.0, 0.3, 0.9),
-                     w=0.36, horns=False, female=True, hair=(0.12, 0.07, 0.05)),
-    "colossus": dict(skin=(0.46, 0.47, 0.52), cloth=(0.20, 0.17, 0.15), eye=(1.0, 0.55, 0.1),
+    "huntress": dict(skin=(0.86, 0.80, 0.86), cloth=(0.24, 0.07, 0.27), eye=(1.0, 0.3, 0.9),
+                     w=0.36, horns=False, female=True, hair=(0.06, 0.05, 0.07)),
+    "colossus": dict(skin=(0.30, 0.31, 0.35), cloth=(0.36, 0.35, 0.33), eye=(1.0, 0.55, 0.1),
                      w=0.85, horns=True, plates=(0.32, 0.30, 0.28)),
-    "titan": dict(skin=(0.50, 0.44, 0.38), cloth=(0.26, 0.22, 0.19), eye=(1.0, 0.22, 0.08),
-                  w=0.9, horns=True, plates=(0.36, 0.33, 0.30), crags=(0.40, 0.37, 0.33)),
+    "titan": dict(skin=(0.34, 0.27, 0.19), cloth=(0.26, 0.42, 0.18), eye=(0.45, 0.9, 1.0),
+                  w=0.6, horns=True, plates=(0.26, 0.42, 0.18), crags=(0.45, 0.9, 1.0)),
 }
-
-
-def build_drone():
-    """Elektro-Drohne: flacher Rumpf mit vier Rotorarmen, blau leuchtendes Auge, Spulen unten.
-    Gleiche Rückgabe wie build_mob; 'Beine' sind die Rotoren (drehen sich)."""
-    rng = random.Random(77)
-    root = NodePath("drone")
-    body, glow = Mesh(), Mesh(lit=False)
-    body.mat = "metal"
-    box(body, 0, 0, 0.32, 0.5, 0.5, 0.18, (0.22, 0.24, 0.30), rng)
-    box(body, 0, 0, 0.44, 0.3, 0.3, 0.08, (0.16, 0.17, 0.22), rng)
-    for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
-        box(body, sx * 0.3, sy * 0.3, 0.36, 0.34, 0.06, 0.04, (0.30, 0.32, 0.36))
-    box(glow, 0, 0.26, 0.32, 0.16, 0.03, 0.1, (0.35, 0.8, 1.0))        # Auge vorne
-    box(glow, 0, 0, 0.18, 0.06, 0.06, 0.12, (0.4, 0.85, 1.0))          # Elektrode unten
-    torso = root.attachNewNode("torso")
-    torso.attachNewNode(body.node("b"))
-    g = torso.attachNewNode(glow.node("g"))
-    g.setFogOff()
-    rm = Mesh(lit=False)                                                 # Rotorblatt (Kreuz)
-    box(rm, 0, 0, 0, 0.36, 0.05, 0.01, (0.75, 0.78, 0.82))
-    box(rm, 0, 0, 0, 0.05, 0.36, 0.01, (0.75, 0.78, 0.82))
-    rotors = [rm, rm]
-    legs = []
-    for i, (ox, oy) in enumerate(((0.45, 0.45), (-0.45, -0.45), (0.45, -0.45), (-0.45, 0.45))):
-        n = torso.attachNewNode("rotor")
-        n.setPos(ox, oy, 0.42)
-        n.attachNewNode(rotors[i % 2].node("r"))
-        legs.append(n)
-    bar = root.attachNewNode("bar")
-    bar.setPos(0, 0, 1.0)
-    return root, torso, legs, bar
-
-
-def build_critter(col):
-    """Fluchttier: Feldhase - gestreckter Körper, lange Ohren mit dunklen Spitzen, helle Blume (Schwanz),
-    kräftige Hinterläufe. Unauffällige Fellfarbe, kein Leuchten. Gleiche Rückgabe wie build_mob."""
-    rng = random.Random(5)
-    root = NodePath("critter")
-    m = Mesh()
-    dark = tuple(c * 0.62 for c in col)
-    belly = tuple(min(1.0, c * 1.35 + 0.12) for c in col)
-    blob(m, 0, -0.05, 0.02, 0.36, 0.56, 0.36, col, rng, jitter=0.07)        # Rumpf (hinten höher)
-    blob(m, 0, -0.22, 0.12, 0.34, 0.34, 0.34, col, rng, jitter=0.05)        # Hinterteil
-    blob(m, 0, 0.0, -0.12, 0.28, 0.4, 0.14, belly, rng, jitter=0.04)       # heller Bauch
-    blob(m, 0, 0.42, 0.26, 0.24, 0.3, 0.24, col, rng, jitter=0.05)         # Kopf
-    box(m, 0, 0.62, 0.2, 0.1, 0.08, 0.08, dark, rng)                       # Nase
-    for sx in (-1, 1):
-        box(m, sx * 0.07, 0.34, 0.62, 0.08, 0.05, 0.42, col, rng)          # Ohren, leicht nach hinten
-        box(m, sx * 0.07, 0.32, 0.86, 0.085, 0.055, 0.1, (0.12, 0.1, 0.09), rng)   # dunkle Ohrspitzen
-        box(m, sx * 0.13, 0.54, 0.3, 0.04, 0.06, 0.06, (0.06, 0.05, 0.05))  # Augen (seitlich)
-    blob(m, 0, -0.5, 0.2, 0.12, 0.1, 0.12, (0.92, 0.9, 0.86), rng, jitter=0.03)   # Blume
-    torso = root.attachNewNode("torso")
-    torso.setZ(0.45)
-    torso.attachNewNode(m.node("m"))
-    legs = []
-    for sx in (-1, 1):                                # Hinterläufe (gross); die Vorderpfoten hängen am Rumpf
-        lm = Mesh()
-        box(lm, 0, 0.12, -0.17, 0.12, 0.42, 0.1, dark, rng)
-        leg = root.attachNewNode("leg")
-        leg.setPos(sx * 0.17, -0.22, 0.25)
-        leg.attachNewNode(lm.node("l"))
-        legs.append(leg)
-    fm = Mesh()
-    for sx in (-1, 1):
-        box(fm, sx * 0.1, 0.32, -0.32, 0.07, 0.08, 0.26, dark, rng)       # Vorderläufe
-    torso.attachNewNode(fm.node("f"))
-    bar = root.attachNewNode("bar")
-    bar.setPos(0, 0, 1.6)
-    return root, torso, legs, bar
 
 
 def mob_bar(bar):
@@ -11378,8 +11311,8 @@ def mob_bar(bar):
     return bar, fg
 
 
-def build_mob(kind, look=None):
-    """Gibt (root, torso, legL, legR, bar, bar_fg) zurück. Hüfte liegt bei z=0.75,
+def _build_mob_lo(kind, look=None):
+    """9d: einfaches Modell (Fernansicht). Gibt (root, torso, legL, legR, bar, bar_fg) zurück. Hüfte liegt bei z=0.75,
     Füsse bei z=0, Blick Richtung +y. look: eigenes Aussehen (für Mitspieler)."""
     if kind == "drone":
         root, torso, legs, bar = build_drone()
@@ -11462,6 +11395,389 @@ def build_mob(kind, look=None):
     fg.setDepthOffset(1)
     bar.hide()
     return root, torso, legs[0], legs[1], bar, fg
+
+
+# ------------------------------------------------------------------ 9d: Monster-Makeover
+# Jede Art hat ein eigenes, detailliertes Modell (Rumpf um die Hüfte bei z = 0,75, Beine mit Gelenk an der Hüfte -
+# die Animationen in MobView bleiben dieselben). In der Entfernung schaltet ein LODNode auf das alte, einfache Modell
+# um (MOB_LOD_DIST, in Modell-Metern: grosse Monster schalten entsprechend später um). Die Geometrie wird je Art nur
+# einmal gebaut und von allen Exemplaren geteilt.
+MOB_LOD_DIST = 45.0
+_MOB_GEOM = {}
+
+
+def _tube(m, pts, rs, col, rng=None, sides=8, caps=(True, True), colfn=None, mat=None):
+    rr = [r if isinstance(r, tuple) else (r, r) for r in rs]
+    loft(m, pts, [r[0] for r in rr], [r[1] for r in rr], col, rng, mat, colfn, caps, 0.03, sides)
+
+
+def _claws(m, hand, d, n, ln, col, rng, spread=0.035):
+    """n Krallen ab hand in Richtung d (Einheitsvektor), leicht gefächert."""
+    for k in range(n):
+        o = (k - (n - 1) / 2) * spread
+        a = (hand[0] + o, hand[1], hand[2])
+        b = (a[0] + d[0] * ln + o * 0.5, a[1] + d[1] * ln, a[2] + d[2] * ln)
+        _tube(m, [a, b], [0.012, 0.002], col, rng, 5)
+
+
+def _mob_hi_grunt(rng):
+    """Grunt: ausgemergelter, gebeugter Zombie - zerrissenes Hemd mit Blutflecken, Rippen, hängender Kiefer, ein Arm
+    greift nach vorn, der andere baumelt; ein Hosenbein zerfetzt, ein Fuss nackt."""
+    skin, shirt, pants = (0.52, 0.60, 0.46), (0.46, 0.43, 0.34), (0.27, 0.25, 0.22)
+    blood, dskin = (0.36, 0.06, 0.05), (0.36, 0.42, 0.32)
+
+    def stain(p):
+        v = math.sin(p[0] * 31 + p[2] * 17) * math.sin(p[1] * 23 - p[2] * 11)
+        return blood if v > 0.55 else shirt
+    t = Mesh()
+    ell(t, (0, 0.0, 0.02), 0.17, 0.12, 0.1, pants, rng, rings=4)                               # Becken
+    _tube(t, [(0, 0, 0.04), (0, 0.07, 0.3), (0, 0.17, 0.5)], [(0.16, 0.11), (0.17, 0.12), (0.19, 0.12)], shirt, rng, 10,
+          colfn=stain)                                                                          # gebeugter Rumpf
+    for k in range(4):                                                                          # Rippen (Hemd zerrissen)
+        z = 0.2 + 0.06 * k
+        box(t, -0.17, 0.08 + 0.04 * k, z, 0.03, 0.1, 0.018, dskin, rng)
+    for k in range(6):                                                                          # Fetzen am Saum
+        a = math.pi * (0.15 + 0.7 * k / 5)
+        x, y = math.cos(a) * 0.17, -math.sin(a) * 0.12 + 0.02
+        _tube(t, [(x, y, 0.06), (x * 1.05, y * 1.05, -0.08 - 0.03 * (k % 2))], [(0.03, 0.006), (0.015, 0.004)], shirt, rng, 4)
+    for sx in (-1, 1):
+        ell(t, (sx * 0.2, 0.16, 0.5), 0.07, 0.07, 0.06, shirt, rng, rings=4)                   # Schultern
+    _tube(t, [(0, 0.19, 0.55), (0, 0.27, 0.66)], [0.05, 0.045], skin, rng, 8)                   # Hals
+    ell(t, (0, 0.31, 0.8), 0.115, 0.13, 0.14, skin, rng, rings=6)                               # Kopf
+    box(t, 0, 0.42, 0.73, 0.1, 0.05, 0.07, (0.12, 0.05, 0.05), rng)                             # offener Mund
+    box(t, 0, 0.405, 0.69, 0.09, 0.06, 0.03, dskin, rng)                                       # hängender Kiefer
+    for k in range(4):
+        box(t, -0.03 + 0.02 * k, 0.445, 0.765, 0.008, 0.01, 0.018, (0.85, 0.82, 0.62))           # Zähne
+    for sx in (-1, 1):
+        ell(t, (sx * 0.045, 0.425, 0.84), 0.022, 0.012, 0.016, (0.95, 0.92, 0.55), None, rings=3)  # trübe Augen
+        box(t, sx * 0.045, 0.43, 0.875, 0.05, 0.02, 0.012, dskin, rng)                         # Brauenwulst
+    for k in range(5):                                                                          # schüttere Haare
+        cone(t, -0.06 + 0.03 * k, 0.27 - 0.02 * (k % 2), 0.92, 0.025, 0.06, 4, (0.16, 0.14, 0.11), rng)
+    # Arme: links greift nach vorn (Ärmel zerrissen), rechts baumelt
+    _tube(t, [(-0.22, 0.16, 0.48), (-0.27, 0.36, 0.43)], [0.055, 0.045], shirt, rng, 8)
+    _tube(t, [(-0.27, 0.36, 0.43), (-0.22, 0.62, 0.42)], [0.04, 0.032], skin, rng, 8)
+    ell(t, (-0.21, 0.66, 0.42), 0.04, 0.05, 0.025, skin, rng, rings=3)
+    _claws(t, (-0.21, 0.69, 0.42), (0.0, 1.0, -0.15), 4, 0.07, dskin, rng, 0.018)
+    _tube(t, [(0.22, 0.15, 0.48), (0.27, 0.15, 0.24)], [0.045, 0.038], skin, rng, 8)
+    _tube(t, [(0.27, 0.15, 0.24), (0.29, 0.22, 0.02)], [0.036, 0.03], skin, rng, 8)
+    box(t, 0.28, 0.2, 0.15, 0.06, 0.05, 0.03, blood, rng)                                      # Wunde
+    _claws(t, (0.29, 0.23, -0.01), (0.0, 0.2, -1.0), 4, 0.07, dskin, rng, 0.018)
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.03, -0.38)], [0.085, 0.07], pants, rng, 8)
+        if sx < 0:                                                                              # zerfetztes Hosenbein, nackter Fuss
+            _tube(lm, [(0, 0.03, -0.38), (0, -0.01, -0.5)], [0.07, 0.065], pants, rng, 6)
+            _tube(lm, [(0, -0.01, -0.5), (0, -0.02, -0.72)], [0.05, 0.042], skin, rng, 8)
+            ell(lm, (0, 0.05, -0.73), 0.05, 0.1, 0.03, skin, rng, rings=3)
+        else:
+            _tube(lm, [(0, 0.03, -0.38), (0, -0.02, -0.68)], [0.065, 0.06], pants, rng, 8)
+            box(lm, 0, 0.05, -0.71, 0.11, 0.24, 0.07, (0.18, 0.13, 0.09), rng)
+        legs.append(lm)
+    return t, legs, 0.15
+
+
+def _mob_hi_brute(rng):
+    """Brute: massig, rote Haut, gebogene Hörner, Hauer, riesige Arme mit Stachel-Armschienen, Lendenschurz."""
+    skin, dskin, leather, iron = (0.72, 0.21, 0.15), (0.48, 0.12, 0.09), (0.26, 0.18, 0.11), (0.22, 0.22, 0.24)
+    bone = (0.88, 0.84, 0.70)
+    t = Mesh()
+    ell(t, (0, 0, 0.02), 0.25, 0.18, 0.13, leather, rng, rings=4)
+    box(t, 0, 0.17, -0.12, 0.26, 0.04, 0.3, leather, rng)                                      # Lendenschurz
+    box(t, 0, 0.0, 0.1, 0.52, 0.38, 0.06, (0.16, 0.11, 0.07), rng)                             # Gürtel
+    ell(t, (0, 0.2, 0.1), 0.05, 0.03, 0.05, bone, rng, rings=3)                                # Schnalle (Knochen)
+    _tube(t, [(0, 0, 0.1), (0, 0.03, 0.36), (0, 0.06, 0.6)], [(0.25, 0.18), (0.33, 0.23), (0.37, 0.21)], skin, rng, 12)
+    for sx in (-1, 1):
+        ell(t, (sx * 0.13, 0.22, 0.48), 0.13, 0.06, 0.09, skin, rng, rings=4)                 # Brustmuskeln
+        for k in range(2):
+            ell(t, (sx * 0.07, 0.22, 0.22 + 0.1 * k), 0.06, 0.035, 0.045, dskin, rng, rings=3)  # Bauchmuskeln
+    _tube(t, [(0, 0.08, 0.62), (0, 0.15, 0.74)], [0.1, 0.09], skin, rng, 8)                     # Stiernacken
+    ell(t, (0, 0.16, 0.84), 0.14, 0.15, 0.15, skin, rng, rings=6)                               # kleiner Kopf
+    box(t, 0, 0.29, 0.9, 0.2, 0.05, 0.04, dskin, rng)                                          # Brauenwulst
+    for sx in (-1, 1):
+        ell(t, (sx * 0.055, 0.29, 0.86), 0.025, 0.012, 0.016, (1.0, 0.55, 0.1), None, rings=3)  # glühende Augen
+        cone(t, sx * 0.07, 0.3, 0.74, 0.025, 0.09, 5, bone, rng, 0.0)                         # Hauer
+        _tube(t, [(sx * 0.11, 0.14, 0.93), (sx * 0.22, 0.12, 1.0), (sx * 0.29, 0.03, 1.1), (sx * 0.26, -0.06, 1.2)],
+              [0.05, 0.04, 0.025, 0.008], bone, rng, 7)                                        # Hörner
+        ell(t, (sx * 0.38, 0.04, 0.58), 0.17, 0.16, 0.13, skin, rng, rings=5)                 # Schultern
+        for k in range(3):
+            cone(t, sx * (0.4 + 0.05 * k), 0.0 - 0.05 * k, 0.68, 0.03, 0.1, 4, iron, rng)      # Stacheln
+        _tube(t, [(sx * 0.42, 0.05, 0.52), (sx * 0.5, 0.12, 0.3)], [0.12, 0.11], skin, rng, 10)   # Oberarm
+        _tube(t, [(sx * 0.5, 0.12, 0.3), (sx * 0.52, 0.22, 0.05)], [0.14, 0.13], skin, rng, 10)   # Unterarm (wuchtig)
+        _tube(t, [(sx * 0.5, 0.14, 0.24), (sx * 0.52, 0.2, 0.1)], [0.15, 0.15], iron, rng, 10)  # Armschiene
+        for k in range(3):
+            cone(t, sx * 0.62, 0.15 + 0.03 * k, 0.12 + 0.05 * k, 0.02, 0.07, 4, (0.6, 0.6, 0.62), rng)
+        ell(t, (sx * 0.53, 0.25, -0.04), 0.13, 0.13, 0.12, dskin, rng, rings=5)              # Fäuste
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.04, -0.38)], [0.13, 0.11], skin, rng, 10)
+        _tube(lm, [(0, 0.04, -0.38), (0, 0.0, -0.66)], [0.105, 0.09], skin, rng, 10)
+        box(lm, 0, 0.06, -0.71, 0.17, 0.28, 0.09, (0.14, 0.10, 0.08), rng)                     # Fusswickel
+        legs.append(lm)
+    return t, legs, 0.2
+
+
+def _mob_hi_huntress(rng):
+    """Jägerin: schlank, tief geduckt, langer Zopf, Klingen-Finnen an den Schulterblättern, lange Krallen,
+    Maske mit glühenden Schlitzen - unverwechselbare Silhouette."""
+    suit, trim, skin, hair = (0.24, 0.07, 0.27), (0.85, 0.15, 0.62), (0.86, 0.80, 0.86), (0.06, 0.05, 0.07)
+    metal = (0.70, 0.72, 0.78)
+    t = Mesh()
+    ell(t, (0, 0, 0.0), 0.14, 0.11, 0.09, suit, rng, rings=4)
+    _tube(t, [(0, 0.0, 0.02), (0, 0.12, 0.28), (0, 0.25, 0.47)], [(0.12, 0.09), (0.11, 0.08), (0.15, 0.09)], suit, rng, 10)
+    _tube(t, [(-0.12, 0.05, 0.1), (0.0, 0.2, 0.36), (0.12, 0.05, 0.1)], [0.012] * 3, trim, None, 4)   # Leuchtnaht
+    for sx in (-1, 1):
+        ell(t, (sx * 0.15, 0.24, 0.46), 0.06, 0.06, 0.05, suit, rng, rings=4)
+        loft(t, [(sx * 0.1, 0.12, 0.42), (sx * 0.18, -0.1, 0.68), (sx * 0.2, -0.22, 0.86)], [0.012, 0.01, 0.003],
+             [0.07, 0.05, 0.01], metal, rng, None, None, (True, True), 0.02, 4)                # Klingen-Finnen
+    _tube(t, [(0, 0.27, 0.5), (0, 0.33, 0.62)], [0.04, 0.036], skin, rng, 8)
+    ell(t, (0, 0.36, 0.76), 0.095, 0.115, 0.12, skin, rng, rings=6)                            # Kopf
+    box(t, 0, 0.45, 0.78, 0.17, 0.05, 0.05, (0.08, 0.06, 0.09), rng)                           # Maske
+    for sx in (-1, 1):
+        box(t, sx * 0.04, 0.475, 0.785, 0.045, 0.01, 0.012, (1.0, 0.3, 0.9))                  # Augenschlitze
+        cone(t, sx * 0.09, 0.34, 0.8, 0.02, 0.1, 4, skin, rng, 0.0)                            # spitze Ohren
+    ell(t, (0, 0.32, 0.84), 0.1, 0.11, 0.06, hair, rng, rings=4)
+    _tube(t, [(0, 0.27, 0.86), (0, 0.12, 0.92), (0, -0.12, 0.84), (0, -0.32, 0.68), (0, -0.44, 0.5)],
+          [0.045, 0.05, 0.04, 0.03, 0.01], hair, rng, 6)                                        # langer Zopf
+    _tube(t, [(-0.16, 0.26, 0.44), (-0.2, 0.42, 0.3)], [0.035, 0.03], suit, rng, 8)            # Arme: links lauernd vorn
+    _tube(t, [(-0.2, 0.42, 0.3), (-0.16, 0.58, 0.12)], [0.028, 0.024], skin, rng, 8)
+    _claws(t, (-0.16, 0.6, 0.1), (0.0, 0.6, -0.8), 3, 0.12, metal, rng, 0.02)
+    _tube(t, [(0.16, 0.26, 0.44), (0.22, 0.3, 0.22)], [0.035, 0.03], suit, rng, 8)             # rechts zum Sprung zurück
+    _tube(t, [(0.22, 0.3, 0.22), (0.24, 0.1, 0.06)], [0.028, 0.024], skin, rng, 8)
+    _claws(t, (0.24, 0.08, 0.04), (0.0, -0.3, -0.95), 3, 0.12, metal, rng, 0.02)
+    legs = []
+    for sx in (-1, 1):                                                                          # gebeugte Sprungbeine
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.16, -0.3)], [0.07, 0.055], suit, rng, 8)
+        _tube(lm, [(0, 0.16, -0.3), (0, -0.04, -0.62)], [0.05, 0.04], suit, rng, 8)
+        _tube(lm, [(0, -0.04, -0.62), (0, 0.1, -0.73)], [0.045, 0.035], (0.1, 0.06, 0.1), rng, 6)
+        cone(lm, 0, -0.07, -0.74, 0.02, 0.1, 4, metal, rng, 0.0)                               # Fersensporn
+        box(lm, 0, 0.15, -0.31, 0.06, 0.02, 0.05, trim)
+        legs.append(lm)
+    return t, legs, 0.12
+
+
+def _mob_hi_colossus(rng):
+    """Koloss: Steinriese - dunkler Körper unter dicken Felsplatten (Schultern, Brust, Arme, Knie), glühende Risse
+    dazwischen, Felsbrocken-Fäuste, kleiner gepanzerter Kopf mit glühenden Augen."""
+    body, stone, dstone, glow = (0.30, 0.31, 0.35), (0.50, 0.48, 0.44), (0.36, 0.35, 0.33), (1.0, 0.55, 0.12)
+    t = Mesh()
+    ell(t, (0, 0, 0.03), 0.3, 0.22, 0.14, body, rng, rings=4)
+    _tube(t, [(0, 0, 0.08), (0, 0.04, 0.38), (0, 0.06, 0.6)], [(0.3, 0.22), (0.37, 0.26), (0.4, 0.24)], body, rng, 12)
+    blob(t, 0, 0.2, 0.42, 0.3, 0.12, 0.2, stone, rng, jitter=0.15, subdiv=1, mat="rock")       # Brustplatte
+    blob(t, 0, 0.21, 0.18, 0.22, 0.1, 0.1, dstone, rng, jitter=0.15, subdiv=1, mat="rock")
+    blob(t, 0, -0.2, 0.44, 0.32, 0.14, 0.24, dstone, rng, jitter=0.2, subdiv=1, mat="rock")     # Rückenplatte
+    for k in range(3):
+        cone(t, -0.12 + 0.12 * k, -0.28, 0.5 + 0.06 * (k % 2), 0.07, 0.22, 5, stone, rng)       # Rückenzacken
+    for z in (0.3, 0.06):
+        box(t, 0, 0.27, z, 0.4, 0.015, 0.025, glow)                                             # glühende Fugen
+    ell(t, (0, 0.12, 0.8), 0.13, 0.14, 0.14, body, rng, rings=5)                                # Kopf
+    blob(t, 0, 0.12, 0.88, 0.16, 0.17, 0.09, stone, rng, jitter=0.12, subdiv=1, mat="rock")     # Steinhelm
+    box(t, 0, 0.25, 0.8, 0.16, 0.02, 0.025, glow)                                               # Augen-Schlitz
+    for sx in (-1, 1):
+        blob(t, sx * 0.44, 0.0, 0.66, 0.24, 0.26, 0.15, stone, rng, jitter=0.18, subdiv=1, mat="rock")   # Schulterplatten
+        box(t, sx * 0.44, 0.0, 0.56, 0.4, 0.3, 0.02, glow)
+        _tube(t, [(sx * 0.46, 0.04, 0.55), (sx * 0.56, 0.1, 0.3)], [0.14, 0.13], body, rng, 10)
+        _tube(t, [(sx * 0.56, 0.1, 0.3), (sx * 0.58, 0.18, 0.06)], [0.14, 0.15], body, rng, 10)
+        blob(t, sx * 0.6, 0.14, 0.2, 0.17, 0.17, 0.13, stone, rng, jitter=0.2, subdiv=1, mat="rock")     # Armplatte
+        blob(t, sx * 0.6, 0.22, -0.04, 0.18, 0.18, 0.16, dstone, rng, jitter=0.25, subdiv=1, mat="rock") # Felsfaust
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.03, -0.38)], [0.15, 0.14], body, rng, 10)
+        _tube(lm, [(0, 0.03, -0.38), (0, 0.0, -0.66)], [0.14, 0.13], body, rng, 10)
+        blob(lm, 0, 0.12, -0.38, 0.14, 0.09, 0.12, stone, rng, jitter=0.2, subdiv=1, mat="rock")        # Kniepanzer
+        blob(lm, 0, 0.1, -0.12, 0.13, 0.08, 0.14, dstone, rng, jitter=0.2, subdiv=1, mat="rock")
+        blob(lm, 0, 0.06, -0.71, 0.18, 0.24, 0.09, dstone, rng, jitter=0.15, subdiv=1, mat="rock")       # Fuss
+        legs.append(lm)
+    return t, legs, 0.22
+
+
+def _mob_hi_titan(rng):
+    """Titan: uralter Wald-/Berg-Riese - schlanker, sehr hoher Körper aus Rinde und Moos, lange Arme bis fast zum
+    Boden, Geweih aus Ästen, Bart aus Wurzeln, Bäumchen und Kristalle auf den Schultern, glühender Kristall-Kern -
+    eine ganz andere Silhouette als der kantige Koloss."""
+    bark, dbark, moss, crys = (0.34, 0.27, 0.19), (0.22, 0.17, 0.12), (0.26, 0.42, 0.18), (0.45, 0.9, 1.0)
+    t = Mesh()
+
+    def mossy(p):
+        return moss if math.sin(p[0] * 13 + p[1] * 7) * math.cos(p[2] * 9) > 0.45 else bark
+    ell(t, (0, 0, 0.02), 0.2, 0.15, 0.12, dbark, rng, rings=4)
+    _tube(t, [(0, 0, 0.06), (0, 0.02, 0.32), (0, 0.0, 0.58), (0, 0.05, 0.7)], [(0.2, 0.15), (0.24, 0.17), (0.3, 0.19), (0.26, 0.16)],
+          bark, rng, 12, colfn=mossy)
+    for k in range(5):                                                                          # Rindenrippen
+        box(t, -0.12 + 0.06 * k, 0.17, 0.3 + 0.04 * (k % 2), 0.025, 0.03, 0.28, dbark, rng)
+    ell(t, (0, 0.2, 0.46), 0.07, 0.04, 0.08, crys, None, rings=4)                               # Kristall-Kern
+    _tube(t, [(0, 0.06, 0.7), (0, 0.12, 0.8)], [0.09, 0.08], bark, rng, 8)
+    ell(t, (0, 0.15, 0.88), 0.11, 0.12, 0.13, bark, rng, rings=6)                               # Kopf
+    for sx in (-1, 1):
+        ell(t, (sx * 0.045, 0.26, 0.9), 0.022, 0.012, 0.014, crys, None, rings=3)               # Augen
+        _tube(t, [(sx * 0.07, 0.12, 0.97), (sx * 0.16, 0.1, 1.08), (sx * 0.2, 0.05, 1.22), (sx * 0.26, 0.0, 1.3)],
+              [0.025, 0.02, 0.014, 0.006], dbark, rng, 5)                                       # Geweih
+        _tube(t, [(sx * 0.16, 0.1, 1.08), (sx * 0.26, 0.14, 1.14)], [0.014, 0.005], dbark, rng, 4)
+        _tube(t, [(sx * 0.2, 0.05, 1.22), (sx * 0.14, 0.0, 1.32)], [0.012, 0.004], dbark, rng, 4)
+    for k in range(6):                                                                          # Wurzel-Bart
+        x = -0.06 + 0.024 * k
+        _tube(t, [(x, 0.24, 0.84), (x * 1.3, 0.27, 0.7), (x * 1.1, 0.24, 0.56 - 0.04 * (k % 3))],
+              [0.014, 0.01, 0.003], (0.30, 0.36, 0.16), rng, 4)
+    for sx in (-1, 1):
+        blob(t, sx * 0.3, 0.0, 0.66, 0.13, 0.15, 0.09, moss, rng, jitter=0.25, subdiv=1, moss=0.8)     # moosige Schultern
+        if sx < 0:                                                                              # Bäumchen auf der Schulter
+            prism(t, sx * 0.3, 0.02, 0.7, 0.012, 0.1, 5, dbark, rng)
+            cone(t, sx * 0.3, 0.02, 0.76, 0.06, 0.14, 7, (0.14, 0.34, 0.16), rng)
+            cone(t, sx * 0.3, 0.02, 0.84, 0.045, 0.1, 7, (0.18, 0.40, 0.18), rng)
+        else:                                                                                   # Kristalle
+            for k in range(3):
+                cone(t, sx * (0.26 + 0.04 * k), -0.04 + 0.04 * k, 0.7, 0.03, 0.16 - 0.03 * k, 5, crys, None, 0.0)
+        _tube(t, [(sx * 0.3, 0.02, 0.62), (sx * 0.38, 0.08, 0.3), (sx * 0.4, 0.14, 0.0), (sx * 0.38, 0.22, -0.3)],
+              [0.08, 0.07, 0.065, 0.06], bark, rng, 8, colfn=mossy)                             # lange Arme
+        for k in range(4):                                                                      # Astfinger
+            _tube(t, [(sx * (0.36 + 0.015 * k), 0.24, -0.32), (sx * (0.34 + 0.03 * k), 0.3 + 0.01 * k, -0.45)],
+                  [0.018, 0.006], dbark, rng, 4)
+    for k in range(4):                                                                          # Kristalle am Rücken
+        cone(t, -0.09 + 0.06 * k, -0.18, 0.36 + 0.08 * (k % 2), 0.035, 0.18, 5, crys, None, 0.0)
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.02, -0.38), (0, -0.02, -0.66)], [0.1, 0.085, 0.075], bark, rng, 8, colfn=mossy)
+        for k in range(4):                                                                      # Wurzelfüsse
+            a = math.radians(-50 + 33 * k)
+            _tube(lm, [(0, 0.0, -0.66), (math.sin(a) * 0.14, math.cos(a) * 0.18, -0.74)], [0.04, 0.015], dbark, rng, 5)
+        legs.append(lm)
+    return t, legs, 0.14
+
+
+def build_drone():
+    """9d: Elektro-Drohne, technisch: gerundeter Rumpf mit Panelfugen, vier Ausleger mit Rotorschutz-Ringen,
+    Kamera-Auge (Linse, Ring, rote LED), Elektro-Spulen mit zwei Polen unten, Antenne. Rückgabe wie build_mob;
+    'Beine' sind die Rotoren (drehen sich)."""
+    rng = random.Random(77)
+    root = NodePath("drone")
+    body, glow = Mesh(), Mesh(lit=False)
+    hull, dk, alu = (0.24, 0.26, 0.31), (0.12, 0.13, 0.16), (0.62, 0.64, 0.68)
+    ell(body, (0, 0, 0.33), 0.27, 0.27, 0.1, hull, rng, mat="metal", rings=5)
+    _ring_z(body, 0, 0, 0.3, 0.33, 0.275, 0.275, dk, rng)
+    ell(body, (0, -0.02, 0.42), 0.14, 0.14, 0.06, dk, rng, rings=4)
+    for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        _tube(body, [(sx * 0.15, sy * 0.15, 0.35), (sx * 0.43, sy * 0.43, 0.37)], [0.025, 0.02], alu, rng, 6)
+        _ring_z(body, sx * 0.45, sy * 0.45, 0.36, 0.39, 0.2, 0.2, dk, rng, 16)
+        prism(body, sx * 0.45, sy * 0.45, 0.36, 0.03, 0.06, 8, alu, rng)                       # Motor
+        box(glow, sx * 0.45 + sx * 0.19, sy * 0.45, 0.375, 0.02, 0.02, 0.015, (1.0, 0.2, 0.15) if sy > 0 else (0.2, 1.0, 0.3))
+    _tube(body, [(0, 0.22, 0.33), (0, 0.3, 0.33)], [0.075, 0.07], dk, rng, 12)                 # Kamera-Gehäuse
+    _tube(glow, [(0, 0.3, 0.33), (0, 0.31, 0.33)], [0.055, 0.055], (0.35, 0.85, 1.0), None, 12)  # Linse
+    ell(glow, (0, 0.312, 0.33), 0.02, 0.006, 0.02, (0.9, 1.0, 1.0), None, rings=3)
+    box(glow, 0.06, 0.26, 0.4, 0.02, 0.02, 0.02, (1.0, 0.15, 0.1))                             # rote LED
+    _tube(body, [(0, 0, 0.27), (0, 0, 0.12)], [0.05, 0.04], dk, rng, 10)                        # Spulenträger
+    for k in range(5):
+        _ring_z(glow, 0, 0, 0.14 + 0.025 * k, 0.15 + 0.025 * k, 0.06, 0.06, (0.4, 0.85, 1.0), None, 10)
+    for sx in (-1, 1):
+        _tube(body, [(sx * 0.03, 0, 0.12), (sx * 0.06, 0.03, 0.04)], [0.012, 0.008], alu, rng, 5)  # Pole
+        ell(glow, (sx * 0.06, 0.03, 0.035), 0.015, 0.015, 0.015, (0.6, 0.95, 1.0), None, rings=3)
+    _tube(body, [(-0.1, -0.12, 0.42), (-0.12, -0.16, 0.58)], [0.008, 0.004], alu, rng, 4)      # Antenne
+    torso = root.attachNewNode("torso")
+    torso.attachNewNode(body.node("b"))
+    g = torso.attachNewNode(glow.node("g"))
+    g.setFogOff()
+    rm = Mesh(lit=False)                                                 # Rotorblatt (zwei Blätter, verdreht)
+    for a in (0.0, math.pi):
+        p0, p1 = (0.0, 0.0, 0.0), (math.cos(a) * 0.18, math.sin(a) * 0.18, 0.005)
+        loft(rm, [p0, p1], [0.025, 0.015], [0.004, 0.003], (0.80, 0.82, 0.86), None, None, None, (True, True), 0.0, 4)
+    rotors = [rm, rm]
+    legs = []
+    for i, (ox, oy) in enumerate(((0.45, 0.45), (-0.45, -0.45), (0.45, -0.45), (-0.45, 0.45))):
+        n = torso.attachNewNode("rotor")
+        n.setPos(ox, oy, 0.43)
+        n.attachNewNode(rotors[i % 2].node("r"))
+        legs.append(n)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 1.0)
+    return root, torso, legs, bar
+
+
+def build_critter(col):
+    """9d: Fluchttier - detaillierter Feldhase: gerundeter Körper (hinten höher), heller Bauch, lange Ohren mit rosa
+    Innenseite und dunklen Spitzen, glänzende Augen, rosa Nase, Schnurrhaare, weisse Blume, kräftige Hinterläufe.
+    Gleiche Rückgabe wie build_mob."""
+    rng = random.Random(5)
+    root = NodePath("critter")
+    m = Mesh()
+    dark = tuple(c * 0.62 for c in col)
+    belly = tuple(min(1.0, c * 1.35 + 0.12) for c in col)
+    pink = (0.88, 0.62, 0.62)
+
+    def fur(p):
+        return belly if p[2] < -0.06 else (dark if math.sin(p[0] * 40 + p[1] * 30) > 0.8 else col)
+    _tube(m, [(0, -0.36, 0.06), (0, -0.2, 0.12), (0, 0.05, 0.06), (0, 0.24, 0.12)],
+          [(0.15, 0.15), (0.2, 0.19), (0.17, 0.15), (0.11, 0.11)], col, rng, 12, colfn=fur)
+    ell(m, (0, 0.34, 0.26), 0.11, 0.15, 0.11, col, rng, rings=6)                                 # Kopf
+    ell(m, (0, 0.47, 0.22), 0.05, 0.05, 0.045, belly, rng, rings=4)                              # Schnauze
+    ell(m, (0, 0.515, 0.235), 0.018, 0.012, 0.012, pink, None, rings=3)                         # Nase
+    for sx in (-1, 1):
+        ell(m, (sx * 0.075, 0.42, 0.29), 0.022, 0.028, 0.025, (0.05, 0.04, 0.04), None, rings=4)   # Augen
+        ell(m, (sx * 0.088, 0.43, 0.3), 0.006, 0.006, 0.006, (0.95, 0.95, 0.95), None, rings=2)
+        _tube(m, [(sx * 0.04, 0.32, 0.34), (sx * 0.07, 0.24, 0.6), (sx * 0.08, 0.18, 0.76)],
+              [(0.03, 0.05), (0.03, 0.055), (0.012, 0.02)], col, rng, 6)                         # Ohren
+        _tube(m, [(sx * 0.052, 0.33, 0.36), (sx * 0.082, 0.26, 0.58)], [(0.012, 0.03), (0.01, 0.03)], pink, None, 4)
+        ell(m, (sx * 0.08, 0.185, 0.77), 0.018, 0.024, 0.03, (0.12, 0.1, 0.09), None, rings=3)   # dunkle Spitzen
+        for k in range(3):                                                                       # Schnurrhaare
+            _tube(m, [(sx * 0.04, 0.49, 0.22 - 0.01 * k), (sx * 0.16, 0.5, 0.24 - 0.025 * k)], [0.002, 0.001],
+                  (0.9, 0.9, 0.88), None, 3)
+        _tube(m, [(sx * 0.07, 0.2, -0.0), (sx * 0.08, 0.26, -0.2), (sx * 0.08, 0.32, -0.26)],
+              [0.035, 0.028, 0.025], dark, rng, 6)                                               # Vorderläufe
+    ell(m, (0, -0.48, 0.18), 0.07, 0.06, 0.07, (0.95, 0.93, 0.9), rng, rings=4)                 # Blume
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.45)
+    torso.attachNewNode(m.node("m"))
+    legs = []
+    for sx in (-1, 1):                                # Hinterläufe (gross)
+        lm = Mesh()
+        ell(lm, (0, 0.0, 0.0), 0.08, 0.14, 0.12, col, rng, rings=4)                             # Keule
+        _tube(lm, [(0, 0.02, -0.08), (0, -0.08, -0.18)], [0.04, 0.03], col, rng, 6)
+        _tube(lm, [(0, -0.08, -0.2), (0, 0.18, -0.22)], [(0.035, 0.02), (0.03, 0.018)], dark, rng, 6)   # langer Fuss
+        leg = root.attachNewNode("leg")
+        leg.setPos(sx * 0.15, -0.22, 0.25)
+        leg.attachNewNode(lm.node("l"))
+        legs.append(leg)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 1.6)
+    return root, torso, legs, bar
+
+
+_MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_huntress, "colossus": _mob_hi_colossus,
+           "titan": _mob_hi_titan}
+
+
+def build_mob(kind, look=None):
+    """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
+    Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
+    if kind == "drone":
+        root, torso, legs, bar = build_drone()
+        bar, fg = mob_bar(bar)
+        return root, torso, legs[0], legs[1], bar, fg, legs
+    if kind == "critter":
+        root, torso, legs, bar = build_critter((look or {}).get("fur", CRITTER_COLORS["standard"]))
+        bar, fg = mob_bar(bar)
+        return root, torso, legs[0], legs[1], bar, fg
+    lo = _build_mob_lo(kind, look)
+    if kind not in _MOB_HI:
+        return lo
+    geo = _MOB_GEOM.get(kind)
+    if geo is None:
+        t_, legs_, lx = _MOB_HI[kind](random.Random(sum(map(ord, kind)) + 9))
+        geo = _MOB_GEOM[kind] = (t_.node("t9"), [lm.node("l9") for lm in legs_], lx)
+    root, torso, legL, legR, bar, fg = lo
+    for part, hi in ((torso, geo[0]), (legL, geo[1][0]), (legR, geo[1][1])):
+        old = part.getChild(0)                                 # Geometrie des einfachen Modells
+        lod = LODNode("lod")
+        lnp = part.attachNewNode(lod)
+        lnp.attachNewNode(hi)
+        old.reparentTo(lnp)
+        lod.addSwitch(MOB_LOD_DIST, 0.0)
+        lod.addSwitch(1e6, MOB_LOD_DIST)
+    legL.setX(-geo[2])
+    legR.setX(geo[2])
+    return root, torso, legL, legR, bar, fg
 
 
 # ------------------------------------------------------- Modell: Soldat (Spieler)
@@ -13340,58 +13656,2720 @@ class Hot:
         self.txt.destroy()
 
 
+# ------------------------------------------------------------------ 9d: detaillierte Ausrüstung
+# Sets mit gemeinsamer Optik: Rüstungs-Set = Oliv mit Tarnband und Schablonen-Nummer, Schild-Set = dunkles Blaugrau
+# mit leuchtenden Cyan-Linien, Hermes-Set = Gold mit weissen Flügeln. Einzelteile: Basic-Helm Stahlgrau, Jetpack
+# Orange/Alu, Springfeder-Schuhe Grün mit Stahlfedern.
+GEAR_LOOK = {"armor": ((0.36, 0.40, 0.25), (0.22, 0.25, 0.15), (0.50, 0.48, 0.32)),     # Grundfarbe, dunkel, Akzent
+             "shield": ((0.20, 0.25, 0.33), (0.12, 0.15, 0.20), (0.40, 0.90, 1.00)),
+             "hermes": ((0.92, 0.72, 0.26), (0.66, 0.48, 0.14), (0.98, 0.97, 0.92)),
+             "": ((0.55, 0.57, 0.58), (0.32, 0.33, 0.35), (0.80, 0.80, 0.78))}
+_GL_GLOW = (0.45, 0.95, 1.0)
+
+
+def _cone(m, cx, cy, z0, r, h, sides, col, rng=None, jit=0.0):
+    """9d: genauer Kegel (ohne die zufällige Spitzen-Verschiebung von cone) - Hörner, Zähne, Stacheln, Düsen."""
+    loft(m, [(cx, cy, z0), (cx, cy, z0 + h)], [r, 0.002], [r, 0.002], col, rng, None, None, (True, False), 0.02, sides)
+
+
+def _dome(m, cx, cy, z0, rx, ry, h, col, rng, n=7, mat=None, sides=None):
+    """Kuppel (Helmschale): Viertelkreis-Profil um die z-Achse, unten geschlossen."""
+    cs, rxs, rys = [], [], []
+    for k in range(n + 1):
+        a = math.pi / 2 * k / n
+        cs.append((cx, cy, z0 + h * math.sin(a)))
+        rxs.append(max(0.004, rx * math.cos(a)))
+        rys.append(max(0.004, ry * math.cos(a)))
+    loft(m, cs, rxs, rys, col, rng, mat, None, (True, True), 0.015, sides)
+
+
+def _ring_z(m, cx, cy, z0, z1, rx, ry, col, rng, sides=None):
+    loft(m, [(cx, cy, z0), (cx, cy, z1)], [rx, rx], [ry, ry], col, rng, None, None, (True, True), 0.015, sides)
+
+
+def _wing(m, x, y, z, side, col, rng, k=1.0):
+    """Flügel aus drei Federlagen (Hermes), zeigt nach hinten oben; side = +-1."""
+    for i, (ln, ang, w) in enumerate(((0.26, 25, 0.06), (0.21, 40, 0.055), (0.15, 58, 0.05))):
+        a = math.radians(ang)
+        p0 = (x, y - 0.01 * i, z - 0.03 * i * k)
+        p1 = (x + side * 0.02 * k, y - math.cos(a) * ln * k, z + math.sin(a) * ln * k - 0.03 * i * k)
+        loft(m, [p0, p1], [0.012 * k, 0.006 * k], [w * k, 0.02 * k], tuple(min(1.0, c - 0.04 * i) for c in col), rng,
+             None, None, (True, True), 0.02, 6)
+
+
 def gear_model(gi, rng=None, sides=(-1, 1)):
-    """Low-Poly-Modell eines Ausrüstungsteils (für Drops und als Anbau an Spielerfiguren). Ursprung: Mitte.
-    Schuhe: sides=(-1, 1) = Paar (Drop), sides=(0,) = ein einzelner Schuh (hängt am Bein der Figur)."""
+    """9d: detailliertes Modell eines Ausrüstungsteils (Drop und am Spieler). Ursprung: Mitte. Schuhe:
+    sides=(-1, 1) = Paar (Drop), sides=(0,) = ein Schuh (am Bein der Figur). Masse wie bisher (Anbau an Sinans Soldat)."""
     g = GEAR[gi]
     rng = rng or random.Random(31 + gi)
     m = Mesh()
-    c = g.col
-    if g.slot == "head":                            # Helme: Schale, Kuppe und Rand (sitzt über dem Kopf)
-        box(m, 0, 0, 0.1, 0.58, 0.54, 0.2, c, rng)
-        box(m, 0, 0, 0.24, 0.42, 0.4, 0.08, c, rng)
-        box(m, 0, 0.02, 0.0, 0.64, 0.6, 0.04, tuple(v * 0.7 for v in c), rng)
-        if g.kind == "hp":                          # Armeehelm: Tarnnetz-Band, tiefer Nackenschutz
-            box(m, 0, 0, 0.14, 0.6, 0.56, 0.05, (0.30, 0.32, 0.22), rng)
-            box(m, 0, -0.26, 0.02, 0.5, 0.08, 0.16, c, rng)
-        elif g.kind == "shield":                    # Schild-Helm: leuchtendes Visier
-            box(m, 0, 0.28, 0.06, 0.46, 0.04, 0.1, (0.45, 0.85, 1.0))
-        elif g.kind == "dash":                      # Hermes-Helm: Flügel
+    base, dark, acc = GEAR_LOOK.get(g.set, GEAR_LOOK[""])
+    if g.kind == "jetpack":
+        base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
+    elif g.kind == "spring":
+        base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    if g.slot == "head":                                         # ---------------- Helme
+        if g.set == "hermes":
+            _dome(m, 0, 0, -0.02, 0.30, 0.29, 0.27, base, rng, mat="metal")
+            loft(m, [(0, 0.06, 0.25), (0, -0.05, 0.31), (0, -0.2, 0.26)], [0.03, 0.035, 0.025], [0.05, 0.07, 0.04], acc, rng,
+                 None, None, (True, True), 0.02, 8)                                          # Kamm
             for sx in (-1, 1):
-                box(m, sx * 0.33, -0.04, 0.2, 0.04, 0.22, 0.16, (1.0, 1.0, 0.95), rng)
-    elif g.slot == "torso" and g.kind == "dash":    # Hermes-Weste: goldene Weste mit Flügelchen am Rücken
-        box(m, 0, 0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
-        box(m, 0, -0.2, 0.0, 0.5, 0.06, 0.5, c, rng)
-        for sx in (-1, 1):
-            box(m, sx * 0.14, -0.27, 0.12, 0.05, 0.08, 0.3, (1.0, 1.0, 0.95), rng)
-    elif g.slot == "torso" and g.kind == "hp":      # Plattenrüstung: Brust- und Rückenplatte, Schulterstücke
-        dk = tuple(v * 0.75 for v in c)
-        box(m, 0, 0.2, 0.04, 0.56, 0.06, 0.56, c, rng)
-        box(m, 0, -0.2, 0.04, 0.56, 0.06, 0.56, dk, rng)
-        for sx in (-1, 1):
-            box(m, sx * 0.3, 0.0, 0.3, 0.18, 0.42, 0.06, dk, rng)
-    elif g.kind == "shield" and g.slot == "torso":  # Schildgenerator: Weste mit leuchtendem Kern
-        box(m, 0, 0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
-        box(m, 0, -0.2, 0.0, 0.52, 0.06, 0.52, (0.2, 0.25, 0.32), rng)
-        box(m, 0, 0.24, 0.06, 0.18, 0.03, 0.18, c)
-    elif g.kind == "jetpack":                       # Jetpack: zwei Tanks auf dem Rücken
-        for sx in (-1, 1):
-            box(m, sx * 0.11, -0.28, 0.0, 0.18, 0.18, 0.52, c, rng)
-            box(m, sx * 0.11, -0.28, -0.31, 0.12, 0.12, 0.1, (0.2, 0.2, 0.22), rng)
-    else:                                           # Schuhe (Paar oder einzeln)
+                _wing(m, sx * 0.29, -0.02, 0.12, sx, acc, rng)
+            _ring_z(m, 0, 0, -0.03, 0.0, 0.315, 0.305, dark, rng)
+        else:
+            _dome(m, 0, 0, -0.02, 0.30, 0.29, 0.30, base, rng, mat="metal" if g.set != "armor" else None)
+            _ring_z(m, 0, 0.0, -0.04, -0.005, 0.33, 0.32, dark, rng)                        # Rand
+            for sx in (-1, 1):                                                               # Kinnriemen
+                box(m, sx * 0.27, 0.04, -0.12, 0.02, 0.05, 0.2, (0.12, 0.11, 0.10), rng)
+                ell(m, (sx * 0.29, 0.04, 0.02), 0.02, 0.025, 0.025, acc if g.set else dark, rng, rings=3)   # Nieten
+            if g.kind == "save_head":                                                         # Basic-Helm: Stahl, Mittelgrat
+                loft(m, [(0, 0.27, 0.12), (0, 0.15, 0.27), (0, -0.12, 0.28), (0, -0.27, 0.12)], [0.02] * 4, [0.015] * 4,
+                     acc, rng, None, None, (True, True), 0.02, 6)
+            elif g.set == "armor":                                                            # Armeehelm: Tarnnetz, Nackenschutz, NVG-Halter
+                _ring_z(m, 0, 0, 0.1, 0.15, 0.31, 0.30, dark, rng)
+                for k in range(10):
+                    a = 2 * math.pi * k / 10
+                    box(m, math.cos(a) * 0.29, math.sin(a) * 0.28, 0.17, 0.05, 0.05, 0.05, (0.30, 0.33, 0.18), rng)
+                loft(m, [(0, -0.2, 0.1), (0, -0.3, 0.0), (0, -0.32, -0.08)], [0.22, 0.2, 0.18], [0.03, 0.03, 0.025], base, rng,
+                     None, None, (True, True), 0.02, 8)
+                box(m, 0, 0.27, 0.1, 0.1, 0.04, 0.08, (0.12, 0.12, 0.12), rng)
+                box(m, 0.2, -0.12, 0.22, 0.02, 0.1, 0.05, acc, rng)                           # Schablonen-Nummer
+            else:                                                                             # Schild-Helm: Visier + Emitter
+                loft(m, [(-0.22, 0.2, 0.06), (0, 0.29, 0.07), (0.22, 0.2, 0.06)], [0.03, 0.03, 0.03], [0.05, 0.055, 0.05],
+                     _GL_GLOW, None, None, None, (True, True), 0.0, 6)
+                _ring_z(m, 0, 0, 0.26, 0.3, 0.07, 0.07, acc, rng)
+                for sx in (-1, 1):
+                    loft(m, [(sx * 0.29, 0.1, 0.1), (sx * 0.24, -0.15, 0.2)], [0.01, 0.01], [0.012, 0.012], _GL_GLOW,
+                         None, None, None, (True, True), 0.0, 4)
+    elif g.slot == "torso":                                      # ---------------- Oberkörper
+        if g.kind == "jetpack":
+            box(m, 0, -0.22, 0.05, 0.36, 0.05, 0.42, dark, rng, mat="metal")                 # Tragplatte
+            for sx in (-1, 1):
+                prism(m, sx * 0.11, -0.3, -0.22, 0.09, 0.5, 12, base, rng)                    # Tanks
+                ell(m, (sx * 0.11, -0.3, 0.28), 0.09, 0.09, 0.06, base, rng, rings=4)
+                _cone(m, sx * 0.11, -0.3, -0.36, 0.06, 0.14, 10, acc, rng, 0.02)              # Düsen (zeigen nach unten)
+                box(m, sx * 0.11, -0.3, 0.02, 0.19, 0.19, 0.03, acc, rng)                     # Spannband
+                box(m, sx * 0.17, 0.0, 0.18, 0.05, 0.42, 0.04, (0.12, 0.12, 0.13), rng)        # Gurte
+            box(m, 0, -0.3, 0.18, 0.1, 0.08, 0.1, (0.2, 0.2, 0.22), rng)                       # Steuerkasten
+            box(m, 0, -0.345, 0.2, 0.04, 0.01, 0.03, (1.0, 0.3, 0.1))
+        else:
+            for sy in (1, -1):                                                                 # Brust- und Rückenplatte
+                loft(m, [(0, sy * 0.2, -0.22), (0, sy * 0.215, 0.05), (0, sy * 0.2, 0.3)], [0.27, 0.28, 0.25],
+                     [0.035, 0.04, 0.035], base if sy > 0 else dark, rng, None, None, (True, True), 0.02, 10)
+            for sx in (-1, 1):                                                                 # Seitenteile, Schulterstücke
+                box(m, sx * 0.27, 0.0, 0.0, 0.04, 0.36, 0.3, dark, rng)
+                ell(m, (sx * 0.27, 0.0, 0.3), 0.1, 0.2, 0.05, base, rng, rings=4)
+            if g.set == "armor":                                                               # MOLLE-Gurte, Taschen, Nummer
+                for z in (-0.12, -0.02, 0.08):
+                    box(m, 0, 0.245, z, 0.46, 0.012, 0.025, dark, rng)
+                for sx in (-1, 0, 1):
+                    box(m, sx * 0.15, 0.27, -0.1, 0.11, 0.06, 0.13, (0.30, 0.33, 0.20), rng)
+                box(m, 0.12, 0.25, 0.2, 0.08, 0.01, 0.04, acc, rng)
+            elif g.set == "shield":                                                            # Generator-Kern + Leuchtlinien
+                loft(m, [(0, 0.23, 0.04), (0, 0.27, 0.04)], [0.09, 0.07], [0.09, 0.07], acc, rng, None, None, (True, True), 0.0, 6)
+                loft(m, [(0, 0.265, 0.04), (0, 0.28, 0.04)], [0.06, 0.05], [0.06, 0.05], _GL_GLOW, None, None, None, (True, True), 0.0, 6)
+                for sx in (-1, 1):
+                    box(m, sx * 0.17, 0.24, 0.04, 0.12, 0.012, 0.018, _GL_GLOW)
+                    box(m, sx * 0.17, 0.24, -0.12, 0.012, 0.012, 0.3, _GL_GLOW)
+                loft(m, [(0, -0.24, -0.1), (0, -0.24, 0.2)], [0.08, 0.08], [0.04, 0.04], dark, rng, None, None, (True, True), 0.02, 10)
+                for k in range(4):
+                    _ring_z(m, 0, -0.24, -0.06 + k * 0.07, -0.04 + k * 0.07, 0.085, 0.05, _GL_GLOW, None, 10)
+            else:                                                                              # Hermes-Weste: Flügel, Lorbeer
+                for sx in (-1, 1):
+                    _wing(m, sx * 0.1, -0.24, 0.18, sx, acc, rng, 1.5)
+                    for k in range(4):
+                        ell(m, (sx * (0.04 + 0.03 * k), 0.25, 0.14 - 0.035 * k), 0.012, 0.01, 0.022, acc, rng, rings=3)
+                box(m, 0, 0.245, -0.06, 0.44, 0.012, 0.03, dark, rng)
+    else:                                                        # ---------------- Schuhe / Stiefel
         for sx in sides:
             x = sx * 0.15
-            box(m, x, 0.04, 0.0, 0.2, 0.32, 0.12, c, rng)
-            if g.kind == "dash":                    # Hermes: Flügelchen
-                for wx in ((x + sx * 0.12,) if sx else (-0.12, 0.12)):
-                    box(m, wx, -0.06, 0.1, 0.04, 0.16, 0.12, (1.0, 1.0, 0.95), rng)
-            elif g.kind == "spring":                # Springfedern unter der Sohle
-                box(m, x, 0.04, -0.12, 0.12, 0.12, 0.12, (0.6, 0.6, 0.62), rng)
-            elif g.kind == "shield":                # Schild-Stiefel: leuchtende Kappe
-                box(m, x, 0.18, 0.04, 0.16, 0.05, 0.08, (0.45, 0.85, 1.0))
-            elif g.kind == "hp":                    # Kampfstiefel: hoher Schaft
-                box(m, x, -0.02, 0.14, 0.18, 0.2, 0.18, c, rng)
+            sole = (0.1, 0.09, 0.08) if g.kind != "dash" else dark
+            box(m, x, 0.05, -0.05, 0.19, 0.33, 0.035, sole, rng)                              # Sohle
+            loft(m, [(x, -0.09, -0.02), (x, 0.06, -0.01), (x, 0.17, -0.025)], [0.09, 0.09, 0.07], [0.05, 0.045, 0.035],
+                 base, rng, None, None, (True, True), 0.02, 10)                                # Schuh
+            if g.kind == "hp":                                                                  # Kampfstiefel: hoher Schaft, Schnürung
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.2)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                for k in range(5):
+                    box(m, x, 0.02, 0.02 + 0.035 * k, 0.07, 0.012, 0.008, (0.08, 0.07, 0.06))
+                box(m, x, 0.16, -0.02, 0.15, 0.05, 0.04, dark, rng)
+            elif g.kind == "shield":                                                            # Schild-Stiefel: leuchtende Kappe + Ring
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.14)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                ell(m, (x, 0.15, -0.01), 0.07, 0.04, 0.035, _GL_GLOW, None, rings=3)
+                _ring_z(m, x, -0.06, 0.1, 0.12, 0.088, 0.078, _GL_GLOW, None, 10)
+            elif g.kind == "dash":                                                              # Hermes: Riemen + Flügel am Knöchel
+                for k in range(3):
+                    box(m, x, -0.02 + 0.06 * k, 0.04, 0.17, 0.025, 0.015, acc, rng)
+                for wx in ((sx,) if sx else (-1, 1)):
+                    _wing(m, x + wx * 0.09, -0.08, 0.06, wx, acc, rng, 0.6)
+            elif g.kind == "spring":                                                            # Springfedern unter der Sohle
+                pts = [(x + 0.05 * math.cos(t * 0.5), 0.05 + 0.05 * math.sin(t * 0.5), -0.07 - 0.008 * t) for t in range(25)]
+                loft(m, pts, [0.012] * len(pts), [0.012] * len(pts), acc, rng, "metal", None, (True, True), 0.0, 5)
+                box(m, x, 0.05, -0.28, 0.16, 0.24, 0.03, sole, rng)
+                box(m, x, -0.04, 0.04, 0.17, 0.04, 0.02, (1.0, 1.0, 1.0), rng)
     return m
+
+
+def gear_icon_shapes(gi):
+    """9d: HUD-Symbol (Seitenansicht y/z, Sinans Formsprache) eines Ausrüstungsteils."""
+    g = GEAR[gi]
+    base, dark, acc = GEAR_LOOK.get(g.set, GEAR_LOOK[""])
+    if g.kind == "jetpack":
+        base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
+    elif g.kind == "spring":
+        base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    S = []
+    if g.slot == "head":
+        dome = [(-0.3 * math.cos(a), 0.3 * math.sin(a)) for a in [math.pi * i / 16 for i in range(17)]]
+        S.append(("p", 0, 0.1, dome, base))
+        S.append(("p", 0, 0.1, [(-0.33, -0.03), (0.33, -0.03), (0.33, 0.01), (-0.33, 0.01)], dark))
+        if g.set == "hermes":
+            S += [("p", 0, 0.1, [(-0.06, 0.12), (-0.3, 0.32), (-0.26, 0.2), (-0.36, 0.26), (-0.22, 0.1)], acc),
+                  ("p", 0, 0.1, [(0.0, 0.28), (0.22, 0.3), (0.18, 0.26)], acc)]
+        elif g.set == "armor":
+            S += [("p", 0, 0.1, [(-0.29, 0.09), (0.29, 0.09), (0.28, 0.15), (-0.28, 0.15)], dark),
+                  ("p", 0, 0.1, [(-0.32, 0.0), (-0.36, -0.1), (-0.24, -0.06)], base),
+                  ("b", 0, 0.3, 0.08, 0.1, 0.05, 0.08, (0.12, 0.12, 0.12))]
+        elif g.set == "shield":
+            S += [("p", 0, 0.1, [(0.12, 0.03), (0.31, 0.04), (0.29, 0.12), (0.1, 0.1)], _GL_GLOW),
+                  ("b", 0, 0.0, 0.31, 0.1, 0.12, 0.04, acc)]
+        else:
+            S += [("p", 0, 0.1, [(-0.25, 0.16), (0.0, 0.31), (0.25, 0.16), (0.0, 0.27)], acc)]
+    elif g.slot == "torso":
+        if g.kind == "jetpack":
+            for y in (-0.12, 0.12):
+                S.append(("p", 0, 0.1, [(y - 0.09, -0.22), (y + 0.09, -0.22), (y + 0.09, 0.26), (y, 0.32), (y - 0.09, 0.26)], base))
+                S.append(("p", 0, 0.1, [(y - 0.05, -0.22), (y + 0.05, -0.22), (y + 0.03, -0.34), (y - 0.03, -0.34)], acc))
+                S.append(("b", 0, y, 0.02, 0.1, 0.19, 0.03, acc))
+            S.append(("b", 0, 0.0, 0.18, 0.1, 0.1, 0.1, (0.2, 0.2, 0.22)))
+        else:
+            vest = [(-0.28, -0.24), (0.28, -0.24), (0.3, 0.2), (0.12, 0.3), (0.06, 0.22), (-0.06, 0.22), (-0.12, 0.3), (-0.3, 0.2)]
+            S.append(("p", 0, 0.1, vest, base))
+            if g.set == "armor":
+                for z in (-0.12, -0.02, 0.08):
+                    S.append(("b", 0, 0.0, z, 0.1, 0.5, 0.025, dark))
+                for y in (-0.15, 0.0, 0.15):
+                    S.append(("b", 0, y, -0.12, 0.1, 0.11, 0.12, (0.30, 0.33, 0.20)))
+            elif g.set == "shield":
+                S.append(("e", 0, 0.0, 0.03, 0.05, 0.09, 0.09, acc))
+                S.append(("e", 0, 0.0, 0.03, 0.05, 0.06, 0.06, _GL_GLOW))
+                for y in (-0.17, 0.17):
+                    S.append(("b", 0, y, -0.04, 0.1, 0.015, 0.3, _GL_GLOW))
+            else:
+                S += [("p", 0, 0.1, [(-0.08, 0.14), (-0.4, 0.38), (-0.34, 0.22), (-0.44, 0.28), (-0.26, 0.08)], acc),
+                      ("p", 0, 0.1, [(0.08, 0.14), (0.4, 0.38), (0.34, 0.22), (0.44, 0.28), (0.26, 0.08)], acc),
+                      ("b", 0, 0.0, -0.06, 0.1, 0.48, 0.03, dark)]
+    else:
+        boot = [(-0.12, -0.06), (0.17, -0.06), (0.2, 0.0), (0.12, 0.05), (0.0, 0.07), (-0.02, 0.24), (-0.14, 0.24), (-0.14, 0.0)]
+        if g.kind in ("dash", "spring"):
+            boot = [(-0.12, -0.06), (0.17, -0.06), (0.2, 0.0), (0.12, 0.05), (-0.02, 0.07), (-0.12, 0.06)]
+        S.append(("p", 0, 0.1, boot, base))
+        S.append(("p", 0, 0.1, [(-0.14, -0.08), (0.2, -0.08), (0.2, -0.05), (-0.14, -0.05)], (0.1, 0.09, 0.08)))
+        if g.kind == "hp":
+            for k in range(5):
+                S.append(("b", 0, -0.02, 0.0 + 0.04 * k, 0.1, 0.05, 0.01, dark))
+        elif g.kind == "shield":
+            S += [("e", 0, 0.15, -0.01, 0.05, 0.05, 0.035, _GL_GLOW), ("b", 0, -0.08, 0.12, 0.1, 0.13, 0.02, _GL_GLOW)]
+        elif g.kind == "dash":
+            S += [("p", 0, 0.1, [(-0.1, 0.05), (-0.3, 0.22), (-0.26, 0.12), (-0.34, 0.15), (-0.2, 0.02)], acc)]
+        else:
+            for k in range(5):
+                S.append(("b", 0, 0.03, -0.1 - 0.035 * k, 0.1, 0.16, 0.015, acc))
+            S.append(("p", 0, 0.1, [(-0.12, -0.3), (0.16, -0.3), (0.16, -0.27), (-0.12, -0.27)], (0.1, 0.09, 0.08)))
+    return S
+
+
+def gear_icon(gi, width=0.13, height=0.1):
+    """9d: Symbol eines Ausrüstungsteils (HUD-Kachel, Hover) aus gear_icon_shapes."""
+    polys = [(pts, col if col == _GL_GLOW else tuple(c * 0.55 for c in col))     # polys_icon hellt kräftig auf
+             for s in gear_icon_shapes(gi) for pts, col in shape_polys(s)]
+    return polys_icon(polys, width, height, "gearicon_" + GEAR[gi].name)
+
+
+# ------------------------------------------------------------------ 9d: Monster-Makeover
+# Jede Art hat ein eigenes, detailliertes Modell (Rumpf um die Hüfte bei z = 0,75, Beine mit Gelenk an der Hüfte -
+# die Animationen in MobView bleiben dieselben). In der Entfernung schaltet ein LODNode auf das alte, einfache Modell
+# um (MOB_LOD_DIST, in Modell-Metern: grosse Monster schalten entsprechend später um). Die Geometrie wird je Art nur
+# einmal gebaut und von allen Exemplaren geteilt.
+MOB_LOD_DIST = 45.0
+_MOB_GEOM = {}
+
+
+def _tube(m, pts, rs, col, rng=None, sides=8, caps=(True, True), colfn=None, mat=None):
+    rr = [r if isinstance(r, tuple) else (r, r) for r in rs]
+    loft(m, pts, [r[0] for r in rr], [r[1] for r in rr], col, rng, mat, colfn, caps, 0.03, sides)
+
+
+def _claws(m, hand, d, n, ln, col, rng, spread=0.035):
+    """n Krallen ab hand in Richtung d (Einheitsvektor), leicht gefächert."""
+    for k in range(n):
+        o = (k - (n - 1) / 2) * spread
+        a = (hand[0] + o, hand[1], hand[2])
+        b = (a[0] + d[0] * ln + o * 0.5, a[1] + d[1] * ln, a[2] + d[2] * ln)
+        _tube(m, [a, b], [0.012, 0.002], col, rng, 5)
+
+
+def _mob_hi_grunt(rng):
+    """Grunt: ausgemergelter, gebeugter Zombie - zerrissenes Hemd mit Blutflecken, Rippen, hängender Kiefer, ein Arm
+    greift nach vorn, der andere baumelt; ein Hosenbein zerfetzt, ein Fuss nackt."""
+    skin, shirt, pants = (0.52, 0.60, 0.46), (0.46, 0.43, 0.34), (0.27, 0.25, 0.22)
+    blood, dskin = (0.36, 0.06, 0.05), (0.36, 0.42, 0.32)
+
+    def stain(p):
+        v = math.sin(p[0] * 31 + p[2] * 17) * math.sin(p[1] * 23 - p[2] * 11)
+        return blood if v > 0.55 else shirt
+    t = Mesh()
+    ell(t, (0, 0.0, 0.02), 0.17, 0.12, 0.1, pants, rng, rings=4)                               # Becken
+    _tube(t, [(0, 0, 0.04), (0, 0.07, 0.3), (0, 0.17, 0.5)], [(0.16, 0.11), (0.17, 0.12), (0.19, 0.12)], shirt, rng, 10,
+          colfn=stain)                                                                          # gebeugter Rumpf
+    for k in range(4):                                                                          # Rippen (Hemd zerrissen)
+        z = 0.2 + 0.06 * k
+        box(t, -0.17, 0.08 + 0.04 * k, z, 0.03, 0.1, 0.018, dskin, rng)
+    for k in range(6):                                                                          # Fetzen am Saum
+        a = math.pi * (0.15 + 0.7 * k / 5)
+        x, y = math.cos(a) * 0.17, -math.sin(a) * 0.12 + 0.02
+        _tube(t, [(x, y, 0.06), (x * 1.05, y * 1.05, -0.08 - 0.03 * (k % 2))], [(0.03, 0.006), (0.015, 0.004)], shirt, rng, 4)
+    for sx in (-1, 1):
+        ell(t, (sx * 0.2, 0.16, 0.5), 0.07, 0.07, 0.06, shirt, rng, rings=4)                   # Schultern
+    _tube(t, [(0, 0.19, 0.55), (0, 0.27, 0.66)], [0.05, 0.045], skin, rng, 8)                   # Hals
+    ell(t, (0, 0.31, 0.8), 0.115, 0.13, 0.14, skin, rng, rings=6)                               # Kopf
+    box(t, 0, 0.42, 0.73, 0.1, 0.05, 0.07, (0.12, 0.05, 0.05), rng)                             # offener Mund
+    box(t, 0, 0.405, 0.69, 0.09, 0.06, 0.03, dskin, rng)                                       # hängender Kiefer
+    for k in range(4):
+        box(t, -0.03 + 0.02 * k, 0.445, 0.765, 0.008, 0.01, 0.018, (0.85, 0.82, 0.62))           # Zähne
+    for sx in (-1, 1):
+        ell(t, (sx * 0.045, 0.425, 0.84), 0.022, 0.012, 0.016, (0.95, 0.92, 0.55), None, rings=3)  # trübe Augen
+        box(t, sx * 0.045, 0.43, 0.875, 0.05, 0.02, 0.012, dskin, rng)                         # Brauenwulst
+    for k in range(5):                                                                          # schüttere Haare
+        _cone(t, -0.06 + 0.03 * k, 0.27 - 0.02 * (k % 2), 0.92, 0.025, 0.06, 4, (0.16, 0.14, 0.11), rng)
+    # Arme: links greift nach vorn (Ärmel zerrissen), rechts baumelt
+    _tube(t, [(-0.22, 0.16, 0.48), (-0.27, 0.36, 0.43)], [0.055, 0.045], shirt, rng, 8)
+    _tube(t, [(-0.27, 0.36, 0.43), (-0.22, 0.62, 0.42)], [0.04, 0.032], skin, rng, 8)
+    ell(t, (-0.21, 0.66, 0.42), 0.04, 0.05, 0.025, skin, rng, rings=3)
+    _claws(t, (-0.21, 0.69, 0.42), (0.0, 1.0, -0.15), 4, 0.07, dskin, rng, 0.018)
+    _tube(t, [(0.22, 0.15, 0.48), (0.27, 0.15, 0.24)], [0.045, 0.038], skin, rng, 8)
+    _tube(t, [(0.27, 0.15, 0.24), (0.29, 0.22, 0.02)], [0.036, 0.03], skin, rng, 8)
+    box(t, 0.28, 0.2, 0.15, 0.06, 0.05, 0.03, blood, rng)                                      # Wunde
+    _claws(t, (0.29, 0.23, -0.01), (0.0, 0.2, -1.0), 4, 0.07, dskin, rng, 0.018)
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.03, -0.38)], [0.085, 0.07], pants, rng, 8)
+        if sx < 0:                                                                              # zerfetztes Hosenbein, nackter Fuss
+            _tube(lm, [(0, 0.03, -0.38), (0, -0.01, -0.5)], [0.07, 0.065], pants, rng, 6)
+            _tube(lm, [(0, -0.01, -0.5), (0, -0.02, -0.72)], [0.05, 0.042], skin, rng, 8)
+            ell(lm, (0, 0.05, -0.73), 0.05, 0.1, 0.03, skin, rng, rings=3)
+        else:
+            _tube(lm, [(0, 0.03, -0.38), (0, -0.02, -0.68)], [0.065, 0.06], pants, rng, 8)
+            box(lm, 0, 0.05, -0.71, 0.11, 0.24, 0.07, (0.18, 0.13, 0.09), rng)
+        legs.append(lm)
+    return t, legs, 0.15
+
+
+def _mob_hi_brute(rng):
+    """Brute: massig, rote Haut, gebogene Hörner, Hauer, riesige Arme mit Stachel-Armschienen, Lendenschurz."""
+    skin, dskin, leather, iron = (0.72, 0.21, 0.15), (0.48, 0.12, 0.09), (0.26, 0.18, 0.11), (0.22, 0.22, 0.24)
+    bone = (0.88, 0.84, 0.70)
+    t = Mesh()
+    ell(t, (0, 0, 0.02), 0.25, 0.18, 0.13, leather, rng, rings=4)
+    box(t, 0, 0.17, -0.12, 0.26, 0.04, 0.3, leather, rng)                                      # Lendenschurz
+    box(t, 0, 0.0, 0.1, 0.52, 0.38, 0.06, (0.16, 0.11, 0.07), rng)                             # Gürtel
+    ell(t, (0, 0.2, 0.1), 0.05, 0.03, 0.05, bone, rng, rings=3)                                # Schnalle (Knochen)
+    _tube(t, [(0, 0, 0.1), (0, 0.03, 0.36), (0, 0.06, 0.6)], [(0.25, 0.18), (0.33, 0.23), (0.37, 0.21)], skin, rng, 12)
+    for sx in (-1, 1):
+        ell(t, (sx * 0.13, 0.22, 0.48), 0.13, 0.06, 0.09, skin, rng, rings=4)                 # Brustmuskeln
+        for k in range(2):
+            ell(t, (sx * 0.07, 0.22, 0.22 + 0.1 * k), 0.06, 0.035, 0.045, dskin, rng, rings=3)  # Bauchmuskeln
+    _tube(t, [(0, 0.08, 0.62), (0, 0.15, 0.74)], [0.1, 0.09], skin, rng, 8)                     # Stiernacken
+    ell(t, (0, 0.16, 0.84), 0.14, 0.15, 0.15, skin, rng, rings=6)                               # kleiner Kopf
+    box(t, 0, 0.29, 0.9, 0.2, 0.05, 0.04, dskin, rng)                                          # Brauenwulst
+    for sx in (-1, 1):
+        ell(t, (sx * 0.055, 0.29, 0.86), 0.025, 0.012, 0.016, (1.0, 0.55, 0.1), None, rings=3)  # glühende Augen
+        _cone(t, sx * 0.07, 0.3, 0.74, 0.025, 0.09, 5, bone, rng, 0.0)                         # Hauer
+        _tube(t, [(sx * 0.11, 0.14, 0.93), (sx * 0.22, 0.12, 1.0), (sx * 0.29, 0.03, 1.1), (sx * 0.26, -0.06, 1.2)],
+              [0.05, 0.04, 0.025, 0.008], bone, rng, 7)                                        # Hörner
+        ell(t, (sx * 0.38, 0.04, 0.58), 0.17, 0.16, 0.13, skin, rng, rings=5)                 # Schultern
+        for k in range(3):
+            _cone(t, sx * (0.4 + 0.05 * k), 0.0 - 0.05 * k, 0.68, 0.03, 0.1, 4, iron, rng)      # Stacheln
+        _tube(t, [(sx * 0.42, 0.05, 0.52), (sx * 0.5, 0.12, 0.3)], [0.12, 0.11], skin, rng, 10)   # Oberarm
+        _tube(t, [(sx * 0.5, 0.12, 0.3), (sx * 0.52, 0.22, 0.05)], [0.14, 0.13], skin, rng, 10)   # Unterarm (wuchtig)
+        _tube(t, [(sx * 0.5, 0.14, 0.24), (sx * 0.52, 0.2, 0.1)], [0.15, 0.15], iron, rng, 10)  # Armschiene
+        for k in range(3):
+            _cone(t, sx * 0.62, 0.15 + 0.03 * k, 0.12 + 0.05 * k, 0.02, 0.07, 4, (0.6, 0.6, 0.62), rng)
+        ell(t, (sx * 0.53, 0.25, -0.04), 0.13, 0.13, 0.12, dskin, rng, rings=5)              # Fäuste
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.04, -0.38)], [0.13, 0.11], skin, rng, 10)
+        _tube(lm, [(0, 0.04, -0.38), (0, 0.0, -0.66)], [0.105, 0.09], skin, rng, 10)
+        box(lm, 0, 0.06, -0.71, 0.17, 0.28, 0.09, (0.14, 0.10, 0.08), rng)                     # Fusswickel
+        legs.append(lm)
+    return t, legs, 0.2
+
+
+def _mob_hi_huntress(rng):
+    """Jägerin: schlank, tief geduckt, langer Zopf, Klingen-Finnen an den Schulterblättern, lange Krallen,
+    Maske mit glühenden Schlitzen - unverwechselbare Silhouette."""
+    suit, trim, skin, hair = (0.24, 0.07, 0.27), (0.85, 0.15, 0.62), (0.86, 0.80, 0.86), (0.06, 0.05, 0.07)
+    metal = (0.70, 0.72, 0.78)
+    t = Mesh()
+    ell(t, (0, 0, 0.0), 0.14, 0.11, 0.09, suit, rng, rings=4)
+    _tube(t, [(0, 0.0, 0.02), (0, 0.12, 0.28), (0, 0.25, 0.47)], [(0.12, 0.09), (0.11, 0.08), (0.15, 0.09)], suit, rng, 10)
+    _tube(t, [(-0.12, 0.05, 0.1), (0.0, 0.2, 0.36), (0.12, 0.05, 0.1)], [0.012] * 3, trim, None, 4)   # Leuchtnaht
+    for sx in (-1, 1):
+        ell(t, (sx * 0.15, 0.24, 0.46), 0.06, 0.06, 0.05, suit, rng, rings=4)
+        loft(t, [(sx * 0.1, 0.12, 0.42), (sx * 0.18, -0.1, 0.68), (sx * 0.2, -0.22, 0.86)], [0.012, 0.01, 0.003],
+             [0.07, 0.05, 0.01], metal, rng, None, None, (True, True), 0.02, 4)                # Klingen-Finnen
+    _tube(t, [(0, 0.27, 0.5), (0, 0.33, 0.62)], [0.04, 0.036], skin, rng, 8)
+    ell(t, (0, 0.36, 0.76), 0.095, 0.115, 0.12, skin, rng, rings=6)                            # Kopf
+    box(t, 0, 0.45, 0.78, 0.17, 0.05, 0.05, (0.08, 0.06, 0.09), rng)                           # Maske
+    for sx in (-1, 1):
+        box(t, sx * 0.04, 0.475, 0.785, 0.045, 0.01, 0.012, (1.0, 0.3, 0.9))                  # Augenschlitze
+        _cone(t, sx * 0.09, 0.34, 0.8, 0.02, 0.1, 4, skin, rng, 0.0)                            # spitze Ohren
+    ell(t, (0, 0.32, 0.84), 0.1, 0.11, 0.06, hair, rng, rings=4)
+    _tube(t, [(0, 0.27, 0.86), (0, 0.12, 0.92), (0, -0.12, 0.84), (0, -0.32, 0.68), (0, -0.44, 0.5)],
+          [0.045, 0.05, 0.04, 0.03, 0.01], hair, rng, 6)                                        # langer Zopf
+    _tube(t, [(-0.16, 0.26, 0.44), (-0.2, 0.42, 0.3)], [0.035, 0.03], suit, rng, 8)            # Arme: links lauernd vorn
+    _tube(t, [(-0.2, 0.42, 0.3), (-0.16, 0.58, 0.12)], [0.028, 0.024], skin, rng, 8)
+    _claws(t, (-0.16, 0.6, 0.1), (0.0, 0.6, -0.8), 3, 0.12, metal, rng, 0.02)
+    _tube(t, [(0.16, 0.26, 0.44), (0.22, 0.3, 0.22)], [0.035, 0.03], suit, rng, 8)             # rechts zum Sprung zurück
+    _tube(t, [(0.22, 0.3, 0.22), (0.24, 0.1, 0.06)], [0.028, 0.024], skin, rng, 8)
+    _claws(t, (0.24, 0.08, 0.04), (0.0, -0.3, -0.95), 3, 0.12, metal, rng, 0.02)
+    legs = []
+    for sx in (-1, 1):                                                                          # gebeugte Sprungbeine
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.16, -0.3)], [0.07, 0.055], suit, rng, 8)
+        _tube(lm, [(0, 0.16, -0.3), (0, -0.04, -0.62)], [0.05, 0.04], suit, rng, 8)
+        _tube(lm, [(0, -0.04, -0.62), (0, 0.1, -0.73)], [0.045, 0.035], (0.1, 0.06, 0.1), rng, 6)
+        _cone(lm, 0, -0.07, -0.74, 0.02, 0.1, 4, metal, rng, 0.0)                               # Fersensporn
+        box(lm, 0, 0.15, -0.31, 0.06, 0.02, 0.05, trim)
+        legs.append(lm)
+    return t, legs, 0.12
+
+
+def _mob_hi_colossus(rng):
+    """Koloss: Steinriese - dunkler Körper unter dicken Felsplatten (Schultern, Brust, Arme, Knie), glühende Risse
+    dazwischen, Felsbrocken-Fäuste, kleiner gepanzerter Kopf mit glühenden Augen."""
+    body, stone, dstone, glow = (0.30, 0.31, 0.35), (0.50, 0.48, 0.44), (0.36, 0.35, 0.33), (1.0, 0.55, 0.12)
+    t = Mesh()
+    ell(t, (0, 0, 0.03), 0.3, 0.22, 0.14, body, rng, rings=4)
+    _tube(t, [(0, 0, 0.08), (0, 0.04, 0.38), (0, 0.06, 0.6)], [(0.3, 0.22), (0.37, 0.26), (0.4, 0.24)], body, rng, 12)
+    blob(t, 0, 0.2, 0.42, 0.3, 0.12, 0.2, stone, rng, jitter=0.15, subdiv=1, mat="rock")       # Brustplatte
+    blob(t, 0, 0.21, 0.18, 0.22, 0.1, 0.1, dstone, rng, jitter=0.15, subdiv=1, mat="rock")
+    blob(t, 0, -0.2, 0.44, 0.32, 0.14, 0.24, dstone, rng, jitter=0.2, subdiv=1, mat="rock")     # Rückenplatte
+    for k in range(3):
+        _cone(t, -0.12 + 0.12 * k, -0.28, 0.5 + 0.06 * (k % 2), 0.07, 0.22, 5, stone, rng)       # Rückenzacken
+    for z in (0.3, 0.06):
+        box(t, 0, 0.27, z, 0.4, 0.015, 0.025, glow)                                             # glühende Fugen
+    ell(t, (0, 0.12, 0.8), 0.13, 0.14, 0.14, body, rng, rings=5)                                # Kopf
+    blob(t, 0, 0.12, 0.88, 0.16, 0.17, 0.09, stone, rng, jitter=0.12, subdiv=1, mat="rock")     # Steinhelm
+    box(t, 0, 0.25, 0.8, 0.16, 0.02, 0.025, glow)                                               # Augen-Schlitz
+    for sx in (-1, 1):
+        blob(t, sx * 0.44, 0.0, 0.66, 0.24, 0.26, 0.15, stone, rng, jitter=0.18, subdiv=1, mat="rock")   # Schulterplatten
+        box(t, sx * 0.44, 0.0, 0.56, 0.4, 0.3, 0.02, glow)
+        _tube(t, [(sx * 0.46, 0.04, 0.55), (sx * 0.56, 0.1, 0.3)], [0.14, 0.13], body, rng, 10)
+        _tube(t, [(sx * 0.56, 0.1, 0.3), (sx * 0.58, 0.18, 0.06)], [0.14, 0.15], body, rng, 10)
+        blob(t, sx * 0.6, 0.14, 0.2, 0.17, 0.17, 0.13, stone, rng, jitter=0.2, subdiv=1, mat="rock")     # Armplatte
+        blob(t, sx * 0.6, 0.22, -0.04, 0.18, 0.18, 0.16, dstone, rng, jitter=0.25, subdiv=1, mat="rock") # Felsfaust
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.03, -0.38)], [0.15, 0.14], body, rng, 10)
+        _tube(lm, [(0, 0.03, -0.38), (0, 0.0, -0.66)], [0.14, 0.13], body, rng, 10)
+        blob(lm, 0, 0.12, -0.38, 0.14, 0.09, 0.12, stone, rng, jitter=0.2, subdiv=1, mat="rock")        # Kniepanzer
+        blob(lm, 0, 0.1, -0.12, 0.13, 0.08, 0.14, dstone, rng, jitter=0.2, subdiv=1, mat="rock")
+        blob(lm, 0, 0.06, -0.71, 0.18, 0.24, 0.09, dstone, rng, jitter=0.15, subdiv=1, mat="rock")       # Fuss
+        legs.append(lm)
+    return t, legs, 0.22
+
+
+def _mob_hi_titan(rng):
+    """Titan: uralter Wald-/Berg-Riese - schlanker, sehr hoher Körper aus Rinde und Moos, lange Arme bis fast zum
+    Boden, Geweih aus Ästen, Bart aus Wurzeln, Bäumchen und Kristalle auf den Schultern, glühender Kristall-Kern -
+    eine ganz andere Silhouette als der kantige Koloss."""
+    bark, dbark, moss, crys = (0.34, 0.27, 0.19), (0.22, 0.17, 0.12), (0.26, 0.42, 0.18), (0.45, 0.9, 1.0)
+    t = Mesh()
+
+    def mossy(p):
+        return moss if math.sin(p[0] * 13 + p[1] * 7) * math.cos(p[2] * 9) > 0.45 else bark
+    ell(t, (0, 0, 0.02), 0.2, 0.15, 0.12, dbark, rng, rings=4)
+    _tube(t, [(0, 0, 0.06), (0, 0.02, 0.32), (0, 0.0, 0.58), (0, 0.05, 0.7)], [(0.2, 0.15), (0.24, 0.17), (0.3, 0.19), (0.26, 0.16)],
+          bark, rng, 12, colfn=mossy)
+    for k in range(5):                                                                          # Rindenrippen
+        box(t, -0.12 + 0.06 * k, 0.17, 0.3 + 0.04 * (k % 2), 0.025, 0.03, 0.28, dbark, rng)
+    ell(t, (0, 0.2, 0.46), 0.07, 0.04, 0.08, crys, None, rings=4)                               # Kristall-Kern
+    _tube(t, [(0, 0.06, 0.7), (0, 0.12, 0.8)], [0.09, 0.08], bark, rng, 8)
+    ell(t, (0, 0.15, 0.88), 0.11, 0.12, 0.13, bark, rng, rings=6)                               # Kopf
+    for sx in (-1, 1):
+        ell(t, (sx * 0.045, 0.26, 0.9), 0.022, 0.012, 0.014, crys, None, rings=3)               # Augen
+        _tube(t, [(sx * 0.07, 0.12, 0.97), (sx * 0.16, 0.1, 1.08), (sx * 0.2, 0.05, 1.22), (sx * 0.26, 0.0, 1.3)],
+              [0.025, 0.02, 0.014, 0.006], dbark, rng, 5)                                       # Geweih
+        _tube(t, [(sx * 0.16, 0.1, 1.08), (sx * 0.26, 0.14, 1.14)], [0.014, 0.005], dbark, rng, 4)
+        _tube(t, [(sx * 0.2, 0.05, 1.22), (sx * 0.14, 0.0, 1.32)], [0.012, 0.004], dbark, rng, 4)
+    for k in range(6):                                                                          # Wurzel-Bart
+        x = -0.06 + 0.024 * k
+        _tube(t, [(x, 0.24, 0.84), (x * 1.3, 0.27, 0.7), (x * 1.1, 0.24, 0.56 - 0.04 * (k % 3))],
+              [0.014, 0.01, 0.003], (0.30, 0.36, 0.16), rng, 4)
+    for sx in (-1, 1):
+        blob(t, sx * 0.3, 0.0, 0.66, 0.13, 0.15, 0.09, moss, rng, jitter=0.25, subdiv=1, moss=0.8)     # moosige Schultern
+        if sx < 0:                                                                              # Bäumchen auf der Schulter
+            prism(t, sx * 0.3, 0.02, 0.7, 0.012, 0.1, 5, dbark, rng)
+            _cone(t, sx * 0.3, 0.02, 0.76, 0.06, 0.14, 7, (0.14, 0.34, 0.16), rng)
+            _cone(t, sx * 0.3, 0.02, 0.84, 0.045, 0.1, 7, (0.18, 0.40, 0.18), rng)
+        else:                                                                                   # Kristalle
+            for k in range(3):
+                _cone(t, sx * (0.26 + 0.04 * k), -0.04 + 0.04 * k, 0.7, 0.03, 0.16 - 0.03 * k, 5, crys, None, 0.0)
+        _tube(t, [(sx * 0.3, 0.02, 0.62), (sx * 0.38, 0.08, 0.3), (sx * 0.4, 0.14, 0.0), (sx * 0.38, 0.22, -0.3)],
+              [0.08, 0.07, 0.065, 0.06], bark, rng, 8, colfn=mossy)                             # lange Arme
+        for k in range(4):                                                                      # Astfinger
+            _tube(t, [(sx * (0.36 + 0.015 * k), 0.24, -0.32), (sx * (0.34 + 0.03 * k), 0.3 + 0.01 * k, -0.45)],
+                  [0.018, 0.006], dbark, rng, 4)
+    for k in range(4):                                                                          # Kristalle am Rücken
+        _cone(t, -0.09 + 0.06 * k, -0.18, 0.36 + 0.08 * (k % 2), 0.035, 0.18, 5, crys, None, 0.0)
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        _tube(lm, [(0, 0, 0), (0, 0.02, -0.38), (0, -0.02, -0.66)], [0.1, 0.085, 0.075], bark, rng, 8, colfn=mossy)
+        for k in range(4):                                                                      # Wurzelfüsse
+            a = math.radians(-50 + 33 * k)
+            _tube(lm, [(0, 0.0, -0.66), (math.sin(a) * 0.14, math.cos(a) * 0.18, -0.74)], [0.04, 0.015], dbark, rng, 5)
+        legs.append(lm)
+    return t, legs, 0.14
+
+
+def build_drone():
+    """9d: Elektro-Drohne, technisch: gerundeter Rumpf mit Panelfugen, vier Ausleger mit Rotorschutz-Ringen,
+    Kamera-Auge (Linse, Ring, rote LED), Elektro-Spulen mit zwei Polen unten, Antenne. Rückgabe wie build_mob;
+    'Beine' sind die Rotoren (drehen sich)."""
+    rng = random.Random(77)
+    root = NodePath("drone")
+    body, glow = Mesh(), Mesh(lit=False)
+    hull, dk, alu = (0.24, 0.26, 0.31), (0.12, 0.13, 0.16), (0.62, 0.64, 0.68)
+    ell(body, (0, 0, 0.33), 0.27, 0.27, 0.1, hull, rng, mat="metal", rings=5)
+    _ring_z(body, 0, 0, 0.3, 0.33, 0.275, 0.275, dk, rng)
+    ell(body, (0, -0.02, 0.42), 0.14, 0.14, 0.06, dk, rng, rings=4)
+    for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        _tube(body, [(sx * 0.15, sy * 0.15, 0.35), (sx * 0.43, sy * 0.43, 0.37)], [0.025, 0.02], alu, rng, 6)
+        _ring_z(body, sx * 0.45, sy * 0.45, 0.36, 0.39, 0.2, 0.2, dk, rng, 16)
+        prism(body, sx * 0.45, sy * 0.45, 0.36, 0.03, 0.06, 8, alu, rng)                       # Motor
+        box(glow, sx * 0.45 + sx * 0.19, sy * 0.45, 0.375, 0.02, 0.02, 0.015, (1.0, 0.2, 0.15) if sy > 0 else (0.2, 1.0, 0.3))
+    _tube(body, [(0, 0.22, 0.33), (0, 0.3, 0.33)], [0.075, 0.07], dk, rng, 12)                 # Kamera-Gehäuse
+    _tube(glow, [(0, 0.3, 0.33), (0, 0.31, 0.33)], [0.055, 0.055], (0.35, 0.85, 1.0), None, 12)  # Linse
+    ell(glow, (0, 0.312, 0.33), 0.02, 0.006, 0.02, (0.9, 1.0, 1.0), None, rings=3)
+    box(glow, 0.06, 0.26, 0.4, 0.02, 0.02, 0.02, (1.0, 0.15, 0.1))                             # rote LED
+    _tube(body, [(0, 0, 0.27), (0, 0, 0.12)], [0.05, 0.04], dk, rng, 10)                        # Spulenträger
+    for k in range(5):
+        _ring_z(glow, 0, 0, 0.14 + 0.025 * k, 0.15 + 0.025 * k, 0.06, 0.06, (0.4, 0.85, 1.0), None, 10)
+    for sx in (-1, 1):
+        _tube(body, [(sx * 0.03, 0, 0.12), (sx * 0.06, 0.03, 0.04)], [0.012, 0.008], alu, rng, 5)  # Pole
+        ell(glow, (sx * 0.06, 0.03, 0.035), 0.015, 0.015, 0.015, (0.6, 0.95, 1.0), None, rings=3)
+    _tube(body, [(-0.1, -0.12, 0.42), (-0.12, -0.16, 0.58)], [0.008, 0.004], alu, rng, 4)      # Antenne
+    torso = root.attachNewNode("torso")
+    torso.attachNewNode(body.node("b"))
+    g = torso.attachNewNode(glow.node("g"))
+    g.setFogOff()
+    rm = Mesh(lit=False)                                                 # Rotorblatt (zwei Blätter, verdreht)
+    for a in (0.0, math.pi):
+        p0, p1 = (0.0, 0.0, 0.0), (math.cos(a) * 0.18, math.sin(a) * 0.18, 0.005)
+        loft(rm, [p0, p1], [0.025, 0.015], [0.004, 0.003], (0.80, 0.82, 0.86), None, None, None, (True, True), 0.0, 4)
+    rotors = [rm, rm]
+    legs = []
+    for i, (ox, oy) in enumerate(((0.45, 0.45), (-0.45, -0.45), (0.45, -0.45), (-0.45, 0.45))):
+        n = torso.attachNewNode("rotor")
+        n.setPos(ox, oy, 0.43)
+        n.attachNewNode(rotors[i % 2].node("r"))
+        legs.append(n)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 1.0)
+    return root, torso, legs, bar
+
+
+def build_critter(col):
+    """9d: Fluchttier - detaillierter Feldhase: gerundeter Körper (hinten höher), heller Bauch, lange Ohren mit rosa
+    Innenseite und dunklen Spitzen, glänzende Augen, rosa Nase, Schnurrhaare, weisse Blume, kräftige Hinterläufe.
+    Gleiche Rückgabe wie build_mob."""
+    rng = random.Random(5)
+    root = NodePath("critter")
+    m = Mesh()
+    dark = tuple(c * 0.62 for c in col)
+    belly = tuple(min(1.0, c * 1.35 + 0.12) for c in col)
+    pink = (0.88, 0.62, 0.62)
+
+    def fur(p):
+        return belly if p[2] < -0.06 else (dark if math.sin(p[0] * 40 + p[1] * 30) > 0.8 else col)
+    _tube(m, [(0, -0.36, 0.06), (0, -0.2, 0.12), (0, 0.05, 0.06), (0, 0.24, 0.12)],
+          [(0.15, 0.15), (0.2, 0.19), (0.17, 0.15), (0.11, 0.11)], col, rng, 12, colfn=fur)
+    ell(m, (0, 0.34, 0.26), 0.11, 0.15, 0.11, col, rng, rings=6)                                 # Kopf
+    ell(m, (0, 0.47, 0.22), 0.05, 0.05, 0.045, belly, rng, rings=4)                              # Schnauze
+    ell(m, (0, 0.515, 0.235), 0.018, 0.012, 0.012, pink, None, rings=3)                         # Nase
+    for sx in (-1, 1):
+        ell(m, (sx * 0.075, 0.42, 0.29), 0.022, 0.028, 0.025, (0.05, 0.04, 0.04), None, rings=4)   # Augen
+        ell(m, (sx * 0.088, 0.43, 0.3), 0.006, 0.006, 0.006, (0.95, 0.95, 0.95), None, rings=2)
+        _tube(m, [(sx * 0.04, 0.32, 0.34), (sx * 0.07, 0.24, 0.6), (sx * 0.08, 0.18, 0.76)],
+              [(0.03, 0.05), (0.03, 0.055), (0.012, 0.02)], col, rng, 6)                         # Ohren
+        _tube(m, [(sx * 0.052, 0.33, 0.36), (sx * 0.082, 0.26, 0.58)], [(0.012, 0.03), (0.01, 0.03)], pink, None, 4)
+        ell(m, (sx * 0.08, 0.185, 0.77), 0.018, 0.024, 0.03, (0.12, 0.1, 0.09), None, rings=3)   # dunkle Spitzen
+        for k in range(3):                                                                       # Schnurrhaare
+            _tube(m, [(sx * 0.04, 0.49, 0.22 - 0.01 * k), (sx * 0.16, 0.5, 0.24 - 0.025 * k)], [0.002, 0.001],
+                  (0.9, 0.9, 0.88), None, 3)
+        _tube(m, [(sx * 0.07, 0.2, -0.0), (sx * 0.08, 0.26, -0.2), (sx * 0.08, 0.32, -0.26)],
+              [0.035, 0.028, 0.025], dark, rng, 6)                                               # Vorderläufe
+    ell(m, (0, -0.48, 0.18), 0.07, 0.06, 0.07, (0.95, 0.93, 0.9), rng, rings=4)                 # Blume
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.45)
+    torso.attachNewNode(m.node("m"))
+    legs = []
+    for sx in (-1, 1):                                # Hinterläufe (gross)
+        lm = Mesh()
+        ell(lm, (0, 0.0, 0.0), 0.08, 0.14, 0.12, col, rng, rings=4)                             # Keule
+        _tube(lm, [(0, 0.02, -0.08), (0, -0.08, -0.18)], [0.04, 0.03], col, rng, 6)
+        _tube(lm, [(0, -0.08, -0.2), (0, 0.18, -0.22)], [(0.035, 0.02), (0.03, 0.018)], dark, rng, 6)   # langer Fuss
+        leg = root.attachNewNode("leg")
+        leg.setPos(sx * 0.15, -0.22, 0.25)
+        leg.attachNewNode(lm.node("l"))
+        legs.append(leg)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 1.6)
+    return root, torso, legs, bar
+
+
+_MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_huntress, "colossus": _mob_hi_colossus,
+           "titan": _mob_hi_titan}
+
+
+def build_mob(kind, look=None):
+    """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
+    Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
+    if kind == "drone":
+        root, torso, legs, bar = build_drone()
+        bar, fg = mob_bar(bar)
+        return root, torso, legs[0], legs[1], bar, fg, legs
+    if kind == "critter":
+        root, torso, legs, bar = build_critter((look or {}).get("fur", CRITTER_COLORS["standard"]))
+        bar, fg = mob_bar(bar)
+        return root, torso, legs[0], legs[1], bar, fg
+    lo = _build_mob_lo(kind, look)
+    if kind not in _MOB_HI:
+        return lo
+    geo = _MOB_GEOM.get(kind)
+    if geo is None:
+        t_, legs_, lx = _MOB_HI[kind](random.Random(sum(map(ord, kind)) + 9))
+        geo = _MOB_GEOM[kind] = (t_.node("t9"), [lm.node("l9") for lm in legs_], lx)
+    root, torso, legL, legR, bar, fg = lo
+    for part, hi in ((torso, geo[0]), (legL, geo[1][0]), (legR, geo[1][1])):
+        old = part.getChild(0)                                 # Geometrie des einfachen Modells
+        lod = LODNode("lod")
+        lnp = part.attachNewNode(lod)
+        lnp.attachNewNode(hi)
+        old.reparentTo(lnp)
+        lod.addSwitch(MOB_LOD_DIST, 0.0)
+        lod.addSwitch(1e6, MOB_LOD_DIST)
+    legL.setX(-geo[2])
+    legR.setX(geo[2])
+    return root, torso, legL, legR, bar, fg
+
+
+# ------------------------------------------------------- Modell: Soldat (Spieler)
+SOLDIER_SKINS = [(0.89, 0.72, 0.58), (0.80, 0.60, 0.45), (0.62, 0.44, 0.32), (0.45, 0.31, 0.22), (0.93, 0.78, 0.66)]
+SOLDIER_HAIR = [(0.07, 0.06, 0.05), (0.28, 0.17, 0.08), (0.70, 0.55, 0.28), (0.50, 0.18, 0.07), (0.55, 0.55, 0.55),
+                (0.86, 0.86, 0.84)]
+SOLDIER_EYES = [(0.25, 0.38, 0.55), (0.30, 0.20, 0.10), (0.25, 0.42, 0.28), (0.18, 0.15, 0.12)]
+CAMO_PAL = [(0.17, 0.20, 0.11), (0.29, 0.33, 0.19), (0.44, 0.41, 0.27), (0.28, 0.21, 0.13)]   # Waldtarn: dunkel, oliv, sand, braun
+CAMO_SETS = [CAMO_PAL,
+             [(0.50, 0.42, 0.28), (0.66, 0.57, 0.38), (0.78, 0.70, 0.50), (0.45, 0.33, 0.20)],        # Wüste
+             [(0.62, 0.66, 0.70), (0.80, 0.83, 0.86), (0.92, 0.94, 0.96), (0.45, 0.50, 0.56)],        # Schnee
+             [(0.18, 0.19, 0.21), (0.30, 0.32, 0.35), (0.46, 0.48, 0.51), (0.24, 0.26, 0.30)],        # Stadt
+             [(0.05, 0.05, 0.06), (0.09, 0.10, 0.11), (0.15, 0.16, 0.17), (0.07, 0.08, 0.10)],        # Nacht
+             [(0.12, 0.26, 0.10), (0.22, 0.42, 0.16), (0.38, 0.55, 0.24), (0.30, 0.24, 0.12)]]        # Dschungel
+SOLDIER_GLOVES = [(0.11, 0.11, 0.10), (0.30, 0.20, 0.12), (0.22, 0.26, 0.15), None]
+SOLDIER_BOOTS = [(0.16, 0.12, 0.08), (0.07, 0.07, 0.08), (0.52, 0.44, 0.30)]
+# Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Ziffernfolge
+# (eine Ziffer je Eintrag) - klein genug, um ihn im Netzwerk mitzuschicken.
+LOOK_OPTS = (
+    ("tarn", "Tarnmuster", ("Wald", "Wüste", "Schnee", "Stadt", "Nacht", "Dschungel")),
+    ("haut", "Hautton", ("Hell", "Mittel", "Gebräunt", "Dunkel", "Sehr hell")),
+    ("augen", "Augenfarbe", ("Blau", "Braun", "Grün", "Dunkel")),
+    ("haar", "Haarfarbe", ("Schwarz", "Braun", "Blond", "Rot", "Grau", "Weiß")),
+    ("frisur", "Frisur", ("Kurz", "Glatze", "Lang")),
+    ("kopf", "Kopfbedeckung", ("Gefechtshelm", "Buschhut", "Barett", "Mütze", "Keine")),
+    ("brille", "Brille", ("Keine", "Schutzbrille", "Sonnenbrille")),
+    ("gesicht", "Gesicht", ("Normal", "Bart", "Tarnbemalung", "Sturmhaube")),
+    ("extra", "Zubehör", ("Keins", "Halstuch", "Headset", "Nachtsichtgerät")),
+    ("weste", "Weste", ("Plattenträger", "Keine")),
+    ("pack", "Rucksack", ("Groß", "Klein", "Keiner")),
+    ("handschuh", "Handschuhe", ("Schwarz", "Braun", "Oliv", "Keine")),
+    ("stiefel", "Stiefel", ("Dunkelbraun", "Schwarz", "Sand")),
+    ("akzent", "Teamfarbe", ("Spielerfarbe", "Blau", "Rot", "Grün", "Gelb", "Violett", "Türkis", "Orange", "Weiß")),
+)
+
+
+def look_valid(code):
+    return (isinstance(code, str) and len(code) == len(LOOK_OPTS)
+            and all(c.isdigit() and int(c) < len(o[2]) for c, o in zip(code, LOOK_OPTS)))
+
+
+def look_default(seed=0):
+    """Ein zufälliger, aber stabiler Standard-Charakter (Hautton, Augen, Haare nach seed)."""
+    r = random.Random(seed * 7919 + 13)
+    v = [0] * len(LOOK_OPTS)
+    for k, (key, _l, vals) in enumerate(LOOK_OPTS):
+        if key in ("haut", "augen", "haar"):
+            v[k] = r.randrange(len(vals))
+    return "".join(str(i) for i in v)
+
+
+def look_random(rng):
+    return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
+
+
+def soldier_look(code, pid=0):
+    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer)."""
+    if not look_valid(code):
+        code = look_default(pid)
+    v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
+    ak = v["akzent"]
+    acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
+    skin = SOLDIER_SKINS[v["haut"]]
+    glove = SOLDIER_GLOVES[v["handschuh"]] or skin
+    return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
+                pal=CAMO_SETS[v["tarn"]], kopf=v["kopf"], brille=v["brille"], gesicht=v["gesicht"], extra=v["extra"],
+                frisur=v["frisur"], weste=v["weste"], pack=v["pack"], glove=glove, boots=SOLDIER_BOOTS[v["stiefel"]],
+                key=(code, acc))
+_SIDES = 16
+_CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
+_SOLDIER_CACHE = {}
+SOLDIER_SH = ((-0.245, 0.0, 0.55), (0.245, 0.0, 0.55))        # Schultergelenke links / rechts (Torso-Raum)
+SOLDIER_HAND = ((0.10, 0.36, 0.40), (0.10, 0.14, 0.375))      # Hände am Gewehr: links Handschutz, rechts Griff
+
+
+def _camo_col(p, f=11.0, off=0.0, pal=None):
+    """Tarnmuster: fleckige Farbwahl aus drei überlagerten Sinuswellen (je Dreieck, stabil auf allen Rechnern)."""
+    pal = pal or CAMO_PAL
+    x = p[0] + off
+    v = math.sin(x * f + p[2] * f * 0.7) + math.sin(p[1] * f * 1.3 - p[2] * f * 1.1 + 1.7) \
+        + math.sin((x + p[1]) * f * 0.8 + p[2] * f * 0.5 + 3.1)
+    return pal[0] if v < -0.9 else pal[1] if v < 0.5 else pal[2] if v < 1.5 else pal[3]
+
+
+def _lerp3(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+
+
+def loft(m, cs, rxs, rys, col, rng=None, mat=None, colfn=None, caps=(True, True), jit=0.03, sides=None):
+    """Gelenkte Röhre durch die Mittelpunkte cs mit elliptischen Querschnitten (rx, ry je Punkt), weich beleuchtet.
+    So entstehen Körperformen (Brust, Taille, Waden ...) aus vielen kleinen Dreiecken. colfn(Punkt) -> Farbe (Tarnmuster)."""
+    n = len(cs)
+    rings = []
+    tab = _CS if sides is None else [(math.cos(2 * math.pi * i / sides), math.sin(2 * math.pi * i / sides)) for i in range(sides)]
+    for i, c in enumerate(cs):
+        d = norm(sub(cs[min(n - 1, i + 1)], cs[max(0, i - 1)]))
+        ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+        k = dot(ref, d)
+        u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+        v = cross(d, u)
+        rx, ry = rxs[i], rys[i]
+        pts, nds = [], []
+        for co, si in tab:
+            pts.append((c[0] + u[0] * co * rx + v[0] * si * ry, c[1] + u[1] * co * rx + v[1] * si * ry,
+                        c[2] + u[2] * co * rx + v[2] * si * ry))
+            a, b = co / max(rx, 1e-3), si / max(ry, 1e-3)
+            nn = norm((u[0] * a + v[0] * b, u[1] * a + v[1] * b, u[2] * a + v[2] * b))
+            nds.append(max(0.0, dot(nn, SUN)))
+        rings.append((pts, nds, c, d))
+
+    def pick(a, b, c3):
+        if colfn:                                   # Farbe je Ecke: die Tarnflecken laufen weich ineinander
+            f = 1 + rng.uniform(-jit, jit) if rng else 1.0
+            return [tuple(x * f for x in colfn(q)) for q in (a, b, c3)]
+        return jc(col, rng, jit) if rng else col
+
+    S = len(tab)
+    for r in range(n - 1):
+        A, B = rings[r], rings[r + 1]
+        ref = _lerp3(A[2], B[2], 0.5)
+        for i in range(S):
+            j = (i + 1) % S
+            p0, p1, p2, p3 = A[0][i], A[0][j], B[0][j], B[0][i]
+            m.tri(p0, p1, p2, pick(p0, p1, p2), ref, mat=mat, nd=(A[1][i], A[1][j], B[1][j]))
+            m.tri(p0, p2, p3, pick(p0, p2, p3), ref, mat=mat, nd=(A[1][i], B[1][j], B[1][i]))
+    for k, (idx, sgn) in enumerate(((0, -1.0), (n - 1, 1.0))):
+        if not caps[k] or n < 2:
+            continue
+        pts, _nds, c, d = rings[idx]
+        other = rings[1 if idx == 0 else n - 2][2]
+        nd = max(0.0, dot((d[0] * sgn, d[1] * sgn, d[2] * sgn), SUN))
+        for i in range(S):
+            j = (i + 1) % S
+            m.tri(c, pts[i], pts[j], pick(c, pts[i], pts[j]), other, mat=mat, nd=(nd, nd, nd))
+
+
+def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
+    """Weiches Ellipsoid (Gelenke, Ohren, Hände, Kinn)."""
+    cs, rxs, rys = [], [], []
+    for k in range(rings + 1):
+        a = -math.pi / 2 + math.pi * k / rings
+        cs.append((c[0], c[1], c[2] + rz * math.sin(a)))
+        rxs.append(rx * math.cos(a))
+        rys.append(ry * math.cos(a))
+    loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
+
+
+def glove(m, wr, d, s, col, rng, curl=1.0, dn=None):
+    """Handschuh: Handteller, vier gebogene Finger und Daumen. wr = Handgelenk, d = Richtung zu den Fingern,
+    s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu)."""
+    if dn is not None:                                             # Krümmrichtung vorgegeben (z. B. quer um einen Griff)
+        k = dot(dn, d)
+        v = norm((dn[0] - d[0] * k, dn[1] - d[1] * k, dn[2] - d[2] * k))
+        u = cross(v, d)
+    else:
+        ref = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+        k = dot(ref, d)
+        u = norm((ref[0] - d[0] * k, ref[1] - d[1] * k, ref[2] - d[2] * k))
+        v = cross(d, u)
+        if v[2] > 0:
+            v = (-v[0], -v[1], -v[2])                              # v zeigt nach unten: dorthin krümmen sich die Finger
+
+    def at(base, a, b, c):
+        return (base[0] + d[0] * a + u[0] * b + v[0] * c, base[1] + d[1] * a + u[1] * b + v[1] * c,
+                base[2] + d[2] * a + u[2] * b + v[2] * c)
+
+    kn = at(wr, 0.085, 0, 0)
+    loft(m, [wr, at(wr, 0.04, 0, 0), kn], [0.032, 0.043, 0.045], [0.022, 0.027, 0.026], col, rng, None, None,
+         (True, True), 0.03, 10)                                   # Handteller
+    for i, (off, ln) in enumerate(((-1.5, 0.9), (-0.5, 1.0), (0.5, 0.95), (1.5, 0.8))):
+        b0 = at(kn, 0, off * 0.0225, 0)
+        p1 = at(b0, 0.028 * ln, 0, 0.012 * curl)
+        p2 = at(p1, 0.022 * ln * (1 - 0.55 * curl), 0, 0.026 * curl * ln)
+        p3 = at(p2, 0.010 * (1 - 0.8 * curl), 0, 0.020 * curl)
+        loft(m, [b0, p1, p2, p3], [0.0105, 0.0095, 0.0085, 0.0070], [0.0105, 0.0095, 0.0085, 0.0070], col, rng,
+             None, None, (False, True), 0.03, 6)                   # Finger
+    t0 = at(wr, 0.03, -s * 0.034, -0.004)
+    t1 = at(t0, 0.030, -s * 0.010, 0.005 * curl)
+    t2 = at(t1, 0.025, s * 0.004, 0.011 * curl)
+    loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
+         (False, True), 0.03, 6)                                   # Daumen
+
+
+def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10)):
+    """Rechte Hand, die einen senkrechten Pistolengriff umfasst (Ego-Ansicht). Ursprung: Mitte des Griffs, 0.033 hinter
+    seiner Vorderseite. Handballen liegt seitlich am Griff, die vier Finger laufen quer um die Vorderseite, der Daumen
+    liegt oben an der Seite, der Unterarm läuft nach hinten."""
+    xc, kn_y = 0.038 * s, 0.015
+    wr = (xc, kn_y - 0.085, 0.0)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.35, dn=(-s, 0.0, 0.0))      # Finger greifen weit um den Griff
+    cs = [(xc, wr[1] - 0.005, 0.0), (xc + 0.030 * s, wr[1] - 0.12, -0.07), (xc + 0.070 * s, wr[1] - 0.25, -0.17),
+          (xc + 0.120 * s, wr[1] - 0.50, -0.36)]
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
+         lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
+    loft(m, [(xc, wr[1] + 0.008, 0.0), (xc, wr[1] - 0.028, -0.001)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
+         rng, None, None, (False, False), 0.02)                    # Manschette
+
+
+def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10)):
+    """Arm in der Ego-Ansicht (Hand im Ursprung, Unterarm läuft nach hinten -y und etwas nach unten):
+    Handschuh mit Fingern, Manschette und Tarnärmel wie beim Soldaten."""
+    wr = (0.0, -0.09, -0.012)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, curl)
+    y1 = -(length + 0.07)
+    cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
+          (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
+    loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
+         lambda p: _camo_col(p, 11.0, s * 0.3, pal), (False, True))
+    loft(m, [(0.0, -0.082, -0.0135), (0.0, -0.118, -0.0145)], [0.041, 0.042], [0.041, 0.042], (0.12, 0.12, 0.10),
+         rng, None, None, (False, False), 0.02)                    # Manschette
+
+
+def _soldier_meshes(L):
+    """Baut die Teile des Soldaten: Oberkörper samt Kopf (Mesh in torso-Koordinaten, Hüfte = Ursprung, Blick +y),
+    je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75) und je einen Arm (Schulter = Ursprung).
+    L = Aussehen aus soldier_look(): Tarnmuster, Hautton, Kopfbedeckung, Brille, Gesicht, Ausrüstung ..."""
+    rng = random.Random(1234 + int(L["key"][0]))
+    skin, hair, eye, acc, pal = L["skin"], L["hair"], L["eye"], L["acc"], L["pal"]
+    skin_d = tuple(c * 0.84 for c in skin)
+    camo = lambda p, f=11.0, off=0.0: _camo_col(p, f, off, pal)          # noqa: E731
+    OLV = tuple(c * 0.66 for c in pal[1])                                # Weste, Taschen
+    POUCH, FLAP = tuple(c * 0.8 for c in OLV), tuple(c * 1.15 for c in OLV)
+    DK = (0.11, 0.11, 0.10)           # schwarzes Leder / Gummi
+    LEATH = L["boots"]
+    METAL = (0.50, 0.46, 0.34)
+    GL = L["glove"]
+    GLASS = (0.12, 0.18, 0.26)
+    tm = Mesh()
+
+    # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
+    zs = [-0.07, 0.0, 0.10, 0.20, 0.30, 0.42, 0.52, 0.585, 0.635, 0.668]
+    rxs = [0.200, 0.215, 0.210, 0.185, 0.190, 0.210, 0.225, 0.225, 0.170, 0.080]
+    rys = [0.120, 0.130, 0.125, 0.110, 0.115, 0.130, 0.140, 0.125, 0.100, 0.075]
+    cys = [0.0, -0.010, -0.015, 0.0, 0.005, 0.010, 0.015, 0.0, -0.010, 0.0]
+    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, None, camo)
+    # ---- Hals mit Kragen
+    loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
+         skin, rng, None, None, (False, False), 0.015)
+    loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
+         tuple(c * 0.8 for c in pal[1]), rng, None, None, (False, False))
+    # ---- Koppel mit Schnalle und Taschen
+    loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
+    box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
+    for sx in (-1, 1):
+        box(tm, sx * 0.165, 0.05, 0.19, 0.055, 0.075, 0.09, LEATH, rng)                  # Gürteltaschen
+        box(tm, sx * 0.165, 0.05, 0.236, 0.058, 0.078, 0.02, tuple(c * 1.15 for c in LEATH), rng)
+    # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
+    if L["weste"] == 0:
+        vz = [0.30, 0.40, 0.50, 0.578]
+        loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
+             [0.130, 0.146, 0.156, 0.140], OLV, rng, None, None, (True, False), 0.04)
+        for sx in (-1, 1):
+            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
+        for x in (-0.09, 0.0, 0.09):
+            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
+            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
+        box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
+        box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
+        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
+    # ---- Rucksack
+    if L["pack"] == 0:                                                                       # gross mit Schlafrolle
+        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
+        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
+        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
+    elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
+        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
+        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
+
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
+    #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
+    def arm(S, E, H, s):
+        am = Mesh()
+        E, H = sub(E, S), sub(H, S)
+        S = (0.0, 0.0, 0.0)
+        mid = _lerp3(S, E, 0.5)
+        up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
+        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, None, lambda p: camo(p, 11.0, s * 0.3))
+        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
+        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, None)
+        d = norm(sub(H, E))
+        wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
+        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
+             lambda p: camo(p, 11.0, s * 0.3), (False, False))
+        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
+             (False, False), 0.02)                                 # Manschette
+        glove(am, wr, d, s, GL, rng, 1.0)
+        return am
+
+    arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
+            arm(SOLDIER_SH[1], (0.285, -0.02, 0.31), SOLDIER_HAND[1], 1)]     # rechte Hand am Griff
+
+    # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
+    hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
+    hrx = [0.035, 0.070, 0.080, 0.084, 0.086, 0.086, 0.080, 0.060, 0.020]
+    hry = [0.050, 0.075, 0.090, 0.103, 0.110, 0.112, 0.108, 0.090, 0.040]
+    hcy = [0.060, 0.050, 0.040, 0.028, 0.018, 0.010, 0.005, 0.0, 0.0]
+    kopf, gesicht, brille, extra, frisur = L["kopf"], L["gesicht"], L["brille"], L["extra"], L["frisur"]
+    mask = gesicht == 3
+    loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
+    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else skin, rng)                  # Kinn
+    for sx in (-1, 1):
+        ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
+        if not mask:
+            ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                  # Wangenknochen
+        box(tm, sx * 0.037, 0.1245, 0.915, 0.036, 0.012, 0.019, (0.93, 0.93, 0.90))             # Augapfel
+        box(tm, sx * 0.037, 0.1315, 0.915, 0.019, 0.006, 0.019, eye)                            # Iris
+        box(tm, sx * 0.037, 0.1345, 0.915, 0.009, 0.004, 0.009, (0.02, 0.02, 0.03))             # Pupille
+        box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
+        box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
+        if frisur != 1:
+            box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten
+    for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
+                     ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
+                     ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
+                     ((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0.019, 0.134, 0.872))):
+        tm.tri(a, b, c3, DK if mask else skin, (0, 0.09, 0.9))
+    if mask:                                                                                    # Sturmhaube: Untergesicht + Hals
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:5], hz[:5])], [r * 1.04 + 0.002 for r in hrx[:5]],
+             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, None, None, (True, False), 0.03)
+        loft(tm, [(0, 0.01, 0.675), (0, 0.012, 0.74), (0, 0.015, 0.79)], [0.066, 0.061, 0.060], [0.066, 0.063, 0.063],
+             DK, rng, None, None, (False, False))
+    else:
+        box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
+        box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
+        box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                        # Mundspalt
+    if gesicht == 1:                                                                            # Kinnbart + Schnurrbart
+        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.03 + 0.003 for r in hrx[:3]],
+             [r * 1.03 + 0.003 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
+        box(tm, 0, 0.1345, 0.8585, 0.070, 0.014, 0.012, hair, rng)
+    if gesicht == 2:                                                                            # Tarnbemalung
+        g1, g2 = (0.10, 0.15, 0.07), (0.38, 0.33, 0.18)
+        for sx in (-1, 1):
+            for k, zz in enumerate((0.885, 0.862, 0.84)):
+                box(tm, sx * 0.058, 0.1285 - 0.001 * k, zz, 0.052, 0.006, 0.011, g1 if k % 2 == 0 else g2)
+        box(tm, 0, 0.1235, 0.953, 0.10, 0.006, 0.012, g1)
+        box(tm, 0, 0.157, 0.9, 0.02, 0.004, 0.034, g1)
+    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare
+    if frisur != 1:
+        box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                   # Haar im Nacken
+        if kopf in (2, 3, 4):
+            loft(tm, [(0, cy, z) for cy, z in zip((0.003, 0.002, 0.0, 0.0), (0.955, 0.985, 1.015, 1.04))],
+                 [0.090, 0.092, 0.075, 0.030], [0.117, 0.118, 0.098, 0.045], hair, rng, None, None, (False, True), 0.04)
+    if frisur == 2:
+        loft(tm, [(0, -0.100, 0.96), (0, -0.118, 0.90), (0, -0.128, 0.80), (0, -0.120, 0.69)],
+             [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
+    # ---- Kopfbedeckung
+    if kopf == 0:                                                                               # Gefechtshelm mit Tarnbezug
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
+                                               (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
+             [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
+             None, rng, None, lambda p: camo(p, 17.0, 0.7), (True, True))
+        loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
+        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
+        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
+        for sx in (-1, 1):
+            box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
+    elif kopf == 1:                                                                             # Buschhut mit Krempe
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
+             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, None,
+             lambda p: camo(p, 15.0, 0.4), (False, True))
+        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
+             lambda p: camo(p, 13.0, 0.9), (True, True))
+        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
+    elif kopf == 2:                                                                             # Barett
+        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
+        box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
+        loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
+    elif kopf == 3:                                                                             # Feldmütze mit Schirm
+        loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
+             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, None,
+             lambda p: camo(p, 15.0, 0.2), (True, True))
+        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
+        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
+    # ---- Brille
+    if brille == 1:                                                                             # Schutzbrille
+        box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
+        for sx in (-1, 1):
+            box(tm, sx * 0.034, 0.145, 0.915, 0.052, 0.010, 0.036, GLASS)
+        loft(tm, [(0, 0.014, 0.905), (0, 0.014, 0.927)], [0.092, 0.092], [0.119, 0.119], DK, rng, None, None,
+             (False, False), 0.02)
+    elif brille == 2:                                                                           # Sonnenbrille
+        for sx in (-1, 1):
+            box(tm, sx * 0.037, 0.140, 0.915, 0.050, 0.008, 0.028, (0.03, 0.03, 0.04))
+            box(tm, sx * 0.087, 0.07, 0.918, 0.006, 0.13, 0.008, DK)
+        box(tm, 0, 0.138, 0.92, 0.024, 0.008, 0.008, DK)
+        box(tm, 0, 0.139, 0.931, 0.14, 0.008, 0.008, DK)
+    # ---- Zubehör
+    if extra == 1:                                                                              # Halstuch
+        loft(tm, [(0, 0.008, 0.655), (0, 0.012, 0.69), (0, 0.016, 0.725)], [0.088, 0.075, 0.066], [0.085, 0.072, 0.064],
+             acc, rng, None, None, (False, False), 0.04)
+        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat=None)
+    elif extra == 2:                                                                            # Headset
+        for sx in (-1, 1):
+            ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
+        box(tm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
+        box(tm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
+        ell(tm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+    elif extra == 3:                                                                            # Nachtsichtgerät
+        if kopf != 0:
+            loft(tm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+        box(tm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
+        box(tm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
+        box(tm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
+
+    legs = []
+    for sx in (-1, 1):
+        lm = Mesh()
+        off = sx * 0.4
+        # Hose: Oberschenkel, Knie, Wade, Knöchel
+        lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
+        lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
+        lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
+        lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
+        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, None, lambda p, o=off: camo(p, 11.0, o))
+        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
+        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
+        # Stiefel: Schaft, Fuss, Sohle, Schnürung
+        loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
+             LEATH, rng, None, None, (False, False), 0.03)
+        loft(lm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
+             [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
+        box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
+        box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
+        legs.append(lm)
+    return tm, legs, arms
+
+
+def build_soldier(look):
+    """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
+    (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
+    key = look["key"]
+    parts = _SOLDIER_CACHE.get(key)
+    if parts is None:
+        tm, lms, ams = _soldier_meshes(look)
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams])
+    root = NodePath("soldier")
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.75)
+    torso.attachNewNode(parts[0])
+    legs = []
+    for sx, gn in zip((-1, 1), parts[1]):
+        leg = root.attachNewNode("leg")
+        leg.setPos(sx * 0.115, 0, 0.75)
+        leg.attachNewNode(gn)
+        legs.append(leg)
+    arms = []
+    for sh, gn in zip(SOLDIER_SH, parts[2]):
+        an = torso.attachNewNode("arm")
+        an.setPos(*sh)
+        an.attachNewNode(gn)
+        arms.append(an)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 2.2)
+    bar.setBillboardPointEye()
+    bar.setLightOff()
+    bar.setTwoSided(True)
+    cm = CardMaker("bg")
+    cm.setFrame(-0.5, 0.5, -0.05, 0.05)
+    bg = bar.attachNewNode(cm.generate())
+    bg.setColor(0, 0, 0, 1)
+    cm = CardMaker("fg")
+    cm.setFrame(0, 1, -0.035, 0.035)
+    fg = bar.attachNewNode(cm.generate())
+    fg.setPos(-0.5, -0.01, 0)
+    fg.setColor(0.85, 0.1, 0.1, 1)
+    fg.setDepthOffset(1)
+    bar.hide()
+    return root, torso, legs[0], legs[1], bar, fg, arms[0], arms[1]
+
+
+# Höhe der Visierlinie über dem Waffenursprung beim Zielen (Kimme und Korn liegen auf dieser Höhe)
+ADS_Z = {"Pistole": 0.069, "Sturmgewehr": 0.079, "Revolver": 0.0765, "Maschinenpistole": 0.071}
+ADS_Z_DEFAULT = 0.095
+
+# Montagepunkt (y, Oberkante z) der Schiene je Primärwaffe; Höhe der Zielachse über der Schiene je Visier
+SCOPE_MOUNT = {"Sturmgewehr": (0.25, 0.0375), "Schrotflinte": (0.08, 0.0425), "Scharfschütze": (0.15, 0.035)}
+SCOPE_AXIS = {SC_RED: 0.086, SC_ACOG: 0.05, SC_SNIPER: 0.065}
+IRON_ADS_Z = {"Schrotflinte": 0.0735, "Scharfschütze": 0.066}     # Sturmgewehr: Kimme/Korn steckt schon im Modell
+_RING = (0.09, 0.095, 0.1)
+_DK, _DK2, _DOT = (0.08, 0.08, 0.09), (0.12, 0.12, 0.14), (0.95, 0.95, 0.9)
+IRON_EXTRA = {
+    "Schrotflinte": [(0, 0.0, 0.0475, 0.034, 0.06, 0.015, _DK2),
+                     (-0.0135, 0.0, 0.0655, 0.011, 0.014, 0.031, _DK), (0.0135, 0.0, 0.0655, 0.011, 0.014, 0.031, _DK),
+                     (0, 0.76, 0.06, 0.022, 0.04, 0.02, _DK2), (0, 0.76, 0.0695, 0.008, 0.012, 0.02, (0.06, 0.06, 0.07)),
+                     (-0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, _DOT), (0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, _DOT),
+                     (0, 0.754, 0.0765, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))],
+    "Scharfschütze": [(0, -0.1, 0.0385, 0.034, 0.06, 0.007, _DK2),
+                      (-0.0135, -0.1, 0.0575, 0.011, 0.014, 0.031, _DK), (0.0135, -0.1, 0.0575, 0.011, 0.014, 0.031, _DK),
+                      (0, 0.9, 0.0405, 0.022, 0.04, 0.016, _DK2), (0, 0.9, 0.0605, 0.008, 0.012, 0.0235, (0.06, 0.06, 0.07)),
+                      (-0.0135, -0.1075, 0.0575, 0.004, 0.002, 0.006, _DOT), (0.0135, -0.1075, 0.0575, 0.004, 0.002, 0.006, _DOT),
+                      (0, 0.894, 0.0705, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))],
+}
+
+
+def ring_mesh(m, cx, cy, cz, r_out, r_in, depth, col, rng, n=24):
+    """Rundring mit Achse in y-Richtung (Reflexvisier): Aussen-, Innen- und Stirnflächen."""
+    y0, y1 = cy - depth / 2, cy + depth / 2
+    cen = (cx, cy, cz)
+    for i in range(n):
+        a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+        c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
+        for r in (r_out, r_in):
+            p = [(cx + c0 * r, y0, cz + s0 * r), (cx + c1 * r, y0, cz + s1 * r),
+                 (cx + c1 * r, y1, cz + s1 * r), (cx + c0 * r, y1, cz + s0 * r)]
+            k = 0.78 if r == r_in else 1.0
+            cc = (col[0] * k, col[1] * k, col[2] * k)
+            m.tri(p[0], p[1], p[2], cc, ref=cen if r == r_out else None)
+            m.tri(p[0], p[2], p[3], cc, ref=cen if r == r_out else None)
+        for y in (y0, y1):
+            q = [(cx + c0 * r_out, y, cz + s0 * r_out), (cx + c1 * r_out, y, cz + s1 * r_out),
+                 (cx + c1 * r_in, y, cz + s1 * r_in), (cx + c0 * r_in, y, cz + s0 * r_in)]
+            m.tri(q[0], q[1], q[2], col, ref=(cx, y + (1 if y > cy else -1), cz))
+            m.tri(q[0], q[2], q[3], col, ref=(cx, y + (1 if y > cy else -1), cz))
+
+
+def scope_parts(sc, wname, rel=False):
+    """Quader eines Visiers (cx,cy,cz,sx,sy,sz,Farbe) auf der Schiene der Waffe wname.
+    rel=True: Montagepunkt im Ursprung (für Symbole)."""
+    ym, zt = (0.0, 0.0) if rel else SCOPE_MOUNT[wname]
+    if sc == SC_RED:       # Reflexvisier: breiter Sockel, Rundring (Glas) darüber, Verstellknopf rechts
+        return [(0, ym, zt + 0.02, 0.085, 0.17, 0.04, _DK2),
+                (0.034, ym - 0.02, zt + 0.0425, 0.02, 0.03, 0.005, (0.16, 0.16, 0.18)),
+                (0, ym, zt + 0.086, 0.1, 0.09, 0.1, _RING)]       # Seitenansicht des Rings (Symbol); im Modell ein Rundring
+    if sc == SC_ACOG:
+        return [(0, ym, zt + 0.012, 0.03, 0.12, 0.024, _DK2), (0, ym, zt + 0.05, 0.04, 0.17, 0.05, (0.20, 0.19, 0.16)),
+                (0, ym + 0.1, zt + 0.05, 0.05, 0.04, 0.058, (0.08, 0.08, 0.09)),
+                (0, ym - 0.1, zt + 0.05, 0.046, 0.035, 0.054, (0.08, 0.08, 0.09)),
+                (0, ym, zt + 0.083, 0.008, 0.12, 0.007, (0.95, 0.25, 0.1))]
+    if sc == SC_SNIPER:
+        return [(0, ym + 0.06, zt + 0.02, 0.02, 0.03, 0.04, _DK2), (0, ym - 0.06, zt + 0.02, 0.02, 0.03, 0.04, _DK2),
+                (0, ym, zt + 0.065, 0.04, 0.30, 0.04, _DK), (0, ym + 0.17, zt + 0.065, 0.058, 0.05, 0.058, (0.06, 0.06, 0.07)),
+                (0, ym - 0.16, zt + 0.065, 0.05, 0.04, 0.05, (0.06, 0.06, 0.07)), (0, ym, zt + 0.095, 0.014, 0.02, 0.012, (0.3, 0.3, 0.32))]
+    if rel:
+        return []
+    if wname == "Sturmgewehr":
+        return list(GUN_PARTS[wname][0][-8:])             # Kimme und Korn sitzen am Modell
+    return [] if wname not in IRON_EXTRA else list(IRON_EXTRA[wname])
+
+
+def scope_ads_z(sc, wname):
+    if sc == SC_IRON or wname not in SCOPE_MOUNT:
+        return ADS_Z.get(wname, IRON_ADS_Z.get(wname, ADS_Z_DEFAULT))
+    return SCOPE_MOUNT[wname][1] + SCOPE_AXIS[sc]
+
+# (cx, cy, cz, sx, sy, sz, farbe) in Waffen-Koordinaten: +y vorwärts, +x rechts
+GUN_PARTS = {
+    "Pistole": ([(0, 0.12, 0.03, 0.05, 0.26, 0.055, (0.22, 0.22, 0.25)),
+                 (0, 0.08, -0.005, 0.045, 0.20, 0.04, (0.15, 0.15, 0.17)),
+                 (0, 0.0, -0.07, 0.045, 0.07, 0.13, (0.30, 0.20, 0.12)),
+                 # Kimme: zwei Backen mit Ausschnitt; Korn: Pfosten mit Schutzbacken und Leuchtpunkten
+                 (-0.0135, 0.0, 0.0665, 0.011, 0.014, 0.018, (0.10, 0.10, 0.12)),
+                 (0.0135, 0.0, 0.0665, 0.011, 0.014, 0.018, (0.10, 0.10, 0.12)),
+                 (0, 0.235, 0.0665, 0.010, 0.012, 0.018, (0.10, 0.10, 0.12)),
+                 (-0.0135, -0.0075, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9)),
+                 (0.0135, -0.0075, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9)),
+                 (0, 0.2285, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9))], (0, 0.26, 0.035)),
+    "Sturmgewehr": ([(0, 0.20, 0.0, 0.055, 0.45, 0.075, (0.20, 0.22, 0.20)),
+                     (0, 0.55, 0.02, 0.025, 0.35, 0.025, (0.1, 0.1, 0.1)),
+                     (0, 0.40, 0.0, 0.06, 0.25, 0.07, (0.18, 0.20, 0.18)),
+                     (0, -0.15, -0.01, 0.05, 0.28, 0.09, (0.30, 0.33, 0.22)),
+                     (0, 0.05, -0.09, 0.04, 0.06, 0.12, (0.30, 0.20, 0.12)),
+                     (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
+                     # Kimme: Sockel mit zwei Backen (Ausschnitt dazwischen); Korn: Sockel, Pfosten, Schutzbacken
+                     (0, 0.13, 0.052, 0.036, 0.09, 0.03, (0.12, 0.12, 0.13)),
+                     (-0.0145, 0.15, 0.0745, 0.012, 0.014, 0.025, (0.08, 0.08, 0.09)),
+                     (0.0145, 0.15, 0.0745, 0.012, 0.014, 0.025, (0.08, 0.08, 0.09)),
+                     (0, 0.66, 0.045, 0.03, 0.05, 0.035, (0.12, 0.12, 0.13)),
+                     (0, 0.66, 0.074, 0.010, 0.008, 0.03, (0.06, 0.06, 0.07)),
+                     (-0.014, 0.66, 0.072, 0.005, 0.012, 0.036, (0.1, 0.1, 0.11)),
+                     (0.014, 0.66, 0.072, 0.005, 0.012, 0.036, (0.1, 0.1, 0.11)),
+                     (0, 0.655, 0.0875, 0.004, 0.002, 0.004, (0.95, 0.5, 0.1))], (0, 0.74, 0.02)),
+    "Schrotflinte": ([(0, 0.45, 0.03, 0.04, 0.70, 0.04, (0.15, 0.15, 0.18)),
+                      (0, 0.40, -0.015, 0.04, 0.55, 0.035, (0.17, 0.17, 0.2)),
+                      (0, 0.05, 0.0, 0.06, 0.25, 0.085, (0.25, 0.25, 0.28)),
+                      (0, 0.35, -0.04, 0.06, 0.20, 0.05, (0.40, 0.26, 0.14)),
+                      (0, -0.22, -0.03, 0.05, 0.35, 0.10, (0.40, 0.26, 0.14))], (0, 0.80, 0.03)),
+    "Scharfschütze": ([(0, 0.10, 0.0, 0.05, 0.60, 0.07, (0.20, 0.25, 0.22)),
+                       (0, 0.65, 0.02, 0.025, 0.55, 0.025, (0.1, 0.1, 0.1)),
+                       (0, -0.30, -0.02, 0.05, 0.35, 0.10, (0.30, 0.30, 0.28)),
+                       (0, 0.10, -0.07, 0.035, 0.08, 0.08, (0.12, 0.12, 0.12))], (0, 0.95, 0.02)),
+    "Revolver": ([(0, 0.14, 0.03, 0.05, 0.30, 0.06, (0.30, 0.30, 0.33)),
+                  (0, 0.06, 0.0, 0.07, 0.10, 0.09, (0.25, 0.25, 0.28)),
+                  (0, -0.02, -0.07, 0.045, 0.07, 0.13, (0.35, 0.22, 0.12)),
+                  # Kimme: Sockel mit zwei Backen (Ausschnitt dazwischen); Korn: Sockel mit Pfosten, Leuchtpunkte
+                  (0, -0.005, 0.054, 0.034, 0.05, 0.012, (0.12, 0.12, 0.13)),
+                  (-0.0135, -0.005, 0.0725, 0.011, 0.014, 0.025, (0.08, 0.08, 0.09)),
+                  (0.0135, -0.005, 0.0725, 0.011, 0.014, 0.025, (0.08, 0.08, 0.09)),
+                  (0, 0.275, 0.064, 0.02, 0.04, 0.012, (0.12, 0.12, 0.13)),
+                  (0, 0.275, 0.0715, 0.008, 0.012, 0.023, (0.06, 0.06, 0.07)),
+                  (-0.0135, -0.0125, 0.0725, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
+                  (0.0135, -0.0125, 0.0725, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
+                  (0, 0.269, 0.078, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))], (0, 0.30, 0.035)),
+    "Maschinenpistole": ([(0, 0.12, 0.0, 0.05, 0.30, 0.07, (0.18, 0.18, 0.20)),
+                          (0, 0.30, 0.01, 0.025, 0.15, 0.025, (0.1, 0.1, 0.1)),
+                          (0, 0.08, -0.09, 0.04, 0.06, 0.14, (0.12, 0.12, 0.12)),
+                          (0, -0.02, -0.05, 0.045, 0.07, 0.11, (0.25, 0.18, 0.12)),
+                          # Kimme (Sockel + zwei Backen) und Korn (Sockel + Pfosten) mit Leuchtpunkten
+                          (0, 0.0, 0.0425, 0.036, 0.07, 0.015, (0.10, 0.10, 0.11)),
+                          (-0.0135, 0.0, 0.0655, 0.011, 0.014, 0.031, (0.08, 0.08, 0.09)),
+                          (0.0135, 0.0, 0.0655, 0.011, 0.014, 0.031, (0.08, 0.08, 0.09)),
+                          (0, 0.36, 0.034, 0.026, 0.04, 0.024, (0.10, 0.10, 0.11)),
+                          (0, 0.36, 0.0625, 0.008, 0.012, 0.034, (0.06, 0.06, 0.07)),
+                          (-0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
+                          (0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
+                          (0, 0.354, 0.074, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))], (0, 0.40, 0.01)),
+    "Raketenwerfer": ([(0, 0.25, 0.02, 0.14, 0.95, 0.14, (0.25, 0.30, 0.22)),
+                       (0, 0.78, 0.02, 0.18, 0.12, 0.18, (0.15, 0.15, 0.15)),
+                       (0, -0.20, 0.02, 0.17, 0.12, 0.17, (0.15, 0.15, 0.15)),
+                       (0, 0.10, -0.10, 0.04, 0.08, 0.14, (0.12, 0.12, 0.12)),
+                       (0, 0.35, 0.12, 0.04, 0.20, 0.05, (0.10, 0.10, 0.10))], (0, 0.88, 0.02)),
+    "Minigun": ([(0, 0.0, 0.0, 0.14, 0.30, 0.14, (0.20, 0.20, 0.22)),
+                 (0.04, 0.45, 0.04, 0.03, 0.70, 0.03, (0.35, 0.35, 0.38)),
+                 (-0.04, 0.45, 0.04, 0.03, 0.70, 0.03, (0.35, 0.35, 0.38)),
+                 (0.04, 0.45, -0.04, 0.03, 0.70, 0.03, (0.35, 0.35, 0.38)),
+                 (-0.04, 0.45, -0.04, 0.03, 0.70, 0.03, (0.35, 0.35, 0.38)),
+                 (0, 0.0, -0.12, 0.04, 0.08, 0.14, (0.12, 0.12, 0.12))], (0, 0.82, 0.0)),
+    "Railgun": ([(0, 0.30, 0.0, 0.07, 0.90, 0.09, (0.15, 0.20, 0.30)),
+                 (0, 0.30, 0.06, 0.03, 0.70, 0.03, (0.20, 0.70, 0.90)),
+                 (0, -0.10, -0.02, 0.06, 0.30, 0.11, (0.10, 0.12, 0.18)),
+                 (0, 0.05, -0.10, 0.04, 0.08, 0.13, (0.10, 0.10, 0.10))], (0, 0.78, 0.0)),
+}
+
+# Wechselmagazin je Waffe (für die Nachladeanimation der Ego-Ansicht). Gleiche Tupel wie in GUN_PARTS
+# werden dort im Ego-Modell weggelassen (das Magazin ist dann ein eigenes, bewegliches Teil).
+RHAND_GRIP = {"Pistole": (0.0, 0.003, -0.07, -3.0), "Revolver": (0.0, -0.027, -0.07, -14.0),
+              "Maschinenpistole": (0.0, -0.033, -0.06, -15.0), "Sturmgewehr": (0.0, 0.052, -0.09, -7.0),
+              "Scharfschütze": (0.0, -0.1155, -0.08, 20.0), "Schrotflinte": (0.0, -0.098, -0.02, 0.0),
+              "Railgun": (0.0, 0.052, -0.11, -5.0), "Raketenwerfer": (0.0, 0.08, -0.107, -7.0),
+              "Minigun": (0.0, 0.0045, -0.127, -2.0)}      # rechte Hand am Griff (Waffenraum): Position, Neigung des Griffs
+MAG_PARTS = {
+    "Pistole": (0, 0.0, -0.12, 0.04, 0.06, 0.09, (0.10, 0.10, 0.12)),
+    "Sturmgewehr": (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
+    "Schrotflinte": (0, 0.25, -0.075, 0.04, 0.12, 0.03, (0.75, 0.15, 0.10)),
+    "Scharfschütze": (0, 0.10, -0.07, 0.035, 0.08, 0.08, (0.12, 0.12, 0.12)),
+    "Revolver": (0, 0.06, -0.075, 0.05, 0.06, 0.04, (0.75, 0.60, 0.25)),
+    "Maschinenpistole": (0, 0.08, -0.09, 0.04, 0.06, 0.14, (0.12, 0.12, 0.12)),
+    "Raketenwerfer": None,                      # die Rakete wird von vorn eingeschoben
+    "Minigun": (0, -0.02, -0.20, 0.09, 0.12, 0.09, (0.25, 0.32, 0.18)),
+    "Railgun": (0, 0.05, -0.17, 0.05, 0.08, 0.09, (0.20, 0.70, 0.90)),
+}
+
+# ------------------------------------------------------------------ Detaillierte Waffenmodelle
+# Jede Waffe besteht aus Formen (Waffenkoordinaten wie GUN_PARTS: +y vorwärts, +x rechts, z oben). Aus denselben
+# Formen entstehen das 3D-Modell (Ego-Ansicht, Bodenmodell) und das 2D-Symbol (Seitenansicht).
+#   ("p", cx, Breite, [(y, z), ...], Farbe)            Seitenprofil, in x-Richtung aufgedickt (abgeschrägte Kanten)
+#   ("t", [(x, y, z), ...], [r, ...], Farbe, Seiten)   runde Röhre entlang eines Pfads; r = Radius oder (rx, rz)
+#   ("b", cx, cy, cz, sx, sy, sz, Farbe)                Quader
+#   ("e", cx, cy, cz, rx, ry, rz, Farbe)                Ellipsoid
+def _gs_line(cx, w, p0, p1, t, col):
+    """Dünner Balken (Profil) von p0 nach p1 im y/z-Schnitt, Dicke t (Abzugsbügel, Drähte)."""
+    dy, dz = p1[0] - p0[0], p1[1] - p0[1]
+    ln = math.hypot(dy, dz) or 1e-6
+    ny, nz = -dz / ln * t / 2, dy / ln * t / 2
+    return ("p", cx, w, [(p0[0] + ny, p0[1] + nz), (p1[0] + ny, p1[1] + nz), (p1[0] - ny, p1[1] - nz),
+                         (p0[0] - ny, p0[1] - nz)], col)
+
+
+def _gs_loop(cx, w, pts, t, col):
+    return [_gs_line(cx, w, pts[i], pts[i + 1], t, col) for i in range(len(pts) - 1)]
+
+
+def _gs_ty(cx, cz, prof, col, sides=12):
+    """Drehkörper um die y-Achse: prof = [(y, r) oder (y, rx, rz)]; gleiche y ergeben eine Stufe."""
+    pts, rs, last = [], [], None
+    for e in prof:
+        y = e[0]
+        if last is not None and y <= last:
+            y = last + 5e-4
+        last = y
+        pts.append((cx, y, cz))
+        rs.append(e[1] if len(e) == 2 else (e[1], e[2]))
+    return ("t", pts, rs, col, sides)
+
+
+def _poly_area(pts):
+    n = len(pts)
+    return 0.5 * sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n))
+
+
+def _earclip(pts):
+    """Dreiecke (Indexe) eines einfachen Polygons mit Umlaufsinn gegen den Uhrzeigersinn."""
+    idx = list(range(len(pts)))
+    out = []
+
+    def cr(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    while len(idx) > 3:
+        m = len(idx)
+        for k in range(m):
+            i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % m]
+            a, b, c = pts[i0], pts[i1], pts[i2]
+            if cr(a, b, c) <= 1e-12:
+                continue
+            if any(cr(a, b, pts[j]) >= 0 and cr(b, c, pts[j]) >= 0 and cr(c, a, pts[j]) >= 0
+                   for j in idx if j not in (i0, i1, i2)):
+                continue
+            out.append((i0, i1, i2))
+            idx.pop(k)
+            break
+        else:
+            break
+    for k in range(1, len(idx) - 1):
+        out.append((idx[0], idx[k], idx[k + 1]))
+    return out
+
+
+def _gs_ext(m, cx, w, pts, col, rng, off, bev=0.0035):
+    """Seitenprofil -> Körper: grosse Seitenflächen, schmale Fase, Ober-/Unterkanten."""
+    pts = [(p[0] + off[1], p[1] + off[2]) for p in pts]
+    cx += off[0]
+    if _poly_area(pts) < 0:
+        pts = pts[::-1]
+    n = len(pts)
+    ys, zs = [p[0] for p in pts], [p[1] for p in pts]
+    y0, y1, z0, z1 = min(ys), max(ys), min(zs), max(zs)
+    gy, gz = (y0 + y1) / 2, (z0 + z1) / 2
+    ly, lz = max(y1 - y0, 1e-3), max(z1 - z0, 1e-3)
+    ky, kz = max(0.3, 1 - 2 * bev / ly), max(0.3, 1 - 2 * bev / lz)
+    cap = [(gy + (p[0] - gy) * ky, gz + (p[1] - gz) * kz) for p in pts]
+    hw = w / 2
+    xw = max(hw - bev, hw * 0.5)
+
+    def vk(z):
+        return 0.74 + 0.26 * (z - z0) / lz
+
+    cc = jc(col, rng, 0.02)
+    for sg in (-1, 1):
+        for a, b, c in _earclip(cap):
+            P = [(cx + sg * hw, cap[i][0], cap[i][1]) for i in (a, b, c)]
+            m.tri(P[0], P[1], P[2], cc, ref=(cx, gy, gz), vk=[vk(cap[i][1]) for i in (a, b, c)])
+    for i in range(n):
+        j = (i + 1) % n
+        ey, ez = pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]
+        ln = math.hypot(ey, ez)
+        if ln < 1e-7:
+            continue
+        oy, oz = ez / ln, -ey / ln                                   # Aussenrichtung (Polygon gegen den Uhrzeigersinn)
+        my, mz = (pts[i][0] + pts[j][0]) / 2, (pts[i][1] + pts[j][1]) / 2
+        c1 = jc(col, rng, 0.02)
+        for sg in (-1, 1):
+            q = [(cx + sg * hw, cap[i][0], cap[i][1]), (cx + sg * hw, cap[j][0], cap[j][1]),
+                 (cx + sg * xw, pts[j][0], pts[j][1]), (cx + sg * xw, pts[i][0], pts[i][1])]
+            ref = (cx + sg * (hw + xw) / 2 - sg * 0.6, my - oy, mz - oz)
+            kk = [vk(cap[i][1]), vk(cap[j][1]), vk(pts[j][1]), vk(pts[i][1])]
+            m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(kk[0], kk[1], kk[2]))
+            m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(kk[0], kk[2], kk[3]))
+        q = [(cx - xw, pts[i][0], pts[i][1]), (cx + xw, pts[i][0], pts[i][1]),
+             (cx + xw, pts[j][0], pts[j][1]), (cx - xw, pts[j][0], pts[j][1])]
+        ref = (cx, my - oy, mz - oz)
+        k0, k1 = vk(pts[i][1]), vk(pts[j][1])
+        top = 1.0 + 0.0 * oz
+        m.tri(q[0], q[1], q[2], c1, ref=ref, vk=(k0 * top, k0 * top, k1 * top))
+        m.tri(q[0], q[2], q[3], c1, ref=ref, vk=(k0 * top, k1 * top, k1 * top))
+
+
+def build_shapes(m, shapes, rng, off=(0.0, 0.0, 0.0)):
+    """Baut die Formen einer Waffe in das Mesh m; off verschiebt alles (Bodenmodell, Magazin)."""
+    ox, oy, oz = off
+    for s in shapes:
+        k = s[0]
+        if k == "p":
+            _gs_ext(m, s[1], s[2], s[3], s[4], rng, off)
+        elif k == "t":
+            rx = [r if not isinstance(r, tuple) else r[0] for r in s[2]]
+            rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+            loft(m, [(x + ox, y + oy, z + oz) for x, y, z in s[1]], rx, rz, s[3], rng, None, None, (True, True), 0.02, s[4])
+        elif k == "b":
+            box(m, s[1] + ox, s[2] + oy, s[3] + oz, s[4], s[5], s[6], s[7], rng)
+        else:
+            ell(m, (s[1] + ox, s[2] + oy, s[3] + oz), s[4], s[5], s[6], s[7], rng, rings=5)
+
+
+def shape_polys(s, off=(0.0, 0.0, 0.0)):
+    """Seitenansicht (y/z) einer Form als [(Punkte, Farbe)]."""
+    oy, oz = off[1], off[2]
+    k = s[0]
+    if k == "p":
+        return [([(y + oy, z + oz) for y, z in s[3]], s[4])]
+    if k == "b":
+        y0, y1, z0, z1 = s[2] - s[5] / 2 + oy, s[2] + s[5] / 2 + oy, s[3] - s[6] / 2 + oz, s[3] + s[6] / 2 + oz
+        return [([(y0, z0), (y1, z0), (y1, z1), (y0, z1)], s[7])]
+    if k == "e":
+        return [([(s[2] + oy + math.cos(a) * s[5], s[3] + oz + math.sin(a) * s[6])
+                  for a in [2 * math.pi * i / 14 for i in range(14)]], s[7])]
+    pts = [(y + oy, z + oz) for _x, y, z in s[1]]
+    rz = [r if not isinstance(r, tuple) else r[1] for r in s[2]]
+    left, right = [], []
+    for i, (y, z) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        dy, dz = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dy, dz)
+        if ln < 1e-9:
+            continue
+        ny, nz = -dz / ln * rz[i], dy / ln * rz[i]
+        left.append((y + ny, z + nz))
+        right.append((y - ny, z - nz))
+    if len(left) < 2:
+        return []
+    return [(left + right[::-1], s[3])]
+
+
+_C_DK = (0.08, 0.08, 0.09)
+
+
+def _gs_mk():
+    """Alle Waffenformen. Rückgabe: Name -> {body, barrel (nur Schrotflinte), mag (relativ zur Magazinmitte), iron}."""
+    G = {}
+    P = GUN_PARTS
+
+    # ---------------- Pistole
+    slide, frame, grip, dk = (0.22, 0.22, 0.25), (0.15, 0.15, 0.17), (0.30, 0.20, 0.12), (0.06, 0.06, 0.07)
+    body = [("p", 0, 0.046, [(-0.012, 0.006), (-0.014, 0.050), (-0.005, 0.0575), (0.236, 0.0575), (0.252, 0.049),
+                             (0.254, 0.008), (0.236, 0.0025), (0.0, 0.0025)], slide),
+            ("p", 0, 0.040, [(-0.03, 0.0025), (0.19, 0.0025), (0.19, -0.018), (0.15, -0.021), (0.11, -0.028),
+                             (0.035, -0.028), (-0.03, -0.012)], frame),
+            ("p", 0, 0.042, [(-0.03, -0.003), (0.040, -0.003), (0.038, -0.028), (0.032, -0.135), (-0.034, -0.135),
+                             (-0.038, -0.07)], grip)]
+    body += [("b", 0.0235, 0.095, 0.0375, 0.002, 0.06, 0.022, dk)]
+    body += [("b", 0, 0.012 + 0.0095 * k, 0.030, 0.0475, 0.0028, 0.034, dk) for k in range(5)]
+    body += [("b", 0, 0.0, -0.04 - 0.015 * k, 0.0435, 0.062, 0.0035, (0.18, 0.12, 0.07)) for k in range(5)]
+    body += [("t", [(0, 0.248, 0.0345), (0, 0.264, 0.0345)], [0.0095, 0.0095], (0.10, 0.10, 0.12), 10),
+             ("t", [(0, 0.2636, 0.0345), (0, 0.2641, 0.0345)], [0.0062, 0.0062], (0.01, 0.01, 0.02), 10),
+             ("p", 0, 0.010, [(-0.014, 0.052), (-0.034, 0.062), (-0.036, 0.052), (-0.02, 0.040)], dk),
+             ("p", 0, 0.006, [(0.06, -0.028), (0.068, -0.028), (0.064, -0.05), (0.057, -0.048)], (0.10, 0.10, 0.12))]
+    body += _gs_loop(0, 0.012, [(0.035, -0.028), (0.04, -0.052), (0.075, -0.058), (0.108, -0.044), (0.11, -0.026)], 0.007, frame)
+    body += [("b",) + tuple(t) for t in P["Pistole"][0][3:]]                 # Kimme und Korn
+    G["Pistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.026, 0.046), (0.026, 0.046), (0.026, -0.044), (-0.026, -0.044)], (0.10, 0.10, 0.12)),
+        ("b", 0, 0.0, -0.047, 0.040, 0.062, 0.010, (0.05, 0.05, 0.06)),
+        ("b", 0, 0.0, 0.047, 0.030, 0.040, 0.004, (0.8, 0.6, 0.2))])
+
+    # ---------------- Sturmgewehr
+    up, lo, hg, stk, grp, blk = (0.20, 0.22, 0.20), (0.17, 0.19, 0.17), (0.18, 0.20, 0.18), (0.30, 0.33, 0.22), (0.30, 0.20, 0.12), (0.10, 0.10, 0.10)
+    body = [("p", 0, 0.052, [(-0.03, -0.004), (-0.03, 0.030), (-0.018, 0.0375), (0.285, 0.0375), (0.285, -0.004)], up),
+            ("p", 0, 0.050, [(-0.03, -0.004), (0.285, -0.004), (0.285, -0.030), (0.235, -0.040), (0.125, -0.040),
+                             (0.100, -0.036), (0.04, -0.036), (-0.03, -0.040)], lo),
+            ("p", 0, 0.040, [(0.035, -0.034), (0.092, -0.034), (0.078, -0.150), (0.022, -0.150)], grp),
+            ("t", [(0, -0.03, 0.012), (0, -0.19, 0.012)], [0.0155, 0.0155], (0.15, 0.16, 0.14), 12),
+            ("p", 0, 0.048, [(-0.185, 0.028), (-0.29, 0.034), (-0.294, -0.058), (-0.21, -0.050), (-0.16, -0.020), (-0.16, 0.0)], stk),
+            ("b", 0, -0.293, -0.012, 0.05, 0.008, 0.092, _C_DK),
+            _gs_ty(0, 0.0, [(0.28, 0.0335), (0.535, 0.0335)], hg, 14),
+            _gs_ty(0, 0.0, [(0.28, 0.036), (0.292, 0.036)], _C_DK, 14),
+            ("b", 0, 0.41, 0.0345, 0.02, 0.25, 0.006, (0.12, 0.12, 0.13)),
+            _gs_ty(0, 0.02, [(0.53, 0.0115), (0.62, 0.0105), (0.70, 0.0105)], blk, 10),
+            _gs_ty(0, 0.02, [(0.695, 0.0145), (0.74, 0.0145)], (0.07, 0.07, 0.08), 10),
+            _gs_ty(0, 0.02, [(0.715, 0.0152), (0.722, 0.0152)], (0.02, 0.02, 0.03), 10),
+            ("b", 0.0265, 0.135, 0.018, 0.004, 0.075, 0.026, _C_DK),
+            ("b", 0, -0.02, 0.0415, 0.024, 0.045, 0.008, (0.10, 0.10, 0.11)),
+            ("b", 0.027, 0.155, -0.025, 0.004, 0.015, 0.012, blk),
+            ("b", 0, 0.123, -0.050, 0.006, 0.008, 0.022, _C_DK)]
+    body += [("b", sg * 0.0325, y, 0.0, 0.004, 0.035, 0.028, (0.05, 0.05, 0.06)) for y in (0.34, 0.40, 0.46) for sg in (-1, 1)]
+    body += _gs_loop(0, 0.008, [(0.100, -0.040), (0.108, -0.062), (0.142, -0.062), (0.150, -0.040)], 0.006, lo)
+    G["Sturmgewehr"] = dict(body=body, barrel=[], iron=[("b",) + tuple(t) for t in P["Sturmgewehr"][0][-8:]], mag=[
+        ("p", 0, 0.036, [(-0.040, 0.080), (0.040, 0.080), (0.044, 0.02), (0.062, -0.081), (0.010, -0.083), (-0.030, -0.01)], (0.12, 0.12, 0.12)),
+        ("p", 0, 0.040, [(0.004, -0.078), (0.070, -0.078), (0.064, -0.087), (0.002, -0.088)], _C_DK)])
+
+    # ---------------- Schrotflinte (Kipplauf: "barrel" hängt am Scharnier y = 0.175)
+    wood, stl = (0.40, 0.26, 0.14), (0.25, 0.25, 0.28)
+    body = [("p", 0, 0.058, [(-0.075, 0.040), (-0.06, 0.0425), (0.175, 0.0425), (0.178, 0.0), (0.176, -0.030),
+                             (0.17, -0.0425), (0.0, -0.0425), (-0.075, -0.03)], stl),
+            ("p", 0, 0.050, [(-0.07, 0.022), (-0.20, 0.018), (-0.32, 0.005), (-0.395, -0.010), (-0.398, -0.088),
+                             (-0.33, -0.082), (-0.22, -0.058), (-0.10, -0.040), (-0.07, -0.032)], wood),
+            ("b", 0, -0.399, -0.049, 0.052, 0.010, 0.080, (0.08, 0.08, 0.09)),
+            ("b", 0.0295, 0.08, 0.02, 0.004, 0.09, 0.02, _C_DK),
+            ("p", 0, 0.006, [(0.01, -0.043), (0.018, -0.043), (0.014, -0.066), (0.008, -0.064)], _C_DK)]
+    body += _gs_loop(0, 0.008, [(-0.03, -0.043), (-0.02, -0.068), (0.04, -0.07), (0.07, -0.043)], 0.007, stl)
+    barrel = [("t", [(0, 0.175, 0.03), (0, 0.76, 0.03), (0, 0.80, 0.03)], [0.0205, 0.0205, 0.0215], (0.15, 0.15, 0.18), 14),
+              _gs_ty(0, 0.03, [(0.77, 0.0235), (0.80, 0.0235)], (0.10, 0.10, 0.12), 14),
+              _gs_ty(0, 0.03, [(0.7995, 0.0150), (0.8, 0.0150)], (0.01, 0.01, 0.02), 14),
+              ("b", 0, 0.48, 0.0525, 0.008, 0.62, 0.006, (0.12, 0.12, 0.14)),
+              _gs_ty(0, -0.015, [(0.175, 0.0175), (0.68, 0.0175)], (0.17, 0.17, 0.20), 12),
+              _gs_ty(0, -0.015, [(0.675, 0.0195), (0.70, 0.0195)], (0.10, 0.10, 0.12), 12),
+              _gs_ty(0, -0.04, [(0.25, 0.020, 0.018), (0.262, 0.030, 0.026), (0.45, 0.030, 0.026)], wood, 12)]
+    barrel += [_gs_ty(0, -0.04, [(y, 0.0312, 0.0272), (y + 0.008, 0.0312, 0.0272)], (0.22, 0.13, 0.07), 12)
+               for y in (0.29, 0.32, 0.35, 0.38, 0.41)]
+    shells = []
+    for sx_, sz_ in ((-0.013, 0.0), (0.013, 0.0), (0.0, 0.02)):
+        shells.append(("t", [(sx_, -0.05, sz_), (sx_, 0.045, sz_)], [0.0105, 0.0105], (0.75, 0.15, 0.10), 10))
+        shells.append(("t", [(sx_, -0.06, sz_), (sx_, -0.045, sz_)], [0.0112, 0.0112], (0.8, 0.65, 0.25), 10))
+    G["Schrotflinte"] = dict(body=body, barrel=barrel, iron=[], mag=shells)
+
+    # ---------------- Scharfschütze
+    gry = (0.30, 0.30, 0.28)
+    body = [("t", [(0, -0.13, 0.005), (0, 0.30, 0.005)], [0.029, 0.029], (0.20, 0.25, 0.22), 14),
+            _gs_ty(0, 0.005, [(0.29, 0.0315), (0.31, 0.0315)], _C_DK, 14),
+            ("b", 0.0285, 0.06, 0.012, 0.004, 0.10, 0.022, _C_DK),
+            ("b", 0.036, -0.04, 0.012, 0.024, 0.012, 0.012, (0.35, 0.35, 0.38)),
+            ("e", 0.052, -0.04, 0.006, 0.012, 0.012, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.15, 0.0325, 0.022, 0.30, 0.005, (0.12, 0.12, 0.14)),
+            ("p", 0, 0.046, [(-0.475, 0.032), (-0.40, 0.034), (-0.30, 0.018), (-0.22, 0.004), (-0.13, 0.0), (-0.13, -0.03),
+                             (-0.10, -0.035), (-0.065, -0.125), (-0.115, -0.128), (-0.15, -0.075), (-0.22, -0.075),
+                             (-0.30, -0.072), (-0.475, -0.070)], gry),
+            ("b", 0, -0.478, -0.019, 0.048, 0.012, 0.102, _C_DK),
+            ("p", 0, 0.040, [(-0.02, -0.02), (0.0, -0.040), (0.38, -0.040), (0.42, -0.034), (0.42, 0.006), (0.30, 0.006),
+                             (0.30, -0.018)], (0.28, 0.27, 0.24)),
+            ("t", [(0, 0.30, 0.02), (0, 0.38, 0.02), (0, 0.55, 0.02), (0, 0.88, 0.02), (0, 0.905, 0.02)],
+             [0.016, 0.015, 0.0135, 0.0125, 0.0125], (0.10, 0.10, 0.11), 12),
+            ("t", [(0, 0.895, 0.02), (0, 0.905, 0.02), (0, 0.95, 0.02)], [0.0125, 0.0205, 0.0205], (0.12, 0.12, 0.13), 12),
+            _gs_ty(0, 0.02, [(0.915, 0.0212), (0.922, 0.0212)], (0.02, 0.02, 0.03), 12),
+            _gs_ty(0, 0.02, [(0.933, 0.0212), (0.940, 0.0212)], (0.02, 0.02, 0.03), 12),
+            ("t", [(0.02, 0.36, -0.04), (0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("t", [(-0.02, 0.36, -0.04), (-0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
+            ("p", 0, 0.012, [(-0.115, -0.035), (-0.05, -0.035), (-0.05, -0.052), (-0.115, -0.052)], _C_DK)]
+    G["Scharfschütze"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.032, [(-0.036, 0.04), (0.036, 0.04), (0.038, -0.04), (-0.038, -0.04)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.043, 0.036, 0.084, 0.008, _C_DK)])
+
+    # ---------------- Revolver
+    stl, wd = (0.30, 0.30, 0.33), (0.35, 0.22, 0.12)
+    body = [("p", 0, 0.040, [(-0.045, 0.052), (-0.030, 0.062), (0.125, 0.062), (0.128, 0.012), (0.125, -0.028),
+                             (0.02, -0.032), (-0.035, -0.012)], stl),
+            _gs_ty(0, 0.0, [(0.012, 0.0405), (0.11, 0.0405)], (0.25, 0.25, 0.28), 16),
+            ("t", [(0, 0.11, 0.035), (0, 0.30, 0.035)], [(0.0215, 0.0255), (0.0165, 0.0215)], stl, 8),
+            _gs_ty(0, 0.035, [(0.285, 0.019, 0.023), (0.30, 0.019, 0.023)], _C_DK, 8),
+            ("b", 0, 0.205, 0.0615, 0.012, 0.18, 0.004, _C_DK),
+            ("t", [(0.0, 0.12, 0.0), (0, 0.27, 0.0)], [0.0075, 0.0075], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.255, 0.013), (0.285, 0.013)], stl, 8),
+            ("p", 0, 0.040, [(0.018, -0.004), (-0.040, 0.0), (-0.056, -0.03), (-0.064, -0.10), (-0.080, -0.138),
+                             (-0.026, -0.140), (0.0, -0.10), (0.012, -0.04)], wd),
+            ("p", 0, 0.010, [(-0.032, 0.058), (-0.058, 0.074), (-0.066, 0.068), (-0.040, 0.046)], _C_DK),
+            ("b", 0, 0.06, -0.04, 0.006, 0.008, 0.022, _C_DK)]
+    for k in range(6):
+        a = math.pi / 6 + k * math.pi / 3
+        body.append(("t", [(0.039 * math.cos(a), 0.03, 0.039 * math.sin(a)), (0.039 * math.cos(a), 0.095, 0.039 * math.sin(a))],
+                     [0.0065, 0.0065], (0.08, 0.08, 0.09), 6))
+    body += _gs_loop(0, 0.012, [(0.02, -0.032), (0.03, -0.055), (0.09, -0.058), (0.11, -0.03)], 0.007, stl)
+    body += [("b",) + tuple(t) for t in P["Revolver"][0][3:]]
+    bul = [("t", [(0.017 * math.cos(k * math.pi / 3), -0.027, 0.017 * math.sin(k * math.pi / 3)),
+                  (0.017 * math.cos(k * math.pi / 3), 0.027, 0.017 * math.sin(k * math.pi / 3))],
+            [0.0058, 0.0058], (0.75, 0.6, 0.25), 8) for k in range(6)]
+    bul.append(_gs_ty(0, 0.0, [(-0.03, 0.026), (-0.024, 0.026)], _C_DK, 10))
+    G["Revolver"] = dict(body=body, barrel=[], iron=[], mag=bul)
+
+    # ---------------- Maschinenpistole
+    smg, gp = (0.18, 0.18, 0.20), (0.25, 0.18, 0.12)
+    body = [("p", 0, 0.050, [(-0.032, 0.030), (-0.022, 0.036), (0.262, 0.036), (0.272, 0.028), (0.272, -0.030),
+                             (0.22, -0.036), (0.0, -0.036), (-0.032, -0.030)], smg),
+            ("p", 0, 0.040, [(0.012, -0.034), (-0.052, -0.034), (-0.060, -0.108), (-0.012, -0.110), (0.004, -0.060)], gp),
+            _gs_ty(0, 0.01, [(0.26, 0.0235), (0.355, 0.0235)], (0.13, 0.13, 0.15), 12),
+            ("t", [(0, 0.35, 0.01), (0, 0.40, 0.01)], [0.0125, 0.0125], (0.08, 0.08, 0.09), 10),
+            _gs_ty(0, 0.01, [(0.385, 0.0150), (0.40, 0.0150)], _C_DK, 10),
+            ("b", 0.0255, 0.17, 0.012, 0.004, 0.06, 0.02, _C_DK),
+            ("b", -0.03, 0.19, 0.03, 0.012, 0.035, 0.012, (0.10, 0.10, 0.10)),
+            ("b", 0, 0.035, -0.046, 0.006, 0.008, 0.022, _C_DK),
+            ("b", 0, -0.203, -0.015, 0.044, 0.008, 0.07, _C_DK)]
+    body += [("b", sg * 0.0235, y, 0.012, 0.004, 0.012, 0.014, _C_DK) for y in (0.28, 0.30, 0.32, 0.34) for sg in (-1, 1)]
+    body += _gs_loop(0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, 0.012), (-0.20, 0.012)], 0.007, smg)
+    body += _gs_loop(0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(-0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
+    body += _gs_loop(0, 0.01, [(0.015, -0.036), (0.022, -0.060), (0.05, -0.062), (0.06, -0.036)], 0.007, smg)
+    body += [("b",) + tuple(t) for t in P["Maschinenpistole"][0][4:]]
+    G["Maschinenpistole"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.034, [(-0.030, 0.070), (0.030, 0.070), (0.030, -0.070), (-0.028, -0.070)], (0.12, 0.12, 0.12)),
+        ("b", 0, 0.0, -0.074, 0.040, 0.064, 0.008, _C_DK)]
+        + [("b", 0, 0, z, 0.0365, 0.062, 0.004, (0.06, 0.06, 0.07)) for z in (0.04, 0.01, -0.02, -0.05)])
+
+    # ---------------- Raketenwerfer
+    olv, dk2 = (0.25, 0.30, 0.22), (0.15, 0.15, 0.15)
+    body = [_gs_ty(0, 0.02, [(-0.225, 0.07), (0.725, 0.07)], olv, 22),
+            _gs_ty(0, 0.02, [(-0.26, 0.088), (-0.20, 0.085), (-0.14, 0.072)], dk2, 22),
+            _gs_ty(0, 0.02, [(-0.2625, 0.06), (-0.2585, 0.06)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.70, 0.072), (0.745, 0.085), (0.84, 0.092)], dk2, 22),
+            _gs_ty(0, 0.02, [(0.8395, 0.07), (0.842, 0.07)], (0.02, 0.02, 0.02), 22),
+            _gs_ty(0, 0.02, [(0.62, 0.0715), (0.64, 0.0715)], (0.85, 0.7, 0.1), 22),
+            ("t", [(0, 0.25, 0.115), (0, 0.45, 0.115)], [0.018, 0.018], (0.10, 0.10, 0.10), 12),
+            ("t", [(0, 0.44, 0.115), (0, 0.465, 0.115)], [0.018, 0.026], _C_DK, 12),
+            ("t", [(0, 0.23, 0.115), (0, 0.25, 0.115)], [0.026, 0.018], _C_DK, 12),
+            ("b", 0, 0.30, 0.096, 0.02, 0.03, 0.04, _C_DK), ("b", 0, 0.40, 0.096, 0.02, 0.03, 0.04, _C_DK),
+            ("p", 0, 0.040, [(0.06, -0.045), (0.12, -0.045), (0.105, -0.17), (0.05, -0.17)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.036, [(0.34, -0.05), (0.38, -0.05), (0.375, -0.14), (0.335, -0.14)], (0.12, 0.12, 0.12)),
+            ("p", 0, 0.05, [(-0.14, -0.05), (-0.05, -0.05), (-0.05, -0.085), (-0.14, -0.085)], _C_DK),
+            ("b", 0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15)),
+            ("b", -0.0705, 0.20, 0.025, 0.004, 0.16, 0.035, (0.6, 0.55, 0.15))]
+    body += [_gs_ty(0, 0.02, [(y, 0.0725), (y + 0.04, 0.0725)], (0.18, 0.2, 0.16), 22) for y in (0.0, 0.35)]
+    body += _gs_loop(0, 0.008, [(0.12, -0.045), (0.14, -0.07), (0.19, -0.07), (0.19, -0.045)], 0.007, (0.12, 0.12, 0.12))
+    G["Raketenwerfer"] = dict(body=body, barrel=[], iron=[], mag=[])
+
+    # ---------------- Minigun
+    stl2 = (0.35, 0.35, 0.38)
+    body = [_gs_ty(0, 0.0, [(-0.20, 0.05), (-0.15, 0.07), (0.0, 0.075), (0.12, 0.068)], (0.20, 0.20, 0.22), 18),
+            _gs_ty(0, 0.0, [(0.10, 0.07), (0.14, 0.07)], (0.15, 0.15, 0.17), 18),
+            _gs_ty(0, 0.0, [(0.12, 0.018), (0.80, 0.018)], _C_DK, 8),
+            _gs_ty(0, 0.0, [(0.78, 0.064), (0.81, 0.064)], (0.22, 0.22, 0.25), 16),
+            ("p", 0, 0.045, [(-0.03, -0.065), (0.04, -0.065), (0.035, -0.19), (-0.025, -0.19)], (0.12, 0.12, 0.12)),
+            ("b", 0, 0.045, -0.12, 0.012, 0.014, 0.03, _C_DK)]
+    for k in range(6):
+        a = k * math.pi / 3
+        body.append(("t", [(0.048 * math.cos(a), 0.14, 0.048 * math.sin(a)), (0.048 * math.cos(a), 0.82, 0.048 * math.sin(a))],
+                     [0.0125, 0.0125], stl2, 8))
+    body += [_gs_ty(0, 0.0, [(y, 0.066), (y + 0.03, 0.066)], (0.22, 0.22, 0.25), 16) for y in (0.28, 0.58)]
+    body += _gs_loop(0, 0.012, [(-0.07, 0.07), (-0.06, 0.12), (0.05, 0.12), (0.06, 0.07)], 0.014, (0.2, 0.2, 0.22))
+    G["Minigun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("p", 0, 0.09, [(-0.06, 0.045), (0.06, 0.045), (0.06, -0.045), (-0.06, -0.045)], (0.25, 0.32, 0.18)),
+        ("b", 0, 0.0, 0.049, 0.04, 0.05, 0.008, (0.15, 0.2, 0.1)),
+        ("t", [(0, 0.0, 0.045), (0, 0.02, 0.115)], [0.012, 0.012], (0.8, 0.65, 0.25), 8)])
+
+    # ---------------- Railgun
+    rb, rc = (0.15, 0.20, 0.30), (0.20, 0.70, 0.90)
+    body = [("t", [(0, -0.12, 0.0), (0, 0.78, 0.0)], [0.03, 0.03], (0.10, 0.13, 0.2), 12),
+            ("p", 0, 0.070, [(-0.25, 0.04), (-0.14, 0.042), (0.05, 0.045), (0.05, -0.075), (-0.12, -0.075), (-0.25, -0.04)], (0.10, 0.12, 0.18)),
+            ("b", 0, -0.252, -0.0, 0.062, 0.01, 0.1, _C_DK),
+            ("p", 0, 0.026, [(-0.05, 0.045), (0.0, 0.07), (0.60, 0.07), (0.66, 0.05), (0.66, 0.045)], rc),
+            ("t", [(0, 0.7, 0.0), (0, 0.74, 0.0), (0, 0.78, 0.0)], [0.04, 0.045, 0.032], (0.10, 0.12, 0.18), 14),
+            ("t", [(0, 0.779, 0.0), (0, 0.781, 0.0)], [0.02, 0.02], (0.5, 0.95, 1.0), 12),
+            ("t", [(0.05, -0.1, 0.0), (0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("t", [(-0.05, -0.1, 0.0), (-0.05, 0.0, 0.0)], [0.018, 0.018], rc, 10),
+            ("p", 0, 0.040, [(0.0, -0.05), (0.09, -0.05), (0.08, -0.165), (0.02, -0.165)], (0.10, 0.10, 0.10))]
+    for sg in (-1, 1):
+        body.append(("b", sg * 0.036, 0.35, 0.0, 0.014, 0.85, 0.03, (0.18, 0.24, 0.34)))
+        body.append(("b", sg * 0.029, 0.36, 0.0, 0.004, 0.78, 0.014, (0.2, 0.8, 1.0)))
+    for k in range(7):
+        y = 0.05 + 0.1 * k
+        body.append(_gs_ty(0, 0.0, [(y, 0.052), (y + 0.04, 0.052)], (0.12, 0.16, 0.26), 14))
+        body.append(_gs_ty(0, 0.0, [(y + 0.04, 0.054), (y + 0.048, 0.054)], (0.2, 0.8, 1.0), 14))
+    body += _gs_loop(0, 0.008, [(0.09, -0.05), (0.1, -0.08), (0.15, -0.08), (0.15, -0.05)], 0.007, (0.10, 0.10, 0.10))
+    G["Railgun"] = dict(body=body, barrel=[], iron=[], mag=[
+        ("t", [(0, 0, -0.04), (0, 0, 0.04)], [0.032, 0.032], rc, 12),
+        ("t", [(0, 0, -0.045), (0, 0, -0.038)], [0.036, 0.036], _C_DK, 12),
+        ("t", [(0, 0, 0.038), (0, 0, 0.045)], [0.036, 0.036], _C_DK, 12)])
+    return G
+
+
+GUN_SHAPES = _gs_mk()
+_POLY_CACHE = {}
+
+
+def weapon_polys(wname, iron=True):
+    """Seitenansicht (y/z) einer ganzen Waffe: [(Punkte, Farbe)] in Zeichenreihenfolge."""
+    key = (wname, iron)
+    if key in _POLY_CACHE:
+        return _POLY_CACHE[key]
+    sh = GUN_SHAPES[wname]
+    out = []
+    for s in sh["body"] + sh["barrel"]:
+        out += shape_polys(s)
+    mp = MAG_PARTS.get(wname)
+    if mp is not None:
+        for s in sh["mag"]:
+            out += shape_polys(s, (mp[0], mp[1], mp[2]))
+    if iron:
+        for s in sh["iron"]:
+            out += shape_polys(s)
+    _POLY_CACHE[key] = out
+    return out
+
+
+def weapon_frame(wname):
+    """Umgebendes Rechteck (y0, y1, z0, z1) der Seitenansicht einer Waffe (Bezug für Symbole und Ankerpunkte)."""
+    pts = [p for poly, _c in weapon_polys(wname) for p in poly]
+    return min(p[0] for p in pts), max(p[0] for p in pts), min(p[1] for p in pts), max(p[1] for p in pts)
+
+
+def _offset_poly(pts, d):
+    """Polygon um d nach aussen versetzt (Gehrung, begrenzt)."""
+    n = len(pts)
+    sg = 1.0 if _poly_area(pts) > 0 else -1.0
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e1, e2 = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+        l1, l2 = math.hypot(*e1) or 1e-9, math.hypot(*e2) or 1e-9
+        n1, n2 = (e1[1] / l1 * sg, -e1[0] / l1 * sg), (e2[1] / l2 * sg, -e2[0] / l2 * sg)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]
+        bl = math.hypot(bx, by)
+        if bl < 1e-6:
+            bx, by, bl = n1[0], n1[1], 1.0
+        k = d / max(0.5, (bx * n1[0] + by * n1[1]) / bl)
+        out.append((b[0] + bx / bl * k, b[1] + by / bl * k))
+    return out
+
+
+def polys_icon(polys, width, height, name, bounds=None, pad=0.03, edge=0.0045):
+    """Flaches Symbol aus Polygonen [(Punkte (a, b), Farbe)] in der x/z-Ebene, Mitte im Ursprung. Jedes Teil bekommt
+    einen dunklen Rand und einen Farbverlauf (oben heller); gezeichnet wird in der Reihenfolge der Liste."""
+    allp = [p for pts, _c in polys for p in pts]
+    a0, a1, b0, b1 = bounds if bounds else (min(p[0] for p in allp), max(p[0] for p in allp),
+                                            min(p[1] for p in allp), max(p[1] for p in allp))
+    k = min(width / (a1 - a0 + 2 * pad), height / (b1 - b0 + 2 * pad))
+    ma, mb = (a0 + a1) / 2, (b0 + b1) / 2
+    m = Mesh(lit=False)
+    o = edge / k
+
+    def P(p):
+        return ((p[0] - ma) * k, 0.0, (p[1] - mb) * k)
+
+    for pts, col in polys:
+        if len(pts) < 3 or abs(_poly_area(pts)) < 1e-9:
+            continue
+        pts = list(pts) if _poly_area(pts) > 0 else list(pts)[::-1]
+        outl = _offset_poly(pts, o)
+        for a, b, c in _earclip(outl):
+            m.tri(P(outl[a]), P(outl[b]), P(outl[c]), (0.02, 0.02, 0.03))
+        lo, hi = min(p[1] for p in pts), max(p[1] for p in pts)
+        base = tuple(min(1.0, v * 1.5 + 0.28) for v in col)
+
+        def shade(p):
+            f = 0.80 + 0.34 * (p[1] - lo) / max(hi - lo, 1e-6)
+            return tuple(min(1.0, v * f) for v in base)
+
+        for a, b, c in _earclip(pts):
+            m.tri(P(pts[a]), P(pts[b]), P(pts[c]), [shade(pts[a]), shade(pts[b]), shade(pts[c])])
+    nd = NodePath(m.node(name))
+    nd.setTwoSided(True)
+    return nd
+
+
+def rect_polys(prts, off=(0.0, 0.0)):
+    """Quader (cx,cy,cz,sx,sy,sz,Farbe) als Seitenansicht-Polygone."""
+    return [([(cy - sy / 2 + off[0], cz - sz / 2 + off[1]), (cy + sy / 2 + off[0], cz - sz / 2 + off[1]),
+              (cy + sy / 2 + off[0], cz + sz / 2 + off[1]), (cy - sy / 2 + off[0], cz + sz / 2 + off[1])], col)
+            for _cx, cy, cz, _sx, sy, sz, col in prts]
+
+
+# Rennhaltung (BF3-artig): (dx, dy, dz, heading, pitch, roll). Pistolen: Lauf nach oben vor der Brust;
+# grosse Waffen: quer vor dem Körper.
+SPRINT_POSE = {
+    "Pistole": (-0.08, -0.03, 0.0, 8.0, 42.0, -6.0),
+    "Revolver": (-0.08, -0.03, 0.0, 8.0, 42.0, -6.0),
+    "Maschinenpistole": (-0.14, -0.04, 0.02, 38.0, 16.0, -8.0),
+    "Raketenwerfer": (-0.22, -0.12, -0.04, 58.0, 8.0, -12.0),
+    "Minigun": (-0.22, -0.10, -0.08, 55.0, 6.0, -10.0),
+}
+SPRINT_POSE_DEFAULT = (-0.16, -0.08, -0.02, 52.0, 10.0, -14.0)
+
+
+STEEL, DSTEEL = (0.80, 0.82, 0.86), (0.52, 0.54, 0.58)
+# ------------------------------------------------------------------ 9c: detaillierte Nahkampfwaffen
+# Gleiche Formsprache wie die Schusswaffen (siehe _gs_mk): Griff im Ursprung, Klinge nach +y, z oben, Klingenebene y/z.
+# Daraus entstehen 3D-Modell (Ego-Ansicht, Mitspieler, Drop) und HUD-Symbol (Seitenansicht).
+_MC = {"steel": (0.80, 0.82, 0.86), "edge": (0.95, 0.96, 0.99), "spine": (0.62, 0.64, 0.69), "fuller": (0.50, 0.52, 0.58),
+       "dark": (0.16, 0.16, 0.18), "brass": (0.80, 0.63, 0.28), "gold": (0.86, 0.70, 0.30), "wood": (0.46, 0.29, 0.15),
+       "wood2": (0.36, 0.22, 0.11), "leather": (0.34, 0.20, 0.11), "leather2": (0.22, 0.13, 0.07), "iron": (0.20, 0.20, 0.22),
+       "iron2": (0.30, 0.30, 0.33), "ito": (0.10, 0.09, 0.12), "same": (0.88, 0.85, 0.76), "rune": (0.78, 0.36, 1.0),
+       "ebony": (0.11, 0.06, 0.09), "dagger": (0.27, 0.26, 0.32)}
+
+
+def _mw_blade(y0, y1, half, tip, cz=lambda y: 0.0, top=None, edge_k=0.45, wcore=0.009, wedge=0.0035, ccore=None, cedge=None,
+              n=14):
+    """Klinge aus zwei Profilen: dicker Rücken (oben) und dünne Schneide (unten), damit man die Fase sieht.
+    half(t) = halbe Höhe (t 0..1 entlang der Klinge), cz(y) = Mittellinie (gebogene/gewellte Klingen), tip = Spitzenlänge."""
+    ccore, cedge = ccore or _MC["steel"], cedge or _MC["edge"]
+    top = top or half
+    ys = [y0 + (y1 - tip - y0) * i / n for i in range(n + 1)]
+    up = [(y, cz(y) + top((y - y0) / (y1 - y0))) for y in ys]
+    lo = [(y, cz(y) - half((y - y0) / (y1 - y0))) for y in ys]
+    mid = [(y, a[1] + (b[1] - a[1]) * edge_k) for y, a, b in zip(ys, lo, up)]       # Grenze Schneide/Rücken
+    tipp = (y1, cz(y1))
+    core = up + [tipp] + mid[::-1]
+    edge = mid + [tipp] + lo[::-1]
+    return [("p", 0, wcore, core, ccore), ("p", 0, wedge, edge, cedge)]
+
+
+def _mw_wrap(y0, y1, r, col, col2, n, sides=8):
+    """Gewickelter Griff: Röhre + n dunklere Wicklungsringe."""
+    out = [("t", [(0, y0, 0), (0, y1, 0)], [r, r], col, sides)]
+    for k in range(n):
+        y = y0 + (y1 - y0) * (k + 0.5) / n
+        rr = (r[0] * 1.12, r[1] * 1.12) if isinstance(r, tuple) else r * 1.12
+        out.append(("t", [(0, y - 0.004, 0), (0, y + 0.004, 0)], [rr, rr], col2, sides))
+    return out
+
+
+def _mw_circle(cy, cz, r, n=20, a0=0.0):
+    return [(cy + r * math.cos(a0 + 2 * math.pi * i / n), cz + r * math.sin(a0 + 2 * math.pi * i / n)) for i in range(n)]
+
+
+def _melee_shapes():
+    C = _MC
+    S = {}
+    # ---------------- Messer (Start): Tropfenspitze, Holzgriff mit Messingnieten
+    S["Messer"] = (
+        [("t", [(0, -0.016, 0), (0, -0.004, 0)], [(0.012, 0.016), (0.013, 0.018)], C["iron2"], 8)]
+        + [("t", [(0, -0.004, 0), (0, 0.098, 0)], [(0.013, 0.017), (0.012, 0.016)], C["wood"], 8)]
+        + [("e", 0, y, 0.0, 0.0155, 0.0045, 0.0045, C["brass"]) for y in (0.022, 0.07)]
+        + [("b", 0, 0.103, 0.003, 0.022, 0.008, 0.044, C["iron2"])]
+        + _mw_blade(0.107, 0.262, lambda t: 0.012 - 0.004 * t, 0.03, top=lambda t: 0.016 - 0.006 * t ** 2, wcore=0.008))
+    # ---------------- Erschöpfungsdolch (9c, vorher Kampfmesser): gewellte Ritualklinge, Runen, Ebenholz, Gold
+    wave = lambda y: 0.007 * math.sin((y - 0.12) * 52.0) * min(1.0, (y - 0.12) / 0.03)      # noqa: E731
+    S["Erschöpfungsdolch"] = (
+        [("e", 0, -0.034, 0.0, 0.009, 0.009, 0.009, C["rune"]),
+         ("e", 0, -0.018, 0.0, 0.019, 0.016, 0.02, C["gold"])]
+        + _mw_wrap(-0.004, 0.102, (0.0135, 0.016), C["ebony"], C["gold"], 3)
+        + [("p", 0, 0.03, [(0.104, 0.004), (0.11, -0.03), (0.122, -0.042), (0.118, -0.028), (0.116, 0.0), (0.118, 0.03),
+                            (0.124, 0.046), (0.11, 0.036)], C["gold"]),
+           ("e", 0, 0.112, 0.003, 0.018, 0.006, 0.006, C["rune"])]
+        + _mw_blade(0.118, 0.318, lambda t: 0.016 * (1 - t) ** 0.6 + 0.003, 0.03, cz=wave, wcore=0.009, wedge=0.0035,
+                    ccore=C["dagger"], cedge=(0.55, 0.52, 0.62))
+        + [("b", 0, y, wave(y) + 0.002, 0.0105, 0.009, 0.004, C["rune"]) for y in (0.15, 0.185, 0.22, 0.255)]
+        + [("b", 0, y + 0.006, wave(y + 0.006) - 0.003, 0.0105, 0.004, 0.006, C["rune"]) for y in (0.165, 0.2, 0.237)])
+    # ---------------- Machete: breite Klinge, schwarzer Rücken, Holzgriff mit drei Nieten und Fangriemenloch
+    S["Machete"] = (
+        [("p", 0, 0.028, [(-0.03, 0.004), (-0.02, -0.018), (0.112, -0.016), (0.122, 0.0), (0.112, 0.02), (-0.016, 0.024)], C["wood2"]),
+         ("e", 0, -0.016, 0.004, 0.0145, 0.006, 0.006, C["dark"])]
+        + [("e", 0, y, 0.002, 0.0145, 0.0045, 0.0045, C["brass"]) for y in (0.012, 0.05, 0.088)]
+        + [("b", 0, 0.124, 0.002, 0.03, 0.01, 0.048, C["iron"])]
+        + _mw_blade(0.129, 0.505, lambda t: 0.018 + 0.016 * t ** 1.5, 0.05, cz=lambda y: 0.006 * ((y - 0.13) / 0.37) ** 2,
+                    top=lambda t: 0.012 + 0.012 * t ** 2, edge_k=0.35, wcore=0.008, wedge=0.0035,
+                    ccore=(0.22, 0.22, 0.24), cedge=C["steel"]))
+    # ---------------- Schwert: Parierstange, Lederwicklung, Knauf, Hohlkehle, zweischneidig
+    blade = [("p", 0, 0.0105, [(0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, 0.0055), (0.096, 0.0085)], C["steel"]),
+             ("p", 0, 0.004, [(0.096, 0.0085), (0.096, 0.024), (0.70, 0.019), (0.80, 0.0), (0.70, 0.0055)], C["edge"]),
+             ("p", 0, 0.004, [(0.096, -0.024), (0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, -0.019)], C["edge"]),
+             ("p", 0, 0.0118, [(0.11, -0.0035), (0.58, -0.0025), (0.6, 0.0), (0.58, 0.0025), (0.11, 0.0035)], C["fuller"])]
+    S["Schwert"] = (
+        [("e", 0, -0.104, 0.0, 0.024, 0.02, 0.026, C["brass"]),
+         ("t", [(0, -0.088, 0), (0, -0.08, 0)], [(0.014, 0.014), (0.016, 0.016)], C["brass"], 10)]
+        + _mw_wrap(-0.08, 0.072, (0.0155, 0.0175), C["leather"], C["leather2"], 6)
+        + [("p", 0, 0.028, [(0.074, -0.004), (0.08, -0.10), (0.094, -0.112), (0.092, -0.094), (0.088, 0.0), (0.092, 0.094),
+                             (0.094, 0.112), (0.08, 0.10), (0.074, 0.004)], C["iron2"]),
+           ("e", 0, 0.084, 0.0, 0.019, 0.012, 0.014, C["brass"]),
+           ("b", 0, 0.09, 0.0, 0.016, 0.012, 0.05, C["iron2"])]
+        + blade)
+    # ---------------- Katana: Tsuka mit Rauten-Wicklung, runde Tsuba, Habaki, gebogene Klinge mit heller Härtelinie
+    curve = lambda y: 0.038 * max(0.0, (y - 0.13) / 0.70) ** 2     # noqa: E731
+    kat = [("t", [(0, -0.135, 0), (0, -0.124, 0)], [(0.016, 0.019), (0.017, 0.02)], C["iron"], 10),
+           ("t", [(0, -0.124, 0), (0, 0.108, 0)], [(0.0165, 0.0195), (0.016, 0.019)], C["ito"], 10)]
+    for k in range(8):                                             # Same-Haut-Rauten zwischen der Wicklung
+        y = -0.105 + k * 0.028
+        kat.append(("p", 0, 0.034, [(y - 0.011, 0.0), (y, 0.012), (y + 0.011, 0.0), (y, -0.012)], C["same"]))
+    kat += [("e", 0, -0.01, 0.006, 0.019, 0.014, 0.006, C["gold"]),             # Menuki
+            ("t", [(0, 0.108, 0), (0, 0.118, 0)], [(0.046, 0.05), (0.046, 0.05)], C["iron"], 14),   # Tsuba
+            ("b", 0, 0.128, 0.0, 0.014, 0.02, 0.034, C["brass"])]                # Habaki
+    kat += _mw_blade(0.12, 0.84, lambda t: 0.0135 - 0.004 * t, 0.06, cz=curve, top=lambda t: 0.0135 - 0.004 * t,
+                     edge_k=0.38, wcore=0.009, wedge=0.0035, ccore=C["spine"], cedge=(0.96, 0.97, 1.0))
+    S["Katana"] = kat
+    # ---------------- Bratpfanne (Gusseisen): Boden, Kochfläche, hoher Rand, Stiel mit Holzgriff und Aufhängeloch
+    PR, PC = 0.142, 0.33
+    pan = [("t", [(0, -0.05, 0), (0, 0.085, 0)], [(0.011, 0.015), (0.012, 0.016)], C["wood2"], 8),
+           ("t", [(0, 0.085, 0), (0, 0.11, 0), (0, PC - PR + 0.01, 0)], [(0.009, 0.012), (0.008, 0.011), (0.011, 0.016)], C["iron"], 8),
+           ("e", 0, -0.032, 0.0, 0.016, 0.006, 0.006, C["dark"]),
+           ("b", 0, 0.088, 0.0, 0.026, 0.006, 0.034, C["iron2"])]
+    pan.append(("p", -0.016, 0.01, _mw_circle(PC, 0.0, PR, 24), C["iron"]))                  # Boden (unten = -x)
+    pan.append(("p", -0.008, 0.006, _mw_circle(PC, 0.0, PR - 0.012, 24), (0.27, 0.27, 0.29)))   # Kochfläche
+    for i in range(24):                                                           # Rand: 24 Bogenstücke
+        a0, a1 = 2 * math.pi * i / 24, 2 * math.pi * (i + 1.05) / 24
+        pts = [(PC + PR * math.cos(a0), PR * math.sin(a0)), (PC + PR * math.cos(a1), PR * math.sin(a1)),
+               (PC + (PR - 0.012) * math.cos(a1), (PR - 0.012) * math.sin(a1)), (PC + (PR - 0.012) * math.cos(a0), (PR - 0.012) * math.sin(a0))]
+        pan.append(("p", 0.0, 0.034, pts, (0.18, 0.18, 0.2)))
+    S["Bratpfanne"] = pan
+    return S
+
+
+MELEE_SHAPES = _melee_shapes()
+PAN_CENTER = (-0.004, 0.33, 0.0)   # 9c: Mitte der Kochfläche (Pfannen-Koordinaten; Essen liegt in +x darauf)
+
+
+def _scale_shape(s, k):
+    if s[0] == "p":
+        return ("p", s[1] * k, s[2] * k, [(y * k, z * k) for y, z in s[3]], s[4])
+    if s[0] == "t":
+        return ("t", [(x * k, y * k, z * k) for x, y, z in s[1]],
+                [((r[0] * k, r[1] * k) if isinstance(r, tuple) else r * k) for r in s[2]], s[3], s[4])
+    return (s[0],) + tuple(v * k for v in s[1:7]) + (s[7],)
+
+
+def melee_model(mi, scale=1.0):
+    """9c: detailliertes Modell einer Nahkampfwaffe (Griff im Ursprung, Klinge nach +y) aus MELEE_SHAPES."""
+    rng = random.Random(40 + mi)
+    m = Mesh()
+    build_shapes(m, [_scale_shape(s, scale) for s in MELEE_SHAPES[MELEE[mi].name]], rng)
+    return m
+
+
+def melee_icon(mi, width=0.24, height=0.13):
+    """9c: Seitenansicht der Nahkampfwaffe fürs HUD - aus denselben Formen wie das 3D-Modell (wie weapon_icon)."""
+    polys = [pp for s in MELEE_SHAPES[MELEE[mi].name] for pp in shape_polys(s)]
+    return polys_icon(polys, width, height, "icon9_" + MELEE[mi].name)
+
+
+def food_shapes():
+    """9c: Essen auf der Bratpfanne, in der Reihenfolge, in der es dazukommt (Pfannen-Koordinaten, Kochfläche bei
+    x = PAN_CENTER[0], Essen ragt nach +x). -> Liste von Formenlisten (je ein Stück)."""
+    cy0, cx0 = PAN_CENTER[1], PAN_CENTER[0] + 0.004
+    out = []
+
+    def bacon(y, z, ang, h=0.0):
+        pts = []
+        for i in range(8):
+            t = i / 7
+            pts.append((y + math.cos(ang) * (t - 0.5) * 0.11 - math.sin(ang) * 0.006 * math.sin(t * 9),
+                        z + math.sin(ang) * (t - 0.5) * 0.11 + math.cos(ang) * 0.006 * math.sin(t * 9)))
+        top = [(py - math.sin(ang) * 0.011, pz + math.cos(ang) * 0.011) for py, pz in pts]
+        mid = [(py - math.sin(ang) * 0.0045, pz + math.cos(ang) * 0.0045) for py, pz in pts]
+        return [("p", cx0 + 0.004 + h, 0.006, pts + mid[::-1], (0.72, 0.20, 0.16)),
+                ("p", cx0 + 0.0045 + h, 0.006, mid + top[::-1], (0.95, 0.82, 0.72))]
+
+    def egg(y, z, h=0.0):
+        wh = [(y + 0.032 * math.cos(a) * (1 + 0.12 * math.sin(3 * a)), z + 0.028 * math.sin(a) * (1 + 0.1 * math.cos(2 * a)))
+              for a in [2 * math.pi * i / 14 for i in range(14)]]
+        return [("p", cx0 + 0.003 + h, 0.004, wh, (0.98, 0.97, 0.93)),
+                ("e", cx0 + 0.008 + h, y + 0.003, z, 0.008, 0.012, 0.012, (1.0, 0.70, 0.08))]
+
+    def steak(y, z, h=0.0):
+        ol = [(y + 0.05 * math.cos(a) * (1 + 0.15 * math.sin(2 * a + 0.5)), z + 0.035 * math.sin(a)) for a in
+              [2 * math.pi * i / 16 for i in range(16)]]
+        return [("p", cx0 + 0.008 + h, 0.016, ol, (0.42, 0.20, 0.12)),
+                ("b", cx0 + 0.0165 + h, y - 0.012, z + 0.006, 0.002, 0.05, 0.004, (0.18, 0.08, 0.05)),
+                ("b", cx0 + 0.0165 + h, y + 0.006, z - 0.008, 0.002, 0.05, 0.004, (0.18, 0.08, 0.05)),
+                ("e", cx0 + 0.008 + h, y - 0.04, z + 0.006, 0.008, 0.01, 0.012, (0.95, 0.88, 0.75))]
+
+    def fries(y, z, h=0.0):
+        rr = random.Random(int(y * 1000 + z * 100))
+        out_ = []
+        for k in range(7):
+            a = rr.uniform(-0.8, 0.8)
+            out_.append(("t", [(cx0 + 0.008 + h + 0.004 * (k % 2), y + rr.uniform(-0.02, 0.02) - math.cos(a) * 0.03,
+                                z + rr.uniform(-0.02, 0.02) - math.sin(a) * 0.03),
+                               (cx0 + 0.008 + h + 0.004 * (k % 2), y + rr.uniform(-0.02, 0.02) + math.cos(a) * 0.03,
+                                z + rr.uniform(-0.02, 0.02) + math.sin(a) * 0.03)], [0.0045, 0.0045], (0.98, 0.80, 0.30), 4))
+        return out_
+
+    def pizza(y, z, h=0.0):
+        tri = [(y - 0.045, z - 0.03), (y + 0.05, z), (y - 0.045, z + 0.03)]
+        return [("p", cx0 + 0.006 + h, 0.008, tri, (0.98, 0.78, 0.30)),
+                ("p", cx0 + 0.006 + h, 0.012, [(y - 0.05, z - 0.034), (y - 0.04, z - 0.034), (y - 0.04, z + 0.034),
+                                               (y - 0.05, z + 0.034)], (0.78, 0.50, 0.20)),
+                ("e", cx0 + 0.011 + h, y - 0.012, z - 0.008, 0.003, 0.009, 0.009, (0.75, 0.12, 0.08)),
+                ("e", cx0 + 0.011 + h, y + 0.012, z + 0.004, 0.003, 0.008, 0.008, (0.75, 0.12, 0.08))]
+
+    out.append(bacon(cy0 - 0.03, 0.05, 0.2))
+    out.append(egg(cy0 + 0.05, -0.04))
+    out.append(bacon(cy0 + 0.02, 0.07, -0.15))
+    out.append(steak(cy0 - 0.02, -0.03))
+    out.append(egg(cy0 + 0.06, 0.04))
+    out.append(fries(cy0 - 0.075, -0.02))
+    out.append(pizza(cy0 + 0.0, 0.0, 0.016))
+    out.append(bacon(cy0 - 0.06, 0.06, 0.6, 0.012))
+    out.append(egg(cy0 + 0.03, -0.075, 0.004))
+    out.append(fries(cy0 + 0.07, 0.0, 0.016))
+    out.append(steak(cy0 + 0.02, 0.05, 0.022))
+    out.append(pizza(cy0 - 0.03, -0.06, 0.03))
+    out.append(bacon(cy0 + 0.0, -0.02, 1.2, 0.04))
+    out.append(egg(cy0 - 0.02, 0.03, 0.045))
+    return out
+
+
+FOOD_SHAPES = food_shapes()
+
+
+def food_nodes(parent, scale=1.0):
+    """9c: Essens-Stücke als Knoten unter parent (Pfannen-Koordinaten), alle versteckt -> Liste."""
+    out = []
+    for k, sh in enumerate(FOOD_SHAPES):
+        fm = Mesh()
+        build_shapes(fm, [_scale_shape(s, scale) for s in sh], random.Random(70 + k))
+        nd = parent.attachNewNode(fm.node("essen%d" % k))
+        nd.hide()
+        out.append(nd)
+    return out
+
+
+def show_food(nodes, n):
+    for k, nd in enumerate(nodes):
+        (nd.show if k < n else nd.hide)()
+
+
+# ---- Ausrüstungsteile als Quader (Waffen-Koordinaten wie GUN_PARTS; Magazin-Teile relativ zur Magazinmitte)
+GRIP_AT = {"Pistole": (0.17, -0.02), "Revolver": (0.20, 0.0), "Maschinenpistole": (0.20, -0.035),
+           "Sturmgewehr": (0.42, -0.035), "Schrotflinte": (0.35, -0.065), "Scharfschütze": (0.35, -0.035)}
+ATT_MUZZLE_EXT = (0.0, 0.20, 0.20, 0.07)        # Verlängerung der Mündung je Lauf-Aufsatz (Mündungsfeuer sitzt am Ende)
+_AK, _AK2 = (0.12, 0.12, 0.14), (0.20, 0.20, 0.22)
+
+
+def att_parts(wname, si, v):
+    """Quader des Aufsatzes v im Platz si (0 Lauf, 1 Magazin, 2 Griff) für die Waffe wname."""
+    if v == 0 or wname not in GRIP_AT:
+        return []
+    if si == 0:
+        mx, my, mz = GUN_PARTS[wname][1]
+        if v == 1:                                   # Schalldämpfer: dicker Zylinder mit schwarzer Öffnung
+            return [(mx, my + 0.095, mz, 0.05, 0.19, 0.05, _AK), (mx, my + 0.192, mz, 0.034, 0.012, 0.034, (0.02, 0.02, 0.03))]
+        if v == 2:                                   # langer, dünner Lauf mit Mündungsbremse
+            return [(mx, my + 0.09, mz, 0.022, 0.18, 0.022, (0.14, 0.14, 0.16)),
+                    (mx, my + 0.185, mz, 0.036, 0.03, 0.036, _AK2)]
+        return [(mx, my + 0.03, mz, 0.045, 0.07, 0.04, _AK2),                  # Kompensator: Block mit zwei Rippen
+                (mx - 0.016, my + 0.03, mz + 0.025, 0.01, 0.07, 0.014, (0.3, 0.3, 0.33)),
+                (mx + 0.016, my + 0.03, mz + 0.025, 0.01, 0.07, 0.014, (0.3, 0.3, 0.33))]
+    if si == 1:
+        mp = MAG_PARTS.get(wname)
+        if mp is None:
+            return []
+        sx, sy, sz, col = mp[3], mp[4], mp[5], mp[6]
+        if v == 1:                                   # erweitertes Magazin: längerer Schacht
+            lt = tuple(min(1.0, c * 1.3 + 0.03) for c in col)
+            return [(0, 0, -sz / 2 - 0.045, sx * 1.05, sy * 1.05, 0.09, lt)]
+        if v == 2:                                   # Schnellmagazin: orange Band und Zuglasche
+            return [(0, 0, -sz / 2 - 0.014, sx * 0.8, sy * 1.4, 0.028, (0.95, 0.55, 0.1)),
+                    (0, 0, 0.0, sx * 1.07, sy * 1.07, 0.02, (0.95, 0.55, 0.1))]
+        return [(0, 0, sz * 0.25, sx * 1.07, sy * 1.07, 0.022, (0.85, 0.12, 0.08)),    # Panzerbrechend: rot-schwarze Bänder
+                (0, 0, sz * 0.05, sx * 1.07, sy * 1.07, 0.016, (0.04, 0.04, 0.05))]
+    y, zt = GRIP_AT[wname]
+    if v == 1:                                       # Senkrechtgriff
+        return [(0, y, zt - 0.006, 0.03, 0.07, 0.012, _AK), (0, y, zt - 0.05, 0.026, 0.032, 0.09, (0.16, 0.16, 0.18))]
+    if v == 2:                                       # Winkelgriff: nach vorn geneigt (Stufen)
+        return [(0, y, zt - 0.006, 0.03, 0.08, 0.012, _AK), (0, y + 0.006, zt - 0.03, 0.026, 0.045, 0.05, (0.16, 0.16, 0.18)),
+                (0, y + 0.024, zt - 0.056, 0.026, 0.045, 0.03, (0.16, 0.16, 0.18))]
+    return [(0, y, zt - 0.022, 0.03, 0.07, 0.032, _AK),                            # Laserpointer mit rotem Auge
+            (0, y + 0.037, zt - 0.022, 0.014, 0.012, 0.014, (1.0, 0.1, 0.1))]
+
+
+def loadout_extra(wi, scope, att):
+    """Rechtecke (y0, y1, z0, z1, Farbe) für das Symbol: montiertes Visier und Aufsätze."""
+    w = WEAPONS[wi]
+    out = []
+    if scope is not None and scope != SC_IRON and w.name in SCOPE_MOUNT:
+        out += list(scope_parts(scope, w.name))
+    att = att_valid(att) or ATT_NONE
+    mp = MAG_PARTS.get(w.name)
+    for si, v in enumerate(att):
+        for cx, cy, cz, sx, sy, sz, col in att_parts(w.name, si, v):
+            if si == 1 and mp is not None:
+                cy, cz = cy + mp[1], cz + mp[2]
+            out.append((cx, cy, cz, sx, sy, sz, col))
+    return out
+
+
+def weapon_icon(wi, width=0.42, height=0.2, parts=None, name=None, extra=None, scope=None):
+    """Seitenansicht einer Waffe als flaches Bild (x/z-Ebene, Mitte im Ursprung), gezeichnet
+    aus denselben Formen wie das 3D-Modell: je Teil dunkler Rand und Farbverlauf.
+    parts/name: eigene Quader (Nahkampfwaffen); extra: zusätzliche Quader (Visier, Aufsätze);
+    scope: Visier statt der Kimme und Korn des Sturmgewehrs."""
+    if parts is not None:
+        return polys_icon(rect_polys(list(parts) + list(extra or [])), width, height, name or "icon_melee")
+    wname = WEAPONS[wi].name
+    iron = not (scope is not None and scope != SC_IRON and wname == "Sturmgewehr")
+    polys = list(weapon_polys(wname, iron))
+    if extra:
+        polys += rect_polys(extra)
+    return polys_icon(polys, width, height, name or ("icon_" + wname), bounds=weapon_frame(wname))
+
+
+def gadget_icon(kind, width=0.42, height=0.2):
+    """Vorderansicht eines Gadgets als flaches Bild (wie weapon_icon): erst dunkler Rand, dann die Teile."""
+    if kind == GAD_C4:                            # C4 von oben gesehen (x/y statt x/z)
+        rects = [(cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2, col)
+                 for cx, cy, _cz, sx, sy, _sz, col in gadget_parts(kind)]
+    else:
+        rects = [(cx - sx / 2, cx + sx / 2, cz - sz / 2, cz + sz / 2, col)
+                 for cx, _cy, cz, sx, _sy, sz, col in gadget_parts(kind)]
+    x0, x1 = min(r[0] for r in rects), max(r[1] for r in rects)
+    z0, z1 = min(r[2] for r in rects), max(r[3] for r in rects)
+    pad = 0.03
+    k = min(width / (x1 - x0 + 2 * pad), height / (z1 - z0 + 2 * pad)) * 0.9
+    mx, mz = (x0 + x1) / 2, (z0 + z1) / 2
+    m = Mesh(lit=False)
+
+    def quad(a0, a1, b0, b1, col):
+        p = [((a - mx) * k, 0.0, (b - mz) * k) for a, b in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))]
+        m.tri(p[0], p[1], p[2], col)
+        m.tri(p[0], p[2], p[3], col)
+
+    o = 0.012
+    for a0, a1, b0, b1, _c in rects:
+        quad(a0 - o, a1 + o, b0 - o, b1 + o, (0.02, 0.02, 0.03))
+    for a0, a1, b0, b1, c in rects:
+        quad(a0, a1, b0, b1, tuple(min(1.0, v * 1.5 + 0.28) for v in c))
+    np = NodePath(m.node("gadicon%d" % kind))
+    np.setTwoSided(True)
+    return np
+
+
+TOMA_RIDER = True          # 7d: auf der anfliegenden Tomahawk-Rakete reitet ein (fiktiver) Comic-Rodeo-General mit
+TOMA_RIDER_SCALE = 1.5     # ... in Comic-Grösse (gut sichtbar am Himmel)
+TOMA_YEEHAW = True         # ... und ruft beim Überflug "Yeehaw!" ...
+TOMA_YEEHAW_U = 0.45       # ... wenn die Rakete so weit (Anteil des Countdowns) geflogen ist
+TOMA_YEEHAW_VOL = 0.75
+
+
+def build_rodeo_rider():
+    """7d: Fiktiver Comic-Rodeo-General (Low-Poly) in Raketen-Koordinaten (Rakete: Spitze +y, Länge ~1, Breite 0,12;
+    sie wird x10 gezeichnet): sitzt rittlings, Sonnenbrille, Uniformjacke mit Orden; rechte Hand schwenkt den
+    Cowboyhut, linke hält einen Stab mit wehender Flagge (Sterne und Streifen). Keine echte Person.
+    -> (root, Arm mit Hut, Flagge)"""
+    rng = random.Random(77)
+    root = NodePath("rodeo_reiter")
+    m = Mesh()
+    skin, khaki, dk = (0.93, 0.74, 0.60), (0.52, 0.47, 0.30), (0.32, 0.20, 0.10)
+    boot, belt = (0.36, 0.20, 0.08), (0.25, 0.16, 0.08)
+    for sx in (-1, 1):                                          # Beine rittlings: Oberschenkel, Unterschenkel, Stiefel
+        box(m, sx * 0.075, 0.0, 0.065, 0.04, 0.10, 0.04, khaki, rng)
+        box(m, sx * 0.09, 0.02, 0.0, 0.035, 0.04, 0.10, khaki, rng)
+        box(m, sx * 0.095, 0.04, -0.06, 0.04, 0.08, 0.035, boot, rng)
+        box(m, sx * 0.095, 0.075, -0.05, 0.03, 0.02, 0.03, (0.85, 0.75, 0.3))   # Sporen
+    box(m, 0, 0.0, 0.10, 0.12, 0.08, 0.04, khaki, rng)          # Hüfte / Sattel
+    box(m, 0, -0.005, 0.175, 0.11, 0.065, 0.12, (0.40, 0.42, 0.26), rng)   # Uniformjacke
+    box(m, 0, -0.005, 0.125, 0.115, 0.07, 0.018, belt)          # Gürtel
+    box(m, 0, 0.03, 0.125, 0.03, 0.006, 0.02, (0.95, 0.8, 0.25))  # grosse Gürtelschnalle
+    for k, c in enumerate(((0.9, 0.2, 0.15), (0.95, 0.8, 0.25), (0.2, 0.35, 0.8), (0.95, 0.8, 0.25))):
+        box(m, -0.035 + (k % 2) * 0.016, 0.03, 0.2 - (k // 2) * 0.018, 0.012, 0.004, 0.012, c)   # Orden
+    for sx in (-1, 1):
+        box(m, sx * 0.06, -0.005, 0.235, 0.035, 0.07, 0.012, (0.95, 0.8, 0.25))   # goldene Schulterstücke
+    box(m, 0, 0.0, 0.25, 0.03, 0.03, 0.03, skin)                # Hals
+    box(m, 0, 0.0, 0.29, 0.07, 0.07, 0.07, skin, rng)           # Kopf
+    box(m, 0, 0.012, 0.268, 0.075, 0.06, 0.03, skin, rng)       # breites Kinn
+    box(m, 0, -0.01, 0.33, 0.072, 0.066, 0.016, (0.55, 0.52, 0.48))   # graues Haar
+    box(m, 0, 0.037, 0.3, 0.078, 0.008, 0.016, (0.03, 0.03, 0.04))    # Sonnenbrille
+    box(m, 0, 0.037, 0.3, 0.012, 0.01, 0.006, (0.6, 0.6, 0.62))
+    box(m, 0, 0.038, 0.277, 0.03, 0.006, 0.006, (0.6, 0.25, 0.2))     # breites Grinsen
+    box(m, -0.07, 0.01, 0.21, 0.03, 0.03, 0.08, (0.40, 0.42, 0.26), rng)  # linker Oberarm (hält die Fahne)
+    box(m, -0.075, 0.035, 0.18, 0.025, 0.06, 0.025, (0.40, 0.42, 0.26), rng)
+    box(m, -0.075, 0.07, 0.18, 0.028, 0.028, 0.028, skin)          # linke Hand
+    box(m, -0.075, 0.07, 0.29, 0.008, 0.008, 0.36, (0.55, 0.45, 0.3))   # Fahnenstab
+    box(m, -0.075, 0.07, 0.475, 0.018, 0.018, 0.018, (0.95, 0.8, 0.25))  # goldene Spitze
+    body = root.attachNewNode(m.node("reiter"))
+    # Rechter Arm mit Hut (dreht um die Schulter: winkt)
+    arm = root.attachNewNode("arm_hut")
+    arm.setPos(0.065, 0.0, 0.225)
+    a = Mesh()
+    box(a, 0.0, 0.0, 0.05, 0.03, 0.03, 0.11, (0.40, 0.42, 0.26), rng)
+    box(a, 0.0, 0.0, 0.115, 0.028, 0.028, 0.028, skin)
+    hat = (0.55, 0.36, 0.18)
+    box(a, 0.0, 0.0, 0.15, 0.16, 0.12, 0.012, hat, rng)               # Krempe
+    box(a, 0.0, 0.0, 0.175, 0.08, 0.07, 0.05, hat, rng)               # Kopfteil
+    box(a, 0.0, 0.0, 0.158, 0.082, 0.072, 0.01, (0.15, 0.1, 0.06))    # Hutband
+    for sx in (-1, 1):
+        box(a, sx * 0.075, 0.0, 0.16, 0.02, 0.12, 0.012, hat)          # hochgebogene Krempe
+    arm.attachNewNode(a.node("arm"))
+    arm.setR(-35.0)
+    # Flagge am Stab (weht nach hinten, unbeleuchtet, beidseitig)
+    flag = root.attachNewNode("flagge")
+    flag.setPos(-0.075, 0.07, 0.43)
+    f = Mesh(lit=False)
+    W, H = 0.22, 0.12
+    n_st = 7
+    for i in range(n_st):                                           # Streifen rot/weiss
+        z0, z1 = -H + H * i / n_st, -H + H * (i + 1) / n_st
+        c = (0.78, 0.1, 0.12) if i % 2 == 0 else (0.95, 0.95, 0.95)
+        f.tri((0, 0, z0), (0, -W, z0), (0, -W, z1), c)
+        f.tri((0, 0, z0), (0, -W, z1), (0, 0, z1), c)
+    cz0 = -H * 3 / n_st
+    bl = (0.12, 0.18, 0.5)
+    f.tri((0.0005, 0, cz0), (0.0005, -W * 0.42, cz0), (0.0005, -W * 0.42, 0), bl)
+    f.tri((0.0005, 0, cz0), (0.0005, -W * 0.42, 0), (0.0005, 0, 0), bl)
+    for i in range(3):                                              # angedeutete Sterne
+        for j in range(4):
+            sy, sz = -0.012 - j * 0.022, cz0 + 0.01 + i * 0.016
+            f.tri((0.001, sy, sz), (0.001, sy - 0.006, sz), (0.001, sy - 0.003, sz + 0.006), (1, 1, 1))
+    fn = flag.attachNewNode(f.node("flagge"))
+    fn.setTwoSided(True)
+    return root, arm, flag
+
+
+def build_rocket(lit=True):
+    """Rakete (Spitze bei +y, Länge ~1 m) und ihre Flamme (hinten bei -y) als zwei Modelle."""
+    rng = random.Random(21)
+    m = Mesh(lit=lit)
+    box(m, 0, 0, 0, 0.12, 0.8, 0.12, (0.62, 0.64, 0.58), rng)
+    box(m, 0, 0.44, 0, 0.09, 0.14, 0.09, (0.85, 0.2, 0.15), rng)        # Spitze in Stufen
+    box(m, 0, 0.54, 0, 0.06, 0.08, 0.06, (0.85, 0.2, 0.15), rng)
+    box(m, 0, 0.6, 0, 0.03, 0.06, 0.03, (0.9, 0.3, 0.2), rng)
+    box(m, 0, 0.1, 0, 0.135, 0.07, 0.135, (0.25, 0.25, 0.27), rng)      # Band
+    for sx, sz in ((1, 0), (-1, 0), (0, 1), (0, -1)):                   # vier Leitflossen
+        box(m, sx * 0.09, -0.34, sz * 0.09, 0.02 + 0.08 * abs(sx), 0.16, 0.02 + 0.08 * abs(sz),
+            (0.30, 0.30, 0.34), rng)
+    f = Mesh(lit=False)
+    box(f, 0, -0.65, 0, 0.09, 0.5, 0.09, (1.0, 0.55, 0.1))
+    box(f, 0, -0.55, 0, 0.05, 0.35, 0.05, (1.0, 0.95, 0.5))
+    box(f, 0, -0.62, 0, 0.14, 0.18, 0.02, (1.0, 0.6, 0.1))
+    box(f, 0, -0.62, 0, 0.02, 0.18, 0.14, (1.0, 0.6, 0.1))
+    return NodePath(m.node("rocket")), NodePath(f.node("flame"))
+
+
+def build_vehicle_model():
+    """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück."""
+    rng = random.Random(5)
+    body_c, dark, glass = (0.52, 0.22, 0.14), (0.14, 0.14, 0.16), (0.55, 0.75, 0.85)
+    root = NodePath("jeep")
+    m = Mesh()
+    m.mat = "metal"
+    box(m, 0, 0, 0.62, 1.7, 3.2, 0.34, body_c, rng)                  # Wanne
+    box(m, 0, 1.12, 0.95, 1.5, 0.95, 0.3, body_c, rng)               # Motorhaube
+    box(m, 0, 1.62, 0.78, 1.3, 0.08, 0.28, dark)                     # Kühlergrill
+    box(m, 0, -1.3, 0.95, 1.5, 0.5, 0.3, body_c, rng)                # Heck
+    for sx in (-1, 1):
+        box(m, sx * 0.45, -0.2, 0.9, 0.5, 0.55, 0.12, dark, rng)     # Sitze
+        box(m, sx * 0.45, -0.5, 1.2, 0.5, 0.1, 0.5, dark, rng)       # Lehnen
+        box(m, sx * 0.8, 0.45, 1.4, 0.07, 0.07, 0.95, dark)          # Überrollbügel
+        box(m, sx * 0.8, -1.0, 1.4, 0.07, 0.07, 0.95, dark)
+        box(m, sx * 0.8, -0.27, 1.88, 0.07, 1.5, 0.07, dark)
+        box(m, sx * 0.88, 1.1, 0.72, 0.16, 1.0, 0.1, dark, rng)      # Kotflügel
+    box(m, 0, 0.45, 1.88, 1.6, 0.07, 0.07, dark)
+    box(m, 0, -1.0, 1.88, 1.6, 0.07, 0.07, dark)
+    box(m, 0, 0.55, 1.28, 1.5, 0.05, 0.5, glass)                     # Windschutzscheibe
+    box(m, 0, -0.9, 1.3, 0.36, 0.36, 0.5, dark)                      # Sockel fürs Heckgeschütz
+    box(m, 0, -0.9, 1.56, 0.8, 0.8, 0.08, (0.46, 0.48, 0.52))        # Drehkranz
+    box(m, 0, 1.68, 0.6, 1.8, 0.16, 0.16, dark, rng)                 # Stossstange vorn
+    box(m, 0, -1.68, 0.6, 1.8, 0.14, 0.16, dark, rng)                # hinten
+    for sx in (-1, 1):
+        box(m, sx * 1.0, 0.55, 1.15, 0.06, 0.14, 0.16, dark)         # Aussenspiegel
+        box(m, sx * 0.62, 1.66, 0.9, 0.34, 0.1, 0.2, dark)           # Scheinwerfergehäuse
+    box(m, 0.55, -1.2, 1.12, 0.3, 0.22, 0.34, (0.30, 0.34, 0.20), rng)   # Kanister
+    box(m, -0.62, -1.62, 0.55, 0.08, 0.3, 0.08, (0.35, 0.35, 0.38))  # Auspuff
+    root.attachNewNode(m.node("body"))
+    lm = Mesh(lit=False)
+    for sx in (-1, 1):
+        box(lm, sx * 0.55, 1.64, 0.9, 0.28, 0.06, 0.16, (1.0, 0.92, 0.55))
+        box(lm, sx * 0.6, -1.56, 0.92, 0.2, 0.05, 0.1, (0.9, 0.1, 0.1))
+    root.attachNewNode(lm.node("lights"))
+    wheels = []
+    for sx, sy in ((-1, 1.05), (1, 1.05), (-1, -1.05), (1, -1.05)):
+        piv = root.attachNewNode("wheel")
+        piv.setPos(sx * 0.95, sy, 0.4)
+        tm = Mesh()
+        prism(tm, 0, 0, -0.15, 0.4, 0.3, 8, (0.08, 0.08, 0.09), rng)
+        prism(tm, 0, 0, -0.17, 0.2, 0.34, 6, (0.62, 0.62, 0.66), rng)
+        tire = piv.attachNewNode(tm.node("tire"))
+        tire.setR(90)                                                # Achse = x
+        wheels.append(piv)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 2.7)
+    bar.setBillboardPointEye()
+    bar.setLightOff()
+    bar.setTwoSided(True)
+    cm = CardMaker("bg")
+    cm.setFrame(-0.8, 0.8, -0.07, 0.07)
+    bar.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
+    cm = CardMaker("fg")
+    cm.setFrame(0, 1, -0.05, 0.05)
+    fg = bar.attachNewNode(cm.generate())
+    fg.setPos(-0.75, -0.01, 0)
+    fg.setScale(1.5, 1, 1)
+    fg.setColor(0.95, 0.75, 0.1, 1)
+    fg.setDepthOffset(1)
+    bar.hide()
+    return root, wheels, bar, fg
+
+
+def build_heli_model():
+    """Kampfhubschrauber, Nase bei +y, Kufen bei z=0. Gibt (root, rotor, tail_rotor, bar, fg) zurück."""
+    rng = random.Random(31)
+    body, dark, red = (0.30, 0.37, 0.27), (0.14, 0.14, 0.16), (0.72, 0.16, 0.1)
+    glass, steel = (0.5, 0.72, 0.88), (0.5, 0.52, 0.56)
+    root = NodePath("heli")
+    m = Mesh()
+    m.mat = "metal"
+    box(m, 0, 0.0, 1.45, 1.9, 3.6, 1.45, body, rng)                  # Kabine
+    blob(m, 0, 2.0, 1.4, 0.95, 1.2, 0.85, body, rng)                 # Bug
+    blob(m, 0, 2.55, 1.75, 0.8, 0.7, 0.6, glass, rng, jitter=0.05)   # Cockpitscheibe
+    box(m, 0, -3.3, 1.85, 0.5, 4.4, 0.5, body, rng)                  # Heckausleger
+    box(m, 0, -5.3, 2.5, 0.12, 0.95, 1.2, red)                       # Seitenleitwerk
+    box(m, 0, -4.9, 1.9, 1.7, 0.6, 0.1, body)                        # Höhenleitwerk
+    box(m, 0, -0.1, 2.35, 0.9, 1.6, 0.5, dark)                       # Turbinenaufbau
+    box(m, 0, -0.1, 2.7, 0.3, 0.3, 0.35, steel)                      # Rotormast
+    for sx in (-1, 1):
+        box(m, sx * 1.15, 0.1, 0.12, 0.12, 3.8, 0.1, dark)           # Kufen
+        box(m, sx * 1.05, 1.0, 0.6, 0.08, 0.1, 1.0, dark)            # Streben
+        box(m, sx * 1.05, -0.8, 0.6, 0.08, 0.1, 1.0, dark)
+        box(m, sx * 1.55, 0.3, 1.15, 0.55, 1.3, 0.5, dark, rng)      # Raketenbehälter
+        box(m, sx * 1.55, 1.0, 1.15, 0.42, 0.1, 0.38, red)           # Raketenspitzen
+    box(m, 0, 2.7, 0.8, 0.14, 1.2, 0.14, steel)                      # Minigun am Bug
+    box(m, 0, 2.1, 0.85, 0.35, 0.5, 0.3, dark)
+    blob(m, 0, 3.0, 0.95, 0.2, 0.26, 0.2, dark, rng, jitter=0.06)    # Sensorkugel
+    box(m, 0, -5.4, 3.15, 0.1, 0.1, 0.1, red)                         # Positionslicht
+    for sx in (-1, 1):
+        box(m, sx * 0.97, 0.3, 1.5, 0.05, 1.3, 0.85, dark, rng)       # Türfeld
+        box(m, sx * 0.98, 1.0, 1.5, 0.06, 0.06, 0.8, steel)           # Türgriff / Rahmen
+    box(m, 0, -0.1, 3.0, 0.5, 0.5, 0.15, steel)                       # Rotorkopf
+    root.attachNewNode(m.node("body"))
+    rotor = root.attachNewNode("rotor")
+    rotor.setPos(0, -0.1, 2.95)
+    rm = Mesh()
+    box(rm, 0, 0, 0, 10.0, 0.3, 0.05, dark)
+    box(rm, 0, 0, 0, 0.3, 10.0, 0.05, dark)
+    rotor.attachNewNode(rm.node("blades"))
+    trotor = root.attachNewNode("trotor")
+    trotor.setPos(0.25, -5.35, 2.5)
+    tm = Mesh()
+    box(tm, 0, 0, 0, 0.05, 0.2, 2.0, dark)
+    box(tm, 0, 0, 0, 0.05, 2.0, 0.2, dark)
+    trotor.attachNewNode(tm.node("tblades"))
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 5.2)
+    bar.setBillboardPointEye()
+    bar.setLightOff()
+    bar.setTwoSided(True)
+    cm = CardMaker("bg")
+    cm.setFrame(-1.1, 1.1, -0.1, 0.1)
+    bar.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
+    cm = CardMaker("fg")
+    cm.setFrame(0, 1, -0.08, 0.08)
+    fg = bar.attachNewNode(cm.generate())
+    fg.setPos(-1.05, -0.01, 0)
+    fg.setScale(2.1, 1, 1)
+    fg.setColor(0.95, 0.75, 0.1, 1)
+    fg.setDepthOffset(1)
+    bar.hide()
+    return root, rotor, trotor, bar, fg
+
+
+def build_turret_model():
+    """Geschütz auf dem Turm. Ursprung = Drehpunkt (Rohrmitte), Rohr zeigt nach +y.
+    Gibt (root, head, barrel, glow, lamp) zurück: head dreht sich (Heading), barrel neigt sich (Pitch)."""
+    rng = random.Random(8)
+    dark, steel, olive = (0.18, 0.19, 0.21), (0.46, 0.48, 0.52), (0.30, 0.36, 0.24)
+    root = NodePath("turret")
+    pm = Mesh()
+    pm.mat = "metal"
+    box(pm, 0, 0, -0.27, 0.3, 0.3, 0.46, dark, rng)                   # Standfuss bis zum Sockel
+    box(pm, 0, 0, -0.30, 0.9, 0.9, 0.1, steel, rng)                   # Drehkranz
+    root.attachNewNode(pm.node("pedestal"))
+    head = root.attachNewNode("head")
+    hm = Mesh()
+    hm.mat = "metal"
+    box(hm, 0, 0, 0.0, 0.82, 0.9, 0.5, olive, rng)                    # Gehäuse
+    box(hm, 0, -0.62, 0.02, 0.7, 0.34, 0.42, dark, rng)               # Munitionskasten
+    for sx in (-1, 1):
+        box(hm, sx * 0.46, 0.12, 0.05, 0.08, 0.66, 0.56, steel, rng)  # Seitenpanzer
+    box(hm, 0, 0.42, 0.34, 0.5, 0.3, 0.1, steel, rng)                 # Dach vorn
+    head.attachNewNode(hm.node("housing"))
+    barrel = head.attachNewNode("barrel")
+    barrel.setPos(0, 0.4, 0.0)
+    bm = Mesh()
+    bm.mat = "metal"
+    gm = Mesh(lit=False)
+    for sx in (-0.2, 0.2):
+        box(bm, sx, 0.85, 0, 0.13, 1.5, 0.13, dark, rng)              # Rohre
+        box(bm, sx, 1.65, 0, 0.2, 0.2, 0.2, steel, rng)               # Mündungsbremse
+        box(gm, sx, 0.9, 0, 0.17, 1.55, 0.17, (1.0, 0.42, 0.08))      # Glühen bei Hitze
+    box(bm, 0, 0.0, 0, 0.6, 0.45, 0.3, steel, rng)                    # Waffenblock
+    barrel.attachNewNode(bm.node("barrels"))
+    glow = barrel.attachNewNode(gm.node("glow"))
+    glow.setTransparency(TransparencyAttrib.MAlpha)
+    glow.setLightOff()
+    glow.setColorScale(1, 1, 1, 0)
+    lm = Mesh(lit=False)
+    box(lm, 0, 0, 0, 0.14, 0.14, 0.14, (1, 1, 1))
+    lamp = head.attachNewNode(lm.node("lamp"))
+    lamp.setPos(-0.3, -0.1, 0.32)
+    return root, head, barrel, glow, lamp
+
+
+class TurretView:
+    """Darstellung eines Geschützes: dreht sich, Mündungsfeuer beim Schiessen, Rohre glühen mit
+    der Hitze, bei Überhitzung bläulich mit Dampf (Cooldown). Lampe: grün bereit, rot feuert, blau Pause."""
+
+    def __init__(self, t):
+        self.root, self.head, self.barrel, self.glow, self.lamp = build_turret_model()
+        self.root.setPos(t.x, t.y, t.z)
+        self.px, self.py, self.pz = t.x, t.y, t.z
+        self.flash_t = self.steam_t = 0.0
+        if t.kind == "flak":                    # grösseres, bläulich-graues Flakgeschütz
+            self.root.setScale(1.5)
+            self.root.setColorScale(0.8, 0.88, 1.0, 1)
+        elif t.kind == "car":
+            self.root.setScale(0.85)
+
+    def muzzle(self, t, dist=2.1):
+        h, p = math.radians(t.heading), math.radians(t.pitch)
+        return (t.x - math.sin(h) * math.cos(p) * dist, t.y + math.cos(h) * math.cos(p) * dist,
+                t.z + math.sin(p) * dist)
+
+    def update(self, t, dt, game):
+        if t.kind == "car":                     # fährt mit dem Wagen (weich nachgeführt wie dieser)
+            if math.hypot(t.x - self.px, t.y - self.py) > 6.0:
+                self.px, self.py, self.pz = t.x, t.y, t.z
+            a = min(1.0, 18.0 * dt)
+            self.px += (t.x - self.px) * a
+            self.py += (t.y - self.py) * a
+            self.pz += (t.z - self.pz) * a
+            self.root.setPos(self.px, self.py, self.pz)
+        self.head.setH(t.heading)
+        self.barrel.setP(t.pitch)
+        heat = clampf(t.heat, 0.0, 1.0)
+        self.glow.setColorScale(1, 1, 1, 0.0 if t.over else heat * 0.9)
+        if t.over:
+            self.barrel.setColorScale(0.55, 0.75, 1.25, 1)
+            self.lamp.setColorScale(0.25, 0.5, 1.0, 1)
+            self.steam_t -= dt
+            if self.steam_t <= 0:
+                self.steam_t = 0.1
+                game.smoke_puff(self.muzzle(t), 0.22, 1.3, 0.92)
+        else:
+            self.barrel.clearColorScale()
+            self.lamp.setColorScale(*((1.0, 0.15, 0.1, 1) if t.firing else (0.2, 1.0, 0.3, 1)))
+        self.flash_t -= dt
+        if t.firing and self.flash_t <= 0:
+            self.flash_t = 0.08
+            game.fx_spawn(game.sphere_np, self.muzzle(t), 0.07, 0.12, 0.42, (1.0, 0.95, 0.6),
+                          (1.0, 0.45, 0.1), p=0.8, fog=False)
+
+
+class Spring:
+    """Gedämpfte Feder x'' = -k x - c x'. kick() gibt einen Geschwindigkeitsimpuls."""
+
+    def __init__(self, k=180.0, c=14.0):
+        self.x = self.v = 0.0
+        self.k, self.c = k, c
+
+    def step(self, dt):
+        n = int(dt / 0.004) + 1          # Teilschritte -> stabil auch bei grossem dt
+        h = dt / n
+        for _ in range(n):
+            self.v += (-self.k * self.x - self.c * self.v) * h
+            self.x += self.v * h
+
+    def kick(self, v):
+        self.v += v
+
+
+class Particle:
+    def __init__(self, np, pos, vel, life, bounce, spin, shrink):
+        self.np = np
+        self.x, self.y, self.z = pos
+        self.vx, self.vy, self.vz = vel
+        self.life, self.age = life, 0.0
+        self.bounce, self.spin, self.shrink = bounce, spin, shrink
+        self.scale = np.getScale()
+
+
+class Fx:
+    """Animierter Effekt (Feuerball, Druckwelle, Rauch): Grösse und Farbe laufen von Anfang
+    bis Ende, die Deckkraft sinkt als (1-t)^p; optional steigt er auf."""
+
+    def __init__(self, np, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0):
+        self.np, self.life, self.age = np, life, 0.0
+        self.s0, self.s1, self.c0, self.c1, self.p, self.rise = s0, s1, c0, c1, p, rise
+        self.x, self.y, self.z = pos
+
+    def update(self, dt):
+        """False, wenn der Effekt zu Ende ist."""
+        self.age += dt
+        if self.age >= self.life:
+            return False
+        t = self.age / self.life
+        s = self.s0 + (self.s1 - self.s0) * (1 - (1 - t) ** 2)
+        self.z += self.rise * dt
+        self.np.setPos(self.x, self.y, self.z)
+        self.np.setScale(max(s, 0.01))
+        c = [a + (b - a) * t for a, b in zip(self.c0, self.c1)]
+        self.np.setColorScale(c[0], c[1], c[2], (1 - t) ** self.p)
+        return True
+
+
+class Deco:
+    """Dekoknoten im Menü, wird wie ein Text mit destroy() entfernt."""
+    def __init__(self, np):
+        self.np = np
+
+    def destroy(self):
+        self.np.removeNode()
+
+
+class Hot:
+    """Anklickbarer Text: Rechteck für die Maus; beim Überfahren wird er gelb hervorgehoben."""
+    BASE = (0.86, 0.92, 1.0, 1.0)
+    PLAIN = (1.0, 1.0, 1.0, 1.0)
+    ON = (1.0, 0.85, 0.2, 1.0)
+
+    def __init__(self, txt, x, z, scale, action=None, text=""):
+        self.txt, self.action, self.on, self.label = txt, action, False, text
+        self.sel = False                       # gewählte Option einer Knopfreihe (gelb)
+        w = 0.0
+        try:
+            w = float(txt.textNode.getWidth()) * scale
+        except Exception:
+            pass
+        if not w > 0:
+            w = len(text) * 0.5 * scale
+        self.x0, self.x1 = x - w / 2 - 0.05, x + w / 2 + 0.05
+        self.z0, self.z1 = z - 0.3 * scale, z + 1.0 * scale
+
+    def hit(self, ax, az):
+        return self.action is not None and self.x0 <= ax <= self.x1 and self.z0 <= az <= self.z1
+
+    def set(self, on):
+        if on != self.on:
+            self.on = on
+            self.txt.setFg(self.ON if on else (self.ON if self.sel else (self.BASE if self.action else self.PLAIN)))
+
+    def destroy(self):
+        self.txt.destroy()
+
+
+# ------------------------------------------------------------------ 9d: detaillierte Ausrüstung
+# Sets mit gemeinsamer Optik: Rüstungs-Set = Oliv mit Tarnband und Schablonen-Nummer, Schild-Set = dunkles Blaugrau
+# mit leuchtenden Cyan-Linien, Hermes-Set = Gold mit weissen Flügeln. Einzelteile: Basic-Helm Stahlgrau, Jetpack
+# Orange/Alu, Springfeder-Schuhe Grün mit Stahlfedern.
+GEAR_LOOK = {"armor": ((0.36, 0.40, 0.25), (0.22, 0.25, 0.15), (0.50, 0.48, 0.32)),     # Grundfarbe, dunkel, Akzent
+             "shield": ((0.20, 0.25, 0.33), (0.12, 0.15, 0.20), (0.40, 0.90, 1.00)),
+             "hermes": ((0.92, 0.72, 0.26), (0.66, 0.48, 0.14), (0.98, 0.97, 0.92)),
+             "": ((0.55, 0.57, 0.58), (0.32, 0.33, 0.35), (0.80, 0.80, 0.78))}
+_GL_GLOW = (0.45, 0.95, 1.0)
+
+
+def _dome(m, cx, cy, z0, rx, ry, h, col, rng, n=7, mat=None, sides=None):
+    """Kuppel (Helmschale): Viertelkreis-Profil um die z-Achse, unten geschlossen."""
+    cs, rxs, rys = [], [], []
+    for k in range(n + 1):
+        a = math.pi / 2 * k / n
+        cs.append((cx, cy, z0 + h * math.sin(a)))
+        rxs.append(max(0.004, rx * math.cos(a)))
+        rys.append(max(0.004, ry * math.cos(a)))
+    loft(m, cs, rxs, rys, col, rng, mat, None, (True, True), 0.015, sides)
+
+
+def _ring_z(m, cx, cy, z0, z1, rx, ry, col, rng, sides=None):
+    loft(m, [(cx, cy, z0), (cx, cy, z1)], [rx, rx], [ry, ry], col, rng, None, None, (True, True), 0.015, sides)
+
+
+def _wing(m, x, y, z, side, col, rng, k=1.0):
+    """Flügel aus drei Federlagen (Hermes), zeigt nach hinten oben; side = +-1."""
+    for i, (ln, ang, w) in enumerate(((0.26, 25, 0.06), (0.21, 40, 0.055), (0.15, 58, 0.05))):
+        a = math.radians(ang)
+        p0 = (x, y - 0.01 * i, z - 0.03 * i * k)
+        p1 = (x + side * 0.02 * k, y - math.cos(a) * ln * k, z + math.sin(a) * ln * k - 0.03 * i * k)
+        loft(m, [p0, p1], [0.012 * k, 0.006 * k], [w * k, 0.02 * k], tuple(min(1.0, c - 0.04 * i) for c in col), rng,
+             None, None, (True, True), 0.02, 6)
+
+
+def gear_model(gi, rng=None, sides=(-1, 1)):
+    """9d: detailliertes Modell eines Ausrüstungsteils (Drop und am Spieler). Ursprung: Mitte. Schuhe:
+    sides=(-1, 1) = Paar (Drop), sides=(0,) = ein Schuh (am Bein der Figur). Masse wie bisher (Anbau an Sinans Soldat)."""
+    g = GEAR[gi]
+    rng = rng or random.Random(31 + gi)
+    m = Mesh()
+    base, dark, acc = GEAR_LOOK.get(g.set, GEAR_LOOK[""])
+    if g.kind == "jetpack":
+        base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
+    elif g.kind == "spring":
+        base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    if g.slot == "head":                                         # ---------------- Helme
+        if g.set == "hermes":
+            _dome(m, 0, 0, -0.02, 0.30, 0.29, 0.27, base, rng, mat="metal")
+            loft(m, [(0, 0.06, 0.25), (0, -0.05, 0.31), (0, -0.2, 0.26)], [0.03, 0.035, 0.025], [0.05, 0.07, 0.04], acc, rng,
+                 None, None, (True, True), 0.02, 8)                                          # Kamm
+            for sx in (-1, 1):
+                _wing(m, sx * 0.29, -0.02, 0.12, sx, acc, rng)
+            _ring_z(m, 0, 0, -0.03, 0.0, 0.315, 0.305, dark, rng)
+        else:
+            _dome(m, 0, 0, -0.02, 0.30, 0.29, 0.30, base, rng, mat="metal" if g.set != "armor" else None)
+            _ring_z(m, 0, 0.0, -0.04, -0.005, 0.33, 0.32, dark, rng)                        # Rand
+            for sx in (-1, 1):                                                               # Kinnriemen
+                box(m, sx * 0.27, 0.04, -0.12, 0.02, 0.05, 0.2, (0.12, 0.11, 0.10), rng)
+                ell(m, (sx * 0.29, 0.04, 0.02), 0.02, 0.025, 0.025, acc if g.set else dark, rng, rings=3)   # Nieten
+            if g.kind == "save_head":                                                         # Basic-Helm: Stahl, Mittelgrat
+                loft(m, [(0, 0.27, 0.12), (0, 0.15, 0.27), (0, -0.12, 0.28), (0, -0.27, 0.12)], [0.02] * 4, [0.015] * 4,
+                     acc, rng, None, None, (True, True), 0.02, 6)
+            elif g.set == "armor":                                                            # Armeehelm: Tarnnetz, Nackenschutz, NVG-Halter
+                _ring_z(m, 0, 0, 0.1, 0.15, 0.31, 0.30, dark, rng)
+                for k in range(10):
+                    a = 2 * math.pi * k / 10
+                    box(m, math.cos(a) * 0.29, math.sin(a) * 0.28, 0.17, 0.05, 0.05, 0.05, (0.30, 0.33, 0.18), rng)
+                loft(m, [(0, -0.2, 0.1), (0, -0.3, 0.0), (0, -0.32, -0.08)], [0.22, 0.2, 0.18], [0.03, 0.03, 0.025], base, rng,
+                     None, None, (True, True), 0.02, 8)
+                box(m, 0, 0.27, 0.1, 0.1, 0.04, 0.08, (0.12, 0.12, 0.12), rng)
+                box(m, 0.2, -0.12, 0.22, 0.02, 0.1, 0.05, acc, rng)                           # Schablonen-Nummer
+            else:                                                                             # Schild-Helm: Visier + Emitter
+                loft(m, [(-0.22, 0.2, 0.06), (0, 0.29, 0.07), (0.22, 0.2, 0.06)], [0.03, 0.03, 0.03], [0.05, 0.055, 0.05],
+                     _GL_GLOW, None, None, None, (True, True), 0.0, 6)
+                _ring_z(m, 0, 0, 0.26, 0.3, 0.07, 0.07, acc, rng)
+                for sx in (-1, 1):
+                    loft(m, [(sx * 0.29, 0.1, 0.1), (sx * 0.24, -0.15, 0.2)], [0.01, 0.01], [0.012, 0.012], _GL_GLOW,
+                         None, None, None, (True, True), 0.0, 4)
+    elif g.slot == "torso":                                      # ---------------- Oberkörper
+        if g.kind == "jetpack":
+            box(m, 0, -0.22, 0.05, 0.36, 0.05, 0.42, dark, rng, mat="metal")                 # Tragplatte
+            for sx in (-1, 1):
+                prism(m, sx * 0.11, -0.3, -0.22, 0.09, 0.5, 12, base, rng)                    # Tanks
+                ell(m, (sx * 0.11, -0.3, 0.28), 0.09, 0.09, 0.06, base, rng, rings=4)
+                cone(m, sx * 0.11, -0.3, -0.36, 0.06, 0.14, 10, acc, rng, 0.02)              # Düsen (zeigen nach unten)
+                box(m, sx * 0.11, -0.3, 0.02, 0.19, 0.19, 0.03, acc, rng)                     # Spannband
+                box(m, sx * 0.17, 0.0, 0.18, 0.05, 0.42, 0.04, (0.12, 0.12, 0.13), rng)        # Gurte
+            box(m, 0, -0.3, 0.18, 0.1, 0.08, 0.1, (0.2, 0.2, 0.22), rng)                       # Steuerkasten
+            box(m, 0, -0.345, 0.2, 0.04, 0.01, 0.03, (1.0, 0.3, 0.1))
+        else:
+            for sy in (1, -1):                                                                 # Brust- und Rückenplatte
+                loft(m, [(0, sy * 0.2, -0.22), (0, sy * 0.215, 0.05), (0, sy * 0.2, 0.3)], [0.27, 0.28, 0.25],
+                     [0.035, 0.04, 0.035], base if sy > 0 else dark, rng, None, None, (True, True), 0.02, 10)
+            for sx in (-1, 1):                                                                 # Seitenteile, Schulterstücke
+                box(m, sx * 0.27, 0.0, 0.0, 0.04, 0.36, 0.3, dark, rng)
+                ell(m, (sx * 0.27, 0.0, 0.3), 0.1, 0.2, 0.05, base, rng, rings=4)
+            if g.set == "armor":                                                               # MOLLE-Gurte, Taschen, Nummer
+                for z in (-0.12, -0.02, 0.08):
+                    box(m, 0, 0.245, z, 0.46, 0.012, 0.025, dark, rng)
+                for sx in (-1, 0, 1):
+                    box(m, sx * 0.15, 0.27, -0.1, 0.11, 0.06, 0.13, (0.30, 0.33, 0.20), rng)
+                box(m, 0.12, 0.25, 0.2, 0.08, 0.01, 0.04, acc, rng)
+            elif g.set == "shield":                                                            # Generator-Kern + Leuchtlinien
+                loft(m, [(0, 0.23, 0.04), (0, 0.27, 0.04)], [0.09, 0.07], [0.09, 0.07], acc, rng, None, None, (True, True), 0.0, 6)
+                loft(m, [(0, 0.265, 0.04), (0, 0.28, 0.04)], [0.06, 0.05], [0.06, 0.05], _GL_GLOW, None, None, None, (True, True), 0.0, 6)
+                for sx in (-1, 1):
+                    box(m, sx * 0.17, 0.24, 0.04, 0.12, 0.012, 0.018, _GL_GLOW)
+                    box(m, sx * 0.17, 0.24, -0.12, 0.012, 0.012, 0.3, _GL_GLOW)
+                loft(m, [(0, -0.24, -0.1), (0, -0.24, 0.2)], [0.08, 0.08], [0.04, 0.04], dark, rng, None, None, (True, True), 0.02, 10)
+                for k in range(4):
+                    _ring_z(m, 0, -0.24, -0.06 + k * 0.07, -0.04 + k * 0.07, 0.085, 0.05, _GL_GLOW, None, 10)
+            else:                                                                              # Hermes-Weste: Flügel, Lorbeer
+                for sx in (-1, 1):
+                    _wing(m, sx * 0.1, -0.24, 0.18, sx, acc, rng, 1.5)
+                    for k in range(4):
+                        ell(m, (sx * (0.04 + 0.03 * k), 0.25, 0.14 - 0.035 * k), 0.012, 0.01, 0.022, acc, rng, rings=3)
+                box(m, 0, 0.245, -0.06, 0.44, 0.012, 0.03, dark, rng)
+    else:                                                        # ---------------- Schuhe / Stiefel
+        for sx in sides:
+            x = sx * 0.15
+            sole = (0.1, 0.09, 0.08) if g.kind != "dash" else dark
+            box(m, x, 0.05, -0.05, 0.19, 0.33, 0.035, sole, rng)                              # Sohle
+            loft(m, [(x, -0.09, -0.02), (x, 0.06, -0.01), (x, 0.17, -0.025)], [0.09, 0.09, 0.07], [0.05, 0.045, 0.035],
+                 base, rng, None, None, (True, True), 0.02, 10)                                # Schuh
+            if g.kind == "hp":                                                                  # Kampfstiefel: hoher Schaft, Schnürung
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.2)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                for k in range(5):
+                    box(m, x, 0.02, 0.02 + 0.035 * k, 0.07, 0.012, 0.008, (0.08, 0.07, 0.06))
+                box(m, x, 0.16, -0.02, 0.15, 0.05, 0.04, dark, rng)
+            elif g.kind == "shield":                                                            # Schild-Stiefel: leuchtende Kappe + Ring
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.14)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                ell(m, (x, 0.15, -0.01), 0.07, 0.04, 0.035, _GL_GLOW, None, rings=3)
+                _ring_z(m, x, -0.06, 0.1, 0.12, 0.088, 0.078, _GL_GLOW, None, 10)
+            elif g.kind == "dash":                                                              # Hermes: Riemen + Flügel am Knöchel
+                for k in range(3):
+                    box(m, x, -0.02 + 0.06 * k, 0.04, 0.17, 0.025, 0.015, acc, rng)
+                for wx in ((sx,) if sx else (-1, 1)):
+                    _wing(m, x + wx * 0.09, -0.08, 0.06, wx, acc, rng, 0.6)
+            elif g.kind == "spring":                                                            # Springfedern unter der Sohle
+                pts = [(x + 0.05 * math.cos(t * 0.5), 0.05 + 0.05 * math.sin(t * 0.5), -0.07 - 0.008 * t) for t in range(25)]
+                loft(m, pts, [0.012] * len(pts), [0.012] * len(pts), acc, rng, "metal", None, (True, True), 0.0, 5)
+                box(m, x, 0.05, -0.28, 0.16, 0.24, 0.03, sole, rng)
+                box(m, x, -0.04, 0.04, 0.17, 0.04, 0.02, (1.0, 1.0, 1.0), rng)
+    return m
+
+
+def gear_icon_shapes(gi):
+    """9d: HUD-Symbol (Seitenansicht y/z, Sinans Formsprache) eines Ausrüstungsteils."""
+    g = GEAR[gi]
+    base, dark, acc = GEAR_LOOK.get(g.set, GEAR_LOOK[""])
+    if g.kind == "jetpack":
+        base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
+    elif g.kind == "spring":
+        base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    S = []
+    if g.slot == "head":
+        dome = [(-0.3 * math.cos(a), 0.3 * math.sin(a)) for a in [math.pi * i / 16 for i in range(17)]]
+        S.append(("p", 0, 0.1, dome, base))
+        S.append(("p", 0, 0.1, [(-0.33, -0.03), (0.33, -0.03), (0.33, 0.01), (-0.33, 0.01)], dark))
+        if g.set == "hermes":
+            S += [("p", 0, 0.1, [(-0.06, 0.12), (-0.3, 0.32), (-0.26, 0.2), (-0.36, 0.26), (-0.22, 0.1)], acc),
+                  ("p", 0, 0.1, [(0.0, 0.28), (0.22, 0.3), (0.18, 0.26)], acc)]
+        elif g.set == "armor":
+            S += [("p", 0, 0.1, [(-0.29, 0.09), (0.29, 0.09), (0.28, 0.15), (-0.28, 0.15)], dark),
+                  ("p", 0, 0.1, [(-0.32, 0.0), (-0.36, -0.1), (-0.24, -0.06)], base),
+                  ("b", 0, 0.3, 0.08, 0.1, 0.05, 0.08, (0.12, 0.12, 0.12))]
+        elif g.set == "shield":
+            S += [("p", 0, 0.1, [(0.12, 0.03), (0.31, 0.04), (0.29, 0.12), (0.1, 0.1)], _GL_GLOW),
+                  ("b", 0, 0.0, 0.31, 0.1, 0.12, 0.04, acc)]
+        else:
+            S += [("p", 0, 0.1, [(-0.25, 0.16), (0.0, 0.31), (0.25, 0.16), (0.0, 0.27)], acc)]
+    elif g.slot == "torso":
+        if g.kind == "jetpack":
+            for y in (-0.12, 0.12):
+                S.append(("p", 0, 0.1, [(y - 0.09, -0.22), (y + 0.09, -0.22), (y + 0.09, 0.26), (y, 0.32), (y - 0.09, 0.26)], base))
+                S.append(("p", 0, 0.1, [(y - 0.05, -0.22), (y + 0.05, -0.22), (y + 0.03, -0.34), (y - 0.03, -0.34)], acc))
+                S.append(("b", 0, y, 0.02, 0.1, 0.19, 0.03, acc))
+            S.append(("b", 0, 0.0, 0.18, 0.1, 0.1, 0.1, (0.2, 0.2, 0.22)))
+        else:
+            vest = [(-0.28, -0.24), (0.28, -0.24), (0.3, 0.2), (0.12, 0.3), (0.06, 0.22), (-0.06, 0.22), (-0.12, 0.3), (-0.3, 0.2)]
+            S.append(("p", 0, 0.1, vest, base))
+            if g.set == "armor":
+                for z in (-0.12, -0.02, 0.08):
+                    S.append(("b", 0, 0.0, z, 0.1, 0.5, 0.025, dark))
+                for y in (-0.15, 0.0, 0.15):
+                    S.append(("b", 0, y, -0.12, 0.1, 0.11, 0.12, (0.30, 0.33, 0.20)))
+            elif g.set == "shield":
+                S.append(("e", 0, 0.0, 0.03, 0.05, 0.09, 0.09, acc))
+                S.append(("e", 0, 0.0, 0.03, 0.05, 0.06, 0.06, _GL_GLOW))
+                for y in (-0.17, 0.17):
+                    S.append(("b", 0, y, -0.04, 0.1, 0.015, 0.3, _GL_GLOW))
+            else:
+                S += [("p", 0, 0.1, [(-0.08, 0.14), (-0.4, 0.38), (-0.34, 0.22), (-0.44, 0.28), (-0.26, 0.08)], acc),
+                      ("p", 0, 0.1, [(0.08, 0.14), (0.4, 0.38), (0.34, 0.22), (0.44, 0.28), (0.26, 0.08)], acc),
+                      ("b", 0, 0.0, -0.06, 0.1, 0.48, 0.03, dark)]
+    else:
+        boot = [(-0.12, -0.06), (0.17, -0.06), (0.2, 0.0), (0.12, 0.05), (0.0, 0.07), (-0.02, 0.24), (-0.14, 0.24), (-0.14, 0.0)]
+        if g.kind in ("dash", "spring"):
+            boot = [(-0.12, -0.06), (0.17, -0.06), (0.2, 0.0), (0.12, 0.05), (-0.02, 0.07), (-0.12, 0.06)]
+        S.append(("p", 0, 0.1, boot, base))
+        S.append(("p", 0, 0.1, [(-0.14, -0.08), (0.2, -0.08), (0.2, -0.05), (-0.14, -0.05)], (0.1, 0.09, 0.08)))
+        if g.kind == "hp":
+            for k in range(5):
+                S.append(("b", 0, -0.02, 0.0 + 0.04 * k, 0.1, 0.05, 0.01, dark))
+        elif g.kind == "shield":
+            S += [("e", 0, 0.15, -0.01, 0.05, 0.05, 0.035, _GL_GLOW), ("b", 0, -0.08, 0.12, 0.1, 0.13, 0.02, _GL_GLOW)]
+        elif g.kind == "dash":
+            S += [("p", 0, 0.1, [(-0.1, 0.05), (-0.3, 0.22), (-0.26, 0.12), (-0.34, 0.15), (-0.2, 0.02)], acc)]
+        else:
+            for k in range(5):
+                S.append(("b", 0, 0.03, -0.1 - 0.035 * k, 0.1, 0.16, 0.015, acc))
+            S.append(("p", 0, 0.1, [(-0.12, -0.3), (0.16, -0.3), (0.16, -0.27), (-0.12, -0.27)], (0.1, 0.09, 0.08)))
+    return S
+
+
+def gear_icon(gi, width=0.13, height=0.1):
+    """9d: Symbol eines Ausrüstungsteils (HUD-Kachel, Hover) aus gear_icon_shapes."""
+    polys = [(pts, col if col == _GL_GLOW else tuple(c * 0.55 for c in col))     # polys_icon hellt kräftig auf
+             for s in gear_icon_shapes(gi) for pts, col in shape_polys(s)]
+    return polys_icon(polys, width, height, "gearicon_" + GEAR[gi].name)
 
 
 def slot_symbol(slot):
@@ -114489,6 +117467,7 @@ class Game(ShowBase):
         # Hintergrund ein dezenter Umriss des Slots; darüber das getragene Teil. Jede Kachel hat einen eigenen
         # Knoten "item" - später kann dort statt des Texts ein Symbol pro Teil hängen (GEAR_HUD_*).
         self.gear_tiles = {}
+        self.gear_icon_cache = getattr(self, "gear_icon_cache", {})
         for i, sl in enumerate(GEAR_SLOTS):
             tile = self.a2dRightCenter.attachNewNode("gear_" + sl)
             tile.setPos(-GEAR_HUD_W / 2 - 0.03, 0, GEAR_HUD_Y0 - i * (GEAR_HUD_H + 0.02))
@@ -114502,9 +117481,12 @@ class Game(ShowBase):
             sym.setTransparency(TransparencyAttrib.MAlpha)
             sym.setColorScale(1, 1, 1, 0.16)
             item = tile.attachNewNode("item")                    # Platz für Text oder (später) Symbol
-            label = OnscreenText(text="", parent=item, pos=(0, -0.012), scale=GEAR_HUD_TEXT,
+            label = OnscreenText(text="", parent=item, pos=(0, -GEAR_HUD_H / 2 + 0.012), scale=GEAR_HUD_TEXT * 0.72,
                                  fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=True)
-            self.gear_tiles[sl] = {"tile": tile, "bg": bg, "sym": sym, "item": item, "label": label}
+            ico = item.attachNewNode("icon")                     # 9d: Symbol des getragenen Teils
+            ico.setZ(0.014)
+            self.gear_tiles[sl] = {"tile": tile, "bg": bg, "sym": sym, "item": item, "label": label, "ico": ico,
+                                   "gi": None}
         # Munition und Waffenwahl (Slot 1 = Hauptwaffe, 2 = Kleinwaffe, 3 = Kistenwaffe)
         self.ammo_text = OnscreenText(text="", parent=self.a2dBottomRight, pos=(-0.08, 0.08),
                                       scale=0.1, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
@@ -115938,6 +118920,22 @@ class Game(ShowBase):
                 lines = text.split("\n")
                 w = 0.05 + 0.036 * 0.6 * max(len(ln) for ln in lines)
                 h = 0.03 + 0.036 * 1.2 * len(lines)
+                gi = GEAR_IDX.get(lines[0].split("  (")[0]) if "  (" in lines[0] else None   # 9d: Symbol im Hinweis
+                if getattr(self, "tip_icon_gi", None) != gi:
+                    ti = getattr(self, "tip_icon", None)
+                    if ti is not None:
+                        ti.removeNode()
+                    self.tip_icon = None
+                    if gi is not None:
+                        self.tip_icon = gear_icon(gi, 0.2, 0.15)
+                        self.tip_icon.reparentTo(self.tip_root)
+                        self.tip_icon.setBin("fixed", 92)
+                        self.tip_icon.setDepthTest(False)
+                        self.tip_icon.setDepthWrite(False)
+                    self.tip_icon_gi = gi
+                if gi is not None:
+                    w += 0.26
+                    self.tip_icon.setPos(w - 0.14, 0, -0.1)
                 ar = self.getAspectRatio()
                 x = mx + 0.04 if mx < 0 else mx - w - 0.04       # zur Bildmitte hin aufklappen
                 x = min(max(x, -ar + 0.02), ar - w - 0.02)
@@ -119079,6 +122077,18 @@ class Game(ShowBase):
             else:
                 tl["bg"].setColor(0.04, 0.05, 0.08, 0.7)
             gi = pl.gear.get(sl) if alive else None
+            if gi != tl["gi"]:                                   # 9d: Symbol tauschen
+                for c in tl["ico"].getChildren():
+                    c.detachNode()
+                if gi is not None:
+                    ic_ = self.gear_icon_cache.get(gi)
+                    if ic_ is None:
+                        ic_ = self.gear_icon_cache[gi] = gear_icon(gi, GEAR_HUD_W * 0.62, GEAR_HUD_H * 0.62)
+                        ic_.setBin("fixed", 22)
+                        ic_.setDepthTest(False)
+                        ic_.setDepthWrite(False)
+                    ic_.reparentTo(tl["ico"])
+                tl["gi"] = gi
             self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
             if gi is not None:
                 tl["label"].setFg(tuple(c * 0.65 + 0.35 for c in GEAR[gi].col) + (1,))   # aufgehellt: lesbar
@@ -119461,6 +122471,12 @@ class MobView:
         self.root, self.torso, self.legL, self.legR, self.bar, self.fg = parts[:6]
         self.rotors = parts[6] if len(parts) > 6 else []
         self.root.setScale(mob.scale)
+        if mob.scale > 1.2:                                  # 9d: grosse Monster schalten später auf das einfache Modell
+            for lp in self.root.findAllMatches("**/+LODNode"):
+                lod = lp.node()
+                d_ = MOB_LOD_DIST * mob.scale
+                lod.setSwitch(0, d_, 0.0)
+                lod.setSwitch(1, 1e6, d_)
         self.spark_t = 0.0
 
     def update(self, m):
@@ -119519,6 +122535,8 @@ class MobView:
                     u = (m.atk_t - w) / rec
                     lean = -45.0 * (1 - u) if u < 1 else 0.0
             self.torso.setP(lean)
+            if m.kind == "grunt":                          # 9d: schlurfender Zombie - schwankt beim Gehen
+                self.torso.setR(7.0 * math.sin(m.phase * 0.5) * (1.0 if m.speed_now > 0 else 0.4))
             bob = abs(math.sin(m.phase)) * (0.25 if hop else 0.05) * (1 if m.speed_now > 0 else 0)
             self.torso.setZ((0.45 if hop else 0.75) + bob)
         if m.hurt_t > 0:
