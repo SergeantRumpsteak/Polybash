@@ -60,7 +60,9 @@ jobs:
             netsh advfirewall firewall show rule name="Polybash" | Out-Null
             if ($LASTEXITCODE -eq 0) { throw "Firewall-Regeln wurden beim Deinstallieren nicht entfernt" }
             Ann "notice" "Test" "alles in Ordnung"
+            $global:LASTEXITCODE = 0
           } catch {
             Ann "error" "Test fehlgeschlagen" "$_"
             exit 1
           }
+          exit 0
