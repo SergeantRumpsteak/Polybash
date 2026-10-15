@@ -33,17 +33,34 @@ jobs:
       - name: Installer testen (stiller Einbau, Python-Installation erzwungen, Firewall-Regeln, Ausbau)
         shell: pwsh
         run: |
+          function Ann($lvl, $title, $text) {
+            $t = ("$text" -replace '%','%25' -replace "`r",'%0D' -replace "`n",'%0A')
+            if ($t.Length -gt 6000) { $t = $t.Substring($t.Length - 6000) }
+            Write-Host "::$lvl title=$title::$t"
+          }
           $dest = "$env:RUNNER_TEMP\pbtest"
           $exe = (Resolve-Path "Polybash/installer/dist/Polybash-Installer.exe").Path
-          $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup.log","/forcepy=1" -Wait -PassThru
-          Write-Host "Installer-Exitcode: $($p.ExitCode)"
-          Write-Host "--- install.log"; Get-Content "$dest\install.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
-          Write-Host "--- python-install.log (Ende)"; Get-Content "$dest\python-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 25
-          if (-not (Test-Path "$dest\python\python.exe")) { throw "Python wurde nicht installiert" }
-          & "$dest\venv\Scripts\python.exe" -c "import panda3d; print('panda3d', panda3d.__version__)"
-          if ($LASTEXITCODE -ne 0) { throw "Panda3D nicht importierbar" }
-          Write-Host "--- Firewall-Regeln"; netsh advfirewall firewall show rule name="Polybash"
-          if ($LASTEXITCODE -ne 0) { throw "Firewall-Regeln fehlen" }
-          Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
-          netsh advfirewall firewall show rule name="Polybash"
-          if ($LASTEXITCODE -eq 0) { throw "Firewall-Regeln wurden beim Deinstallieren nicht entfernt" }
+          try {
+            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup.log","/forcepy=1" -Wait -PassThru
+            Ann "notice" "Installer-Exitcode" "$($p.ExitCode)"
+            $ls = if (Test-Path $dest) { (Get-ChildItem $dest | ForEach-Object { $_.Name }) -join ", " } else { "(Zielordner fehlt)" }
+            Ann "notice" "Zielordner" $ls
+            foreach ($n in "install.log","python-install.log") {
+              if (Test-Path "$dest\$n") { Ann "notice" $n ((Get-Content "$dest\$n" -Tail 40) -join "`n") } else { Ann "warning" $n "fehlt" }
+            }
+            if (Test-Path "$env:RUNNER_TEMP\setup.log") { Ann "notice" "setup.log (Inno)" ((Get-Content "$env:RUNNER_TEMP\setup.log" -Tail 30) -join "`n") }
+            if (-not (Test-Path "$dest\python\python.exe")) { throw "Python wurde nicht installiert" }
+            $o = & "$dest\venv\Scripts\python.exe" -c "import panda3d; print('panda3d', panda3d.__version__)" 2>&1
+            Ann "notice" "Panda3D" "$o"
+            if ($LASTEXITCODE -ne 0) { throw "Panda3D nicht importierbar" }
+            $r = netsh advfirewall firewall show rule name="Polybash" 2>&1
+            Ann "notice" "Firewall-Regeln nach Installation" ($r -join "`n")
+            if ($LASTEXITCODE -ne 0) { throw "Firewall-Regeln fehlen" }
+            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
+            netsh advfirewall firewall show rule name="Polybash" | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw "Firewall-Regeln wurden beim Deinstallieren nicht entfernt" }
+            Ann "notice" "Test" "alles in Ordnung"
+          } catch {
+            Ann "error" "Test fehlgeschlagen" "$_"
+            exit 1
+          }
