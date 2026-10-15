@@ -67,6 +67,15 @@ jobs:
             $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Polybash\Polybash.lnk")
             Ann "notice" "Verknuepfung" "Ziel: $($lnk.TargetPath) | Argumente: $($lnk.Arguments) | existiert: $(Test-Path $lnk.TargetPath)"
             if (-not (Test-Path $lnk.TargetPath)) { throw "Ziel der Startmenue-Verknuepfung fehlt: $($lnk.TargetPath)" }
+            # dritter Durchlauf: Python-Ordner von Hand loeschen (Windows kennt Python noch) und mit erzwungenem Python neu installieren
+            Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
+            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup3.log","/forcepy=1" -Wait -PassThru
+            Ann "notice" "Dritter Durchlauf (nach Loeschen)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
+            if (-not (Test-Path "$dest\python\python.exe")) { throw "3. Durchlauf: python.exe fehlt" }
+            Remove-Item "$dest\python","$dest\venv" -Recurse -Force
+            $p = Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART","/SP-","/DIR=$dest","/LOG=$env:RUNNER_TEMP\setup4.log","/forcepy=1" -Wait -PassThru
+            Ann "notice" "Vierter Durchlauf (Python-Ordner geloescht)" ((Get-Content "$dest\install.log" -Tail 12) -join "`n")
+            if (-not (Test-Path "$dest\venv\Scripts\pythonw.exe")) { throw "4. Durchlauf: pythonw.exe fehlt" }
             Start-Process "$dest\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOX","/NORESTART" -Wait
             Ann "notice" "Test" "alles in Ordnung"
             $global:LASTEXITCODE = 0
