@@ -247,7 +247,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 36    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 15         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 77               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 78               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -109944,6 +109944,7 @@ class Game(ShowBase):
                     nd.show()
         self.mode, self.net_mode = "menu", "single"
         self.world = self.player = None
+        self.dead_free = False
         self.show_menu("main")
 
     def menu_task(self, dt):
@@ -110261,6 +110262,7 @@ class Game(ShowBase):
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.lost_text.hide()
         self.gun_dr.setActive(True)
+        self.dead_free = False                     # neues Spiel: Maus-Zustand neu bestimmen (Lobby gibt sie gleich frei)
         self.set_capture(True)
         self.loading_step(1.0, "Los geht's!")
 
@@ -113197,8 +113199,8 @@ class Game(ShowBase):
             self.dead_since = None
         hint = ""
         # Maus auf dem Todesbildschirm freigeben (Klick auf Karten und Knopf), beim Respawn wieder einfangen
-        if dead_screen and not self.dead_free and self.quit_box is None:
-            self.dead_free = True
+        if dead_screen and (not self.dead_free or self.captured) and self.quit_box is None:
+            self.dead_free = True                      # (auch wenn die Maus zwischendurch eingefangen wurde)
             self.set_capture(False)
         elif not dead_screen and self.dead_free:
             self.dead_free = False

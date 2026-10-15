@@ -115006,6 +115006,7 @@ class Game(ShowBase):
                     nd.show()
         self.mode, self.net_mode = "menu", "single"
         self.world = self.player = None
+        self.dead_free = False
         self.show_menu("main")
         back = globals().get("POLYBASH_BACK")             # aus dem Hauptprogramm geladen: im selben Fenster zurück
         if back is not None:
@@ -115304,6 +115305,7 @@ class Game(ShowBase):
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.lost_text.hide()
         self.gun_dr.setActive(True)
+        self.dead_free = False                     # neues Spiel: Maus-Zustand neu bestimmen (Lobby gibt sie gleich frei)
         self.set_capture(True)
         self.loading_step(1.0, "Los geht's!")
 
@@ -119541,8 +119543,8 @@ class Game(ShowBase):
             self.dead_since = None
         hint = ""
         # Maus auf dem Todes-/Lobby-Bildschirm freigeben (Klick auf 'Respawn' bzw. 'Spiel starten'), danach wieder einfangen
-        if dead_screen and not self.dead_free and self.quit_box is None:
-            self.dead_free = True
+        if dead_screen and (not self.dead_free or self.captured) and self.quit_box is None:
+            self.dead_free = True                      # (auch wenn die Maus zwischendurch eingefangen wurde)
             self.set_capture(False)
         elif not dead_screen and self.dead_free:
             self.dead_free = False
