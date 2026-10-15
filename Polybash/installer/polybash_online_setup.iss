@@ -63,6 +63,7 @@ var
   NeedPython: Boolean;
   SysPython: String;
   Ok: Boolean;
+  Prepared: Boolean;      { Python gesucht und ggf. heruntergeladen? (im stillen Modus gibt es keine Seiten) }
 
 function InstallOk: Boolean;
 begin
@@ -152,7 +153,7 @@ begin
   if CurPageID = wpReady then
   begin
     SysPython := FindPython;
-    NeedPython := SysPython = '';
+    NeedPython := (SysPython = '') or (ExpandConstant('{param:forcepy|0}') = '1');   { /forcepy=1: Python-Installation erzwingen (Tests) }
     if NeedPython then
     begin
       DownloadPage.Clear;
@@ -171,6 +172,7 @@ begin
         DownloadPage.Hide;
       end;
     end;
+    Prepared := Result;
   end;
 end;
 
@@ -186,7 +188,7 @@ end;
 procedure Fail(const Msg: String);
 begin
   Ok := False;
-  MsgBox(Msg + #13#10#13#10 + 'Details stehen in:' + #13#10 + ExpandConstant('{app}\install.log'), mbError, MB_OK);
+  MsgBox(Msg + #13#10#13#10 + 'Details stehen in:' + #13#10 + ExpandConstant('{app}\install.log') + #13#10 + ExpandConstant('{app}\python-install.log'), mbError, MB_OK);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -199,7 +201,23 @@ begin
     Exit;
   Ok := False;
   App := ExpandConstant('{app}');
+  if not Prepared then                      { stiller Modus (/VERYSILENT): Python hier suchen und laden }
+  begin
+    SysPython := FindPython;
+    NeedPython := (SysPython = '') or (ExpandConstant('{param:forcepy|0}') = '1');
+    if NeedPython then
+    begin
+      try
+        DownloadTemporaryFile('{#PyUrl}', 'python-installer.exe', '', nil);
+      except
+        Fail('Python konnte nicht heruntergeladen werden: ' + GetExceptionMessage);
+        Exit;
+      end;
+    end;
+    Prepared := True;
+  end;
   VenvPy := App + '\venv\Scripts\python.exe';
+  SaveStringToFile(App + '\install.log', 'Polybash-Installation ' + GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':') + #13#10, True);
   Prog := CreateOutputMarqueeProgressPage('Polybash wird eingerichtet', 'Bitte warten - das Fenster offen lassen.');
   try
     Prog.Show;
@@ -207,9 +225,14 @@ begin
     begin
       Prog.SetText('Python 3.12 wird installiert ...', 'nur fuer Polybash, ohne Administratorrechte');
       Prog.Animate;
-      RC := RunCmd('""' + ExpandConstant('{tmp}\python-installer.exe') + '" /quiet InstallAllUsers=0 PrependPath=0 ' +
-        'Include_launcher=0 Include_test=0 Include_doc=0 Include_pip=1 Shortcuts=0 AssociateFiles=0 ' +
-        'TargetDir="' + App + '\python"" >> "' + App + '\install.log" 2>&1');
+      { Ohne cmd.exe aufrufen (die frueheren Anfuehrungszeichen-Verschachtelung machte aus TargetDir Muell -> Code 1603).
+        Das Protokoll des Python-Installers schreibt dieser selbst nach python-install.log. }
+      if not Exec(ExpandConstant('{tmp}\python-installer.exe'),
+        '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Include_pip=1 ' +
+        'Shortcuts=0 AssociateFiles=0 TargetDir="' + App + '\python" /log "' + App + '\python-install.log"',
+        '', SW_HIDE, ewWaitUntilTerminated, RC) then
+        RC := -1;
+      SaveStringToFile(App + '\install.log', 'Python-Installer beendet mit Code ' + IntToStr(RC) + ' (Protokoll: python-install.log)' + #13#10, True);
       Py := App + '\python\python.exe';
       if ((RC <> 0) and (RC <> 3010)) or not FileExists(Py) then
       begin
