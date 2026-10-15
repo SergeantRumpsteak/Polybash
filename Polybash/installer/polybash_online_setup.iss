@@ -188,6 +188,8 @@ end;
 procedure Fail(const Msg: String);
 begin
   Ok := False;
+  SaveStringToFile(ExpandConstant('{app}\install.log'), 'FEHLER: ' + Msg + #13#10, True);
+  if WizardSilent then Exit;
   MsgBox(Msg + #13#10#13#10 + 'Details stehen in:' + #13#10 + ExpandConstant('{app}\install.log') + #13#10 + ExpandConstant('{app}\python-install.log'), mbError, MB_OK);
 end;
 
@@ -235,19 +237,30 @@ begin
       SaveStringToFile(App + '\install.log', 'Python-Installer beendet mit Code ' + IntToStr(RC) + ' (Protokoll: python-install.log)' + #13#10, True);
       Py := App + '\python\python.exe';
       { Reste einer frueheren Installation: Windows kennt Python 3.12.8 noch als "installiert", obwohl der Ordner
-        geloescht wurde. Der Python-Installer tut dann nichts und endet mit Code 0 -> erst entfernen, dann neu installieren. }
+        geloescht wurde. Der Python-Installer tut dann nichts und endet mit Code 0. Stufe 1: reparieren (stellt die
+        Dateien wieder her), Stufe 2: entfernen und neu installieren. Jeder Schritt wird protokolliert. }
       if (RC = 0) and not FileExists(Py) then
       begin
-        SaveStringToFile(App + '\install.log', 'Python-Installer fand eine alte Registrierung ohne Dateien - wird bereinigt und neu installiert' + #13#10, True);
-        Exec(ExpandConstant('{tmp}\python-installer.exe'), '/quiet /uninstall /log "' + App + '\python-uninstall.log"', '', SW_HIDE, ewWaitUntilTerminated, RC);
+        SaveStringToFile(App + '\install.log', 'Python ist bei Windows noch eingetragen, aber die Dateien fehlen - Reparatur wird versucht' + #13#10, True);
         if not Exec(ExpandConstant('{tmp}\python-installer.exe'),
-          '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Include_pip=1 ' +
-          'Shortcuts=0 AssociateFiles=0 TargetDir="' + App + '\python" /log "' + App + '\python-install.log"',
+          '/quiet /repair InstallAllUsers=0 Include_launcher=0 Shortcuts=0 AssociateFiles=0 TargetDir="' + App + '\python" /log "' + App + '\python-repair.log"',
           '', SW_HIDE, ewWaitUntilTerminated, RC) then
           RC := -1;
-        SaveStringToFile(App + '\install.log', 'Python-Installer (2. Versuch) beendet mit Code ' + IntToStr(RC) + #13#10, True);
+        SaveStringToFile(App + '\install.log', 'Reparatur beendet mit Code ' + IntToStr(RC) + ', python.exe vorhanden: ' + IntToStr(Ord(FileExists(Py))) + #13#10, True);
       end;
-      Py := App + '\python\python.exe';
+      if not FileExists(Py) and ((RC = 0) or (RC = 3010)) then
+      begin
+        if not Exec(ExpandConstant('{tmp}\python-installer.exe'), '/quiet /uninstall /log "' + App + '\python-uninstall.log"',
+          '', SW_HIDE, ewWaitUntilTerminated, RC) then
+          RC := -1;
+        SaveStringToFile(App + '\install.log', 'Entfernen beendet mit Code ' + IntToStr(RC) + #13#10, True);
+        if not Exec(ExpandConstant('{tmp}\python-installer.exe'),
+          '/quiet InstallAllUsers=0 PrependPath=0 Include_launcher=0 Include_test=0 Include_doc=0 Include_pip=1 ' +
+          'Shortcuts=0 AssociateFiles=0 TargetDir="' + App + '\python" /log "' + App + '\python-install2.log"',
+          '', SW_HIDE, ewWaitUntilTerminated, RC) then
+          RC := -1;
+        SaveStringToFile(App + '\install.log', 'Neuinstallation beendet mit Code ' + IntToStr(RC) + ', python.exe vorhanden: ' + IntToStr(Ord(FileExists(Py))) + #13#10, True);
+      end;
       if ((RC <> 0) and (RC <> 3010)) or not FileExists(Py) then
       begin
         Fail('Die Installation von Python ist fehlgeschlagen (Code ' + IntToStr(RC) + ').');

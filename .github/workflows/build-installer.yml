@@ -41,11 +41,12 @@ jobs:
           }
           function Run($file, $argl, $name) {
             $q = Start-Process $file -ArgumentList $argl -PassThru
-            if (-not $q.WaitForExit(480000)) {
+            if (-not $q.WaitForExit(300000)) {
               Ann "error" "Haengt: $name" ((Get-Process | Where-Object { $_.ProcessName -match 'python|unins|Polybash|msiexec' } | ForEach-Object { $_.ProcessName }) -join ", ")
               if (Test-Path "$dest\install.log") { Ann "error" "install.log bei $name" ((Get-Content "$dest\install.log" -Tail 15) -join "`n") }
+              foreach ($n in "python-repair.log","python-uninstall.log","python-install2.log") { if (Test-Path "$dest\$n") { Ann "error" "$n bei $name" ((Select-String -Path "$dest\$n" -Pattern "Exit code|error|Detect|already|Planned package|Planned related" | Select-Object -Last 25 | ForEach-Object { $_.Line.Substring([Math]::Min(120,$_.Line.Length)) }) -join "`n") } }
               taskkill /F /T /PID $q.Id | Out-Null
-              throw "$name haengt (nach 8 Minuten abgebrochen)"
+              throw "$name haengt (nach 5 Minuten abgebrochen)"
             }
             return $q
           }
