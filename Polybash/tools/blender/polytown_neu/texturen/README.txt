@@ -14,3 +14,5 @@ Aktuell erwartet:
 Zuordnung und Kachelgroesse (Meter je Wiederholung) stehen in texturen.py (TEXTUREN).
 Fehlt ein Ordner, bleibt das Material einfarbig.
   festung_wand/  -> Materialien "Mauerwerk" und "Mauerwerk dunkel" (Mauern, Tuerme, Wachhaeuser, Wehrgang)
+  festung_treppe/      -> Material "Stufen" (Trittbleche, Wangen, Podest der Feuerwehrtreppen); auch <name>_metal_2k wird erkannt
+  festung_treppenseule/-> Material "Treppensaeule" (Stuetzsaeulen unter den Treppen); solange der Ordner leer ist, bleibt die Saeule einfarbig

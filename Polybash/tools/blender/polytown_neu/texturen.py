@@ -18,7 +18,9 @@ ORDNER = os.path.join(HERE, "texturen")
 TEXTUREN = {
     # Boden: Hofpflaster und Stufen
     "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0},
-    "Stufen":           {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.5},
+    # Feuerwehrtreppe: Trittbleche, Wangen, Podest (Metall) und Stuetzsaeulen
+    "Stufen":           {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0},
+    "Treppensaeule":    {"ordner": "festung_treppenseule", "kachel_m": 1.0, "tint": 0.0},
     # Waende: Mauern, Tuerme, Wachhaeuser, Bergfried-Details
     "Mauerwerk":        {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.0},
     "Mauerwerk dunkel": {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.6},
@@ -37,7 +39,10 @@ def finde_karten(dateien):
         if ende not in ENDUNGEN:
             continue
         t = set(re.split(r"[^a-z0-9]+", stamm))
-        if "disp" in t or "displacement" in t or "height" in t or "metal" in t or "metallic" in t or "spec" in t:
+        if "metal" in t or "metallic" in t:
+            out.setdefault("metall", pfad)
+            continue
+        if "disp" in t or "displacement" in t or "height" in t or "spec" in t:
             continue
         if ("nor" in t or "normal" in t) and ("dx" in t):
             hinweis.append("DirectX-Normal-Map ignoriert (bitte 'nor_gl' / OpenGL laden): " + os.path.basename(pfad))
@@ -129,6 +134,13 @@ def material_belegen(mat, cfg, karten):
             benutzt.append("ARM")
         except Exception as e:
             print("[Polybash] ARM-Karte nicht benutzt:", e)
+    if "metall" in karten:
+        try:
+            met = _tex(nodes, links, mp, karten["metall"], "Non-Color", -600, -1200).outputs["Color"]
+            links.new(met, bsdf.inputs["Metallic"])
+            benutzt.append("Metall")
+        except Exception as e:
+            print("[Polybash] Metall-Karte nicht benutzt:", e)
     if farbe is not None:
         try:
             if ao is not None:

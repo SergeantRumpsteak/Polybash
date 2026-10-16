@@ -45,7 +45,8 @@ FARBEN = {
     "Brueckenbeton": ((0.47, 0.47, 0.49), 0.95, 0.0),
     "Bruestung":     ((0.64, 0.63, 0.60), 0.95, 0.0),
     "Hof":           ((0.50, 0.50, 0.52), 0.95, 0.0),
-    "Stufen":        ((0.44, 0.42, 0.40), 0.95, 0.0),
+    "Stufen":        ((0.44, 0.42, 0.40), 0.6, 0.0),
+    "Treppensaeule": ((0.40, 0.42, 0.44), 0.6, 0.0),
     "Stahl":         ((0.36, 0.40, 0.34), 0.55, 0.0),
     "Metall":        ((0.30, 0.32, 0.30), 0.5, 0.0),
     "Metall hell":   ((0.55, 0.57, 0.58), 0.5, 0.0),
@@ -154,18 +155,40 @@ class Bau:
 
 
 def treppe(b, x, y, d, n, w, base, mat="Stufen", sh=0.5, sd=0.8):
-    """Treppe aus n Stufen (Hoehe sh, Tiefe sd, Breite w) wie im Spiel; (x, y) = Ecke der untersten Stufe."""
+    """Offene Treppe (Feuerwehrtreppe) aus n Stufen (Hoehe sh, Tiefe sd, Breite w); (x, y) = Ecke der untersten Stufe.
+
+    Nur Trittbleche (0,1 m dick) auf zwei seitlichen Wangen, darunter ist Luft; einzelne Stuetzsaeulen reichen bis zum Boden
+    (Hofboden bei base = 0, sonst bis zum Wehrgang bei z = base)."""
     z0 = 0.0 if base == 0 else base
+    rects = []
     for i in range(n):
         top = base + (i + 1) * sh
         if d == "N":
-            b.box(x, y + i * sd, z0, x + w, y + (i + 1) * sd, top, mat)
+            r = (x, y + i * sd, x + w, y + (i + 1) * sd)
         elif d == "S":
-            b.box(x, y - (i + 1) * sd, z0, x + w, y - i * sd, top, mat)
+            r = (x, y - (i + 1) * sd, x + w, y - i * sd)
         elif d == "E":
-            b.box(x + i * sd, y, z0, x + (i + 1) * sd, y + w, top, mat)
+            r = (x + i * sd, y, x + (i + 1) * sd, y + w)
         else:
-            b.box(x - (i + 1) * sd, y, z0, x - i * sd, y + w, top, mat)
+            r = (x - (i + 1) * sd, y, x - i * sd, y + w)
+        rects.append((r, top))
+        b.box(r[0], r[1], top - 0.1, r[2], r[3], top, mat)                  # Trittblech
+    # Wangen: je ein Stahltraeger unter den Seitenkanten, von der ersten bis zur letzten Stufenmitte
+    (r0, t0), (r1, t1) = rects[0], rects[-1]
+    c0 = ((r0[0] + r0[2]) / 2, (r0[1] + r0[3]) / 2)
+    c1 = ((r1[0] + r1[2]) / 2, (r1[1] + r1[3]) / 2)
+    for off in (0.1, w - 0.1):
+        if d in "NS":
+            a = (x + off, c0[1], t0 - 0.16)
+            e = (x + off, c1[1], t1 - 0.16)
+        else:
+            a = (c0[0], y + off, t0 - 0.16)
+            e = (c1[0], y + off, t1 - 0.16)
+        b.beam(a, e, 0.1, 0.22, mat)
+    # Stuetzsaeulen in der Mitte unter einzelnen Stufen
+    for i in ((3, 7) if n >= 8 else (2,) if n >= 4 else ()):
+        (r, top) = rects[i]
+        b.prism((r[0] + r[2]) / 2, (r[1] + r[3]) / 2, z0, 0.13, top - 0.1 - z0, 8, "Treppensaeule")
 
 
 def fenster(b, cx, cy, zc, w, h, nx, ny, tiefe=0.05):
@@ -305,7 +328,13 @@ def wehrgang_treppe(b, s):
     treppe(b, x_lo, y0, "N" if dy > 0 else "S", n, w, 0, sd=sd)
     yt = y0 + dy * n * sd                                      # Ende der obersten Stufe
     ye = yt + dy * w                                           # Ende des Podests
-    b.box(x_lo, min(yt, ye), 0.0, x_hi, max(yt, ye), ZW, "Stufen")
+    y_lo, y_hi = min(yt, ye), max(yt, ye)
+    b.box(x_lo, y_lo, ZW - 0.1, x_hi, y_hi, ZW, "Stufen")                        # Podestblech
+    x_hof = x_hi if s < 0 else x_lo                                              # Kante zum Hof
+    y_end = ye
+    b.box(min(x_hof, x_hof - s * 0.1), y_lo, ZW - 0.32, max(x_hof, x_hof - s * 0.1), y_hi, ZW - 0.1, "Stufen")   # Traeger Hofkante
+    b.box(x_lo, min(y_end, y_end + dy * 0.1), ZW - 0.32, x_hi, max(y_end, y_end + dy * 0.1), ZW - 0.1, "Stufen")   # Traeger Stirnkante
+    b.prism((x_lo + x_hi) / 2, (y_lo + y_hi) / 2, 0.0, 0.15, ZW - 0.1, 8, "Treppensaeule")   # Saeule unter dem Podest
     xf = C + s * (H - TD - w + 0.06)                           # Zaun an der Hofseite (Mitte der Zaunlinie)
     yf = ye - dy * 0.06                                        # Zaun an der Stirnseite
     hz = 1.05
