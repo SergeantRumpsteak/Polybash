@@ -29,34 +29,39 @@ ENDUNGEN = {"jpg", "jpeg", "png", "exr", "tif", "tiff", "webp"}
 
 
 def finde_karten(dateien):
-    """Ordnet Dateinamen (Poly-Haven-Schema, z. B. rock_wall_08_nor_gl_2k.png) den Kartenarten zu.
+    """Ordnet Dateinamen (Poly-Haven-Schema <name>_<art>[_gl|_dx]_<aufloesung>.<endung>) den Kartenarten zu.
 
-    Rueckgabe: dict mit den Schluesseln farbe, rauheit, normal, ao, arm (nur gefundene); Pfade unveraendert."""
+    Die Art ist das Wort direkt vor der Aufloesung (2k) bzw. vor gl/dx - der Namensteil davor (z. B. "metal_plate") zaehlt nicht.
+    Rueckgabe: (dict mit farbe, rauheit, normal, ao, arm, metall - nur gefundene; Pfade unveraendert, Liste mit Hinweisen)."""
     out, hinweis = {}, []
     for pfad in sorted(dateien):
         name = os.path.basename(pfad).lower()
         stamm, _, ende = name.rpartition(".")
         if ende not in ENDUNGEN:
             continue
-        t = set(re.split(r"[^a-z0-9]+", stamm))
-        if "metal" in t or "metallic" in t:
-            out.setdefault("metall", pfad)
-            continue
-        if "disp" in t or "displacement" in t or "height" in t or "spec" in t:
-            continue
-        if ("nor" in t or "normal" in t) and ("dx" in t):
-            hinweis.append("DirectX-Normal-Map ignoriert (bitte 'nor_gl' / OpenGL laden): " + os.path.basename(pfad))
-            continue
-        if "nor" in t or "normal" in t:
-            out.setdefault("normal", pfad)
-        elif "diff" in t or "col" in t or "color" in t or "albedo" in t or "basecolor" in t:
+        toks = [x for x in re.split(r"[^a-z0-9]+", stamm) if x]
+        r = next((k for k in range(len(toks) - 1, 0, -1) if re.fullmatch(r"\d+k", toks[k])), len(toks))
+        art = toks[:r]
+        fmt = None
+        if art and art[-1] in ("gl", "dx"):
+            fmt = art.pop()
+        kind = art[-1] if art else ""
+        if kind in ("nor", "normal"):
+            if fmt == "dx":
+                hinweis.append("DirectX-Normal-Map ignoriert (bitte 'nor_gl' / OpenGL laden): " + os.path.basename(pfad))
+            else:
+                out.setdefault("normal", pfad)
+        elif kind in ("diff", "col", "color", "albedo", "basecolor"):
             out.setdefault("farbe", pfad)
-        elif "rough" in t or "roughness" in t:
+        elif kind in ("rough", "roughness"):
             out.setdefault("rauheit", pfad)
-        elif "ao" in t or "occlusion" in t:
+        elif kind in ("ao", "occlusion"):
             out.setdefault("ao", pfad)
-        elif "arm" in t:
+        elif kind == "arm":
             out.setdefault("arm", pfad)
+        elif kind in ("metal", "metallic"):
+            out.setdefault("metall", pfad)
+        # disp/height/spec u. a. werden nicht benutzt
     return out, hinweis
 
 
