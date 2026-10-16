@@ -82,6 +82,8 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 - Jedes Haus hat einen Pfad zur Strasse (Test: Strassennetz zusammenhaengend, keine Ueberlappungen, nur auf ebenem Grund). Noch ohne Texturen.
 
 ### Wohnhaeuser (stadt.py: haus)
+- 10 Haustypen, abwechselnd gesetzt: Dachformen Satteldach (Traufe oder Giebel zur Strasse), Walmdach, Mansarddach, Pultdach; Putz in 6 Farben, Klinker, sichtbares Fachwerk (Schwelle, Geschossbalken, Staender, Streben, um Fenster/Tuer ausgespart).
+- Heruntergekommener 40er-Look (`verfall` 0..2): verwitterte Farben (`... alt`), Schmutzband am Sockel, abgeplatzter Putz mit Ziegel, Regenstreifen, Dachpappe- und Moosflicken, kaputte/zugenagelte Fenster, fehlende oder schief haengende Fensterlaeden, abgebrochene Kamine. Zufall je Haus ueber `seed`, daher reproduzierbar.
 - Stil 1940er: Putzfassade (6 Farben) mit Sockel, Sprossenfenster mit Bank und Fensterlaeden, Haustuer mit Freitreppe und Vordach, Steildach mit Traufbrett, Gauben, Giebelfenster, Kamin, Fallrohr.
 - 4 von 6 Haustypen mit begehbarem Obergeschoss (Flur mit Treppe, 15 Stufen, Treppenloch mit Gelaender, 2-3 Zimmer je Etage, Innentueren); 2 Typen eingeschossig, ebenfalls betretbar. Tuer offen, Fenster geschlossen.
 - Jedes Haus steht mit der Tuer genau auf der Pfadachse zur Strasse; Spiegelung (`spiegel`) fuer Abwechslung.

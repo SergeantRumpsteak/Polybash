@@ -13,6 +13,7 @@ Ohne bpy testbar (baue_alles); bauen() legt die Objekte in der Collection "Stadt
 """
 import math
 import os
+import random
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +72,21 @@ FARBEN = {
     "Innenwand":     ((0.90, 0.88, 0.80), 0.9, 0.0),
     "Dielen":        ((0.50, 0.36, 0.22), 0.8, 0.0),
     "Decke":         ((0.92, 0.91, 0.86), 0.9, 0.0),
+    "Holz alt":      ((0.20, 0.14, 0.10), 0.95, 0.0),
+    "Schmutz":       ((0.27, 0.25, 0.21), 1.0, 0.0),
+    "Pappe":         ((0.10, 0.10, 0.11), 1.0, 0.0),
+    "Moos":          ((0.24, 0.31, 0.17), 1.0, 0.0),
 }
+
+
+def _verwittert(rgb, hell=0.80, grau=0.30):
+    g = sum(rgb) / 3.0
+    return tuple(max(0.0, min(1.0, (c * (1 - grau) + g * grau) * hell)) for c in rgb)
+
+
+for _n in ("Putz weiss", "Putz gelb", "Putz rot", "Putz blau", "Putz gruen", "Putz grau", "Putz sand", "Ziegel", "Ziegel dunkel", "Laden gruen",
+           "Laden braun", "Klinker", "Dach grau", "Rahmen weiss"):
+    FARBEN[_n + " alt"] = (_verwittert(FARBEN[_n][0]), min(1.0, FARBEN[_n][1] + 0.05), 0.0)       # verwitterte Varianten (heruntergekommen)
 
 
 # ------------------------------------------------------------------ Strassennetz
@@ -221,26 +236,46 @@ def aussenwand(g, ach, aussen, sg, a0, a1, z1, mat, oeff, sockel=True):
         wand(g, ach, p0, p1, a0, a1, zl, zh, m, oeff)
 
 
-def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden):
-    """Fenster in einer Aussenwand: Scheibe mit Sprossenkreuz, Rahmen, Fensterbank, optional Fensterlaeden."""
+def _lok(ach, aussen, sg, a, o, z):
+    """(Laengskoordinate a, Abstand o nach aussen, Hoehe z) einer Wand -> lokale Hausposition."""
+    p = aussen + sg * o
+    return (a, p, z) if ach == "x" else (p, a, z)
+
+
+def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden, zustand="ok", lz=("ok", "ok")):
+    """Fenster in einer Aussenwand: Scheibe mit Sprossenkreuz, Rahmen, Fensterbank, Fensterlaeden.
+
+    zustand: 'ok' | 'kaputt' (Scheibe nur unten) | 'bretter' (zugenagelt); lz = Zustand (links, rechts) der Laeden: 'ok' | 'fehlt' | 'schief'."""
     def pb(a0, a1, o0, o1, z0, z1, m):
         p0, p1 = sorted((aussen + sg * o0, aussen + sg * o1))
         pbox(g, ach, a0, a1, p0, p1, z0, z1, m)
     zl, zh, al, ah, t = zc - h / 2, zc + h / 2, ac - w / 2, ac + w / 2, 0.09
-    pb(al, ah, -0.17, -0.13, zl, zh, "Fenster")
-    pb(ac - 0.025, ac + 0.025, -0.19, -0.11, zl, zh, "Rahmen weiss")
+    ztop = zh if zustand != "kaputt" else zl + 0.45 * h
+    pb(al, ah, -0.17, -0.13, zl, ztop, "Fenster")
+    pb(ac - 0.025, ac + 0.025, -0.19, -0.11, zl, zh, "Rahmen weiss alt" if "Rahmen weiss alt" in FARBEN else "Rahmen weiss")
     pb(al, ah, -0.19, -0.11, zc + h / 6 - 0.025, zc + h / 6 + 0.025, "Rahmen weiss")
     pb(al - t, al, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
     pb(ah, ah + t, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
     pb(al, ah, 0.0, 0.05, zh, zh + t, "Rahmen weiss")
     pb(al, ah, 0.0, 0.05, zl - t, zl, "Rahmen weiss")
-    pb(al - 0.12, ah + 0.12, 0.0, 0.15, zl - t - 0.06, zl - t, "Stein")                       # Fensterbank
+    pb(al - 0.12, ah + 0.12, 0.0, 0.15, zl - t - 0.06, zl - t, "Stein")
+    if zustand == "bretter":                                                            # zugenagelt: drei Bretter quer
+        for k, zz in enumerate((zl + 0.1, zc - 0.1, zh - 0.35)):
+            da = 0.12 * (k - 1)
+            pb(al - 0.15 + da, ah + 0.15 - 0.1 * (k % 2), 0.05, 0.09, zz, zz + 0.2, "Holz alt")
     if laden:
-        for lo, hi in ((al - t - 0.52, al - t - 0.02), (ah + t + 0.02, ah + t + 0.52)):
-            pb(lo, hi, 0.0, 0.05, zl - t, zh + t, laden)
-            for k in range(1, 6):                                                          # Lamellen
-                zz = zl - t + k * (zh - zl + 2 * t) / 6
-                pb(lo + 0.03, hi - 0.03, 0.05, 0.07, zz - 0.02, zz + 0.02, laden)
+        for k, (lo, hi) in enumerate(((al - t - 0.52, al - t - 0.02), (ah + t + 0.02, ah + t + 0.52))):
+            if lz[k] == "ok":
+                pb(lo, hi, 0.0, 0.05, zl - t, zh + t, laden)
+                for j in range(1, 6):                                                   # Lamellen
+                    zz = zl - t + j * (zh - zl + 2 * t) / 6
+                    pb(lo + 0.03, hi - 0.03, 0.05, 0.07, zz - 0.02, zz + 0.02, laden)
+            elif lz[k] == "schief":                                                     # haengt an einem Scharnier schief nach aussen
+                for sgn in (1, -1):
+                    pts = [_lok(ach, aussen, sg, lo, 0.06, zh + t), _lok(ach, aussen, sg, hi, 0.06, zh + t),
+                           _lok(ach, aussen, sg, hi, 0.5, zl + 0.15), _lok(ach, aussen, sg, lo, 0.5, zl + 0.15)]
+                    rv = (0.0, sg * 0.9 * sgn, 0.49 * sgn) if ach == "x" else (sg * 0.9 * sgn, 0.0, 0.49 * sgn)
+                    g.poly(pts, rv, laden)
 
 
 def tuerrahmen(g, ach, p0, p1, a_lo, a_hi, z0, z1, mat="Rahmen weiss", t=0.07, v=0.03):
@@ -275,13 +310,202 @@ def gaube(g, ax, H, rh, d, wand_m, dach_m):
         g.poly([(xx, yf, zf), (xx, yf, zf + 1.3), (xx, yf + ys, zr(ys))], (sgn, 0.0, 0.0), wand_m)
 
 
-def haus(b, cx, cy, zb, theta, T):
-    """Wohnhaus im Stil der 1940er Jahre (Siedlungs-/Stadthaus): Putzfassade mit Sockel, Sprossenfenster, Fensterlaeden, Steildach
-    mit Gauben und Kamin, Vordach mit Freitreppe. Innen: Flur mit Treppe, zwei bis drei Zimmer, bei stock == 2 ein begehbares Obergeschoss
-    (Treppe, Treppenloch mit Gelaender). Tuer auf der lokalen -y-Seite; T['tuer_x'] = Lage der Tuer, T['spiegel'] = +-1."""
+def dach(g, form, w, d, H, rh, dm, gm, e=0.45):
+    """Dach ueber dem Grundriss w x d (Traufe auf Hoehe H, Ueberstand e). form: 'x' Satteldach (First laengs, Traufe zur Strasse),
+    'y' Satteldach (Giebel zur Strasse), 'walm' Walmdach, 'mansard' Mansarddach, 'pult' Pultdach. Rueckgabe: Dachhoehe z(x, y) (zum Aufsetzen von Kamin, Flicken)."""
+    hw, hd = w / 2.0, d / 2.0
+    ZB = "Rahmen weiss"
+
+    def unterseite(zu):
+        g.poly([(-hw - e, -hd - e, zu), (-hw - e, hd + e, zu), (hw + e, hd + e, zu), (hw + e, -hd - e, zu)], (0.0, 0.0, -1.0), dm)
+
+    if form == "x":
+        s = rh / hd
+        zE = H - s * e
+        g.poly([(-hw - e, -hd - e, zE), (hw + e, -hd - e, zE), (hw + e, 0.0, H + rh), (-hw - e, 0.0, H + rh)], (0.0, -s, 1.0), dm)
+        g.poly([(-hw - e, hd + e, zE), (-hw - e, 0.0, H + rh), (hw + e, 0.0, H + rh), (hw + e, hd + e, zE)], (0.0, s, 1.0), dm)
+        unterseite(zE)
+        for sx in (-1, 1):
+            g.poly([(sx * hw, -hd, H), (sx * hw, hd, H), (sx * hw, 0.0, H + rh)], (sx, 0.0, 0.0), gm)
+            g.poly([(sx * (hw + e), -hd - e, zE), (sx * (hw + e), hd + e, zE), (sx * (hw + e), 0.0, H + rh)], (sx, 0.0, 0.0), dm)
+        for sy in (-1, 1):
+            g.box(-hw - e, sy * (hd + e) - (0.05 if sy > 0 else 0.0), zE - 0.22, hw + e, sy * (hd + e) + (0.0 if sy > 0 else 0.05), zE + 0.02, ZB)
+        g.box(-hw - e, -0.1, H + rh - 0.02, hw + e, 0.1, H + rh + 0.1, "Ziegel dunkel")
+        return lambda x, y: H + rh * max(0.0, 1 - abs(y) / hd)
+    if form == "y":
+        s = rh / hw
+        zE = H - s * e
+        g.poly([(-hw - e, -hd - e, zE), (-hw - e, hd + e, zE), (0.0, hd + e, H + rh), (0.0, -hd - e, H + rh)], (-s, 0.0, 1.0), dm)
+        g.poly([(hw + e, -hd - e, zE), (0.0, -hd - e, H + rh), (0.0, hd + e, H + rh), (hw + e, hd + e, zE)], (s, 0.0, 1.0), dm)
+        unterseite(zE)
+        for sy in (-1, 1):
+            g.poly([(-hw, sy * hd, H), (hw, sy * hd, H), (0.0, sy * hd, H + rh)], (0.0, sy, 0.0), gm)
+            g.poly([(-hw - e, sy * (hd + e), zE), (hw + e, sy * (hd + e), zE), (0.0, sy * (hd + e), H + rh)], (0.0, sy, 0.0), dm)
+        for sx in (-1, 1):
+            g.box(sx * (hw + e) - (0.05 if sx > 0 else 0.0), -hd - e, zE - 0.22, sx * (hw + e) + (0.0 if sx > 0 else 0.05), hd + e, zE + 0.02, ZB)
+        g.box(-0.1, -hd - e, H + rh - 0.02, 0.1, hd + e, H + rh + 0.1, "Ziegel dunkel")
+        return lambda x, y: H + rh * max(0.0, 1 - abs(x) / hw)
+    if form == "walm":
+        L = max(0.0, (w - d) / 2.0)
+        s = rh / hd
+        zE = H - s * e
+        g.poly([(-hw - e, -hd - e, zE), (hw + e, -hd - e, zE), (L, 0.0, H + rh), (-L, 0.0, H + rh)], (0.0, -s, 1.0), dm)
+        g.poly([(-hw - e, hd + e, zE), (-L, 0.0, H + rh), (L, 0.0, H + rh), (hw + e, hd + e, zE)], (0.0, s, 1.0), dm)
+        g.poly([(hw + e, -hd - e, zE), (hw + e, hd + e, zE), (L, 0.0, H + rh)], (s, 0.0, 1.0), dm)
+        g.poly([(-hw - e, -hd - e, zE), (-L, 0.0, H + rh), (-hw - e, hd + e, zE)], (-s, 0.0, 1.0), dm)
+        unterseite(zE)
+        for sy in (-1, 1):
+            g.box(-hw - e, sy * (hd + e) - (0.05 if sy > 0 else 0.0), zE - 0.22, hw + e, sy * (hd + e) + (0.0 if sy > 0 else 0.05), zE + 0.02, ZB)
+        if L > 0.15:
+            g.box(-L, -0.1, H + rh - 0.02, L, 0.1, H + rh + 0.1, "Ziegel dunkel")
+        return lambda x, y: H + rh * max(0.0, 1 - max(abs(y), abs(x) - L) / hd)
+    if form == "mansard":
+        kb = 1.3                                              # Breite des Steilteils
+        zb_ = 2.3                                             # Hoehe des Knicks ueber der Traufe
+        ss = zb_ / kb
+        s2 = (rh - zb_) / (hd - kb)
+        zE = H - ss * e
+        for sy in (-1, 1):
+            g.poly([(-hw - e, sy * (hd + e), zE), (hw + e, sy * (hd + e), zE), (hw + e, sy * (hd - kb), H + zb_), (-hw - e, sy * (hd - kb), H + zb_)], (0.0, sy * ss, 1.0), dm)
+            g.poly([(-hw - e, sy * (hd - kb), H + zb_), (hw + e, sy * (hd - kb), H + zb_), (hw + e, 0.0, H + rh), (-hw - e, 0.0, H + rh)], (0.0, sy * s2, 1.0), dm)
+            g.box(-hw - e, sy * (hd + e) - (0.05 if sy > 0 else 0.0), zE - 0.22, hw + e, sy * (hd + e) + (0.0 if sy > 0 else 0.05), zE + 0.02, ZB)
+        unterseite(zE)
+        for sx in (-1, 1):
+            g.poly([(sx * hw, -hd, H), (sx * hw, hd, H), (sx * hw, hd - kb, H + zb_), (sx * hw, 0.0, H + rh), (sx * hw, -(hd - kb), H + zb_)], (sx, 0.0, 0.0), gm)
+            g.poly([(sx * (hw + e), -hd - e, zE), (sx * (hw + e), hd + e, zE), (sx * (hw + e), hd - kb, H + zb_), (sx * (hw + e), 0.0, H + rh),
+                    (sx * (hw + e), -(hd - kb), H + zb_)], (sx, 0.0, 0.0), dm)
+        g.box(-hw - e, -0.1, H + rh - 0.02, hw + e, 0.1, H + rh + 0.1, "Ziegel dunkel")
+
+        def rz(x, y):
+            a = abs(y)
+            return H + ss * (hd - a) if a >= hd - kb else H + zb_ + s2 * (hd - kb - a)
+        return rz
+    # Pultdach: steigt von der Strasse (vorn) nach hinten
+    s = rh / d
+    zf, zh_ = H - s * e, H + rh + s * e
+    g.poly([(-hw - e, -hd - e, zf), (hw + e, -hd - e, zf), (hw + e, hd + e, zh_), (-hw - e, hd + e, zh_)], (0.0, -s, 1.0), dm)
+    g.poly([(-hw - e, -hd - e, zf), (-hw - e, hd + e, zf), (hw + e, hd + e, zf), (hw + e, -hd - e, zf)], (0.0, 0.0, -1.0), dm)
+    g.poly([(-hw - e, hd + e, zf), (hw + e, hd + e, zf), (hw + e, hd + e, zh_), (-hw - e, hd + e, zh_)], (0.0, 1.0, 0.0), dm)
+    g.box(-hw, hd - 0.25, H, hw, hd, H + rh, gm)
+    for sx in (-1, 1):
+        g.poly([(sx * hw, -hd, H), (sx * hw, hd, H), (sx * hw, hd, H + rh)], (sx, 0.0, 0.0), gm)
+        g.poly([(sx * (hw + e), -hd - e, zf), (sx * (hw + e), hd + e, zf), (sx * (hw + e), hd + e, zh_)], (sx, 0.0, 0.0), dm)
+    g.box(-hw - e, -hd - e, zf - 0.2, hw + e, -hd - e + 0.05, zf + 0.02, ZB)
+    return lambda x, y: H + rh * (y + hd) / d
+
+
+def fachwerk(g, wd, H, stock, holz="Holz alt"):
+    """Sichtbares Fachwerk auf einer Aussenwand wd = (ach, aussen, sg, a0, a1, oeff): Schwelle, Geschossbalken, Rahmen, Staender, Streben
+    in den Eckfeldern; alles wird um die Fenster/Tuer ausgespart."""
+    ach, aussen, sg, a0, a1, oeff = wd
+    lo_e, hi_e = (a0, a1) if ach == "x" else (a0 - WD, a1 + WD)
+
+    def pb(aa0, aa1, z0, z1):
+        p0, p1 = sorted((aussen, aussen + sg * 0.07))
+        wand(g, ach, p0, p1, aa0, aa1, z0, z1, holz, oeff)
+    rails = [(0.6, 0.8)] + ([(F1 - 0.2, F1 + 0.05)] if stock == 2 else []) + [(H - 0.2, H)]
+    for z0, z1 in rails:
+        pb(lo_e, hi_e, z0, z1)
+    zones = [(rails[k][1], rails[k + 1][0]) for k in range(len(rails) - 1)]
+    n = max(2, int(round((hi_e - lo_e) / 1.55)))
+    pos = [lo_e + (hi_e - lo_e) * k / n for k in range(n + 1)]
+    for k, a in enumerate(pos):
+        if k == 0:
+            xa, xb = lo_e, lo_e + 0.2
+        elif k == n:
+            xa, xb = hi_e - 0.2, hi_e
+        else:
+            xa, xb = a - 0.06, a + 0.06
+        for z0, z1 in zones:
+            pb(xa, xb, z0, z1)
+    # Streben in den beiden Eckfeldern jedes Geschosses (fallen zum Eckpfosten), nur wenn das Feld fensterfrei ist
+    for (pa, pbb, ecke) in ((pos[0] + 0.2, pos[1] - 0.06, -1), (pos[-2] + 0.06, pos[-1] - 0.2, 1)):
+        for z0, z1 in zones:
+            if any(o[0] < pbb and o[1] > pa and o[2] < z1 and o[3] > z0 for o in oeff):
+                continue
+            za, zb2 = z0 + 0.12, z1 - 0.12
+            if ecke < 0:
+                a_lo, a_hi = pa + 0.0, pbb
+                pts = [(a_lo, za), (a_lo + 0.14, za), (a_hi, zb2), (a_hi - 0.14, zb2)]
+            else:
+                a_lo, a_hi = pa, pbb
+                pts = [(a_hi, za), (a_hi - 0.14, za), (a_lo, zb2), (a_lo + 0.14, zb2)]
+            P = [_lok(ach, aussen, sg, a, 0.075, z) for a, z in pts]
+            rv = (0.0, sg, 0.0) if ach == "x" else (sg, 0.0, 0.0)
+            g.poly(P, rv, holz)
+
+
+def verfall_aussen(g, waende, H, rnd, lvl):
+    """Verfall der Fassade: Schmutzband am Sockel, abgeplatzter Putz (Ziegel scheint durch), Regenstreifen."""
+    for (ach, aussen, sg, a0, a1, oeff) in waende:
+        lo_e, hi_e = (a0, a1) if ach == "x" else (a0 - WD, a1 + WD)
+        p0, p1 = sorted((aussen, aussen + sg * 0.012))
+        wand(g, ach, p0, p1, lo_e, hi_e, 0.6, 1.2 + 0.4 * (lvl - 1), "Schmutz", oeff)
+    for _ in range(2 + 4 * (lvl - 1) + rnd.randint(0, 2)):
+        ach, aussen, sg, a0, a1, oeff = waende[rnd.randrange(len(waende))]
+        bw_, bh_ = rnd.uniform(0.5, 1.3), rnd.uniform(0.4, 1.0)
+        ac = rnd.uniform(a0 + 0.4 + bw_ / 2, a1 - 0.4 - bw_ / 2) if a1 - a0 > bw_ + 1.0 else (a0 + a1) / 2
+        zc = rnd.uniform(1.3, H - 1.0)
+        if any(o[0] - 0.2 < ac + bw_ / 2 and o[1] + 0.2 > ac - bw_ / 2 and o[2] - 0.2 < zc + bh_ / 2 and o[3] + 0.2 > zc - bh_ / 2 for o in oeff):
+            continue
+        p0, p1 = sorted((aussen + sg * 0.012, aussen + sg * 0.03))
+        pbox(g, ach, ac - bw_ / 2, ac + bw_ / 2, p0, p1, zc - bh_ / 2, zc + bh_ / 2, "Klinker alt")
+    for _ in range(1 + lvl):                                       # Regenstreifen unter der Traufe
+        ach, aussen, sg, a0, a1, oeff = waende[rnd.randrange(len(waende))]
+        ac = rnd.uniform(a0 + 0.5, a1 - 0.5)
+        zl = rnd.uniform(2.6, 3.6)
+        if any(o[0] - 0.1 < ac + 0.1 and o[1] + 0.1 > ac - 0.1 and o[2] < H and o[3] > zl for o in oeff):
+            continue
+        p0, p1 = sorted((aussen + sg * 0.012, aussen + sg * 0.02))
+        pbox(g, ach, ac - 0.15, ac + 0.15, p0, p1, zl, H - 0.25, "Schmutz")
+
+
+def verfall_dach(g, form, rz, w, d, H, rnd, lvl):
+    """Flicken aus Dachpappe und Moos auf ebenen Dachflaechen (nur dort, wo z(x, y) tatsaechlich eine Ebene ist)."""
+    hw, hd = w / 2.0, d / 2.0
+    n = 2 + 3 * (lvl - 1) + rnd.randint(0, 2)
+    for _ in range(n):
+        bw_, bh_ = rnd.uniform(0.8, 1.8), rnd.uniform(0.7, 1.5)
+        mat = rnd.choice(("Pappe", "Pappe", "Moos"))
+        if form in ("x", "walm"):
+            L = max(0.0, (w - d) / 2.0)
+            sy = rnd.choice((-1, 1))
+            y0 = rnd.uniform(0.5, hd - 0.7 - bh_)
+            xm = (L + y0) - 0.4 - bw_
+            if xm < 0.3:
+                continue
+            x0 = rnd.uniform(-xm, xm)
+            pts = [(x0, sy * y0), (x0 + bw_, sy * y0), (x0 + bw_, sy * (y0 + bh_)), (x0, sy * (y0 + bh_))]
+        elif form == "y":
+            sx = rnd.choice((-1, 1))
+            x0 = rnd.uniform(0.5, hw - 0.7 - bw_)
+            y0 = rnd.uniform(-hd + 0.7, hd - 0.7 - bh_)
+            pts = [(sx * x0, y0), (sx * (x0 + bw_), y0), (sx * (x0 + bw_), y0 + bh_), (sx * x0, y0 + bh_)]
+        elif form == "pult":
+            x0 = rnd.uniform(-hw + 0.6, hw - 0.6 - bw_)
+            y0 = rnd.uniform(-hd + 0.6, hd - 0.6 - bh_)
+            pts = [(x0, y0), (x0 + bw_, y0), (x0 + bw_, y0 + bh_), (x0, y0 + bh_)]
+        else:
+            continue
+        P = [(x, y, rz(x, y) + 0.03) for x, y in pts]
+        g.poly(P, (0.0, 0.0, 1.0), mat)
+
+
+def haus(b, cx, cy, zb, theta, T, seed=0):
+    """Wohnhaus im Stil der 1940er Jahre (verwitterte Siedlungs-/Stadthaeuser, teils Fachwerk): Putz oder Fachwerk auf Sockel,
+    Sprossenfenster, Fensterlaeden (teils defekt), Haustuer mit Freitreppe und Vordach; Dachformen x/y/walm/mansard/pult mit Gauben und Kamin.
+    Innen: Flur mit Treppe, 2-3 Zimmer je Etage, bei stock == 2 begehbares Obergeschoss (Treppenloch mit Gelaender).
+    Tuer auf der lokalen -y-Seite; T['tuer_x'] = Lage der Tuer, T['spiegel'] = +-1, T['verfall'] 0..2, T['dachform'], T['fachwerk']."""
+    rnd = random.Random(seed * 7919 + 17)
     g = Lok(b, cx, cy, zb, theta, T.get("spiegel", 1))
     w, d, st, rh = T["w"], T["d"], T["stock"], T["rh"]
-    mat, dach, laden = T["wand"], T["dach"], T.get("laden")
+    lvl = T.get("verfall", 0)
+    mat = (T["wand"] + " alt") if lvl and (T["wand"] + " alt") in FARBEN else T["wand"]
+    dach_m = (T["dach"] + " alt") if lvl and (T["dach"] + " alt") in FARBEN else T["dach"]
+    laden = T.get("laden")
+    if laden and lvl and (laden + " alt") in FARBEN:
+        laden = laden + " alt"
+    form = T.get("dachform", "x")
     H = (F1 + 2.65) if st == 2 else (F0 + 2.85)
     tx = T["tuer_x"]
     ix0, ix1, iy0, iy1 = -w / 2 + WD, w / 2 - WD, -d / 2 + WD, d / 2 - WD
@@ -290,23 +514,42 @@ def haus(b, cx, cy, zb, theta, T):
     ew, ow = 1.1, 1.5                                             # Fensterbreite / -hoehe
     zc_eg, zc_og = F0 + 1.55, F1 + 1.4
 
+    def zustaende():
+        r = rnd.random()
+        zu = "ok"
+        if lvl == 1:
+            zu = "kaputt" if r < 0.10 else ("bretter" if r < 0.14 else "ok")
+        elif lvl >= 2:
+            zu = "kaputt" if r < 0.22 else ("bretter" if r < 0.42 else "ok")
+        lz = []
+        for _ in range(2):
+            r = rnd.random()
+            if lvl == 0:
+                lz.append("ok")
+            elif lvl == 1:
+                lz.append("fehlt" if r < 0.2 else ("schief" if r < 0.35 else "ok"))
+            else:
+                lz.append("fehlt" if r < 0.35 else ("schief" if r < 0.6 else "ok"))
+        return zu, tuple(lz)
+
     def fens(lst_eg, lst_og):
-        o = [(a - ew / 2, a + ew / 2, zc_eg - ow / 2, zc_eg + ow / 2) for a in lst_eg]
-        o += [(a - ew / 2, a + ew / 2, zc_og - ow / 2, zc_og + ow / 2) for a in (lst_og if st == 2 else ())]
-        return o
+        r = [(a, zc_eg, zustaende()) for a in lst_eg] + [(a, zc_og, zustaende()) for a in (lst_og if st == 2 else ())]
+        return r
+    wins = {"v": fens(T["fw_eg"], T["fw_og"]), "h": fens(T["bw_eg"], T["bw_og"]), "w": fens(T["ww_eg"], T["ww_og"]), "o": fens(T["ow_eg"], T["ow_og"])}
+    oeffs = {k: [(a - ew / 2, a + ew / 2, zc - ow / 2, zc + ow / 2) for (a, zc, _z) in v] for k, v in wins.items()}
     tuer = (tx - 0.55, tx + 0.55, F0, F0 + TH)
-    of = fens(T["fw_eg"], T["fw_og"]) + [tuer]
-    # Aussenwaende (vorn/hinten ueber die ganze Breite, Seiten dazwischen)
-    aussenwand(g, "x", -d / 2, -1, -w / 2, w / 2, H, mat, of)
-    aussenwand(g, "x", d / 2, 1, -w / 2, w / 2, H, mat, fens(T["bw_eg"], T["bw_og"]))
-    aussenwand(g, "y", -w / 2, -1, -d / 2 + WD, d / 2 - WD, H, mat, fens(T["ww_eg"], T["ww_og"]))
-    aussenwand(g, "y", w / 2, 1, -d / 2 + WD, d / 2 - WD, H, mat, fens(T["ow_eg"], T["ow_og"]))
-    for (ach, aussen, sg, lst_eg, lst_og) in (("x", -d / 2, -1, T["fw_eg"], T["fw_og"]), ("x", d / 2, 1, T["bw_eg"], T["bw_og"]),
-                                              ("y", -w / 2, -1, T["ww_eg"], T["ww_og"]), ("y", w / 2, 1, T["ow_eg"], T["ow_og"])):
-        for a in lst_eg:
-            fensterschmuck(g, ach, aussen, sg, a, zc_eg, ew, ow, laden)
-        for a in (lst_og if st == 2 else ()):
-            fensterschmuck(g, ach, aussen, sg, a, zc_og, ew, ow, laden)
+    oeffs["v"].append(tuer)
+    waende = [("x", -d / 2, -1, -w / 2, w / 2, oeffs["v"]), ("x", d / 2, 1, -w / 2, w / 2, oeffs["h"]),
+              ("y", -w / 2, -1, -d / 2 + WD, d / 2 - WD, oeffs["w"]), ("y", w / 2, 1, -d / 2 + WD, d / 2 - WD, oeffs["o"])]
+    for wd, key in zip(waende, ("v", "h", "w", "o")):
+        ach, aussen, sg, a0, a1, oeff = wd
+        aussenwand(g, ach, aussen, sg, a0, a1, H, mat, oeff)
+        for (a, zc, (zu, lz)) in wins[key]:
+            fensterschmuck(g, ach, aussen, sg, a, zc, ew, ow, laden, zu, lz)
+        if T.get("fachwerk"):
+            fachwerk(g, wd, H, st)
+    if lvl:
+        verfall_aussen(g, waende, H, rnd, lvl)
     # Haustuer: Rahmen, Schwelle, offenes Tuerblatt (nach innen, an der Flurwand)
     tuerrahmen(g, "x", -d / 2 - 0.07, -d / 2 + 0.0, tuer[0], tuer[1], F0, F0 + TH)
     g.box(tuer[0], -d / 2 - 0.05, F0 - 0.04, tuer[1], -d / 2 + WD, F0, "Stein")
@@ -314,7 +557,7 @@ def haus(b, cx, cy, zb, theta, T):
     # Freitreppe (2 Stufen) und Vordach
     g.box(tuer[0] - 0.25, -d / 2 - 0.95, -0.6, tuer[1] + 0.25, -d / 2 - 0.5, 0.1, "Stein")
     g.box(tuer[0] - 0.25, -d / 2 - 0.5, -0.6, tuer[1] + 0.25, -d / 2 - 0.07, F0, "Stein")
-    g.box(tuer[0] - 0.55, -d / 2 - 1.15, 2.75, tuer[1] + 0.55, -d / 2 - 0.07, 2.87, "Dach grau")
+    g.box(tuer[0] - 0.55, -d / 2 - 1.15, 2.75, tuer[1] + 0.55, -d / 2 - 0.07, 2.87, "Dach grau alt" if lvl else "Dach grau")
     for xx in (tuer[0] - 0.5, tuer[1] + 0.5):
         g.box(xx - 0.06, -d / 2 - 1.1, -0.6, xx + 0.06, -d / 2 - 1.0, 2.75, "Rahmen weiss")
     # Geschossdecken, Boden
@@ -325,6 +568,7 @@ def haus(b, cx, cy, zb, theta, T):
     rise = (F1 - F0) / nst
     if st == 2:
         hy0, hy1 = ys + 4 * 0.27, ys + nst * 0.27                 # Treppenloch in der OG-Decke
+
         def platte(x0, y0, x1, y1):
             g.box(x0, y0, F1 - 0.25, x1, y1, F1 - 0.05, "Decke")
             g.box(x0, y0, F1 - 0.05, x1, y1, F1, "Dielen")
@@ -356,20 +600,34 @@ def haus(b, cx, cy, zb, theta, T):
             o2 = [(-2.6, -1.6, zlo, zlo + 2.1)]
             wand(g, "x", qy - 0.06, qy + 0.06, ix0, px - 0.06, zlo, zhi, "Innenwand", o2)
             tuerrahmen(g, "x", qy - 0.06, qy + 0.06, o2[0][0], o2[0][1], zlo, zlo + 2.1)
-    # Dach: Steildach mit Traufkasten, First, Gauben, Giebelfenster, Kamin, Fallrohr
-    satteldach(g, w, d, H, rh, dach, mat, ueber=0.45)
-    for yy in (-d / 2 - 0.45, d / 2 + 0.40):
-        g.box(-w / 2 - 0.45, yy, H - 0.5, w / 2 + 0.45, yy + 0.05, H - 0.3, "Rahmen weiss")                  # Traufbrett
-    g.box(-w / 2 - 0.45, -0.1, H + rh - 0.02, w / 2 + 0.45, 0.1, H + rh + 0.1, "Ziegel dunkel")           # Firstziegel
-    for ax in T.get("gauben", ()):
-        gaube(g, ax, H, rh, d, mat, dach)
-    for sgn in (-1, 1):                                                       # Giebelfenster
-        xo = sgn * w / 2
-        g.box(min(xo, xo + sgn * 0.06), -0.35, H + 0.6, max(xo, xo + sgn * 0.06), 0.35, H + 1.5, "Fenster")
-        g.box(min(xo, xo + sgn * 0.08), -0.04, H + 0.6, max(xo, xo + sgn * 0.08), 0.04, H + 1.5, "Rahmen weiss")
+    # Dach
+    rz = dach(g, form, w, d, H, rh, dach_m, mat)
+    if lvl:
+        verfall_dach(g, form, rz, w, d, H, rnd, lvl)
+    if form in ("x", "walm"):
+        L = max(0.0, (w - d) / 2.0) if form == "walm" else 99.0
+        for ax in T.get("gauben", ()):
+            if abs(ax) + 1.0 <= L + d / 2 - 1.0:
+                gaube(g, ax, H, rh, d, mat, dach_m)
+    if form in ("x", "mansard"):
+        for sgn in (-1, 1):                                                   # Giebelfenster
+            xo = sgn * w / 2
+            zg = H + (0.6 if form == "x" else 1.1)
+            g.box(min(xo, xo + sgn * 0.06), -0.35, zg, max(xo, xo + sgn * 0.06), 0.35, zg + 0.9, "Fenster")
+            g.box(min(xo, xo + sgn * 0.08), -0.04, zg, max(xo, xo + sgn * 0.08), 0.04, zg + 0.9, "Rahmen weiss")
+    if form == "y":
+        for sy in (-1, 1):                                                    # Giebelfenster an Vorder- und Rueckseite
+            yo = sy * d / 2
+            g.box(-0.4, min(yo, yo + sy * 0.06), H + 0.8, 0.4, max(yo, yo + sy * 0.06), H + 1.8, "Fenster")
+            g.box(-0.04, min(yo, yo + sy * 0.08), H + 0.8, 0.04, max(yo, yo + sy * 0.08), H + 1.8, "Rahmen weiss")
     ch = T["kamin"]
-    g.box(ch - 0.35, -0.35, H - 0.1, ch + 0.35, 0.35, H + rh + 0.9, "Klinker")
-    g.box(ch - 0.45, -0.45, H + rh + 0.9, ch + 0.45, 0.45, H + rh + 1.02, "Stein")
+    cy_ = {"y": (d / 2 - 1.6) * (1 if ch >= 0 else -1), "pult": d / 2 - 1.0}.get(form, 0.0)
+    kx, ky = (0.0, cy_) if form == "y" else (ch, cy_)
+    ztop = max(rz(kx + a, ky + c) for a in (-0.45, 0.45) for c in (-0.45, 0.45)) + 0.9
+    g.box(kx - 0.35, ky - 0.35, H - 0.1, kx + 0.35, ky + 0.35, ztop, "Klinker alt" if lvl else "Klinker")
+    g.box(kx - 0.45, ky - 0.45, ztop, kx + 0.45, ky + 0.45, ztop + 0.12, "Stein")
+    if lvl >= 2 and rnd.random() < 0.6:                                       # abgebrochener Kaminkopf: Ziegelhaufen daneben
+        g.box(kx + 0.5, ky - 0.2, rz(kx + 0.5, ky) + 0.0, kx + 1.0, ky + 0.2, rz(kx + 1.0, ky) + 0.25, "Klinker alt")
     g.box(w / 2 - 0.15, -d / 2 - 0.12, 0.0, w / 2 - 0.03, -d / 2 - 0.02, H - 0.3, "Metall")                 # Fallrohr
     return g
 
@@ -563,13 +821,17 @@ def eben(x, y, r, tol=0.35):
 _A = dict(stock=2, rh=3.1, px=1.0, qy=0.3, tuer_x=2.4, fw_eg=(-2.6, -0.4), fw_og=(-2.6, -0.4, 2.4), bw_eg=(-2.6, -0.4, 2.0), bw_og=(-2.6, -0.4, 2.0),
           ww_eg=(-1.8, 1.8), ww_og=(-1.8, 1.8), ow_eg=(-2.4,), ow_og=(-2.4,))
 _C = dict(stock=1, rh=3.0, px=0.5, qy=None, tuer_x=2.0, fw_eg=(-2.4, -0.3), fw_og=(), bw_eg=(-2.2, 2.0), bw_og=(), ww_eg=(0.0,), ww_og=(), ow_eg=(-1.5,), ow_og=())
-HAUSTYPEN = [   # 1940er: Putz, Sockel, Steildach; 4 von 6 Typen mit begehbarem Obergeschoss
-    dict(_A, w=9.0, d=8.0, wand="Putz weiss", dach="Ziegel", laden="Laden gruen", gauben=(-1.8, 1.8), kamin=-3.3, spiegel=1),
-    dict(_A, w=9.6, d=8.4, wand="Putz gelb", dach="Ziegel dunkel", laden="Laden braun", gauben=(0.0,), kamin=3.6, spiegel=-1),
-    dict(_C, w=8.0, d=7.0, wand="Putz gruen", dach="Ziegel", laden="Laden braun", gauben=(-1.2,), kamin=-2.8, spiegel=1),
-    dict(_A, w=9.0, d=8.0, wand="Putz grau", dach="Ziegel dunkel", laden=None, gauben=(-2.0, 2.0), kamin=-3.3, spiegel=-1),
-    dict(_A, w=9.6, d=8.4, wand="Putz sand", dach="Ziegel", laden="Laden gruen", gauben=(-1.8, 1.8), kamin=3.6, spiegel=1),
-    dict(_C, w=8.0, d=7.0, wand="Putz rot", dach="Ziegel dunkel", laden="Laden gruen", gauben=(), kamin=2.8, spiegel=-1),
+HAUSTYPEN = [   # heruntergekommener 1940er-Stil; dachform: x/y/walm/mansard/pult; fachwerk: sichtbares Holzgeruest; verfall: 0..2
+    dict(_A, w=9.6, d=8.4, wand="Putz weiss", dach="Ziegel", laden="Laden gruen", dachform="x", gauben=(-1.8, 1.8), kamin=-3.3, spiegel=1, verfall=1),
+    dict(_A, w=9.0, d=8.0, wand="Putz gelb", dach="Ziegel dunkel", laden="Laden braun", dachform="walm", rh=2.7, gauben=(0.0,), kamin=-1.0, spiegel=-1, verfall=2),
+    dict(_A, w=10.2, d=8.0, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.7, fachwerk=True, kamin=1.0, spiegel=1, verfall=1),
+    dict(_A, w=9.0, d=8.6, wand="Putz grau", dach="Dach grau", laden="Laden gruen", dachform="mansard", rh=3.5, kamin=2.4, spiegel=-1, verfall=2),
+    dict(_C, w=8.0, d=7.0, wand="Putz gruen", dach="Ziegel", laden="Laden braun", dachform="x", gauben=(-1.2,), kamin=-2.8, spiegel=1, verfall=1),
+    dict(_C, w=8.6, d=7.4, wand="Putz rot", dach="Ziegel dunkel", laden="Laden gruen", dachform="pult", rh=1.7, kamin=2.4, spiegel=-1, verfall=2),
+    dict(_A, w=9.6, d=8.0, wand="Putz sand", dach="Ziegel", laden="Laden braun", dachform="x", fachwerk=True, gauben=(-2.0,), kamin=3.3, spiegel=-1, verfall=1),
+    dict(_C, w=7.6, d=6.8, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.2, fachwerk=True, kamin=1.0, spiegel=1, verfall=2),
+    dict(_A, w=9.4, d=8.2, wand="Putz blau", dach="Ziegel dunkel", laden="Laden gruen", dachform="y", rh=3.5, kamin=-1.0, spiegel=-1, verfall=1),
+    dict(_A, w=10.0, d=8.4, wand="Klinker", dach="Ziegel", laden="Laden braun", dachform="walm", rh=2.8, gauben=(-1.8, 1.8), kamin=-1.0, spiegel=1, verfall=0),
 ]
 
 
@@ -593,23 +855,29 @@ def haeuser_entlang(L, p, q, strs, belegt, haeuser, pfade, abstand=15.5, rand=11
     for k in range(n):
         t = t0 + k * abstand
         for s in seiten:
-            zaehler[0] += 1
-            typ = HAUSTYPEN[zaehler[0] % len(HAUSTYPEN)]
-            w, d = typ["w"], typ["d"]
             nx_, ny_ = -s * nrm[0], -s * nrm[1]                 # Richtung zur Strasse (Tuerseite)
             dx_, dy_ = p[0] + ux * t + s * nrm[0] * (hr + setback), p[1] + uy * t + s * nrm[1] * (hr + setback)   # Tuer-/Stufenpunkt
-            tdx = typ["tuer_x"] * typ["spiegel"]
-            hx, hy = dx_ - nx_ * d / 2 - (-ny_) * tdx, dy_ - ny_ * d / 2 - nx_ * tdx
             theta = math.atan2(nx_, -ny_)
-            r = max(w, d) / 2 + 1.0
-            ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
-            if not (ok_e and belegt.frei_haus(hx, hy, theta, w, d)):
+            for typ in typ_folge(len(haeuser)):                  # erster Typ, der an diese Stelle passt (Abwechslung der Typen)
+                w, d = typ["w"], typ["d"]
+                tdx = typ["tuer_x"] * typ["spiegel"]
+                hx, hy = dx_ - nx_ * d / 2 - (-ny_) * tdx, dy_ - ny_ * d / 2 - nx_ * tdx
+                ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
+                if ok_e and belegt.frei_haus(hx, hy, theta, w, d):
+                    break
+            else:
                 continue
+            r = max(w, d) / 2 + 1.0
             belegt.kreise.append((hx, hy, r))
-            haeuser.append({"x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "strasse": strasse["name"]})
+            haeuser.append({"seed": len(haeuser) + 1, "x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "strasse": strasse["name"]})
             door = (dx_ + nx_ * 0.95, dy_ + ny_ * 0.95)
             start = (p[0] + ux * t + s * nrm[0] * (hr - 0.3), p[1] + uy * t + s * nrm[1] * (hr - 0.3))
             pfade.append((start, door))
+
+
+def typ_folge(n):
+    """Reihenfolge der Haustypen, die fuer das n-te Haus der Reihe nach probiert werden (springt ueber die 10 Typen)."""
+    return [HAUSTYPEN[(n * 7 + j * 3) % len(HAUSTYPEN)] for j in range(5)]
 
 
 def kreis_haeuser(zentrum, r_innen, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), versatz=0.0, strasse=None, scheune_idx=3):
@@ -619,21 +887,23 @@ def kreis_haeuser(zentrum, r_innen, strs, belegt, haeuser, pfade, n=9, ohne=(-ma
         a = versatz + 2 * math.pi * k / n
         if any(abs((a - o + math.pi) % (2 * math.pi) - math.pi) < 0.5 for o in ohne):
             continue
-        typ = HAUSTYPEN[(k + 2) % len(HAUSTYPEN)]
         sched = k == scheune_idx
-        w, d = (12.0, 9.0) if sched else (typ["w"], typ["d"])
         rad = r_innen + 3.2
-        tdx = 0.0 if sched else typ["tuer_x"] * typ["spiegel"]
-        # Tuerpunkt D liegt auf dem Radius rad; Mittelpunkt = D - n*d/2 - xachse*tdx mit n = (-cos a, -sin a), xachse = (sin a, -cos a)
-        hx = cx + rad * math.cos(a) + math.cos(a) * d / 2 - math.sin(a) * tdx
-        hy = cy + rad * math.sin(a) + math.sin(a) * d / 2 + math.cos(a) * tdx
         theta = math.atan2(-math.cos(a), math.sin(a))              # Tuer zeigt zur Mitte: Richtung (-cos a, -sin a)
-        r = max(w, d) / 2 + 1.0
-        ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
-        if not (ok_e and belegt.frei_haus(hx, hy, theta, w, d)):
+        for typ in (typ_folge(len(haeuser)) if not sched else [HAUSTYPEN[0]]):
+            w, d = (12.0, 9.0) if sched else (typ["w"], typ["d"])
+            tdx = 0.0 if sched else typ["tuer_x"] * typ["spiegel"]
+            # Tuerpunkt D liegt auf dem Radius rad; Mittelpunkt = D - n*d/2 - xachse*tdx mit n = (-cos a, -sin a), xachse = (sin a, -cos a)
+            hx = cx + rad * math.cos(a) + math.cos(a) * d / 2 - math.sin(a) * tdx
+            hy = cy + rad * math.sin(a) + math.sin(a) * d / 2 + math.cos(a) * tdx
+            ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
+            if ok_e and belegt.frei_haus(hx, hy, theta, w, d):
+                break
+        else:
             continue
+        r = max(w, d) / 2 + 1.0
         belegt.kreise.append((hx, hy, r))
-        haeuser.append({"x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "scheune": sched, "strasse": strasse["name"]})
+        haeuser.append({"seed": len(haeuser) + 1, "x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "scheune": sched, "strasse": strasse["name"]})
         door = (cx + (r_innen + 3.2 - 0.95) * math.cos(a), cy + (r_innen + 3.2 - 0.95) * math.sin(a))
         start = (cx + (r_innen - 0.3) * math.cos(a), cy + (r_innen - 0.3) * math.sin(a))
         pfade.append((start, door))
@@ -725,7 +995,7 @@ def baue_alles():
         if H.get("scheune"):
             scheune(h, H["x"], H["y"], H["zb"], H["theta"], H["w"], H["d"])
         else:
-            haus(h, H["x"], H["y"], H["zb"], H["theta"], H["typ"])
+            haus(h, H["x"], H["y"], H["zb"], H["theta"], H["typ"], seed=H["seed"])
     # Baeume
     bm = Bau("stadt_baeume")
     for x, y, k in P["baeume"]:
