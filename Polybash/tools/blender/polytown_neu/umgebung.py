@@ -55,6 +55,8 @@ REIHE_R = REIHE_B / 2
 REIHE_X0, REIHE_T = 279.0, 19.0                                       # offene Westkante, Tiefe: Rueckwand bei x = 298 (Talkante 300)
 REIHE_YC = tuple(BY + (i - (REIHE_N - 1) / 2.0) * REIHE_B for i in range(REIHE_N))       # Achsen der drei Hallen
 REIHE_Y0, REIHE_Y1 = REIHE_YC[0] - REIHE_R, REIHE_YC[-1] + REIHE_R                       # gesamte Breite 62,4 m
+TANK_POS = (288.0, 108.0)                                             # Mitte der Abstellposition an der Tankstelle
+RC_GELB = 4.5                                                         # Radius der gelben Abbiegelinien
 TANK = (REIHE_X0, 88.0, 297.0, 116.0)                                 # Tankstelle (Asphaltflaeche) suedlich der Hallen, an Vorfeld/Rollweg
 VORFELD = (TAXI_X + TAXI_B / 2, TANK[1], REIHE_X0, REIHE_Y1)         # Vorfeld zwischen Rollweg und Hallen (reicht bis zur Tankstelle)
 HELI = (240.0, 184.0, 8.0)                                            # Helipad nordlich vom Tower auf der Gruenflaeche: Mitte, Radius
@@ -338,6 +340,19 @@ def gelbe_linie_x(b, xa, xb, y, sperr=()):
             b.box(a, y - GELB_B / 2, Z_GELB0, c, y + GELB_B / 2, Z_GELB1, "Markierung gelb")
 
 
+def gelb_bogen(b, cx, cy, r, a0, a1, n=10):
+    """Gelber Kreisbogen (Mittellinie, Breite GELB_B) um (cx, cy) von Winkel a0 bis a1 (Grad), flach auf Z_GELB1."""
+    ri, ra = r - GELB_B / 2, r + GELB_B / 2
+    v, f = [], []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        v += [(cx + ri * math.cos(a), cy + ri * math.sin(a), Z_GELB1), (cx + ra * math.cos(a), cy + ra * math.sin(a), Z_GELB1)]
+    for i in range(n):
+        q = (2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2)
+        f.append(q if a1 > a0 else q[::-1])
+    b.add(v, f, "Markierung gelb")
+
+
 def haltelinie(b, x_bahn, rich, yc, halb):
     """Hold-short-Markierung quer zum Rollweg vor der Bahnkante x_bahn (rich = +1: Rollweg liegt oestlich, -1: westlich).
 
@@ -379,13 +394,20 @@ def landebahn():
     b.box(HANGAR[2], HANGAR[1] - 1.0, -0.12, x0, HANGAR[3] + 1.0, Z_VORFELD, "Vorfeld")
     b.box(x0 - 12.0, C - 6.0, -0.12, x0, C + 6.0, Z_VORFELD, "Vorfeld")
     # ---- gelbe Rollwegmittellinien und Haltelinien (Oberkante Z_GELB1) ----
-    # Rollweg parallel zur Bahn; die Anschlusslinien enden an seiner Mittellinie
-    b.box(TAXI_X - GELB_B / 2, Y_SUED + RC + 1.0, Z_GELB0, TAXI_X + GELB_B / 2, Y_NORD - RC - 1.0, Z_GELB1, "Markierung gelb")
-    for yc in ANSCHLUESSE:                                       # Rollweg -> Haltelinie: die Linie endet am aeusseren Vollstrich
+    # Rollweg parallel zur Bahn: die Linie beginnt am ersten Anschluss und endet am letzten (dort biegt sie ab)
+    rg = RC_GELB
+    b.box(TAXI_X - GELB_B / 2, ANSCHLUESSE[0] + rg, Z_GELB0, TAXI_X + GELB_B / 2, ANSCHLUESSE[-1] - rg, Z_GELB1, "Markierung gelb")
+    for yc in ANSCHLUESSE:                                       # Rollweg -> runder Bogen -> Haltelinie: die Linie endet am aeusseren Vollstrich
         sp = haltelinie(b, x1, +1, yc, TAXI_B / 2)
-        gelbe_linie_x(b, x1 + HOLD_D[3] + 0.125, TAXI_X - GELB_B / 2, yc)
-    for yc in REIHE_YC:                                          # Rollweg -> Vorfeld -> bis hinten in jede Halle
-        gelbe_linie_x(b, TAXI_X + GELB_B / 2, REIHE_X0 + REIHE_T - 3.0, yc)
+        if yc > ANSCHLUESSE[0]:
+            gelb_bogen(b, TAXI_X - rg, yc - rg, rg, 0.0, 90.0)       # von Sueden kommend nach Westen
+        if yc < ANSCHLUESSE[-1]:
+            gelb_bogen(b, TAXI_X - rg, yc + rg, rg, 0.0, -90.0)      # von Norden kommend nach Westen
+        gelbe_linie_x(b, x1 + HOLD_D[3] + 0.125, TAXI_X - rg, yc)
+    for yc in REIHE_YC:                                          # Rollweg -> Bogen -> Vorfeld -> bis hinten in jede Halle
+        gelb_bogen(b, TAXI_X + rg, yc + rg, rg, 180.0, 270.0)
+        gelb_bogen(b, TAXI_X + rg, yc - rg, rg, 180.0, 90.0)
+        gelbe_linie_x(b, TAXI_X + rg, REIHE_X0 + REIHE_T - 3.0, yc)
     gelbe_linie_x(b, HANGAR[0] + 2.5, x0 - 3.0, HY)              # grosser Hangar: von der Halle bis zur Vorfeldkante (keine Haltelinie)
     # ---- weisse Markierungen (Oberkante Z_MARK) ----
     m = "Markierung weiss"
@@ -777,23 +799,24 @@ def zaun():
 
 
 def tankstelle():
-    """Asphaltierte Tankstelle suedlich der Hangarreihe (auf der dem Tower abgewandten Seite), direkt an Vorfeld und Rollweg:
-    Asphaltflaeche, Zapfsaeulen unter einem Vordach, Shop, zwei Tanks, Preisschild."""
+    """Asphaltierte Flugzeug-Tankstelle suedlich der Hangarreihe (auf der dem Tower abgewandten Seite), an Vorfeld und Rollweg.
+
+    Ohne Dach: Abstellposition (14 x 14 m, Platz fuer ein Kleinflugzeug mit ~11 m Spannweite) mit gelber Zufahrtslinie, Haltebalken
+    und Verzurrringen; die Zapfsaeulen stehen auf Inseln am Rand der Position (Schlauchlaenge reicht zum Tank, die Fluegel bleiben frei).
+    Dazu Shop, zwei stehende Tanks und ein Preisschild neben der Zufahrt."""
     b = Bau("umgebung_tankstelle")
     x0, y0, x1, y1 = TANK
     b.box(x0, y0, -0.12, x1, y1, Z_VORFELD, "Vorfeld")
-    # Vordach (10 x 10 m) auf vier Stuetzen; darunter zwei Zapfinseln mit je drei Saeulen
-    cx0, cy0, cx1, cy1 = 283.0, 99.0, 293.0, 109.0
-    b.box(cx0 - 0.4, cy0 - 0.4, 4.6, cx1 + 0.4, cy1 + 0.4, 4.9, "Tower Dach")
-    for px in (cx0 + 0.3, cx1 - 0.3):
-        for py in (cy0 + 0.3, cy1 - 0.3):
-            b.box(px - 0.2, py - 0.2, Z_VORFELD, px + 0.2, py + 0.2, 4.6, "Tower Beton")
-    for yi in (cy0 + 3.0, cy1 - 3.0):
-        b.box(cx0 + 1.5, yi - 0.4, Z_VORFELD, cx1 - 1.5, yi + 0.4, Z_VORFELD + 0.2, "Insel")
-        for k in range(3):
-            xx = cx0 + 2.5 + k * 2.5
-            b.box(xx - 0.35, yi - 0.25, Z_VORFELD + 0.2, xx + 0.35, yi + 0.25, 1.8, "Zapfsaeule")
-    # Shop (Flachdach, Tuer zur Zapfsaeulenseite)
+    # Zapfinseln mit je einer Saeule (Avgas / Jet A1) suedlich der Abstellposition
+    for xx in (TANK_POS[0] - 2.5, TANK_POS[0] + 2.5):
+        b.box(xx - 0.7, TANK_POS[1] - 8.0, Z_VORFELD, xx + 0.7, TANK_POS[1] - 6.9, Z_VORFELD + 0.2, "Insel")
+        b.box(xx - 0.35, TANK_POS[1] - 7.75, Z_VORFELD + 0.2, xx + 0.35, TANK_POS[1] - 7.25, 1.8, "Zapfsaeule")
+        b.box(xx - 0.25, TANK_POS[1] - 7.2, 0.9, xx + 0.25, TANK_POS[1] - 7.1, 1.3, "Metall")             # Schlauchhalter
+    # Verzurrringe unter den Tragflaechen (flache Ringe im Boden) und Haltebalken am Bugradpunkt
+    for dx in (-3.0, 3.0):
+        for dy in (-4.5, 4.5):
+            b.box(TANK_POS[0] + dx - 0.15, TANK_POS[1] + dy - 0.15, Z_VORFELD, TANK_POS[0] + dx + 0.15, TANK_POS[1] + dy + 0.15, Z_VORFELD + 0.06, "Metall")
+    # Shop (Flachdach, Tuer zur Zapfseite)
     sx0, sy0, sx1, sy1 = 281.0, 91.0, 291.0, 97.0
     b.box(sx0, sy0, Z_VORFELD, sx1, sy1, 3.4, "Tower Beton")
     b.box(sx0 - 0.3, sy0 - 0.3, 3.4, sx1 + 0.3, sy1 + 0.3, 3.7, "Tower Dach")
@@ -801,11 +824,21 @@ def tankstelle():
     for dx in (-3.0, 3.0):
         B.fenster(b, 286.0 + dx, sy1, 1.6, 1.8, 1.2, 0, 1)
         B.fenster(b, 286.0 + dx, sy0, 1.6, 1.8, 1.2, 0, -1)
-    # Tanks (stehend) und Preisschild
+    # Tanks (stehend) und Preisschild (am Rand, ausserhalb der Flaechen der Tragflaechen)
     for yy in (92.0, 97.5):
         b.prism(294.3, yy, Z_VORFELD, 1.8, 4.2, 12, "Tank")
-    b.box(281.6 - 0.1, 112.0 - 0.1, Z_VORFELD, 281.6 + 0.1, 112.0 + 0.1, 6.0, "Metall")
-    b.box(281.6 - 1.0, 112.0 - 0.15, 5.0, 281.6 + 1.0, 112.0 + 0.15, 6.4, "Rahmen")
+    b.box(280.5 - 0.1, 89.6 - 0.1, Z_VORFELD, 280.5 + 0.1, 89.6 + 0.1, 6.0, "Metall")
+    b.box(280.5 - 1.0, 89.6 - 0.15, 5.0, 280.5 + 1.0, 89.6 + 0.15, 6.4, "Rahmen")
+    # gelbe Zufahrtslinie (Bogen vom Rollweg) in die Position und Haltebalken; Position als weisses Rechteck
+    px, py = TANK_POS
+    for (a0, a1, sg) in ((180.0, 270.0, 1), (90.0, 180.0, -1)):
+        gelb_bogen(b, TAXI_X + RC_GELB, py + sg * RC_GELB, RC_GELB, a0, a1)
+    gelbe_linie_x(b, TAXI_X + RC_GELB, px + 4.0, py)
+    b.box(px + 4.0, py - 1.8, Z_GELB0, px + 4.4, py + 1.8, Z_GELB1, "Markierung gelb")
+    m = "Markierung weiss"
+    for (xa, ya, xb, yb) in ((px - 6.8, py - 6.8, px + 6.8, py - 6.6), (px - 6.8, py + 6.6, px + 6.8, py + 6.8),
+                             (px - 6.8, py - 6.8, px - 6.6, py + 6.8), (px + 6.6, py - 6.8, px + 6.8, py + 6.8)):
+        b.box(xa, ya, Z_GELB0, xb, yb, Z_GELB1, m)
     return b
 
 
