@@ -73,10 +73,16 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 
 ### Flughafen: Rundungen, Tankstelle, Helipad
 - Der Asphalt um die Landebahn (Zufahrtsstrasse x=226 + Rollweg x=272) ist eine geschlossene Schleife mit Kurvenradius 12 m (`rund`/`pfad`), keine rechten Winkel.
-- Der gelbe Rollweg-Mittelstrich endet an den aeusseren (durchgezogenen) Haltelinien der drei Anschluesse; er laeuft nicht ueber sie hinaus.
-- Tankstelle (asphaltiert, Vordach, 6 Zapfsaeulen, Shop, 2 Tanks) am Ostzaun neben den Hangars, auf der Seite ohne Tower; Helipad (Radius 8 m, H) auf der Wiese neben dem Tower, per Weg an die Strasse angebunden.
+- Der gelbe Rollweg-Mittelstrich beginnt am ersten und endet am letzten Anschluss und biegt in einem Bogen (Radius 4,5 m, `gelb_bogen`) in die Haltelinien ein; er endet am aeusseren (durchgezogenen) Strich. Auch die Zufahrten zu den Hallen und zur Tankstelle zweigen in Boegen ab.
+- Tankstelle (asphaltiert, ohne Dach) am Ostzaun neben den Hangars, auf der Seite ohne Tower: Abstellposition 13,6 x 13,6 m fuer ein Kleinflugzeug (~11 m Spannweite) mit gelber Zufahrtslinie, Haltebalken und Verzurrringen, 2 Zapfsaeulen am Rand, Shop, 2 Tanks; Helipad (Radius 8 m, H) auf der Wiese neben dem Tower, per Weg an die Strasse angebunden.
 
 ### Stadt (polytown_neu/stadt.py)
 - Stadt im Westen: Marktplatz 30 x 30 m mit Brunnen und 6 Staenden, Rathaus mit Uhrturm (Nord), Gasthaus (Sued), 4 Laeden; runde Marktring-Strasse; Hauptstrasse zum Ringweg. Zwei Spangen zu Nord-/Suedstrasse, dort je ein Dorf mit Kreisverkehr, Dorfbrunnen, Scheune.
 - 4 Teiche (`umgebung.TEICHE`, Mulden im Gelaende, Wasserflaechen `Teichwasser`), flache Bauzonen (`umgebung.STADT_ZONEN`).
 - Jedes Haus hat einen Pfad zur Strasse (Test: Strassennetz zusammenhaengend, keine Ueberlappungen, nur auf ebenem Grund). Noch ohne Texturen.
+
+### Wohnhaeuser (stadt.py: haus)
+- Stil 1940er: Putzfassade (6 Farben) mit Sockel, Sprossenfenster mit Bank und Fensterlaeden, Haustuer mit Freitreppe und Vordach, Steildach mit Traufbrett, Gauben, Giebelfenster, Kamin, Fallrohr.
+- 4 von 6 Haustypen mit begehbarem Obergeschoss (Flur mit Treppe, 15 Stufen, Treppenloch mit Gelaender, 2-3 Zimmer je Etage, Innentueren); 2 Typen eingeschossig, ebenfalls betretbar. Tuer offen, Fenster geschlossen.
+- Jedes Haus steht mit der Tuer genau auf der Pfadachse zur Strasse; Spiegelung (`spiegel`) fuer Abwechslung.
+- Test (Mock): Begehbarkeit per Raster-Suche (Koerper 1,8 m, Stufen <= 0,31 m): Flur, alle Zimmer, Treppe und Obergeschoss erreichbar, keine Absturzkanten, Dach nicht begehbar.

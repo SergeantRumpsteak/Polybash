@@ -58,6 +58,19 @@ FARBEN = {
     "Laub":          ((0.18, 0.40, 0.16), 0.9, 0.0),
     "Laub hell":     ((0.30, 0.50, 0.20), 0.9, 0.0),
     "Metall":        ((0.30, 0.32, 0.30), 0.5, 0.0),
+    "Putz gruen":    ((0.66, 0.72, 0.58), 0.9, 0.0),
+    "Putz grau":     ((0.72, 0.70, 0.66), 0.9, 0.0),
+    "Putz sand":     ((0.80, 0.72, 0.58), 0.9, 0.0),
+    "Sockel":        ((0.42, 0.40, 0.37), 0.95, 0.0),
+    "Rahmen weiss":  ((0.93, 0.92, 0.88), 0.7, 0.0),
+    "Laden gruen":   ((0.22, 0.38, 0.26), 0.8, 0.0),
+    "Laden braun":   ((0.38, 0.24, 0.16), 0.8, 0.0),
+    "Ziegel":        ((0.52, 0.22, 0.15), 0.85, 0.0),
+    "Ziegel dunkel": ((0.34, 0.16, 0.12), 0.85, 0.0),
+    "Klinker":       ((0.44, 0.21, 0.15), 0.95, 0.0),
+    "Innenwand":     ((0.90, 0.88, 0.80), 0.9, 0.0),
+    "Dielen":        ((0.50, 0.36, 0.22), 0.8, 0.0),
+    "Decke":         ((0.92, 0.91, 0.86), 0.9, 0.0),
 }
 
 
@@ -117,14 +130,16 @@ def strassenabstand(x, y, strs, ohne=None):
 class Lok:
     """Wie Bau.box/add, aber in lokalen Koordinaten (Haus um (0,0), Tuer auf der -y-Seite) mit Drehung theta und Fusshoehe zb."""
 
-    def __init__(self, b, cx, cy, zb, theta):
+    def __init__(self, b, cx, cy, zb, theta, sx=1):
         self.b, self.cx, self.cy, self.zb = b, cx, cy, zb
         self.c, self.s = math.cos(theta), math.sin(theta)
+        self.sx = sx                                   # -1: Haus an der lokalen x-Achse gespiegelt (Tuer links statt rechts)
 
     def P(self, p):
         return (self.cx + p[0] * self.c - p[1] * self.s, self.cy + p[0] * self.s + p[1] * self.c, self.zb + p[2])
 
     def box(self, x0, y0, z0, x1, y1, z1, mat):
+        x0, x1 = x0 * self.sx, x1 * self.sx
         x0, x1, y0, y1, z0, z1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1), min(z0, z1), max(z0, z1)
         if x1 - x0 < 1e-6 or y1 - y0 < 1e-6 or z1 - z0 < 1e-6:
             return
@@ -136,6 +151,8 @@ class Lok:
 
     def poly(self, verts, richtung, mat):
         """Vieleck (lokal) mit Normale in 'richtung' (lokal)."""
+        verts = [(p[0] * self.sx, p[1], p[2]) for p in verts]
+        richtung = (richtung[0] * self.sx, richtung[1], richtung[2])
         n = [0.0, 0.0, 0.0]
         for k in range(len(verts)):
             a, c = verts[k], verts[(k + 1) % len(verts)]
@@ -145,7 +162,7 @@ class Lok:
         self.b.add([self.P(p) for p in verts], [tuple(range(len(verts)))], mat)
 
     def prism(self, x, y, z0, r, h, n, mat):
-        px, py, _ = self.P((x, y, 0.0))
+        px, py, _ = self.P((x * self.sx, y, 0.0))
         self.b.prism(px, py, self.zb + z0, r, h, n, mat)
 
 
@@ -168,23 +185,192 @@ def fenster_l(g, x, y, nx, ny, zc, w=0.9, h=1.2):
         g.box(x - w / 2, y, zc - h / 2, x + w / 2, y + ny * 0.05, zc + h / 2, "Fenster")
 
 
-def haus(b, cx, cy, zb, theta, w, d, h, rh, wand, dach, kamin=True, stock=1):
-    """Wohnhaus: w (x) x d (y), Tuer auf der -y-Seite (Strassenseite), Satteldach, Fenster, Kamin."""
-    g = Lok(b, cx, cy, zb, theta)
-    g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, wand)
-    satteldach(g, w, d, h, rh, dach, wand)
-    g.box(-0.55, -d / 2 - 0.08, 0.0, 0.55, -d / 2, 2.1, "Tuer")
-    g.box(-0.8, -d / 2 - 0.3, 0.0, 0.8, -d / 2 + 0.0, 0.12, "Stein")                                           # Trittstein
-    for zc in ([1.5] if stock == 1 else [1.4, 4.1]):
-        for sx in (-1, 1):
-            fenster_l(g, sx * w / 4.2, -d / 2, 0, -1, zc)
-            fenster_l(g, sx * w / 4.2, d / 2, 0, 1, zc)
-        fenster_l(g, w / 2, 0.0, 1, 0, zc)
-        fenster_l(g, -w / 2, 0.0, -1, 0, zc)
-    if stock == 2:
-        fenster_l(g, 0.0, -d / 2, 0, -1, 4.1)
-    if kamin:
-        g.box(w / 4 - 0.35, d / 4 - 0.35, h, w / 4 + 0.35, d / 4 + 0.35, h + rh + 0.9, "Stein")
+F0, F1 = 0.2, 3.25                    # Fussbodenhoehe Erdgeschoss / Obergeschoss (ueber der Fusshoehe zb)
+WD = 0.30                             # Aussenwandstaerke (0,24 Putz + 0,06 Innenputz)
+TH = 2.2                              # Tuerhoehe
+
+
+def pbox(g, ach, a0, a1, p0, p1, z0, z1, mat):
+    """Quader mit Laengsachse ach ('x' oder 'y'): a = Koordinate laengs, p = quer dazu. Leere/negative Quader werden uebersprungen."""
+    if z1 - z0 < 1e-4 or a1 - a0 < 1e-4:
+        return
+    if ach == "x":
+        g.box(a0, p0, z0, a1, p1, z1, mat)
+    else:
+        g.box(p0, a0, z0, p1, a1, z1, mat)
+
+
+def wand(g, ach, p0, p1, a0, a1, z0, z1, mat, oeff=()):
+    """Wandstueck (Dicke p0..p1) von a0 bis a1 und z0..z1, ausgespart um die Oeffnungen (alo, ahi, zlo, zhi)."""
+    pts = sorted({a0, a1} | {x for o in oeff for x in (o[0], o[1]) if a0 < x < a1})
+    for lo, hi in zip(pts, pts[1:]):
+        cuts = sorted((min(max(o[2], z0), z1), max(min(o[3], z1), z0)) for o in oeff if o[0] <= lo + 1e-9 and o[1] >= hi - 1e-9)
+        z = z0
+        for c0, c1 in cuts:
+            pbox(g, ach, lo, hi, p0, p1, z, max(z, c0), mat)
+            z = max(z, c1)
+        pbox(g, ach, lo, hi, p0, p1, z, z1, mat)
+
+
+def aussenwand(g, ach, aussen, sg, a0, a1, z1, mat, oeff, sockel=True):
+    """Aussenwand: Kern + Innenputz + Sockelvorsatz; aussen = Koordinate der Aussenflaeche, sg = Richtung nach aussen (+-1)."""
+    for (o0, o1, m, zl, zh) in ((-0.24, 0.0, mat, -1.0, z1), (-WD, -0.24, "Innenwand", -1.0, z1), (0.0, 0.07, "Sockel", -1.0, 0.6)):
+        if m == "Sockel" and not sockel:
+            continue
+        p0, p1 = sorted((aussen + sg * o0, aussen + sg * o1))
+        wand(g, ach, p0, p1, a0, a1, zl, zh, m, oeff)
+
+
+def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden):
+    """Fenster in einer Aussenwand: Scheibe mit Sprossenkreuz, Rahmen, Fensterbank, optional Fensterlaeden."""
+    def pb(a0, a1, o0, o1, z0, z1, m):
+        p0, p1 = sorted((aussen + sg * o0, aussen + sg * o1))
+        pbox(g, ach, a0, a1, p0, p1, z0, z1, m)
+    zl, zh, al, ah, t = zc - h / 2, zc + h / 2, ac - w / 2, ac + w / 2, 0.09
+    pb(al, ah, -0.17, -0.13, zl, zh, "Fenster")
+    pb(ac - 0.025, ac + 0.025, -0.19, -0.11, zl, zh, "Rahmen weiss")
+    pb(al, ah, -0.19, -0.11, zc + h / 6 - 0.025, zc + h / 6 + 0.025, "Rahmen weiss")
+    pb(al - t, al, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
+    pb(ah, ah + t, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
+    pb(al, ah, 0.0, 0.05, zh, zh + t, "Rahmen weiss")
+    pb(al, ah, 0.0, 0.05, zl - t, zl, "Rahmen weiss")
+    pb(al - 0.12, ah + 0.12, 0.0, 0.15, zl - t - 0.06, zl - t, "Stein")                       # Fensterbank
+    if laden:
+        for lo, hi in ((al - t - 0.52, al - t - 0.02), (ah + t + 0.02, ah + t + 0.52)):
+            pb(lo, hi, 0.0, 0.05, zl - t, zh + t, laden)
+            for k in range(1, 6):                                                          # Lamellen
+                zz = zl - t + k * (zh - zl + 2 * t) / 6
+                pb(lo + 0.03, hi - 0.03, 0.05, 0.07, zz - 0.02, zz + 0.02, laden)
+
+
+def tuerrahmen(g, ach, p0, p1, a_lo, a_hi, z0, z1, mat="Rahmen weiss", t=0.07, v=0.03):
+    """Rahmen einer Tuer/Durchgangs (Pfosten + Sturz) um die Oeffnung, ueberlappt die Wand beidseitig um v."""
+    pbox(g, ach, a_lo - t, a_lo, p0 - v, p1 + v, z0, z1 + t, mat)
+    pbox(g, ach, a_hi, a_hi + t, p0 - v, p1 + v, z0, z1 + t, mat)
+    pbox(g, ach, a_lo, a_hi, p0 - v, p1 + v, z1, z1 + t, mat)
+
+
+def gaube(g, ax, H, rh, d, wand_m, dach_m):
+    """Dachgaube (Schleppgaube mit kleinem Giebel) auf der vorderen (-y) Dachseite bei x = ax."""
+    sl = rh / (d / 2.0)
+    yf = -d / 2 + 1.0
+    zf = H + sl * 1.0
+    bw = 0.8
+    g.box(ax - bw, yf, zf - 0.35, ax + bw, yf + 0.18, zf + 1.3, wand_m)
+    g.box(ax - 0.4, yf - 0.04, zf + 0.15, ax + 0.4, yf, zf + 1.05, "Fenster")
+    g.box(ax - 0.025, yf - 0.06, zf + 0.15, ax + 0.025, yf - 0.02, zf + 1.05, "Rahmen weiss")
+    g.box(ax - 0.4, yf - 0.06, zf + 0.58, ax + 0.4, yf - 0.02, zf + 0.64, "Rahmen weiss")
+    for sgn in (-1, 1):
+        g.box(ax + sgn * 0.4 - (0.07 if sgn > 0 else 0), yf - 0.06, zf + 0.1, ax + sgn * 0.4 + (0.0 if sgn > 0 else 0.07), yf - 0.02, zf + 1.1, "Rahmen weiss")
+    ys = 1.11                                                     # Traufe der Gaube trifft hier auf die Dachflaeche
+    yr = 1.6                                                      # First trifft hier auf die Dachflaeche
+    zr = lambda yy: zf + sl * yy
+    A = (ax - bw - 0.12, yf - 0.15, zf + 1.3); B = (ax + bw + 0.12, yf - 0.15, zf + 1.3); Cp = (ax, yf - 0.15, zf + 1.85)
+    E1 = (ax - bw - 0.12, yf + ys, zr(ys)); E2 = (ax + bw + 0.12, yf + ys, zr(ys)); R = (ax, yf + yr, zr(yr))
+    g.poly([A, Cp, R, E1], (-1.0, 0.2, 1.0), dach_m)
+    g.poly([B, E2, R, Cp], (1.0, 0.2, 1.0), dach_m)
+    g.poly([A, B, Cp], (0.0, -1.0, 0.0), wand_m)
+    for sgn in (-1, 1):
+        xx = ax + sgn * bw
+        g.poly([(xx, yf, zf), (xx, yf, zf + 1.3), (xx, yf + ys, zr(ys))], (sgn, 0.0, 0.0), wand_m)
+
+
+def haus(b, cx, cy, zb, theta, T):
+    """Wohnhaus im Stil der 1940er Jahre (Siedlungs-/Stadthaus): Putzfassade mit Sockel, Sprossenfenster, Fensterlaeden, Steildach
+    mit Gauben und Kamin, Vordach mit Freitreppe. Innen: Flur mit Treppe, zwei bis drei Zimmer, bei stock == 2 ein begehbares Obergeschoss
+    (Treppe, Treppenloch mit Gelaender). Tuer auf der lokalen -y-Seite; T['tuer_x'] = Lage der Tuer, T['spiegel'] = +-1."""
+    g = Lok(b, cx, cy, zb, theta, T.get("spiegel", 1))
+    w, d, st, rh = T["w"], T["d"], T["stock"], T["rh"]
+    mat, dach, laden = T["wand"], T["dach"], T.get("laden")
+    H = (F1 + 2.65) if st == 2 else (F0 + 2.85)
+    tx = T["tuer_x"]
+    ix0, ix1, iy0, iy1 = -w / 2 + WD, w / 2 - WD, -d / 2 + WD, d / 2 - WD
+    px = T["px"]                                                  # Trennwand (Flur | Zimmer) bei x = px
+    qy = T.get("qy")                                              # Trennwand zwischen den Zimmern bei y = qy
+    ew, ow = 1.1, 1.5                                             # Fensterbreite / -hoehe
+    zc_eg, zc_og = F0 + 1.55, F1 + 1.4
+
+    def fens(lst_eg, lst_og):
+        o = [(a - ew / 2, a + ew / 2, zc_eg - ow / 2, zc_eg + ow / 2) for a in lst_eg]
+        o += [(a - ew / 2, a + ew / 2, zc_og - ow / 2, zc_og + ow / 2) for a in (lst_og if st == 2 else ())]
+        return o
+    tuer = (tx - 0.55, tx + 0.55, F0, F0 + TH)
+    of = fens(T["fw_eg"], T["fw_og"]) + [tuer]
+    # Aussenwaende (vorn/hinten ueber die ganze Breite, Seiten dazwischen)
+    aussenwand(g, "x", -d / 2, -1, -w / 2, w / 2, H, mat, of)
+    aussenwand(g, "x", d / 2, 1, -w / 2, w / 2, H, mat, fens(T["bw_eg"], T["bw_og"]))
+    aussenwand(g, "y", -w / 2, -1, -d / 2 + WD, d / 2 - WD, H, mat, fens(T["ww_eg"], T["ww_og"]))
+    aussenwand(g, "y", w / 2, 1, -d / 2 + WD, d / 2 - WD, H, mat, fens(T["ow_eg"], T["ow_og"]))
+    for (ach, aussen, sg, lst_eg, lst_og) in (("x", -d / 2, -1, T["fw_eg"], T["fw_og"]), ("x", d / 2, 1, T["bw_eg"], T["bw_og"]),
+                                              ("y", -w / 2, -1, T["ww_eg"], T["ww_og"]), ("y", w / 2, 1, T["ow_eg"], T["ow_og"])):
+        for a in lst_eg:
+            fensterschmuck(g, ach, aussen, sg, a, zc_eg, ew, ow, laden)
+        for a in (lst_og if st == 2 else ()):
+            fensterschmuck(g, ach, aussen, sg, a, zc_og, ew, ow, laden)
+    # Haustuer: Rahmen, Schwelle, offenes Tuerblatt (nach innen, an der Flurwand)
+    tuerrahmen(g, "x", -d / 2 - 0.07, -d / 2 + 0.0, tuer[0], tuer[1], F0, F0 + TH)
+    g.box(tuer[0], -d / 2 - 0.05, F0 - 0.04, tuer[1], -d / 2 + WD, F0, "Stein")
+    g.box(tuer[1] - 0.05, iy0, F0, tuer[1], iy0 + 0.95, F0 + TH - 0.05, "Tuer")
+    # Freitreppe (2 Stufen) und Vordach
+    g.box(tuer[0] - 0.25, -d / 2 - 0.95, -0.6, tuer[1] + 0.25, -d / 2 - 0.5, 0.1, "Stein")
+    g.box(tuer[0] - 0.25, -d / 2 - 0.5, -0.6, tuer[1] + 0.25, -d / 2 - 0.07, F0, "Stein")
+    g.box(tuer[0] - 0.55, -d / 2 - 1.15, 2.75, tuer[1] + 0.55, -d / 2 - 0.07, 2.87, "Dach grau")
+    for xx in (tuer[0] - 0.5, tuer[1] + 0.5):
+        g.box(xx - 0.06, -d / 2 - 1.1, -0.6, xx + 0.06, -d / 2 - 1.0, 2.75, "Rahmen weiss")
+    # Geschossdecken, Boden
+    g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Dielen")
+    sx0 = px + 2.1                                                # Treppenband: x = sx0 .. ix1
+    ys = -1.2                                                     # Treppenfuss, 15 Steigungen zu je 0,27 m Auftritt
+    nst = 15
+    rise = (F1 - F0) / nst
+    if st == 2:
+        hy0, hy1 = ys + 4 * 0.27, ys + nst * 0.27                 # Treppenloch in der OG-Decke
+        def platte(x0, y0, x1, y1):
+            g.box(x0, y0, F1 - 0.25, x1, y1, F1 - 0.05, "Decke")
+            g.box(x0, y0, F1 - 0.05, x1, y1, F1, "Dielen")
+        platte(ix0, iy0, sx0, iy1)
+        platte(sx0, iy0, ix1, hy0)
+        platte(sx0, hy1, ix1, iy1)
+        for k in range(nst):                                      # Treppe (massive Stufen) + Gelaender an der offenen Seite
+            y0 = ys + k * 0.27
+            zt = F0 + (k + 1) * rise
+            g.box(sx0, y0, F0, ix1, y0 + 0.27, zt, "Holz")
+            g.box(sx0 - 0.07, y0, zt + 0.45, sx0 - 0.02, y0 + 0.27, zt + 0.5, "Holz")
+            g.box(sx0 - 0.07, y0, zt + 0.92, sx0 - 0.02, y0 + 0.27, zt + 0.97, "Holz")
+            if k % 3 == 0:
+                g.box(sx0 - 0.08, y0 + 0.1, zt, sx0 - 0.01, y0 + 0.17, zt + 0.97, "Holz")
+        for (x0, y0, x1, y1) in ((sx0 - 0.07, hy0, sx0 - 0.02, hy1), (sx0, hy0 - 0.07, ix1, hy0 - 0.02)):         # Gelaender OG um das Loch
+            g.box(x0, y0, F1 + 0.45, x1, y1, F1 + 0.5, "Holz")
+            g.box(x0, y0, F1 + 0.95, x1, y1, F1 + 1.0, "Holz")
+        for (xx, yy) in ((sx0 - 0.045, hy0 - 0.045), (sx0 - 0.045, (hy0 + hy1) / 2), (sx0 - 0.045, hy1 - 0.1)):
+            g.box(xx - 0.04, yy - 0.04, F1, xx + 0.04, yy + 0.04, F1 + 1.0, "Holz")
+        g.box(ix0, iy0, H - 0.25, ix1, iy1, H, "Decke")
+    else:
+        g.box(ix0, iy0, H - 0.25, ix1, iy1, H, "Decke")
+    # Innenwaende (EG und OG): Flurwand bei x = px mit Tuer, Zimmertrennwand bei y = qy mit Tuer
+    for (zlo, zhi) in ((F0, (F1 - 0.25) if st == 2 else H - 0.25),) + (((F1, H - 0.25),) if st == 2 else ()):
+        o1 = [(-1.55, -0.55, zlo, zlo + 2.1)]
+        wand(g, "y", px - 0.06, px + 0.06, iy0, iy1, zlo, zhi, "Innenwand", o1)
+        tuerrahmen(g, "y", px - 0.06, px + 0.06, o1[0][0], o1[0][1], zlo, zlo + 2.1)
+        if qy is not None:
+            o2 = [(-2.6, -1.6, zlo, zlo + 2.1)]
+            wand(g, "x", qy - 0.06, qy + 0.06, ix0, px - 0.06, zlo, zhi, "Innenwand", o2)
+            tuerrahmen(g, "x", qy - 0.06, qy + 0.06, o2[0][0], o2[0][1], zlo, zlo + 2.1)
+    # Dach: Steildach mit Traufkasten, First, Gauben, Giebelfenster, Kamin, Fallrohr
+    satteldach(g, w, d, H, rh, dach, mat, ueber=0.45)
+    for yy in (-d / 2 - 0.45, d / 2 + 0.40):
+        g.box(-w / 2 - 0.45, yy, H - 0.5, w / 2 + 0.45, yy + 0.05, H - 0.3, "Rahmen weiss")                  # Traufbrett
+    g.box(-w / 2 - 0.45, -0.1, H + rh - 0.02, w / 2 + 0.45, 0.1, H + rh + 0.1, "Ziegel dunkel")           # Firstziegel
+    for ax in T.get("gauben", ()):
+        gaube(g, ax, H, rh, d, mat, dach)
+    for sgn in (-1, 1):                                                       # Giebelfenster
+        xo = sgn * w / 2
+        g.box(min(xo, xo + sgn * 0.06), -0.35, H + 0.6, max(xo, xo + sgn * 0.06), 0.35, H + 1.5, "Fenster")
+        g.box(min(xo, xo + sgn * 0.08), -0.04, H + 0.6, max(xo, xo + sgn * 0.08), 0.04, H + 1.5, "Rahmen weiss")
+    ch = T["kamin"]
+    g.box(ch - 0.35, -0.35, H - 0.1, ch + 0.35, 0.35, H + rh + 0.9, "Klinker")
+    g.box(ch - 0.45, -0.45, H + rh + 0.9, ch + 0.45, 0.45, H + rh + 1.02, "Stein")
+    g.box(w / 2 - 0.15, -d / 2 - 0.12, 0.0, w / 2 - 0.03, -d / 2 - 0.02, H - 0.3, "Metall")                 # Fallrohr
     return g
 
 
@@ -342,17 +528,48 @@ class Belegt:
         return True
 
 
+def _frei_haus(self, hx, hy, theta, w, d):
+    """Platzpruefung fuer ein Haus (Grundriss w x d, Stufen/Vordach 1,2 m davor): Stuetzpunkte auf dem Grundriss muessen frei von
+    Strassen, Plaetzen/Gebaeuden und Teichen sein; Burg, Rand, Flughafen und andere Haeuser (Kreis max(w,d)/2 + 1) wie bei frei()."""
+    r = max(w, d) / 2 + 1.0
+    rb = math.hypot(w, d) / 2 + 1.0
+    if not self.frei(hx, hy, rb, rand=0.0, strasse=False):
+        return False
+    c, s_ = math.cos(theta), math.sin(theta)
+    for ix in range(-int(w / 2.5) - 1, int(w / 2.5) + 2):
+        for iy in range(-int(d / 2.5) - 1, int(d / 2.5) + 3):
+            lx = max(-w / 2 - 0.8, min(w / 2 + 0.8, ix * 2.5))
+            ly = max(-d / 2 - 1.3, min(d / 2 + 0.8, -d / 2 - 1.3 + (iy + int(d / 2.5) + 1) * 2.5)) if False else max(-d / 2 - 1.3, min(d / 2 + 0.8, iy * 2.5))
+            px, py = hx + lx * c - ly * s_, hy + lx * s_ + ly * c
+            if strassenabstand(px, py, self.strs) < 0.5:
+                return False
+            for (x0, y0, x1, y1) in self.rechtecke:
+                if x0 - 0.5 < px < x1 + 0.5 and y0 - 0.5 < py < y1 + 0.5:
+                    return False
+    for (cx_, cy_, cr) in self.kreise:
+        if math.hypot(hx - cx_, hy - cy_) < r + cr:
+            return False
+    return True
+
+
+Belegt.frei_haus = _frei_haus
+
+
 def eben(x, y, r, tol=0.35):
     zs = [U.gelaende_hoehe(x + r * math.cos(a), y + r * math.sin(a)) for a in (0.0, 1.57, 3.14, 4.71)] + [U.gelaende_hoehe(x, y)]
     return max(abs(z) for z in zs) < tol, sum(zs) / len(zs)
 
 
-HAUSTYPEN = [  # w, d, h, rh, Wand, Dach, Stockwerke
-    (8.0, 7.0, 3.2, 2.6, "Putz weiss", "Dach rot", 1),
-    (9.0, 7.5, 5.6, 3.0, "Putz gelb", "Dach rot", 2),
-    (7.0, 6.5, 3.0, 2.4, "Putz rot", "Dach grau", 1),
-    (8.5, 7.0, 5.4, 3.0, "Putz blau", "Dach grau", 2),
-    (7.5, 7.0, 3.1, 2.5, "Putz weiss", "Dach grau", 1),
+_A = dict(stock=2, rh=3.1, px=1.0, qy=0.3, tuer_x=2.4, fw_eg=(-2.6, -0.4), fw_og=(-2.6, -0.4, 2.4), bw_eg=(-2.6, -0.4, 2.0), bw_og=(-2.6, -0.4, 2.0),
+          ww_eg=(-1.8, 1.8), ww_og=(-1.8, 1.8), ow_eg=(-2.4,), ow_og=(-2.4,))
+_C = dict(stock=1, rh=3.0, px=0.5, qy=None, tuer_x=2.0, fw_eg=(-2.4, -0.3), fw_og=(), bw_eg=(-2.2, 2.0), bw_og=(), ww_eg=(0.0,), ww_og=(), ow_eg=(-1.5,), ow_og=())
+HAUSTYPEN = [   # 1940er: Putz, Sockel, Steildach; 4 von 6 Typen mit begehbarem Obergeschoss
+    dict(_A, w=9.0, d=8.0, wand="Putz weiss", dach="Ziegel", laden="Laden gruen", gauben=(-1.8, 1.8), kamin=-3.3, spiegel=1),
+    dict(_A, w=9.6, d=8.4, wand="Putz gelb", dach="Ziegel dunkel", laden="Laden braun", gauben=(0.0,), kamin=3.6, spiegel=-1),
+    dict(_C, w=8.0, d=7.0, wand="Putz gruen", dach="Ziegel", laden="Laden braun", gauben=(-1.2,), kamin=-2.8, spiegel=1),
+    dict(_A, w=9.0, d=8.0, wand="Putz grau", dach="Ziegel dunkel", laden=None, gauben=(-2.0, 2.0), kamin=-3.3, spiegel=-1),
+    dict(_A, w=9.6, d=8.4, wand="Putz sand", dach="Ziegel", laden="Laden gruen", gauben=(-1.8, 1.8), kamin=3.6, spiegel=1),
+    dict(_C, w=8.0, d=7.0, wand="Putz rot", dach="Ziegel dunkel", laden="Laden gruen", gauben=(), kamin=2.8, spiegel=-1),
 ]
 
 
@@ -363,7 +580,7 @@ def setze_haus(zb_, b, wege_b, belegt, hausliste, x, y, nx, ny, hr, typ, rand_st
     return False
 
 
-def haeuser_entlang(L, p, q, strs, belegt, haeuser, pfade, abstand=14.0, rand=11.0, setback=3.2, zaehler=[0], seiten=(1, -1), strasse=None):
+def haeuser_entlang(L, p, q, strs, belegt, haeuser, pfade, abstand=15.5, rand=11.0, setback=3.2, zaehler=[0], seiten=(1, -1), strasse=None):
     dx, dy = q[0] - p[0], q[1] - p[1]
     ln = math.hypot(dx, dy)
     if ln < 2 * rand + 4:
@@ -378,19 +595,19 @@ def haeuser_entlang(L, p, q, strs, belegt, haeuser, pfade, abstand=14.0, rand=11
         for s in seiten:
             zaehler[0] += 1
             typ = HAUSTYPEN[zaehler[0] % len(HAUSTYPEN)]
-            w, d = typ[0], typ[1]
-            off = hr + setback + d / 2
-            hx, hy = p[0] + ux * t + s * nrm[0] * off, p[1] + uy * t + s * nrm[1] * off
-            r = math.hypot(w + 0.8, d + 0.8) / 2
-            ok_e, zb = eben(hx, hy, r * 0.8)
-            if not (ok_e and belegt.frei(hx, hy, r, rand=0.5)):
-                continue
-            theta = math.atan2(-s * nrm[0], s * nrm[1]) if False else None
+            w, d = typ["w"], typ["d"]
             nx_, ny_ = -s * nrm[0], -s * nrm[1]                 # Richtung zur Strasse (Tuerseite)
+            dx_, dy_ = p[0] + ux * t + s * nrm[0] * (hr + setback), p[1] + uy * t + s * nrm[1] * (hr + setback)   # Tuer-/Stufenpunkt
+            tdx = typ["tuer_x"] * typ["spiegel"]
+            hx, hy = dx_ - nx_ * d / 2 - (-ny_) * tdx, dy_ - ny_ * d / 2 - nx_ * tdx
             theta = math.atan2(nx_, -ny_)
+            r = max(w, d) / 2 + 1.0
+            ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
+            if not (ok_e and belegt.frei_haus(hx, hy, theta, w, d)):
+                continue
             belegt.kreise.append((hx, hy, r))
             haeuser.append({"x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "strasse": strasse["name"]})
-            door = (p[0] + ux * t + s * nrm[0] * (hr + setback), p[1] + uy * t + s * nrm[1] * (hr + setback))
+            door = (dx_ + nx_ * 0.95, dy_ + ny_ * 0.95)
             start = (p[0] + ux * t + s * nrm[0] * (hr - 0.3), p[1] + uy * t + s * nrm[1] * (hr - 0.3))
             pfade.append((start, door))
 
@@ -404,17 +621,20 @@ def kreis_haeuser(zentrum, r_innen, strs, belegt, haeuser, pfade, n=9, ohne=(-ma
             continue
         typ = HAUSTYPEN[(k + 2) % len(HAUSTYPEN)]
         sched = k == scheune_idx
-        w, d = (12.0, 9.0) if sched else (typ[0], typ[1])
-        rad = r_innen + 3.2 + d / 2
-        hx, hy = cx + rad * math.cos(a), cy + rad * math.sin(a)
-        r = math.hypot(w + 0.8, d + 0.8) / 2
-        ok_e, zb = eben(hx, hy, r * 0.8)
-        if not (ok_e and belegt.frei(hx, hy, r, rand=0.5)):
-            continue
+        w, d = (12.0, 9.0) if sched else (typ["w"], typ["d"])
+        rad = r_innen + 3.2
+        tdx = 0.0 if sched else typ["tuer_x"] * typ["spiegel"]
+        # Tuerpunkt D liegt auf dem Radius rad; Mittelpunkt = D - n*d/2 - xachse*tdx mit n = (-cos a, -sin a), xachse = (sin a, -cos a)
+        hx = cx + rad * math.cos(a) + math.cos(a) * d / 2 - math.sin(a) * tdx
+        hy = cy + rad * math.sin(a) + math.sin(a) * d / 2 + math.cos(a) * tdx
         theta = math.atan2(-math.cos(a), math.sin(a))              # Tuer zeigt zur Mitte: Richtung (-cos a, -sin a)
+        r = max(w, d) / 2 + 1.0
+        ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
+        if not (ok_e and belegt.frei_haus(hx, hy, theta, w, d)):
+            continue
         belegt.kreise.append((hx, hy, r))
         haeuser.append({"x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "scheune": sched, "strasse": strasse["name"]})
-        door = (cx + (r_innen + 3.2) * math.cos(a), cy + (r_innen + 3.2) * math.sin(a))
+        door = (cx + (r_innen + 3.2 - 0.95) * math.cos(a), cy + (r_innen + 3.2 - 0.95) * math.sin(a))
         start = (cx + (r_innen - 0.3) * math.cos(a), cy + (r_innen - 0.3) * math.sin(a))
         pfade.append((start, door))
 
@@ -444,16 +664,16 @@ def plane_stadt():
         s = S[nm]
         roh = s["roh"]
         for i in range(len(roh)):
-            haeuser_entlang(None, roh[i], roh[(i + 1) % len(roh)], strs, belegt, haeuser, pfade, abstand=13.0, zaehler=zaehler, strasse=s)
-    haeuser_entlang(None, S["Hauptstrasse"]["roh"][0], S["Hauptstrasse"]["roh"][1], strs, belegt, haeuser, pfade, abstand=13.0, rand=6.0, zaehler=zaehler, strasse=S["Hauptstrasse"])
+            haeuser_entlang(None, roh[i], roh[(i + 1) % len(roh)], strs, belegt, haeuser, pfade, abstand=15.0, zaehler=zaehler, strasse=s)
+    haeuser_entlang(None, S["Hauptstrasse"]["roh"][0], S["Hauptstrasse"]["roh"][1], strs, belegt, haeuser, pfade, abstand=15.0, rand=6.0, zaehler=zaehler, strasse=S["Hauptstrasse"])
     for nm in ("Spange Nord", "Spange Sued"):
         s = S[nm]
         for i in range(len(s["roh"]) - 1):
-            haeuser_entlang(None, s["roh"][i], s["roh"][i + 1], strs, belegt, haeuser, pfade, abstand=14.0, rand=13.0, zaehler=zaehler, strasse=s)
+            haeuser_entlang(None, s["roh"][i], s["roh"][i + 1], strs, belegt, haeuser, pfade, abstand=15.5, rand=13.0, zaehler=zaehler, strasse=s)
     for nm in ("Nordstrasse", "Suedstrasse"):
         s = S[nm]
         a, e = s["roh"]
-        haeuser_entlang(None, a, e, strs, belegt, haeuser, pfade, abstand=14.0, rand=14.0, zaehler=zaehler, strasse=s)
+        haeuser_entlang(None, a, e, strs, belegt, haeuser, pfade, abstand=15.5, rand=14.0, zaehler=zaehler, strasse=s)
     # Doerfer um die Kreisverkehre
     kreis_haeuser(DORF_N, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), strasse=S["Kreisverkehr Nord"], scheune_idx=3)
     kreis_haeuser(DORF_S, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(math.pi / 2,), strasse=S["Kreisverkehr Sued"], scheune_idx=6)
@@ -505,8 +725,7 @@ def baue_alles():
         if H.get("scheune"):
             scheune(h, H["x"], H["y"], H["zb"], H["theta"], H["w"], H["d"])
         else:
-            w_, d_, hh, rh, wand, dach, st = H["typ"]
-            haus(h, H["x"], H["y"], H["zb"], H["theta"], w_, d_, hh, rh, wand, dach, stock=st)
+            haus(h, H["x"], H["y"], H["zb"], H["theta"], H["typ"])
     # Baeume
     bm = Bau("stadt_baeume")
     for x, y, k in P["baeume"]:
