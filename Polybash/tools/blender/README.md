@@ -30,7 +30,10 @@ oder: `blender --background --python tools/blender/polytown_neu/talkessel.py` ->
 ## Burg (Polytown von Grund auf, Schritt 2) - Gesamtszene
 Tal, Berge und die Burg (Radarstation) in der Mitte, nachgebaut nach der Burg der Standardkarte (spiel.py bleibt unveraendert):
 
-    ./build_blender.sh tools/blender/polytown_neu/polytown_neu.py
+    ./build_blender.sh
+
+(ohne Argument startet das Skript `tools/blender/polytown_neu/polytown_neu.py`; neue Schritte kommen als weitere Module hinzu,
+die dieses Skript einbindet - der Befehl bleibt immer gleich.)
 
 Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `talkessel.py`).
 

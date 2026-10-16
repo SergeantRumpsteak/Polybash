@@ -2,12 +2,13 @@
 # Polybash - Blender-Karte bauen: holt den neuesten Stand, laesst das Skript die Karte erzeugen
 # und oeffnet das Ergebnis in Blender.
 #
-#   ./build_blender.sh                       Polytown-Blockout
-#   ./build_blender.sh pfad/zum/skript.py    anderes Blender-Skript (Pfad relativ zu diesem Ordner)
+#   ./build_blender.sh                       aktuelle Polytown-Karte (tools/blender/polytown_neu/polytown_neu.py)
+#   ./build_blender.sh pfad/zum/skript.py    anderes Blender-Skript (Pfad relativ zu diesem Ordner),
+#                                            z. B. tools/blender/polytown/polytown_blockout.py (alter Blockout)
 #   BLENDER=/pfad/zu/blender ./build_blender.sh   Blender-Programm von Hand angeben
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
-SKRIPT="${1:-tools/blender/polytown/polytown_blockout.py}"
+SKRIPT="${1:-tools/blender/polytown_neu/polytown_neu.py}"
 AUS="$HOME/blender_out"
 
 fail() {
