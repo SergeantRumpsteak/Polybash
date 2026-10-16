@@ -113918,6 +113918,7 @@ class Game(ShowBase):
 
     def show_menu(self, state="name", msg=""):
         self.clear_menu()
+        self.hide_loading()                      # ein noch stehendes Ladebild (Beitritts-Wechsel) weg
         self.mode, self.menu_state, self.menu_msg = "menu", state, msg
         self.attempt = None
         if state == "join":
@@ -121692,6 +121693,7 @@ def _exp_autostart(g):
         try:
             g.show_menu("connecting")
             g.attempt = JoinAttempt(str(spec["ip"]), int(spec.get("port", NET_PORT)), g.my_name, g.look_code)
+            g.show_loading("client", SimpleNamespace(map_raw={"name": "Verbinde ..."}))   # statt des Verbinden-Menüs
         except (KeyError, TypeError, ValueError):
             g.show_menu("join")
 
