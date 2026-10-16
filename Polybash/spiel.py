@@ -248,7 +248,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 109               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 110               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -110696,6 +110696,13 @@ class Game(ShowBase):
                     fov=self.fov_base, inv=1 if self.invert_y else 0)
         try:
             self.save_prefs()
+        except Exception:
+            pass
+        try:                                      # Ladebild sofort zeigen: das Laden von Experimental dauert, sonst bleibt das Hauptmenü stehen
+            att = None
+            if spec.get("do") != "host":
+                att = SimpleNamespace(map_raw={"name": "Verbinde ..."})
+            self.show_loading("host" if att is None else "client", att)
         except Exception:
             pass
         self.taskMgr.add(lambda task: _pb_to_exp(task, self, spec), "pb-switch", sort=-100)

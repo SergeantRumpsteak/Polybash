@@ -114782,7 +114782,9 @@ class Game(ShowBase):
         tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
                            bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
         tip.setColorScale(1, 1, 1, 1)
-        tip.setBin("fixed", 99)
+        tip.setBin("gui-popup", 100)                 # nach allem im Standard-Bin (Lobby-Karten), sonst liegt der Knopf darüber
+        tip.setDepthTest(False)
+        tip.setDepthWrite(False)
         tip.hide()
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
