@@ -45,6 +45,8 @@ BAHN = (BX - BW / 2, BY - BL / 2, BX + BW / 2, BY + BL / 2)          # x0, y0, x
 SX = 226.0
 Y_SUED, Y_NORD = 66.0, 234.0                                          # Umfahrung der Bahnenden
 TAXI_X, TAXI_B = 272.0, 8.0
+RC = 12.0                                                             # Kurvenradius (Mittellinie) der Umfahrung der Bahnenden
+UMFAHRUNG = ((SX, Y_SUED), (TAXI_X, Y_SUED), (TAXI_X, Y_NORD), (SX, Y_NORD))      # Mittellinie der Schleife (Ecken werden abgerundet)
 ANSCHLUESSE = (80.0, 150.0, 220.0)                                    # Rollweg-Anschluesse an die Bahn (y)
 # Hangarreihe: drei getrennte Tonnenhallen mit je eigenem Halbkreis-Dach (Radius = halbe Teilung REIHE_B = 1,3 x 16 m); wo ein Dach
 # in den Boden geht, beginnt das naechste direkt wieder (die Halbkreise beruehren sich am Boden)
@@ -53,7 +55,9 @@ REIHE_R = REIHE_B / 2
 REIHE_X0, REIHE_T = 279.0, 19.0                                       # offene Westkante, Tiefe: Rueckwand bei x = 298 (Talkante 300)
 REIHE_YC = tuple(BY + (i - (REIHE_N - 1) / 2.0) * REIHE_B for i in range(REIHE_N))       # Achsen der drei Hallen
 REIHE_Y0, REIHE_Y1 = REIHE_YC[0] - REIHE_R, REIHE_YC[-1] + REIHE_R                       # gesamte Breite 62,4 m
-VORFELD = (TAXI_X + TAXI_B / 2, REIHE_Y0, REIHE_X0, REIHE_Y1)                            # Vorfeld zwischen Rollweg und Hallen
+TANK = (REIHE_X0, 88.0, 297.0, 116.0)                                 # Tankstelle (Asphaltflaeche) suedlich der Hallen, an Vorfeld/Rollweg
+VORFELD = (TAXI_X + TAXI_B / 2, TANK[1], REIHE_X0, REIHE_Y1)         # Vorfeld zwischen Rollweg und Hallen (reicht bis zur Tankstelle)
+HELI = (240.0, 184.0, 8.0)                                            # Helipad nordlich vom Tower auf der Gruenflaeche: Mitte, Radius
 # Grosser Hangar am Suedende westlich der Bahn, offen nach Osten (zur Bahn), Tuer im Westen
 HX, HY, HW, HD, HH = 237.5, 90.0, 12.0, 28.0, 6.0                    # Mitte, Breite (x), Tiefe (y), Hoehe
 HANGAR = (HX - HW / 2, HY - HD / 2, HX + HW / 2, HY + HD / 2)       # (231.5, 76, 243.5, 104): 28 m lang in Bahnrichtung
@@ -63,6 +67,12 @@ TOWER_ANNEX = (TX - 6.0, TY - 5.0, TX + 6.0, TY + 5.0)
 SCY = TY + 1.6                                                        # Mitte des Schachts (y); Schachtnordwand sitzt an der Sockelnordwand
 Z_BODEN, Z_KAB = 0.07, 13.3
 RADAR_Z = 17.0                                                        # Drehpunkt der Radaranlage auf dem Kanzeldach                                           # Hallenboden, Kanzelboden
+# Stadt (siehe stadt.py): ebene Zonen fuer Staedte/Doerfer (x0, y0, x1, y1) und Teiche (x, y, Radius) - das Gelaende richtet sich danach
+STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz, Rathaus, Wohnviertel)
+               (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
+               (120.0, 20.0, 182.0, 84.0))        # Dorf im Sueden
+TEICHE = ((36.0, 233.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
+TEICH_Z = -0.4                                    # Wasserspiegel
 # Zaun und Eingang
 GATE_X = 217.0                                                        # Zaunlinie im Westen (zwischen Ring und Flughafenstrasse)
 ZAUN = (GATE_X, 60.0, 299.0, 240.0)
@@ -90,6 +100,8 @@ FARBEN = {
     "Schranke rot":    ((0.75, 0.10, 0.08), 0.6, 0.0),
     "Schranke weiss":  ((0.93, 0.93, 0.90), 0.6, 0.0),
     "Windsack orange": ((0.95, 0.45, 0.08), 0.7, 0.0),
+    "Zapfsaeule":      ((0.78, 0.14, 0.10), 0.5, 0.0),
+    "Tank":            ((0.78, 0.80, 0.80), 0.5, 0.2),
     "Insel":           ((0.55, 0.55, 0.53), 0.95, 0.0),
 }
 
@@ -152,7 +164,12 @@ def huegel_roh(x, y):
 def _flach(x, y):
     """Gemeinsame Maske (0..1) ausser der Wegabflachung: Burggelaende, Flugplatz mit Zaun, Talrand."""
     m = B.smoothstep(0.0, 45.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))   # Flugplatz: x >= 205, y 52..248
-    return m * B.smoothstep(0.0, 35.0, min(x, T.TAL - x, y, T.TAL - y))                          # Talrand (dort schliessen die Berge an, z = 0)
+    m *= B.smoothstep(0.0, 35.0, min(x, T.TAL - x, y, T.TAL - y))                                # Talrand (dort schliessen die Berge an, z = 0)
+    for x0, y0, x1, y1 in STADT_ZONEN:                                                           # Stadt und Doerfer: ebener Baugrund
+        m *= B.smoothstep(0.0, 30.0, math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
+    for tx, ty, tr in TEICHE:                                                                    # rund um Teiche flaches Ufer
+        m *= B.smoothstep(tr + 2.0, tr + 20.0, math.hypot(x - tx, y - ty))
+    return m
 
 
 def gelaende_maske(x, y):
@@ -175,6 +192,10 @@ def gelaende_hoehe(x, y):
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
     h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
+    for tx, ty, tr in TEICHE:                                                                    # Teichmulden
+        d = math.hypot(x - tx, y - ty)
+        if d < tr + 3.5:
+            h -= 2.4 * (1.0 - B.smoothstep(tr - 2.0, tr + 3.5, d))
     return 0.0 if abs(h) < 1e-9 else h
 
 
@@ -197,6 +218,62 @@ def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=3.0):
             x, y = cx + sg * nx, cy + sg * ny
             v.append((x, y, _z_auf(x, y, z, hf)))
     f = [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)]
+    b.add(v, f, mat)
+
+
+def rund(pts, r, geschlossen=False, n=8):
+    """Ersetzt die Ecken eines Linienzugs durch Kreisbogen (Radius r, je n Teilstuecke); bei zu kurzen Seiten wird r verkleinert."""
+    m = len(pts)
+    out = []
+    for i in range(m):
+        if not geschlossen and i in (0, m - 1):
+            out.append(tuple(pts[i]))
+            continue
+        P, A, Cc = pts[i], pts[i - 1], pts[(i + 1) % m]
+        u1 = (A[0] - P[0], A[1] - P[1]); l1 = math.hypot(*u1); u1 = (u1[0] / l1, u1[1] / l1)
+        u2 = (Cc[0] - P[0], Cc[1] - P[1]); l2 = math.hypot(*u2); u2 = (u2[0] / l2, u2[1] / l2)
+        th = math.acos(max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1])))
+        if th > math.pi - 1e-3:
+            out.append(tuple(P))
+            continue
+        t = r / math.tan(th / 2)
+        t = min(t, l1 / 2 if (geschlossen or i > 1) else l1 - 0.01, l2 / 2 if (geschlossen or i < m - 2) else l2 - 0.01)
+        rr = t * math.tan(th / 2)
+        T1 = (P[0] + u1[0] * t, P[1] + u1[1] * t)
+        T2 = (P[0] + u2[0] * t, P[1] + u2[1] * t)
+        bis = (u1[0] + u2[0], u1[1] + u2[1]); lb = math.hypot(*bis); bis = (bis[0] / lb, bis[1] / lb)
+        M = (P[0] + bis[0] * rr / math.sin(th / 2), P[1] + bis[1] * rr / math.sin(th / 2))
+        a1 = math.atan2(T1[1] - M[1], T1[0] - M[0]); a2 = math.atan2(T2[1] - M[1], T2[0] - M[0])
+        da = (a2 - a1 + math.pi) % (2 * math.pi) - math.pi
+        for k in range(n + 1):
+            aa = a1 + da * k / n
+            out.append((M[0] + rr * math.cos(aa), M[1] + rr * math.sin(aa)))
+    return out
+
+
+def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=3.0):
+    """Weg (Breite w) entlang eines Linienzugs, dem Gelaende folgend; zu lange Stuecke werden unterteilt. Normale nach oben."""
+    q = []
+    m = len(pts)
+    for i in range(m if geschlossen else m - 1):
+        p0, p1 = pts[i], pts[(i + 1) % m]
+        ln = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        n = max(1, int(math.ceil(ln / schritt)))
+        q += [(p0[0] + (p1[0] - p0[0]) * k / n, p0[1] + (p1[1] - p0[1]) * k / n) for k in range(n)]
+    if not geschlossen:
+        q.append(tuple(pts[-1]))
+    v = []
+    M = len(q)
+    for i in range(M):
+        a = q[(i - 1) % M] if (geschlossen or i > 0) else q[i]
+        c = q[(i + 1) % M] if (geschlossen or i < M - 1) else q[i]
+        dx, dy = c[0] - a[0], c[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / ln * w / 2, dx / ln * w / 2
+        for sg in (1, -1):
+            x, y = q[i][0] + sg * nx, q[i][1] + sg * ny
+            v.append((x, y, _z_auf(x, y, z, hf)))
+    f = [(2 * i, 2 * i + 1, 2 * ((i + 1) % M) + 1, 2 * ((i + 1) % M)) for i in range(M if geschlossen else M - 1)]
     b.add(v, f, mat)
 
 
@@ -227,10 +304,8 @@ def wege():
     # Zufahrten von den beiden Bruecken (Bruecken enden bei C +- 36,5) bis zur Mitte des Rings
     for s in (-1, 1):
         streifen(b, (C, C + s * (B.A + 11.0)), ring_punkt(s * math.pi / 2), BREITE_WEG, Z_WEG, "Weg")
-    # Flughafenstrasse (Nord-Sued) westlich der Bahn, mit Umfahrung der Bahnenden zum Rollweg
-    streifen(b, (SX, Y_SUED), (SX, Y_NORD), BREITE_WEG, Z_WEG, "Weg")
-    streifen(b, (SX, Y_SUED), (TAXI_X, Y_SUED), BREITE_WEG, Z_WEG, "Weg")
-    streifen(b, (SX, Y_NORD), (TAXI_X, Y_NORD), BREITE_WEG, Z_WEG, "Weg")
+    # Flughafenstrasse (Nord-Sued) westlich der Bahn, mit runder Umfahrung der Bahnenden zum Rollweg: geschlossene Schleife um die Bahn
+    pfad(b, rund(UMFAHRUNG, RC, geschlossen=True), BREITE_WEG, Z_WEG, "Weg", geschlossen=True)
     # zwei gerade Abzweige vom Ring (bei +-45 Grad); sie enden dort, wo sie auf die Flughafenstrasse treffen
     for s in (-1, 1):
         a0, a1 = abzweig(s)
@@ -294,7 +369,7 @@ def landebahn():
     x0, y0, x1, y1 = BAHN
     b.box(x0, y0, -0.12, x1, y1, Z_BAHN, "Piste")
     # Rollweg (parallel zur Bahn, oestlich) mit den Anschluessen an die Bahn
-    b.box(TAXI_X - TAXI_B / 2, Y_SUED - BREITE_WEG / 2, -0.12, TAXI_X + TAXI_B / 2, Y_NORD + BREITE_WEG / 2, Z_VORFELD, "Vorfeld")
+    b.box(TAXI_X - TAXI_B / 2, Y_SUED + RC, -0.12, TAXI_X + TAXI_B / 2, Y_NORD - RC, Z_VORFELD, "Vorfeld")          # gerader Teil; die Kurven sind Teil der Schleife
     for yc in ANSCHLUESSE:
         b.box(x1, yc - TAXI_B / 2, -0.12, TAXI_X - TAXI_B / 2, yc + TAXI_B / 2, Z_VORFELD, "Vorfeld")
     # Vorfeld vor der Hangarreihe (zwischen Rollweg und Hallen)
@@ -305,14 +380,13 @@ def landebahn():
     b.box(x0 - 12.0, C - 6.0, -0.12, x0, C + 6.0, Z_VORFELD, "Vorfeld")
     # ---- gelbe Rollwegmittellinien und Haltelinien (Oberkante Z_GELB1) ----
     # Rollweg parallel zur Bahn; die Anschlusslinien enden an seiner Mittellinie
-    b.box(TAXI_X - GELB_B / 2, Y_SUED - 2.0, Z_GELB0, TAXI_X + GELB_B / 2, Y_NORD + 2.0, Z_GELB1, "Markierung gelb")
-    for yc in ANSCHLUESSE:                                       # Bahn -> Rollweg, mit Haltelinie vor der Bahnkante
+    b.box(TAXI_X - GELB_B / 2, Y_SUED + RC + 1.0, Z_GELB0, TAXI_X + GELB_B / 2, Y_NORD - RC - 1.0, Z_GELB1, "Markierung gelb")
+    for yc in ANSCHLUESSE:                                       # Rollweg -> Haltelinie: die Linie endet am aeusseren Vollstrich
         sp = haltelinie(b, x1, +1, yc, TAXI_B / 2)
-        gelbe_linie_x(b, x1, TAXI_X - GELB_B / 2, yc, sp)
+        gelbe_linie_x(b, x1 + HOLD_D[3] + 0.125, TAXI_X - GELB_B / 2, yc)
     for yc in REIHE_YC:                                          # Rollweg -> Vorfeld -> bis hinten in jede Halle
         gelbe_linie_x(b, TAXI_X + GELB_B / 2, REIHE_X0 + REIHE_T - 3.0, yc)
-    gelbe_linie_x(b, x0 - 11.0, x0, C)                           # Zufahrt von Westen (ohne Haltelinie)
-    gelbe_linie_x(b, HANGAR[0] + 2.5, x0, HY)                    # grosser Hangar: von der Bahn bis in die Halle (ohne Haltelinie)
+    gelbe_linie_x(b, HANGAR[0] + 2.5, x0 - 3.0, HY)              # grosser Hangar: von der Halle bis zur Vorfeldkante (keine Haltelinie)
     # ---- weisse Markierungen (Oberkante Z_MARK) ----
     m = "Markierung weiss"
 
@@ -702,6 +776,60 @@ def zaun():
     return b
 
 
+def tankstelle():
+    """Asphaltierte Tankstelle suedlich der Hangarreihe (auf der dem Tower abgewandten Seite), direkt an Vorfeld und Rollweg:
+    Asphaltflaeche, Zapfsaeulen unter einem Vordach, Shop, zwei Tanks, Preisschild."""
+    b = Bau("umgebung_tankstelle")
+    x0, y0, x1, y1 = TANK
+    b.box(x0, y0, -0.12, x1, y1, Z_VORFELD, "Vorfeld")
+    # Vordach (10 x 10 m) auf vier Stuetzen; darunter zwei Zapfinseln mit je drei Saeulen
+    cx0, cy0, cx1, cy1 = 283.0, 99.0, 293.0, 109.0
+    b.box(cx0 - 0.4, cy0 - 0.4, 4.6, cx1 + 0.4, cy1 + 0.4, 4.9, "Tower Dach")
+    for px in (cx0 + 0.3, cx1 - 0.3):
+        for py in (cy0 + 0.3, cy1 - 0.3):
+            b.box(px - 0.2, py - 0.2, Z_VORFELD, px + 0.2, py + 0.2, 4.6, "Tower Beton")
+    for yi in (cy0 + 3.0, cy1 - 3.0):
+        b.box(cx0 + 1.5, yi - 0.4, Z_VORFELD, cx1 - 1.5, yi + 0.4, Z_VORFELD + 0.2, "Insel")
+        for k in range(3):
+            xx = cx0 + 2.5 + k * 2.5
+            b.box(xx - 0.35, yi - 0.25, Z_VORFELD + 0.2, xx + 0.35, yi + 0.25, 1.8, "Zapfsaeule")
+    # Shop (Flachdach, Tuer zur Zapfsaeulenseite)
+    sx0, sy0, sx1, sy1 = 281.0, 91.0, 291.0, 97.0
+    b.box(sx0, sy0, Z_VORFELD, sx1, sy1, 3.4, "Tower Beton")
+    b.box(sx0 - 0.3, sy0 - 0.3, 3.4, sx1 + 0.3, sy1 + 0.3, 3.7, "Tower Dach")
+    b.box(286.0 - 0.6, sy1, Z_VORFELD, 286.0 + 0.6, sy1 + 0.06, 2.2, "Tuer")
+    for dx in (-3.0, 3.0):
+        B.fenster(b, 286.0 + dx, sy1, 1.6, 1.8, 1.2, 0, 1)
+        B.fenster(b, 286.0 + dx, sy0, 1.6, 1.8, 1.2, 0, -1)
+    # Tanks (stehend) und Preisschild
+    for yy in (92.0, 97.5):
+        b.prism(294.3, yy, Z_VORFELD, 1.8, 4.2, 12, "Tank")
+    b.box(281.6 - 0.1, 112.0 - 0.1, Z_VORFELD, 281.6 + 0.1, 112.0 + 0.1, 6.0, "Metall")
+    b.box(281.6 - 1.0, 112.0 - 0.15, 5.0, 281.6 + 1.0, 112.0 + 0.15, 6.4, "Rahmen")
+    return b
+
+
+def helipad():
+    """Helipad auf der Gruenflaeche nordlich des Towers: runde Betonflaeche mit Ring und H, Zufahrtsweg zur Flughafenstrasse."""
+    b = Bau("umgebung_helipad")
+    hx, hy, hr = HELI
+    b.prism(hx, hy, 0.0, hr, 0.09, 24, "Vorfeld")
+    n = 48
+    ri, ra = hr - 1.6, hr - 1.1
+    v, f = [], []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        v += [(hx + ri * math.cos(a), hy + ri * math.sin(a), 0.11), (hx + ra * math.cos(a), hy + ra * math.sin(a), 0.11)]
+        j = (i + 1) % n
+        f.append((2 * i, 2 * i + 1, 2 * j + 1, 2 * j))
+    b.add(v, f, "Markierung weiss")
+    for sx in (-1, 1):                                                          # H: zwei Balken und Quersteg
+        b.box(hx + sx * 1.8 - 0.4, hy - 2.6, 0.09, hx + sx * 1.8 + 0.4, hy + 2.6, 0.11, "Markierung weiss")
+    b.box(hx - 1.4, hy - 0.4, 0.09, hx + 1.4, hy + 0.4, 0.11, "Markierung weiss")
+    streifen(b, (SX + BREITE_WEG / 2 - 1.0, hy), (hx - hr + 0.5, hy), 5.0, Z_WEG, "Weg")
+    return b
+
+
 def windsaecke():
     """Je ein Windsack an beiden Enden der Landebahn (westlich neben der Bahn, ausserhalb der Rollwege): Mast, Auslegerring, Sack."""
     b = Bau("umgebung_windsaecke")
@@ -752,7 +880,7 @@ def drehteile():
 
 def baue_alles():
     """Gibt die Baugruppen zurueck (ohne bpy aufrufbar)."""
-    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke()]
+    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad()]
 
 
 def bauen():

@@ -18,6 +18,7 @@ import bpy  # noqa: E402
 import talkessel as T  # noqa: E402
 import burg as B  # noqa: E402
 import umgebung as U  # noqa: E402
+import stadt as S  # noqa: E402
 import texturen as TX  # noqa: E402
 
 
@@ -27,6 +28,7 @@ def main():
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
     nu = U.bauen()                    # Ringweg, Abzweige, Landebahn, Hangar, Tower
+    ns = S.bauen()                    # Stadt im Westen, Doerfer im Norden/Sueden, Teiche
     TX.anwenden()                     # Texturen aus texturen/<ordner>/ (falls vorhanden)
     T.build_marker()
     T.setup_view()
@@ -34,7 +36,7 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=path)
     zmax = max(v[2] for v in verts)
     print(f"[Polybash] Polytown neu: Tal {T.TAL:.0f} x {T.TAL:.0f} m, hoechster Gipfel {zmax:.0f} m, "
-          f"{len(tris)} Dreiecke Berge, {nb} Flaechen Burg, {nu} Flaechen Umgebung")
+          f"{len(tris)} Dreiecke Berge, {nb} Flaechen Burg, {nu} Flaechen Umgebung, {ns} Flaechen Stadt")
     print("[Polybash] gespeichert:", path)
 
 

@@ -70,3 +70,13 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 - Markierungen (weiss): Zebrastreifen an beiden Enden, ein Touchdown-Balkenpaar je Anflugrichtung und durchgehend die Mittelstriche; sonst nichts (keine Randlinien, keine Zusatzbalken).
 - Noch ohne Texturen (nur Farben). Objekte in der Collection `Umgebung`: `umgebung_wege`, `umgebung_landebahn`, `umgebung_hangar`, `umgebung_hangarreihe`, `umgebung_tower`, `tower_radar`, `umgebung_zaun`, `umgebung_windsaecke`.
 - Das Haus mit der Radarschuessel ist entfernt; die Schuessel steht auf einem runden Betonsockel (`burg_radarsockel`).
+
+### Flughafen: Rundungen, Tankstelle, Helipad
+- Der Asphalt um die Landebahn (Zufahrtsstrasse x=226 + Rollweg x=272) ist eine geschlossene Schleife mit Kurvenradius 12 m (`rund`/`pfad`), keine rechten Winkel.
+- Der gelbe Rollweg-Mittelstrich endet an den aeusseren (durchgezogenen) Haltelinien der drei Anschluesse; er laeuft nicht ueber sie hinaus.
+- Tankstelle (asphaltiert, Vordach, 6 Zapfsaeulen, Shop, 2 Tanks) am Ostzaun neben den Hangars, auf der Seite ohne Tower; Helipad (Radius 8 m, H) auf der Wiese neben dem Tower, per Weg an die Strasse angebunden.
+
+### Stadt (polytown_neu/stadt.py)
+- Stadt im Westen: Marktplatz 30 x 30 m mit Brunnen und 6 Staenden, Rathaus mit Uhrturm (Nord), Gasthaus (Sued), 4 Laeden; runde Marktring-Strasse; Hauptstrasse zum Ringweg. Zwei Spangen zu Nord-/Suedstrasse, dort je ein Dorf mit Kreisverkehr, Dorfbrunnen, Scheune.
+- 4 Teiche (`umgebung.TEICHE`, Mulden im Gelaende, Wasserflaechen `Teichwasser`), flache Bauzonen (`umgebung.STADT_ZONEN`).
+- Jedes Haus hat einen Pfad zur Strasse (Test: Strassennetz zusammenhaengend, keine Ueberlappungen, nur auf ebenem Grund). Noch ohne Texturen.
