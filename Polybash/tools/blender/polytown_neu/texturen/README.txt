@@ -13,3 +13,4 @@ Aktuell erwartet:
 
 Zuordnung und Kachelgroesse (Meter je Wiederholung) stehen in texturen.py (TEXTUREN).
 Fehlt ein Ordner, bleibt das Material einfarbig.
+  festung_wand/  -> Materialien "Mauerwerk" und "Mauerwerk dunkel" (Mauern, Tuerme, Wachhaeuser, Wehrgang)

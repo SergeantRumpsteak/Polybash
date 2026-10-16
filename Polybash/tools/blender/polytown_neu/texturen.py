@@ -19,7 +19,9 @@ TEXTUREN = {
     # Boden: Hofpflaster und Stufen
     "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0},
     "Stufen":           {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.5},
-    # Waende ("Mauerwerk", "Mauerwerk dunkel"): folgt, sobald die Wandtextur da ist (Ordner z. B. "festung_wand")
+    # Waende: Mauern, Tuerme, Wachhaeuser, Bergfried-Details
+    "Mauerwerk":        {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.0},
+    "Mauerwerk dunkel": {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.6},
 }
 ENDUNGEN = {"jpg", "jpeg", "png", "exr", "tif", "tiff", "webp"}
 
