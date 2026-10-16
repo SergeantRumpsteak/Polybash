@@ -18,13 +18,13 @@ ORDNER = os.path.join(HERE, "texturen")
 #            variation: 0..1 (Anti-Kachelung: zweite gedrehte Abtastung + grosse Helligkeitsflecken; 0 = aus)}
 TEXTUREN = {
     # Boden: Hofpflaster und Stufen
-    "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0, "variation": 0.5},
+    "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0, "variation": 0.0},
     # Feuerwehrtreppe: Trittbleche, Wangen, Podest (Metall) und Stuetzsaeulen
-    "Stufen":           {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0, "variation": 0.2},
-    "Treppensaeule":    {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0, "variation": 0.2},   # eigener Ordner festung_treppenseule moeglich
+    "Stufen":           {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0, "variation": 0.0},
+    "Treppensaeule":    {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0, "variation": 0.0},   # eigener Ordner festung_treppenseule moeglich
     # Waende: Mauern, Tuerme, Wachhaeuser, Bergfried-Details
-    "Mauerwerk":        {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.0, "variation": 0.6},
-    "Mauerwerk dunkel": {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.6, "variation": 0.6},
+    "Mauerwerk":        {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.0, "variation": 0.0},
+    "Mauerwerk dunkel": {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.6, "variation": 0.0},
 }
 ENDUNGEN = {"jpg", "jpeg", "png", "exr", "tif", "tiff", "webp"}
 
