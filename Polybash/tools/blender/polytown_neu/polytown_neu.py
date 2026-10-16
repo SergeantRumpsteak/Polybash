@@ -25,7 +25,7 @@ def main():
     T.build_tal(loch=B.LOCH)          # Wiese mit Aussparung fuer das Burggelaende (Graben)
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
-    TX.anwenden()                     # Steintexturen aus texturen/<ordner>/ (falls vorhanden)
+    TX.anwenden()                     # Texturen aus texturen/<ordner>/ (falls vorhanden)
     T.build_marker()
     T.setup_view()
     path = os.path.join(T.out_dir(), "polytown_neu.blend")

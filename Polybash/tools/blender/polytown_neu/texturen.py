@@ -16,9 +16,10 @@ ORDNER = os.path.join(HERE, "texturen")
 
 # Material -> {ordner: Unterordner in texturen/, kachel_m: Meter je Wiederholung, tint: 0..1 (Einfaerbung mit der Materialfarbe)}
 TEXTUREN = {
-    "Mauerwerk":        {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.0},
-    "Mauerwerk dunkel": {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.6},
-    "Stufen":           {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.5},
+    # Boden: Hofpflaster und Stufen
+    "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0},
+    "Stufen":           {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.5},
+    # Waende ("Mauerwerk", "Mauerwerk dunkel"): folgt, sobald die Wandtextur da ist (Ordner z. B. "festung_wand")
 }
 ENDUNGEN = {"jpg", "jpeg", "png", "exr", "tif", "tiff", "webp"}
 

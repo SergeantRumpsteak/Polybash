@@ -286,9 +286,10 @@ def ecktuerme(b):
                     b.cbox(tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, "Mauerwerk")
                 else:
                     b.cbox(tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, "Mauerwerk")
-    # Treppen im Hof hinauf zu den Wehrgaengen West und Ost
-    treppe(b, C - H + TD, C - 10, "N", 10, 2.5, 0, sd=0.8)
-    treppe(b, C + H - TD - 2.5, C + 10, "S", 10, 2.5, 0, sd=0.8)
+    # Treppen im Hof hinauf zu den Wehrgaengen West und Ost: senkrecht zur Mauer, die oberste Stufe (z = ZW) stoesst an
+    # die Mauer, geradeaus geht es auf den Wehrgang (Bruestung aussen verhindert das Herunterfallen)
+    treppe(b, C - H + TD + 10 * 0.8, C - 8.0, "W", 10, 2.5, 0, sd=0.8)
+    treppe(b, C + H - TD - 10 * 0.8, C + 5.5, "E", 10, 2.5, 0, sd=0.8)
 
 
 def tore(b):

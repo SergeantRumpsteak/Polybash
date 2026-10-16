@@ -49,4 +49,4 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 
 ### Drehbare Teile und Texturen (polytown_neu)
 - Radarschüssel, Freya-Antennen und Flakrohre sind eigene Objekte (`radar_schuessel`, `freya_sw/no`, `flak_nw/so`) mit Drehpunkt als Objekt-Ursprung. Im Blender-Modell sind sie statisch (Animation gibt es nur im Spiel); zum Ansehen: Objekt wählen, `R` `Z` drehen. Die Platzhalter-Empties heißen `marker_flak_nw/so`.
-- Steintexturen: Poly-Haven-Satz (Diffuse, Normal **GL**, Roughness, optional AO) in `tools/blender/polytown_neu/texturen/stein_mauer/` legen, `./build_blender.sh` ausführen. Details in `texturen/README.txt`; Kachelgröße (Standard 2 m) in `texturen.py` (`TEXTUREN`).
+- Texturen: Poly-Haven-Satz (Diffuse, Normal **GL**, Roughness, optional AO) in `tools/blender/polytown_neu/texturen/festung_boden/` legen, `./build_blender.sh` ausführen. Details in `texturen/README.txt`; Kachelgröße (Standard 2 m) in `texturen.py` (`TEXTUREN`).

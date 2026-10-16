@@ -9,7 +9,7 @@ Jeder Texturensatz kommt in einen eigenen Unterordner. Das Skript erkennt die Da
 Displacement/Height wird nicht benutzt. Pro Ordner nur EINE Aufloesung ablegen (2k reicht).
 
 Aktuell erwartet:
-  stein_mauer/   -> Material "Mauerwerk" und "Mauerwerk dunkel" (Burgmauern, Tuerme, Wachhaeuser)
+  festung_boden/ -> Materialien "Hof" (Pflaster) und "Stufen" (nur Boden, nicht die Waende)
 
 Zuordnung und Kachelgroesse (Meter je Wiederholung) stehen in texturen.py (TEXTUREN).
 Fehlt ein Ordner, bleibt das Material einfarbig.
