@@ -73,6 +73,10 @@ FARBEN = {
     "Dielen":        ((0.50, 0.36, 0.22), 0.8, 0.0),
     "Decke":         ((0.92, 0.91, 0.86), 0.9, 0.0),
     "Holz alt":      ((0.20, 0.14, 0.10), 0.95, 0.0),
+    "Tuer gruen":    ((0.20, 0.34, 0.24), 0.8, 0.0),
+    "Tuer rot":      ((0.50, 0.14, 0.11), 0.8, 0.0),
+    "Tuer blau":     ((0.20, 0.29, 0.44), 0.8, 0.0),
+    "Tuer grau":     ((0.40, 0.40, 0.38), 0.8, 0.0),
     "Schmutz":       ((0.27, 0.25, 0.21), 1.0, 0.0),
     "Pappe":         ((0.10, 0.10, 0.11), 1.0, 0.0),
     "Moos":          ((0.24, 0.31, 0.17), 1.0, 0.0),
@@ -85,7 +89,7 @@ def _verwittert(rgb, hell=0.80, grau=0.30):
 
 
 for _n in ("Putz weiss", "Putz gelb", "Putz rot", "Putz blau", "Putz gruen", "Putz grau", "Putz sand", "Ziegel", "Ziegel dunkel", "Laden gruen",
-           "Laden braun", "Klinker", "Dach grau", "Rahmen weiss"):
+           "Laden braun", "Klinker", "Dach grau", "Rahmen weiss", "Stein"):
     FARBEN[_n + " alt"] = (_verwittert(FARBEN[_n][0]), min(1.0, FARBEN[_n][1] + 0.05), 0.0)       # verwitterte Varianten (heruntergekommen)
 
 
@@ -491,6 +495,91 @@ def verfall_dach(g, form, rz, w, d, H, rnd, lvl):
         g.poly(P, (0.0, 0.0, 1.0), mat)
 
 
+VORBAU = {"vordach": 0.95, "vordach_giebel": 1.2, "windfang": 2.3, "veranda": 2.4, "portal": 1.0, "schlicht": 0.7, "rundbogen": 1.0}
+
+
+def eingang(g, art, tx, d, mat, lvl, tuerm="Tuer"):
+    """Haustuer-Vorbau auf der lokalen -y-Seite bei x = tx (Tuerbreite 1,1 m). Arten: vordach (flaches Vordach auf Pfosten), vordach_giebel
+    (kleines Satteldach auf Konsolen), windfang (geschlossener Vorbau mit Fenstern), veranda (offene Holzveranda mit Gelaender),
+    portal (Pilaster mit Gebaelk und Dreiecksgiebel), schlicht (nur Stufe und Laterne), rundbogen (Rundbogenblende ueber der Tuer)."""
+    y0 = -d / 2
+    t0, t1 = tx - 0.55, tx + 0.55
+    st, rw = ("Stein alt" if lvl else "Stein"), ("Rahmen weiss alt" if lvl else "Rahmen weiss")
+    dm = "Dach grau alt" if lvl else "Dach grau"
+    if art == "vordach":
+        g.box(t0 - 0.25, y0 - 0.95, -0.6, t1 + 0.25, y0 - 0.5, 0.1, st)
+        g.box(t0 - 0.25, y0 - 0.5, -0.6, t1 + 0.25, y0 - 0.07, F0, st)
+        g.box(t0 - 0.55, y0 - 1.15, 2.75, t1 + 0.55, y0 - 0.07, 2.87, dm)
+        for xx in (t0 - 0.5, t1 + 0.5):
+            g.box(xx - 0.06, y0 - 1.1, -0.6, xx + 0.06, y0 - 1.0, 2.75, rw)
+    elif art == "vordach_giebel":
+        g.box(t0 - 0.3, y0 - 1.2, -0.6, t1 + 0.3, y0 - 0.6, 0.1, st)
+        g.box(t0 - 0.3, y0 - 0.6, -0.6, t1 + 0.3, y0 - 0.07, F0, st)
+        for sx in (-1, 1):                                                   # Konsolen und Dachflaeche des Giebelvordachs
+            xx = tx + sx * 0.85
+            g.box(xx - 0.05, y0 - 1.0, 2.2, xx + 0.05, y0 - 0.07, 2.3, "Holz alt")
+            g.box(xx - 0.04, y0 - 0.95, 2.3, xx + 0.04, y0 - 0.9, 2.75, "Holz alt")
+        zs, zf = 2.75, 3.35
+        g.poly([(tx - 1.05, y0 - 1.2, zs), (tx + 1.05, y0 - 1.2, zs), (tx + 1.05, y0 - 0.07, zf), (tx - 1.05, y0 - 0.07, zf)], (0.0, -0.5, 1.0), dm)
+        g.poly([(tx - 1.05, y0 - 1.2, zs), (tx - 1.05, y0 - 0.07, zf), (tx + 1.05, y0 - 0.07, zf), (tx + 1.05, y0 - 1.2, zs)], (0.0, 0.5, -1.0), dm)
+    elif art == "windfang":
+        wo = 1.05                                                            # halbe Aussenbreite
+        yf = y0 - 1.5
+        g.box(tx - wo, yf, -0.6, tx + wo, y0, F0, st)                         # Boden
+        for sx in (-1, 1):                                                   # Seitenwaende mit kleinem Fenster
+            xa, xb = (tx - wo, tx - wo + 0.2) if sx < 0 else (tx + wo - 0.2, tx + wo)
+            wand(g, "y", xa, xb, yf, y0, -0.6, 2.55, mat, [(yf + 0.45, yf + 1.15, 1.1, 1.9)])
+            g.box(xa - 0.02 if sx < 0 else xa + 0.08, yf + 0.45, 1.1, xb - 0.08 if sx < 0 else xb + 0.02, yf + 1.15, 1.9, "Fenster")
+        wand(g, "x", yf, yf + 0.2, tx - wo, tx + wo, -0.6, 2.55, mat, [(t0 + 0.05, t1 - 0.05, F0, F0 + 2.1)])           # Vorderwand mit Tuer
+        tuerrahmen(g, "x", yf, yf + 0.2, t0 + 0.05, t1 - 0.05, F0, F0 + 2.1)
+        g.box(tx - wo - 0.15, yf - 0.1, 2.55, tx + wo + 0.15, y0, 2.7, dm)
+        g.box(tx - wo, yf - 0.55, -0.6, tx + wo, yf, 0.1, st)                 # Stufe
+    elif art == "veranda":
+        wv, dv = 1.9, 1.9
+        g.box(tx - wv, y0 - dv, -0.6, tx + wv, y0, F0, "Holz alt")             # Holzboden
+        for xx in (tx - wv + 0.08, tx + wv - 0.08):
+            for yy in (y0 - dv + 0.08, y0 - 0.2):
+                g.box(xx - 0.07, yy - 0.07, -0.6, xx + 0.07, yy + 0.07, 2.75, rw)
+        g.box(tx - wv - 0.15, y0 - dv - 0.15, 2.75, tx + wv + 0.15, y0, 2.87, dm)
+        for (xa, ya, xb, yb) in ((tx - wv, y0 - dv + 0.08, tx - wv + 0.16, y0 - 0.2), (tx + wv - 0.16, y0 - dv + 0.08, tx + wv, y0 - 0.2),
+                                 (tx - wv + 0.08, y0 - dv, tx - 0.85, y0 - dv + 0.16), (tx + 0.85, y0 - dv, tx + wv - 0.08, y0 - dv + 0.16)):
+            g.box(xa, ya, F0 + 0.9, xb, yb, F0 + 0.96, rw)                     # Handlauf
+            g.box(xa, ya, F0 + 0.45, xb, yb, F0 + 0.5, rw)
+        g.box(tx - 0.85, y0 - dv - 0.5, -0.6, tx + 0.85, y0 - dv, 0.1, st)     # Stufe
+    elif art == "portal":
+        g.box(t0 - 0.5, y0 - 1.0, -0.6, t1 + 0.5, y0 - 0.5, 0.1, st)
+        g.box(t0 - 0.5, y0 - 0.5, -0.6, t1 + 0.5, y0 - 0.07, F0, st)
+        for xx in (t0 - 0.45, t1 + 0.15):                                     # Pilaster
+            g.box(xx, y0 - 0.3, F0, xx + 0.3, y0, 2.9, rw)
+            g.box(xx - 0.05, y0 - 0.34, F0, xx + 0.35, y0, F0 + 0.25, st)
+            g.box(xx - 0.05, y0 - 0.34, 2.75, xx + 0.35, y0, 2.9, st)
+        g.box(t0 - 0.6, y0 - 0.38, 2.9, t1 + 0.6, y0, 3.15, rw)               # Gebaelk
+        g.poly([(t0 - 0.6, y0 - 0.38, 3.15), (t1 + 0.6, y0 - 0.38, 3.15), (tx, y0 - 0.38, 3.65)], (0.0, -1.0, 0.0), rw)
+        g.poly([(t0 - 0.6, y0 - 0.38, 3.15), (tx, y0 - 0.38, 3.65), (tx, y0, 3.65), (t0 - 0.6, y0, 3.15)], (-0.5, 0.0, 1.0), dm)
+        g.poly([(t1 + 0.6, y0 - 0.38, 3.15), (t1 + 0.6, y0, 3.15), (tx, y0, 3.65), (tx, y0 - 0.38, 3.65)], (0.5, 0.0, 1.0), dm)
+    elif art == "rundbogen":
+        g.box(t0 - 0.25, y0 - 1.0, -0.6, t1 + 0.25, y0 - 0.5, 0.1, st)
+        g.box(t0 - 0.25, y0 - 0.5, -0.6, t1 + 0.25, y0 - 0.07, F0, st)
+        zc = F0 + TH + 0.08
+        n = 10
+        for k in range(n):                                                     # Bogenring (Stein) und Fuellung (Holz) ueber dem Sturz
+            a0, a1 = math.pi * k / n, math.pi * (k + 1) / n
+            for (ra, rb, m) in ((0.0, 0.55, tuerm), (0.55, 0.8, st)):
+                P = [(tx + ra * math.cos(a0), y0 - 0.02, zc + ra * math.sin(a0)), (tx + rb * math.cos(a0), y0 - 0.02, zc + rb * math.sin(a0)),
+                     (tx + rb * math.cos(a1), y0 - 0.02, zc + rb * math.sin(a1)), (tx + ra * math.cos(a1), y0 - 0.02, zc + ra * math.sin(a1))]
+                if ra == 0.0:
+                    P = [P[1], P[2], P[3]] if False else [(tx, y0 - 0.02, zc), P[1], P[2]]
+                g.poly(P, (0.0, -1.0, 0.0), m)
+        g.box(tx - 0.12, y0 - 0.08, zc + 0.78, tx + 0.12, y0, zc + 0.95, st)       # Schlussstein
+        g.box(t0 - 0.14, y0 - 0.08, F0, t0 - 0.02, y0, zc, st)                      # Gewaende
+        g.box(t1 + 0.02, y0 - 0.08, F0, t1 + 0.14, y0, zc, st)
+    else:                                                                    # schlicht: nur Stufe, Schwelle, Laterne, Hausnummernschild
+        g.box(t0 - 0.2, y0 - 0.7, -0.6, t1 + 0.2, y0 - 0.07, F0, st)
+        g.box(t1 + 0.35, y0 - 0.14, 1.9, t1 + 0.5, y0, 2.3, "Metall")
+        g.box(t1 + 0.3, y0 - 0.2, 2.3, t1 + 0.55, y0, 2.45, "Metall")
+        g.box(t0 - 0.55, y0 - 0.03, 1.5, t0 - 0.25, y0, 1.7, "Rahmen weiss")
+
+
 def haus(b, cx, cy, zb, theta, T, seed=0):
     """Wohnhaus im Stil der 1940er Jahre (verwitterte Siedlungs-/Stadthaeuser, teils Fachwerk): Putz oder Fachwerk auf Sockel,
     Sprossenfenster, Fensterlaeden (teils defekt), Haustuer mit Freitreppe und Vordach; Dachformen x/y/walm/mansard/pult mit Gauben und Kamin.
@@ -553,13 +642,8 @@ def haus(b, cx, cy, zb, theta, T, seed=0):
     # Haustuer: Rahmen, Schwelle, offenes Tuerblatt (nach innen, an der Flurwand)
     tuerrahmen(g, "x", -d / 2 - 0.07, -d / 2 + 0.0, tuer[0], tuer[1], F0, F0 + TH)
     g.box(tuer[0], -d / 2 - 0.05, F0 - 0.04, tuer[1], -d / 2 + WD, F0, "Stein")
-    g.box(tuer[1] - 0.05, iy0, F0, tuer[1], iy0 + 0.95, F0 + TH - 0.05, "Tuer")
-    # Freitreppe (2 Stufen) und Vordach
-    g.box(tuer[0] - 0.25, -d / 2 - 0.95, -0.6, tuer[1] + 0.25, -d / 2 - 0.5, 0.1, "Stein")
-    g.box(tuer[0] - 0.25, -d / 2 - 0.5, -0.6, tuer[1] + 0.25, -d / 2 - 0.07, F0, "Stein")
-    g.box(tuer[0] - 0.55, -d / 2 - 1.15, 2.75, tuer[1] + 0.55, -d / 2 - 0.07, 2.87, "Dach grau alt" if lvl else "Dach grau")
-    for xx in (tuer[0] - 0.5, tuer[1] + 0.5):
-        g.box(xx - 0.06, -d / 2 - 1.1, -0.6, xx + 0.06, -d / 2 - 1.0, 2.75, "Rahmen weiss")
+    g.box(tuer[1] - 0.05, iy0, F0, tuer[1], iy0 + 0.95, F0 + TH - 0.05, T.get("tuerfarbe", "Tuer"))
+    eingang(g, T.get("eingang", "vordach"), tx, d, mat, lvl, T.get("tuerfarbe", "Tuer"))
     # Geschossdecken, Boden
     g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Dielen")
     sx0 = px + 2.1                                                # Treppenband: x = sx0 .. ix1
@@ -786,7 +870,7 @@ class Belegt:
         return True
 
 
-def _frei_haus(self, hx, hy, theta, w, d):
+def _frei_haus(self, hx, hy, theta, w, d, vorbau=1.3):
     """Platzpruefung fuer ein Haus (Grundriss w x d, Stufen/Vordach 1,2 m davor): Stuetzpunkte auf dem Grundriss muessen frei von
     Strassen, Plaetzen/Gebaeuden und Teichen sein; Burg, Rand, Flughafen und andere Haeuser (Kreis max(w,d)/2 + 1) wie bei frei()."""
     r = max(w, d) / 2 + 1.0
@@ -797,7 +881,7 @@ def _frei_haus(self, hx, hy, theta, w, d):
     for ix in range(-int(w / 2.5) - 1, int(w / 2.5) + 2):
         for iy in range(-int(d / 2.5) - 1, int(d / 2.5) + 3):
             lx = max(-w / 2 - 0.8, min(w / 2 + 0.8, ix * 2.5))
-            ly = max(-d / 2 - 1.3, min(d / 2 + 0.8, -d / 2 - 1.3 + (iy + int(d / 2.5) + 1) * 2.5)) if False else max(-d / 2 - 1.3, min(d / 2 + 0.8, iy * 2.5))
+            ly = max(-d / 2 - vorbau - 0.3, min(d / 2 + 0.8, iy * 2.5))
             px, py = hx + lx * c - ly * s_, hy + lx * s_ + ly * c
             if strassenabstand(px, py, self.strs) < 0.5:
                 return False
@@ -822,16 +906,16 @@ _A = dict(stock=2, rh=3.1, px=1.0, qy=0.3, tuer_x=2.4, fw_eg=(-2.6, -0.4), fw_og
           ww_eg=(-1.8, 1.8), ww_og=(-1.8, 1.8), ow_eg=(-2.4,), ow_og=(-2.4,))
 _C = dict(stock=1, rh=3.0, px=0.5, qy=None, tuer_x=2.0, fw_eg=(-2.4, -0.3), fw_og=(), bw_eg=(-2.2, 2.0), bw_og=(), ww_eg=(0.0,), ww_og=(), ow_eg=(-1.5,), ow_og=())
 HAUSTYPEN = [   # heruntergekommener 1940er-Stil; dachform: x/y/walm/mansard/pult; fachwerk: sichtbares Holzgeruest; verfall: 0..2
-    dict(_A, w=9.6, d=8.4, wand="Putz weiss", dach="Ziegel", laden="Laden gruen", dachform="x", gauben=(-1.8, 1.8), kamin=-3.3, spiegel=1, verfall=1),
-    dict(_A, w=9.0, d=8.0, wand="Putz gelb", dach="Ziegel dunkel", laden="Laden braun", dachform="walm", rh=2.7, gauben=(0.0,), kamin=-1.0, spiegel=-1, verfall=2),
-    dict(_A, w=10.2, d=8.0, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.7, fachwerk=True, kamin=1.0, spiegel=1, verfall=1),
-    dict(_A, w=9.0, d=8.6, wand="Putz grau", dach="Dach grau", laden="Laden gruen", dachform="mansard", rh=3.5, kamin=2.4, spiegel=-1, verfall=2),
-    dict(_C, w=8.0, d=7.0, wand="Putz gruen", dach="Ziegel", laden="Laden braun", dachform="x", gauben=(-1.2,), kamin=-2.8, spiegel=1, verfall=1),
-    dict(_C, w=8.6, d=7.4, wand="Putz rot", dach="Ziegel dunkel", laden="Laden gruen", dachform="pult", rh=1.7, kamin=2.4, spiegel=-1, verfall=2),
-    dict(_A, w=9.6, d=8.0, wand="Putz sand", dach="Ziegel", laden="Laden braun", dachform="x", fachwerk=True, gauben=(-2.0,), kamin=3.3, spiegel=-1, verfall=1),
-    dict(_C, w=7.6, d=6.8, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.2, fachwerk=True, kamin=1.0, spiegel=1, verfall=2),
-    dict(_A, w=9.4, d=8.2, wand="Putz blau", dach="Ziegel dunkel", laden="Laden gruen", dachform="y", rh=3.5, kamin=-1.0, spiegel=-1, verfall=1),
-    dict(_A, w=10.0, d=8.4, wand="Klinker", dach="Ziegel", laden="Laden braun", dachform="walm", rh=2.8, gauben=(-1.8, 1.8), kamin=-1.0, spiegel=1, verfall=0),
+    dict(_A, w=9.6, d=8.4, wand="Putz weiss", dach="Ziegel", laden="Laden gruen", dachform="x", gauben=(-1.8, 1.8), kamin=-3.3, spiegel=1, verfall=1, eingang="vordach", tuerfarbe="Tuer"),
+    dict(_A, w=9.0, d=8.0, wand="Putz gelb", dach="Ziegel dunkel", laden="Laden braun", dachform="walm", rh=2.7, gauben=(0.0,), kamin=-1.0, spiegel=-1, verfall=2, eingang="windfang", tuerfarbe="Tuer gruen"),
+    dict(_A, w=10.2, d=8.0, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.7, fachwerk=True, kamin=1.0, spiegel=1, verfall=1, eingang="veranda", tuerfarbe="Tuer rot"),
+    dict(_A, w=9.0, d=8.6, wand="Putz grau", dach="Dach grau", laden="Laden gruen", dachform="mansard", rh=3.5, kamin=2.4, spiegel=-1, verfall=2, eingang="portal", tuerfarbe="Tuer blau"),
+    dict(_C, w=8.0, d=7.0, wand="Putz gruen", dach="Ziegel", laden="Laden braun", dachform="x", gauben=(-1.2,), kamin=-2.8, spiegel=1, verfall=1, eingang="schlicht", tuerfarbe="Tuer grau"),
+    dict(_C, w=8.6, d=7.4, wand="Putz rot", dach="Ziegel dunkel", laden="Laden gruen", dachform="pult", rh=1.7, kamin=2.4, spiegel=-1, verfall=2, eingang="vordach_giebel", tuerfarbe="Tuer"),
+    dict(_A, w=9.6, d=8.0, wand="Putz sand", dach="Ziegel", laden="Laden braun", dachform="x", fachwerk=True, gauben=(-2.0,), kamin=3.3, spiegel=-1, verfall=1, eingang="windfang", tuerfarbe="Tuer rot"),
+    dict(_C, w=7.6, d=6.8, wand="Putz weiss", dach="Ziegel", laden=None, dachform="y", rh=3.2, fachwerk=True, kamin=1.0, spiegel=1, verfall=2, eingang="rundbogen", tuerfarbe="Tuer gruen"),
+    dict(_A, w=9.4, d=8.2, wand="Putz blau", dach="Ziegel dunkel", laden="Laden gruen", dachform="y", rh=3.5, kamin=-1.0, spiegel=-1, verfall=1, eingang="veranda", tuerfarbe="Tuer blau"),
+    dict(_A, w=10.0, d=8.4, wand="Klinker", dach="Ziegel", laden="Laden braun", dachform="walm", rh=2.8, gauben=(-1.8, 1.8), kamin=-1.0, spiegel=1, verfall=0, eingang="portal", tuerfarbe="Tuer"),
 ]
 
 
@@ -863,16 +947,20 @@ def haeuser_entlang(L, p, q, strs, belegt, haeuser, pfade, abstand=15.5, rand=11
                 tdx = typ["tuer_x"] * typ["spiegel"]
                 hx, hy = dx_ - nx_ * d / 2 - (-ny_) * tdx, dy_ - ny_ * d / 2 - nx_ * tdx
                 ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
-                if ok_e and belegt.frei_haus(hx, hy, theta, w, d):
+                if ok_e and belegt.frei_haus(hx, hy, theta, w, d, typ_vorbau(typ)):
                     break
             else:
                 continue
             r = max(w, d) / 2 + 1.0
             belegt.kreise.append((hx, hy, r))
             haeuser.append({"seed": len(haeuser) + 1, "x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "strasse": strasse["name"]})
-            door = (dx_ + nx_ * 0.95, dy_ + ny_ * 0.95)
+            door = (dx_ + nx_ * (typ_vorbau(typ) + 0.05), dy_ + ny_ * (typ_vorbau(typ) + 0.05))
             start = (p[0] + ux * t + s * nrm[0] * (hr - 0.3), p[1] + uy * t + s * nrm[1] * (hr - 0.3))
             pfade.append((start, door))
+
+
+def typ_vorbau(typ):
+    return VORBAU[typ.get("eingang", "vordach")]
 
 
 def typ_folge(n):
@@ -897,16 +985,132 @@ def kreis_haeuser(zentrum, r_innen, strs, belegt, haeuser, pfade, n=9, ohne=(-ma
             hx = cx + rad * math.cos(a) + math.cos(a) * d / 2 - math.sin(a) * tdx
             hy = cy + rad * math.sin(a) + math.sin(a) * d / 2 + math.cos(a) * tdx
             ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
-            if ok_e and belegt.frei_haus(hx, hy, theta, w, d):
+            if ok_e and belegt.frei_haus(hx, hy, theta, w, d, 1.3 if sched else typ_vorbau(typ)):
                 break
         else:
             continue
         r = max(w, d) / 2 + 1.0
         belegt.kreise.append((hx, hy, r))
         haeuser.append({"seed": len(haeuser) + 1, "x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "scheune": sched, "strasse": strasse["name"]})
-        door = (cx + (r_innen + 3.2 - 0.95) * math.cos(a), cy + (r_innen + 3.2 - 0.95) * math.sin(a))
+        vb = 0.95 if sched else typ_vorbau(typ) + 0.05
+        door = (cx + (r_innen + 3.2 - vb) * math.cos(a), cy + (r_innen + 3.2 - vb) * math.sin(a))
         start = (cx + (r_innen - 0.3) * math.cos(a), cy + (r_innen - 0.3) * math.sin(a))
         pfade.append((start, door))
+
+
+# ------------------------------------------------------------------ Oeffentliche Gebaeude (ersetzen Wohnhaeuser)
+def _fuss(art, cx, cy, theta, zus=0.0):
+    """Grundriss-Rechteck (x0, y0, x1, y1) eines oeffentlichen Gebaeudes; theta ist ein Vielfaches von 90 Grad."""
+    w, d, vor = {"feuerwehr": (40.0, 8.4, 1.2), "supermarkt": (12.0, 9.0, 1.7), "post": (11.0, 9.0, 1.7), "kirche": (10.6 + 1.2, 26.0, 1.7)}[art]
+    c, s_ = math.cos(theta), math.sin(theta)
+    pts = []
+    for lx, ly in ((-w / 2 - 0.4, -d / 2 - vor), (w / 2 + 0.4, -d / 2 - vor), (w / 2 + 0.4, d / 2 + 0.6), (-w / 2 - 0.4, d / 2 + 0.6)):
+        if art == "feuerwehr":
+            lx = max(-w / 2 - 0.4, min(lx, w / 2 + 0.4))
+        pts.append((cx + lx * c - ly * s_, cy + lx * s_ + ly * c))
+    return (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
+
+
+def _flaeche_frei(belegt, rc, ignoriere=()):
+    """Ist das Rechteck rc frei von Strassen, Plaetzen/Gebaeuden, Teichen, Burg und anderen Haeusern (Kreise ausser 'ignoriere')?"""
+    x0, y0, x1, y1 = rc
+    if not (4.0 < x0 and x1 < 296.0 and 4.0 < y0 and y1 < 296.0):
+        return False
+    nx_ = int((x1 - x0) / 1.5) + 2
+    ny_ = int((y1 - y0) / 1.5) + 2
+    for i in range(nx_ + 1):
+        for j in range(ny_ + 1):
+            px, py = x0 + (x1 - x0) * i / nx_, y0 + (y1 - y0) * j / ny_
+            ra = math.hypot(px - C, py - C)
+            if ra < U.ring_r(math.atan2(py - C, px - C)) + U.BREITE_WEG / 2 + 8.0 or max(abs(px - C), abs(py - C)) < 46.0:
+                return False
+            if strassenabstand(px, py, belegt.strs) < 0.5:
+                return False
+            for tx, ty, tr in U.TEICHE:
+                if math.hypot(px - tx, py - ty) < tr + 2.0:
+                    return False
+            for (a0, b0, a1, b1) in belegt.rechtecke:
+                if a0 - 0.5 < px < a1 + 0.5 and b0 - 0.5 < py < b1 + 0.5:
+                    return False
+            for k in belegt.kreise:
+                if k not in ignoriere and math.hypot(px - k[0], py - k[1]) < k[2]:
+                    return False
+            if abs(U.gelaende_hoehe(px, py)) > 0.15:
+                return False
+    return True
+
+
+def setze_spezial(strs, belegt, haeuser, pfade):
+    """Ersetzt einzelne Wohnhaeuser durch Feuerwehr, Supermarkt, Post und Kirche (gleiche Tuerseite/Strassenanbindung). Rueckgabe: (spezial, plaetze)."""
+    def finde(x, y, strasse="Marktring"):
+        for i, h in enumerate(haeuser):
+            if h["strasse"] == strasse and abs(h["x"] - x) < 1.0 and abs(h["y"] - y) < 1.0:
+                return i
+        return None
+
+    def tuer(h):
+        th = h["theta"]
+        n = (math.sin(th), -math.cos(th))
+        xa = (math.cos(th), math.sin(th))
+        t = h["typ"]
+        tdx = t["tuer_x"] * t["spiegel"]
+        return (h["x"] + n[0] * h["d"] / 2 + xa[0] * tdx, h["y"] + n[1] * h["d"] / 2 + xa[1] * tdx), n, xa
+
+    auftraege = [("feuerwehr", [(17.6, 140.1), (17.6, 155.1), (17.6, 170.1)]), ("supermarkt", [(72.3, 125.5)]), ("post", [(72.4, 198.2)]),
+                 ("kirche", [(57.0, 197.9), (37.6, 198.2)])]
+    spezial, plaetze, entfernen = [], [], []
+    for art, orte in auftraege:
+        idx = [finde(*o) for o in orte]
+        if None in idx:
+            continue
+        hs = [haeuser[i] for i in idx]
+        kreise = [(h["x"], h["y"], h["r"]) for h in hs]
+        th = hs[0]["theta"]
+        n = (math.sin(th), -math.cos(th))
+        xa = (math.cos(th), math.sin(th))
+        if art == "feuerwehr":
+            cx = sum(h["x"] for h in hs) / len(hs)
+            cy = sum(h["y"] for h in hs) / len(hs)
+            vor = 1.2
+        else:
+            ds = [tuer(h)[0] for h in hs]
+            D = (sum(p[0] for p in ds) / len(ds), sum(p[1] for p in ds) / len(ds))
+            w, d, tdx = {"supermarkt": (12.0, 9.0, 3.8), "post": (11.0, 9.0, 0.0), "kirche": (10.6, 26.0, 0.0)}[art]
+            cx, cy = D[0] - n[0] * d / 2 - xa[0] * tdx, D[1] - n[1] * d / 2 - xa[1] * tdx
+            vor = 1.7
+        rc = _fuss(art, cx, cy, th)
+        if not _flaeche_frei(belegt, rc, ignoriere=kreise):
+            print("Hinweis: %s passt nicht, Wohnhaeuser bleiben" % art)
+            continue
+        zb = sum(h["zb"] for h in hs) / len(hs)
+        if art == "feuerwehr":
+            c_, s_ = math.cos(th), math.sin(th)
+            tdoor = (cx + 15.6 * c_ + 4.2 * s_, cy + 15.6 * s_ - 4.2 * c_)                # Turmtuer (lokal x = 15,6; Fassade y = -4,2)
+            st0 = pfade[idx[1]][0]
+            start = (st0[0], tdoor[1]) if abs(n[0]) > 0.5 else (tdoor[0], st0[1])
+            ziel = (tdoor[0] + n[0] * 0.9, tdoor[1] + n[1] * 0.9)
+            pfade_neu = [(start, ziel)]
+            fx = (cx + n[0] * 4.2, cy + n[1] * 4.2)
+            plaetze.append((min(fx[0], st0[0]) if abs(n[0]) > 0.5 else cx - 20.0, cy - 20.0 if abs(n[0]) > 0.5 else min(fx[1], st0[1]),
+                            max(fx[0], st0[0]) if abs(n[0]) > 0.5 else cx + 20.0, cy + 20.0 if abs(n[0]) > 0.5 else max(fx[1], st0[1])))
+        else:
+            a = pfade[idx[0]]
+            sv = (D[0] - tuer(hs[0])[0][0], D[1] - tuer(hs[0])[0][1])
+            pfade_neu = [((a[0][0] + sv[0], a[0][1] + sv[1]), (D[0] + n[0] * (vor + 0.05), D[1] + n[1] * (vor + 0.05)))]
+        entfernen += idx
+        spezial.append({"art": art, "x": cx, "y": cy, "theta": th, "zb": zb, "rc": rc, "pfade": pfade_neu, "kreise": kreise})
+    for i in sorted(set(entfernen), reverse=True):
+        del haeuser[i]
+        del pfade[i]
+    for sp in spezial:
+        for k in sp["kreise"]:
+            if k in belegt.kreise:
+                belegt.kreise.remove(k)
+        belegt.rechtecke.append(sp["rc"])
+        pfade.extend(sp["pfade"])
+    for pl in plaetze:
+        belegt.rechtecke.append(pl)
+    return spezial, plaetze
 
 
 def plane_stadt():
@@ -947,6 +1151,7 @@ def plane_stadt():
     # Doerfer um die Kreisverkehre
     kreis_haeuser(DORF_N, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), strasse=S["Kreisverkehr Nord"], scheune_idx=3)
     kreis_haeuser(DORF_S, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(math.pi / 2,), strasse=S["Kreisverkehr Sued"], scheune_idx=6)
+    spezial, plaetze = setze_spezial(strs, belegt, haeuser, pfade)
     # Baeume: deterministisch gestreut in den Zonen, nur auf freiem Boden
     baeume = []
     for ix in range(0, 300, 6):
@@ -965,7 +1170,7 @@ def plane_stadt():
             baeume.append((x, y, int(T._h01(ix, iy, 994) * 2)))
     for (x, y, _k) in baeume:
         belegt.kreise.append((x, y, 2.0))
-    return {"strs": strs, "S": S, "zentrum": zentrum, "haeuser": haeuser, "pfade": pfade, "baeume": baeume, "belegt": belegt}
+    return {"strs": strs, "S": S, "zentrum": zentrum, "haeuser": haeuser, "pfade": pfade, "baeume": baeume, "belegt": belegt, "spezial": spezial, "plaetze": plaetze}
 
 
 # ------------------------------------------------------------------ Bau der Objekte
@@ -977,6 +1182,8 @@ def baue_alles():
         U.pfad(w, s["pts"], s["w"], Z_STR, "Strasse", geschlossen=s["zu"])
     x0, y0, x1, y1 = PLATZ
     w.add([(x0, y0, Z_PLATZ), (x1, y0, Z_PLATZ), (x1, y1, Z_PLATZ), (x0, y1, Z_PLATZ)], [(0, 1, 2, 3)], "Pflaster")
+    for (px0, py0, px1, py1) in P["plaetze"]:
+        w.add([(px0, py0, Z_PLATZ), (px1, py0, Z_PLATZ), (px1, py1, Z_PLATZ), (px0, py1, Z_PLATZ)], [(0, 1, 2, 3)], "Pflaster")
     for a, c in P["pfade"]:
         U.streifen(w, a, c, W_PFAD, Z_PFAD, "Pfad")
     # Gebaeude im Zentrum
@@ -996,6 +1203,11 @@ def baue_alles():
             scheune(h, H["x"], H["y"], H["zb"], H["theta"], H["w"], H["d"])
         else:
             haus(h, H["x"], H["y"], H["zb"], H["theta"], H["typ"], seed=H["seed"])
+    # Oeffentliche Gebaeude (Feuerwehr, Supermarkt, Post, Kirche)
+    import oeffentlich as OE
+    oe = Bau("stadt_oeffentlich")
+    for sp in P["spezial"]:
+        getattr(OE, sp["art"])(oe, sp["x"], sp["y"], sp["zb"], sp["theta"])
     # Baeume
     bm = Bau("stadt_baeume")
     for x, y, k in P["baeume"]:
@@ -1006,7 +1218,7 @@ def baue_alles():
         n = 24
         rr = tr + 1.4
         t.add([(tx + rr * math.cos(2 * math.pi * i / n), ty + rr * math.sin(2 * math.pi * i / n), U.TEICH_Z) for i in range(n)], [tuple(range(n))], "Teichwasser")
-    return [w, z, h, bm, t]
+    return [w, z, h, oe, bm, t]
 
 
 def bauen():

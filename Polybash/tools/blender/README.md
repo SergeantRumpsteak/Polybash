@@ -88,3 +88,12 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 - 4 von 6 Haustypen mit begehbarem Obergeschoss (Flur mit Treppe, 15 Stufen, Treppenloch mit Gelaender, 2-3 Zimmer je Etage, Innentueren); 2 Typen eingeschossig, ebenfalls betretbar. Tuer offen, Fenster geschlossen.
 - Jedes Haus steht mit der Tuer genau auf der Pfadachse zur Strasse; Spiegelung (`spiegel`) fuer Abwechslung.
 - Test (Mock): Begehbarkeit per Raster-Suche (Koerper 1,8 m, Stufen <= 0,31 m): Flur, alle Zimmer, Treppe und Obergeschoss erreichbar, keine Absturzkanten, Dach nicht begehbar.
+- Eingaenge (`eingang`): sieben Arten statt eines einheitlichen Vordachs - Vordach, Vordach mit Giebel, Windfang (Vorbau), Veranda, Portal mit Pilastern, schlichte Tuer, Rundbogentuer; je Haustyp festgelegt, Pfad endet vor der jeweiligen Tuer.
+
+### Oeffentliche Gebaeude (polytown_neu/oeffentlich.py)
+Sie ersetzen einzelne Wohnhaeuser (`stadt.setze_spezial`), gleiche Tuerseite und Strassenanbindung, alle im verwitterten 40er-Stil und betretbar:
+- **Feuerwehr** (40 x 8,4 m, ersetzt die drei roten Klinkerhaeuser westlich des Rathauses): Halle mit drei Fluegeltoren (aufgeschwenkt), Aufschrift FEUERWEHR, Spinde, Werkbank, Schlauchregal, Leiter; Wachturm mit gegenlaeufiger Treppe bis zum Wachraum (Rundumfenster, Walmdach, Sirene); gepflasterter Vorplatz bis zur Strasse.
+- **Supermarkt** (Konsum, 12 x 9 m): Schaufenster, gestreifte Markise, Schriftzug, Regale, Kasse, Kuehltruhe, Lieferanten- und Seitentuer, Flachdach mit Attika.
+- **Post** (11 x 9 m, zwei Geschosse): Portal mit Schild POST, Posthorn, gelber Briefkasten, Schalterhalle mit drei Schaltern, Dienstraum mit Paketregal, Walmdach.
+- **Kirche** (10,6 x 26 m): Turm mit Uhr, Schallluken und Spitzhelm samt Kreuz, Portal mit Vorhalle, Schiff mit Spitzbogen-Buntglasfenstern und Strebepfeilern, Chor mit Dreifachlanzette; innen Kirchenbaenke, Mittelgang, Chorstufen, Altar, Kanzel, Taufstein (Turm oben geschlossen).
+- Tests (Mock, kein echtes Blender): Raster-Begehbarkeit je Gebaeude (Eingang bis Innenraeume, Turmtreppe der Feuerwehr, keine Absturzkanten), Stadt-Layout (Pfade, keine Ueberlappung mit Strassen, Zentrum, Haeusern, Teichen, Baeumen).
