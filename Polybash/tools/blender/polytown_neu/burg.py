@@ -2,8 +2,8 @@
 
 Nachbau der Burg aus der Standardkarte (spiel.py bleibt unveraendert): quadratische Betonburg 44 x 44 m mit zwei Toren
 (Nord, Ssued) samt Wachhaeusern und Schranken, Ecktuerme, Bergfried mit Radarschuessel, zwei Flak-Geschuetzen auf den
-Tuermen NW und SO, zwei Freya-Antennen auf den Tuermen SW und NO, Kasematten, Wassergraben mit zwei Bruecken (Nord, Sued)
-und zwei Daemmen (West, Ost).
+Tuermen NW und SO, zwei Freya-Antennen auf den Tuermen SW und NO, Kasematten, Wassergraben mit zwei Bruecken (Nord, Sued) vor den beiden Toren.
+West- und Ostmauer haben keinen Eingang und damit auch keinen Uebergang ueber den Graben.
 
 Dieses Modul wird von polytown_neu.py benutzt; einzeln ausfuehren geht nicht (es braucht das Tal darunter).
 Alle Masse in Metern; die Burg steht auf der ebenen Wiese bei z = 0 mit der Mitte bei (150, 150).
@@ -33,7 +33,7 @@ WASSER = -1.2                  # Wasserspiegel
 PATCH = 40.0                   # Halbe Kantenlaenge des Burggelaendes (Quadrat um die Mitte)
 RASTER = 1.0                   # Gitterweite des Burggelaendes
 LOCH = (C - PATCH, C - PATCH, C + PATCH, C + PATCH)   # hier ist die Wiese ausgespart
-DAEMME = [(C - A - 12.0, C - 2.6, C - A - 0.5, C + 2.6), (C + A + 0.5, C - 2.6, C + A + 12.0, C + 2.6)]
+DAEMME = []                    # keine Daemme: die Burg hat nur das Nord- und das Suedtor (je mit Bruecke)
 
 # Materialien: Name -> (Farbe, Rauheit, Leuchten)
 FARBEN = {
@@ -347,7 +347,9 @@ def bergfried(b):
     b.box(c - 4, c - 4, 0.0, c + 4, c + 4, 6.0, "Beton hell")                     # Betriebsgebaeude
     b.box(c - 4, c + 4 - PW, 6.0, c + 4, c + 4, 7.2, "Beton dunkel")               # Bruestung Nord
     b.box(c - 4, c - 4, 6.0, c - 4 + PW, c + 4, 7.2, "Beton dunkel")               # Bruestung West
-    treppe(b, c + 4 - 12 * 0.8, c - 4 - 2.5, "E", 12, 2.5, 0, sd=0.8)              # Treppe aufs Dach
+    # Treppe aufs Dach an der Ostseite (die Suedseite hat den Eingang): steigt von Norden nach Sueden und endet an der
+    # offenen Suedost-Ecke des Daches (Bruestung nur Nord und West)
+    treppe(b, c + 4, c - 4 + 12 * 0.8, "S", 12, 2.5, 0, sd=0.8)
     # Eingang auf der Suedseite, Vordach, Fenster
     kx, ky = c, c - 4.0
     b.cbox(kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, "Beton hell")
@@ -357,7 +359,7 @@ def bergfried(b):
     b.cbox(kx - 1.0, ky - 0.2, 2.5, 0.2, 0.2, 0.24, "Lampe")
     for dx in (-2.6, 2.6):
         fenster(b, kx + dx, ky, 3.2, 1.3, 1.0, 0, -1)
-    for ox_, ux_ in ((4.0, 0), (-4.0, 0), (0.0, 1)):
+    for ox_, ux_ in ((-4.0, 0), (0.0, 1)):                                          # Ostseite: Treppe davor, dort keine Fenster
         for dd in (-2.0, 2.0):
             if ux_ == 0:
                 fenster(b, c + ox_, c + dd, 3.0, 1.5, 1.2, 1 if ox_ > 0 else -1, 0)
@@ -418,13 +420,8 @@ def hof(b):
         b.beam((fx, fy, 0.0), (fx, fy, 4.6), 0.14, 0.14, "Metall")
         b.beam((fx, fy, 4.5), (fx + 0.7, fy, 4.75), 0.1, 0.1, "Metall")
         b.cbox(fx + 0.8, fy, 4.62, 0.5, 0.3, 0.14, "Lampe")
-    # Fahnen auf den beiden Flak-Tuermen (auf den Tuermen mit Freya-Antenne und neben der Radarschuessel waeren sie im Weg:
-    # die Antennen drehen sich im Spiel, eine Fahne dort wuerde durchdrungen)
-    for (sx, sy), mat, ang in (((-1, 1), "Fahne oliv", 0.0), ((1, -1), "Fahne gelb", 180.0)):
-        fahne(b, c + sx * H + sx * 2.7, c + sy * H + sy * 2.7, ZT, 5.4, mat, 2.4, 1.4, ang)
 
 
-# ------------------------------------------------------------------ Antennen und Flak
 def radarschuessel(b, R=5.9, tiefe=1.8, elev=50.0, hz=4.4, N=16, K=4):
     """Parabolschuessel (Wuerzburg-Riese) auf Drehkranz, in Ortskoordinaten um den Drehpunkt (Blick nach +y)."""
     e = math.radians(elev)
@@ -568,7 +565,7 @@ def smoothstep(e0, e1, x):
 
 
 def graben_tiefe(x, y):
-    """Tiefe des Wassergrabens an (x, y) in Metern (0 ausserhalb); Formel aus spiel.py, nur die Daemme West/Ost bleiben."""
+    """Tiefe des Wassergrabens an (x, y) in Metern (0 ausserhalb); Formel aus spiel.py (ohne Daemme)."""
     o0, o1, o2, o3, dp = GRABEN
     ox, oy = abs(x - C) - A, abs(y - C) - A
     if ox >= o3 or oy >= o3:
@@ -624,7 +621,7 @@ def kontur(o, schritt=1.0, n_arc=8):
 
 
 def wasser_netz():
-    """Wasserflaeche des Grabens (z = WASSER) als Ring; an den Daemmen West/Ost bleibt sie offen."""
+    """Wasserflaeche des Grabens (z = WASSER) als geschlossener Ring."""
     o0, o1, o2, o3, dp = GRABEN
     o_in = o0 + (o1 - o0) * 0.567 - 0.15
     o_out = o2 + (o3 - o2) * 0.433 + 0.15
@@ -634,10 +631,6 @@ def wasser_netz():
     faces = []
     for i in range(n):
         j = (i + 1) % n
-        mx = (ri[i][0] + ri[j][0] + ra[i][0] + ra[j][0]) / 4
-        my = (ri[i][1] + ri[j][1] + ra[i][1] + ra[j][1]) / 4
-        if abs(my - C) < 3.0 and abs(mx - C) > A:
-            continue                                      # Damm
         faces += [(i, n + i, n + j), (i, n + j, j)]
     return verts, faces
 
@@ -694,18 +687,6 @@ def bruecken(b):
             b.cbox(px, yy, 1.95, 0.28, 0.28, 0.36, "Lampe")
     b.box(x0, ys1, 0.0, x1, c - H + TD, 0.02, "Fahrbahn")                   # Zufahrt durch das Tor bis zur Bruecke
     b.box(x0, c - 22.9, 0.02, x1, c - 22.0, 0.24, "Brueckenbeton")             # Schwelle am Tor
-    # Daemme West/Ost ueber dem Tunnelgang: Betonwaende, Pfosten mit Drahtbuegeln
-    for sgn in (-1, 1):
-        xa, xb = c + sgn * (A + 0.8), c + sgn * (A + 9.2)
-        xa, xb = min(xa, xb), max(xa, xb)
-        b.box(xa, c - 2.6, -0.3, xb, c + 2.6, 0.02, "Fahrbahn")
-        for yy in (c - 2.5, c + 2.2):
-            b.box(xa, yy, -2.0, xb, yy + 0.3, 0.8, "Brueckenbeton")
-            b.cbox((xa + xb) / 2, yy + 0.15, 0.93, xb - xa + 0.2, 0.5, 0.14, "Bruestung")
-        for xx in (xa + 0.3, xb - 0.3):
-            for yy in (c - 2.45, c + 2.45):
-                b.cbox(xx, yy, 1.0, 0.5, 0.5, 2.0, "Brueckenbeton")
-                b.beam((xx, yy, 2.0), (xx, yy, 2.4), 0.08, 0.08, "Draht")
 
 
 # ------------------------------------------------------------------ Aufbau in Blender

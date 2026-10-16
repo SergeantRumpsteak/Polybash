@@ -18,6 +18,7 @@ ORDNER = os.path.join(HERE, "texturen")
 TEXTUREN = {
     "Mauerwerk":        {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.0},
     "Mauerwerk dunkel": {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.6},
+    "Stufen":           {"ordner": "stein_mauer", "kachel_m": 2.0, "tint": 0.5},
 }
 ENDUNGEN = {"jpg", "jpeg", "png", "exr", "tif", "tiff", "webp"}
 
