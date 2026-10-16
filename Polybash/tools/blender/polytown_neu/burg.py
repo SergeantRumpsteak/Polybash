@@ -386,18 +386,18 @@ def tore(b):
 
 def bergfried(b):
     c = C
-    b.box(c - 4, c - 4, 0.0, c + 4, c + 4, 6.0, "Beton hell")                     # Betriebsgebaeude
-    b.box(c - 4, c + 4 - PW, 6.0, c + 4, c + 4, 7.2, "Beton dunkel")               # Bruestung Nord
-    b.box(c - 4, c - 4, 6.0, c - 4 + PW, c + 4, 7.2, "Beton dunkel")               # Bruestung West
+    b.box(c - 4, c - 4, 0.0, c + 4, c + 4, 6.0, "Mauerwerk")                     # Betriebsgebaeude
+    b.box(c - 4, c + 4 - PW, 6.0, c + 4, c + 4, 7.2, "Mauerwerk dunkel")               # Bruestung Nord
+    b.box(c - 4, c - 4, 6.0, c - 4 + PW, c + 4, 7.2, "Mauerwerk dunkel")               # Bruestung West
     # Treppe aufs Dach an der Ostseite (die Suedseite hat den Eingang): steigt von Norden nach Sueden und endet an der
     # offenen Suedost-Ecke des Daches (Bruestung nur Nord und West)
     treppe(b, c + 4, c - 4 + 12 * 0.8, "S", 12, 2.5, 0, sd=0.8)
     # Eingang auf der Suedseite, Vordach, Fenster
     kx, ky = c, c - 4.0
-    b.cbox(kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, "Beton hell")
+    b.cbox(kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, "Mauerwerk")
     b.cbox(kx, ky - 0.2, 1.15, 1.7, 0.1, 2.3, "Oliv")
     b.cbox(kx, ky - 0.27, 1.15, 0.05, 0.05, 2.3, "Draht")
-    b.cbox(kx, ky - 0.7, 2.75, 3.4, 1.2, 0.18, "Beton hell")                       # Vordach
+    b.cbox(kx, ky - 0.7, 2.75, 3.4, 1.2, 0.18, "Mauerwerk")                       # Vordach
     b.cbox(kx - 1.0, ky - 0.2, 2.5, 0.2, 0.2, 0.24, "Lampe")
     for dx in (-2.6, 2.6):
         fenster(b, kx + dx, ky, 3.2, 1.3, 1.0, 0, -1)
@@ -411,7 +411,7 @@ def bergfried(b):
     for dx, dy, hh in ((-2.4, -2.4, 0.9), (2.5, 2.4, 0.7)):
         b.cbox(c + dx, c + dy, 6.0 + hh / 2, 1.0, 1.0, hh, "Metall hell")
         b.prism(c + dx, c + dy, 6.0 + hh, 0.3, 0.25, 8, "Metall")
-    b.cbox(c, c, 6.15, 3.2, 3.2, 0.3, "Beton dunkel")
+    b.cbox(c, c, 6.15, 3.2, 3.2, 0.3, "Beton dunkel")                           # Drehkranz-Fundament der Schuessel (bleibt Beton)
 
 
 def hof(b):
@@ -422,24 +422,24 @@ def hof(b):
     for s in (-1, 1):
         for a, bb in ((c - 3.3, c - 1.4), (c + 1.4, c + 3.3)):
             b.box(a, c + s * 28.0, 0.0, bb, c + s * 28.0 + 0.7, 1.2, "Brueckenbeton")
-        b.box(c - 5, c + s * 14, 0.0, c + 5, c + s * 14 + 0.7, 1.2, "Beton dunkel")
+        b.box(c - 5, c + s * 14, 0.0, c + 5, c + s * 14 + 0.7, 1.2, "Mauerwerk dunkel")
 
     def kasematte(xa, ya, xb, yb, front):
-        b.box(xa, ya, 3.0, xb, yb, 3.5, "Beton dunkel")                               # Dach
+        b.box(xa, ya, 3.0, xb, yb, 3.5, "Mauerwerk dunkel")                               # Dach
         if front in "NS":
-            b.box(xa, ya, 0.0, xa + PW, yb, 3.0, "Beton hell")
-            b.box(xb - PW, ya, 0.0, xb, yb, 3.0, "Beton hell")
+            b.box(xa, ya, 0.0, xa + PW, yb, 3.0, "Mauerwerk")
+            b.box(xb - PW, ya, 0.0, xb, yb, 3.0, "Mauerwerk")
             fy = yb - PW if front == "N" else ya
             for k in (1 / 3, 2 / 3):
                 px = xa + (xb - xa) * k
-                b.box(px - 0.35, fy, 0.0, px + 0.35, fy + PW, 3.0, "Beton hell")
+                b.box(px - 0.35, fy, 0.0, px + 0.35, fy + PW, 3.0, "Mauerwerk")
         else:
-            b.box(xa, ya, 0.0, xb, ya + PW, 3.0, "Beton hell")
-            b.box(xa, yb - PW, 0.0, xb, yb, 3.0, "Beton hell")
+            b.box(xa, ya, 0.0, xb, ya + PW, 3.0, "Mauerwerk")
+            b.box(xa, yb - PW, 0.0, xb, yb, 3.0, "Mauerwerk")
             fx_ = xb - PW if front == "E" else xa
             for k in (1 / 3, 2 / 3):
                 py = ya + (yb - ya) * k
-                b.box(fx_, py - 0.35, 0.0, fx_ + PW, py + 0.35, 3.0, "Beton hell")
+                b.box(fx_, py - 0.35, 0.0, fx_ + PW, py + 0.35, 3.0, "Mauerwerk")
 
     kasematte(c - 14, c - 19, c - 6, c - 14, "N")
     kasematte(c + 6, c - 19, c + 14, c - 14, "N")
@@ -448,14 +448,14 @@ def hof(b):
     kasematte(c + 14, c - 14, c + 19, c - 4, "W")
     # freistehende Mauerstuecke um den Bergfried und Sprengschutz hinter den Toren
     for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-        b.box(c + sx * 10 - 2.5, c + sy * 10, 0.0, c + sx * 10 + 2.5, c + sy * 10 + 0.6, 2.0, "Beton dunkel")
+        b.box(c + sx * 10 - 2.5, c + sy * 10, 0.0, c + sx * 10 + 2.5, c + sy * 10 + 0.6, 2.0, "Mauerwerk dunkel")
     for sy in (-1, 1):
-        b.box(c - 2, c + sy * 17, 0.0, c + 2, c + sy * 17 + 0.6, 2.2, "Beton dunkel")
+        b.box(c - 2, c + sy * 17, 0.0, c + 2, c + sy * 17 + 0.6, 2.2, "Mauerwerk dunkel")
     # Loeschwasserbehaelter im Hof
     wx, wy = c + 8.0, c - 8.0
     for a, bb, c2, d2 in ((wx - 1.1, wy - 1.1, wx + 1.1, wy - 0.7), (wx - 1.1, wy + 0.7, wx + 1.1, wy + 1.1),
                           (wx - 1.1, wy - 0.7, wx - 0.7, wy + 0.7), (wx + 0.7, wy - 0.7, wx + 1.1, wy + 0.7)):
-        b.box(a, bb, 0.0, c2, d2, 0.95, "Beton hell")
+        b.box(a, bb, 0.0, c2, d2, 0.95, "Mauerwerk")
     b.box(wx - 0.7, wy - 0.7, 0.0, wx + 0.7, wy + 0.7, 0.7, "Wasser")
     # Lampenmasten im Hof
     for fx, fy in ((c - 6.0, c - 16.0), (c + 6.0, c - 16.0), (c - 6.0, c + 16.0), (c + 6.0, c + 16.0)):
