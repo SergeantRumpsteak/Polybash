@@ -248,7 +248,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 106               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 107               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -9915,15 +9915,61 @@ class Deco:
         self.np.removeNode()
 
 
-START_BTN = (0.12, 0.45, 0.18, 0.92)        # grüner Knopf "Spiel starten"
-START_BTN_HOT = (0.20, 0.62, 0.28, 0.98)
+
+
+# ---- Corporate Design "Tactical": Farben und 3D-Knoepfe
+BTN_C = (0.20, 0.25, 0.33, 0.96)             # Knopf normal (wird mit der Verlaufstextur multipliziert)
+BTN_HC = (0.30, 0.37, 0.50, 0.98)            # Knopf unter der Maus
+BTN_OFF = (0.17, 0.19, 0.23, 0.92)           # Knopf nicht verfuegbar
+START_BTN = (0.22, 0.72, 0.36, 0.98)         # gruener Haupt-Knopf (Start, Verbinden, Bereit)
+START_BTN_HOT = (0.30, 0.90, 0.47, 1.0)
+BTN_ON = (0.14, 0.50, 0.25, 0.98)            # Bereit (zum Abbrechen klicken)
+ACCENT = (1.0, 0.62, 0.14, 1.0)              # Orange, Hauptakzent
+_BTN_TEX = []
+
+
+def btn3d(nd):
+    """Gibt einer Knopfflaeche die leichte 3D-Optik: Lichtkante oben, Verlauf, dunkler Sockel unten.
+    Die Textur ist grau und wird mit nd.setColor() multipliziert, Hover-Farben funktionieren also unveraendert."""
+    try:
+        if not _BTN_TEX:
+            from panda3d.core import PNMImage, Texture
+            W, H = 128, 64
+            im = PNMImage(W, H, 4)
+            for y in range(H):
+                if y == 0:
+                    v = 1.0
+                elif y < 51:
+                    v = 0.90 - 0.40 * (y - 1) / 49.0
+                elif y == 51:
+                    v = 0.16
+                else:
+                    v = 0.36 - 0.14 * (y - 52) / 11.0
+                for x in range(W):
+                    k = v
+                    if y < 51:
+                        if x == 0:
+                            k = min(1.0, v * 1.12)
+                        elif x == W - 1:
+                            k = v * 0.55
+                    im.setXelA(x, y, k, k, k, 1.0)
+            tx = Texture("btn3d")
+            tx.load(im)
+            tx.setWrapU(Texture.WMClamp)
+            tx.setWrapV(Texture.WMClamp)
+            tx.setMinfilter(Texture.FTLinear)
+            tx.setMagfilter(Texture.FTLinear)
+            _BTN_TEX.append(tx)
+        nd.setTexture(_BTN_TEX[0])
+    except Exception:
+        pass
 
 
 class Hot:
     """Anklickbarer Text: Rechteck für die Maus; beim Überfahren wird er gelb hervorgehoben."""
-    BASE = (0.86, 0.92, 1.0, 1.0)
+    BASE = (0.91, 0.94, 0.97, 1.0)
     PLAIN = (1.0, 1.0, 1.0, 1.0)
-    ON = (1.0, 0.85, 0.2, 1.0)
+    ON = (1.0, 0.70, 0.28, 1.0)
 
     def __init__(self, txt, x, z, scale, action=None, text=""):
         self.txt, self.action, self.on, self.label = txt, action, False, text
@@ -11057,12 +11103,12 @@ class SetupPage:
     PER_PAGE = 4                                   # Karten pro Seite (mehr: Pfeile zum Blättern)
     X0, X1 = -0.64, 0.64                           # Breite des Inhalts
     SL0, SL1, SLZ = -0.62, 0.62, -0.47             # Slider: Anfang, Ende, Höhe
-    SEL, HOV, IDLE = (1.0, 0.78, 0.25, 1.0), (0.45, 0.75, 1.0, 1.0), (0.30, 0.38, 0.50, 1.0)
-    BTN, BTN_H = (0.10, 0.17, 0.26, 0.85), (0.22, 0.30, 0.42, 0.95)
-    GO, GO_H = (0.12, 0.34, 0.20, 0.92), (0.20, 0.50, 0.30, 0.97)
-    MODE_ON, MODE_OFF = (0.18, 0.36, 0.58, 0.95), (0.06, 0.09, 0.13, 0.70)
-    CARD_BG = (0.07, 0.10, 0.15, 0.96)
-    GREY, WHITE, YELLOW = (0.62, 0.70, 0.78, 1.0), (1.0, 1.0, 1.0, 1.0), (1.0, 0.9, 0.4, 1.0)
+    SEL, HOV, IDLE = (1.0, 0.62, 0.14, 1.0), (1.0, 0.72, 0.30, 1.0), (0.24, 0.30, 0.40, 1.0)
+    BTN, BTN_H = BTN_C, BTN_HC
+    GO, GO_H = START_BTN, START_BTN_HOT
+    MODE_ON, MODE_OFF = (0.34, 0.30, 0.22, 0.98), (0.10, 0.12, 0.15, 0.70)
+    CARD_BG = (0.06, 0.08, 0.11, 0.96)
+    GREY, WHITE, YELLOW = (0.50, 0.55, 0.61, 1.0), (0.91, 0.94, 0.97, 1.0), (1.0, 0.62, 0.14, 1.0)
     DIM = (0.42, 0.47, 0.52, 1.0)
 
     def __init__(self, game):
@@ -11220,6 +11266,8 @@ class SetupPage:
         nd = self.g.aspect2d.attachNewNode(cm.generate())
         nd.setColor(*col)
         nd.setTransparency(TransparencyAttrib.MAlpha)
+        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb")):
+            btn3d(nd)
         if (i or "").endswith("fill"):
             nd.setPos(x0, 0, 0)
             nd.setSx(max(0.001, x1 - x0))
@@ -108706,14 +108754,14 @@ class Game(ShowBase):
         n = 24
         for i in range(n):                                     # senkrechter Farbverlauf
             k = i / (n - 1)
-            col = (0.04 + 0.05 * k, 0.07 + 0.17 * k, 0.15 + 0.17 * k)
+            col = (0.035 + 0.03 * k, 0.045 + 0.035 * k, 0.065 + 0.04 * k)
             card(-4, 4, 1.1 - 2.2 * (i + 1) / n - 0.002, 1.1 - 2.2 * i / n, col)
         rg = random.Random(7)
         self.bg_polys, self.bg_t = [], 0.0
-        polys = [(-1.15, 0.55, 0.30, (1.0, 0.55, 0.15), 0.10), (1.25, 0.25, 0.42, (0.2, 0.8, 0.9), 0.08),
-                 (-1.0, -0.55, 0.40, (0.2, 0.8, 0.9), 0.07), (1.05, -0.62, 0.26, (1.0, 0.55, 0.15), 0.09),
+        polys = [(-1.15, 0.55, 0.30, (1.0, 0.55, 0.15), 0.10), (1.25, 0.25, 0.42, (0.45, 0.52, 0.62), 0.08),
+                 (-1.0, -0.55, 0.40, (0.45, 0.52, 0.62), 0.07), (1.05, -0.62, 0.26, (1.0, 0.55, 0.15), 0.09),
                  (0.0, 0.95, 0.22, (1.0, 0.8, 0.3), 0.06)]
-        pal = ((1.0, 0.55, 0.15), (0.2, 0.8, 0.9), (1.0, 0.8, 0.3), (0.45, 0.6, 1.0))
+        pal = ((1.0, 0.55, 0.15), (0.45, 0.52, 0.62), (1.0, 0.8, 0.3), (0.30, 0.36, 0.46))
         for _i in range(9):                                  # weitere Rauten, die durchs Bild treiben
             polys.append((rg.uniform(-1.7, 1.7), rg.uniform(-0.95, 0.95), rg.uniform(0.10, 0.34),
                           pal[rg.randrange(len(pal))], rg.uniform(0.05, 0.10)))
@@ -108732,7 +108780,7 @@ class Game(ShowBase):
                                             shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False))
         card(-0.62, 0.62, 0.575, 0.585, (1.0, 0.62, 0.14), 0.9)
         self.menu_items.append(OnscreenText(text="Low-Poly-Partybox für lustige Abende", pos=(0, 0.52),
-                                            scale=0.045, fg=(0.75, 0.85, 0.95, 1), mayChange=False))
+                                            scale=0.045, fg=(0.50, 0.55, 0.61, 1), mayChange=False))
 
     def animate_menu_bg(self, dt):
         """Die Rauten im Menühintergrund treiben langsam durchs Bild, drehen sich und atmen leicht."""
@@ -108918,9 +108966,10 @@ class Game(ShowBase):
                     cm = CardMaker("btn")
                     cm.setFrame(-0.78, 0.78, zz - 0.3 * sc - 0.012, zz + 0.95 * sc + 0.012)
                     card = self.aspect2d.attachNewNode(cm.generate())
-                    card.setColor(*(START_BTN if label.startswith(("Spiel starten", "Verbinden")) else (0.10, 0.17, 0.26, 0.85)))
+                    card.setColor(*(START_BTN if label.startswith(("Spiel starten", "Verbinden")) else BTN_C))
                     card.setTransparency(TransparencyAttrib.MAlpha)
-                t = OnscreenText(text=label, pos=(0, zz), scale=sc,
+                    btn3d(card)
+                t = OnscreenText(text=(label.upper() if (action is not None and big) else label), pos=(0, zz), scale=sc,
                                  fg=Hot.BASE if action else ((1.0, 0.78, 0.3, 1) if head else (0.82, 0.88, 0.95, 1)),
                                  shadow=(0, 0, 0, 0.8), mayChange=True)
                 hot = Hot(t, 0.0, zz, sc, action, label)
@@ -108963,7 +109012,7 @@ class Game(ShowBase):
             if h.label.startswith(("Spiel starten", "Verbinden")):   # grüne Knöpfe (Start, Verbinden)
                 nd.setColor(*(START_BTN_HOT if h is hit else START_BTN))
             else:
-                nd.setColor(*((0.22, 0.30, 0.42, 0.95) if h is hit else (0.10, 0.17, 0.26, 0.85)))
+                nd.setColor(*(BTN_HC if h is hit else BTN_C))
         if self.quit_box is not None:
             for h in self.quit_box[2]:
                 h.set(h is hit)
@@ -109633,12 +109682,14 @@ class Game(ShowBase):
         start = root.attachNewNode(cm.generate())
         start.setColor(*START_BTN)
         start.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(start)
         start_t = OnscreenText(text="Spiel starten", parent=root, pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
                                shadow=(0, 0, 0, 0.8), mayChange=True)
         cm.setFrame(*self.LOBBY_EQ_BTN)
         eq = root.attachNewNode(cm.generate())
-        eq.setColor(0.10, 0.17, 0.26, 0.9)
+        eq.setColorBTN_C
         eq.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(eq)
         eq_t = OnscreenText(text="Ausrüstungsmenü", parent=root, pos=(0, -0.855), scale=0.05, fg=(1, 1, 1, 1),
                             shadow=(0, 0, 0, 0.8), mayChange=False)
         root.hide()
@@ -109686,26 +109737,26 @@ class Game(ShowBase):
         if host:
             n_r, n_g = w.ready_counts()
             if n_r >= n_g:
-                ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_s else ui["start"].setColor(*START_BTN)
+                ui["start"].setColorSTART_BTN_HOT if hov_s else ui["start"].setColor(*START_BTN)
                 self.set_text(ui["start_t"], "Spiel starten")
             else:
-                ui["start"].setColor(0.16, 0.19, 0.24, 0.9)
+                ui["start"].setColorBTN_OFF
                 self.set_text(ui["start_t"], f"Warte auf Bereit ({n_r}/{n_g})")
         else:
             me_ = self.player
             on_ = bool(me_ is not None and me_.ready)
             hov_c = mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
             if on_:
-                ui["start"].setColor(0.12, 0.45, 0.2, 0.98)
+                ui["start"].setColorBTN_ON
                 self.set_text(ui["start_t"], "Bereit  (zum Abbrechen klicken)")
             else:
-                ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_c else ui["start"].setColor(*START_BTN)
+                ui["start"].setColorSTART_BTN_HOT if hov_c else ui["start"].setColor(*START_BTN)
                 self.set_text(ui["start_t"], "Bereit")
         e = self.LOBBY_EQ_BTN
         hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
         for nd in (ui["eq"], ui["eq_t"]):
             (nd.show if self.LOBBY_EQUIP else nd.hide)()
-        ui["eq"].setColor(*((0.22, 0.30, 0.42, 0.95) if hov_e else (0.10, 0.17, 0.26, 0.9)))
+        ui["eq"].setColor(*(BTN_HC if hov_e else BTN_C))
 
     def build_respawn_btn(self):
         cm = CardMaker("respbtn")
@@ -109713,14 +109764,16 @@ class Game(ShowBase):
         self.resp_btn = self.aspect2d.attachNewNode(cm.generate())
         self.resp_btn.setColor(*START_BTN)
         self.resp_btn.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(self.resp_btn)
         self.resp_btn_text = OnscreenText(text="Spawn", pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.resp_btn.hide()
         self.resp_btn_text.hide()
         cm.setFrame(0, 0.72, 0, 0.18)
         self.back_btn = self.aspect2d.attachNewNode(cm.generate())
-        self.back_btn.setColor(0.10, 0.17, 0.26, 0.9)
+        self.back_btn.setColorBTN_C
         self.back_btn.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(self.back_btn)
         self.back_btn_text = OnscreenText(text="Zurück ins Hauptmenü", pos=(0, 0), scale=0.05, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.back_btn.hide()
@@ -110489,7 +110542,7 @@ class Game(ShowBase):
         n = 20
         for i in range(n):                                          # Verlauf wie im Menü
             k = i / (n - 1)
-            card(-4, 4, 1.1 - 2.2 * (i + 1) / n - 0.002, 1.1 - 2.2 * i / n, (0.04 + 0.05 * k, 0.07 + 0.17 * k, 0.15 + 0.17 * k, 1.0))
+            card(-4, 4, 1.1 - 2.2 * (i + 1) / n - 0.002, 1.1 - 2.2 * i / n, (0.035 + 0.03 * k, 0.045 + 0.035 * k, 0.065 + 0.04 * k, 1.0))
         text("POLYBASH", 0, 0.32, 0.18, (1.0, 0.62, 0.14, 1))
         text("Ladevorgang", 0, 0.10, 0.05, (0.75, 0.85, 0.95, 1))
         text(self.loading_map_name(mode, attempt), 0, 0.0, 0.075, (1.0, 0.9, 0.4, 1))
@@ -111084,8 +111137,9 @@ class Game(ShowBase):
         cm = CardMaker("deadbtn")
         cm.setFrame(*self.DEAD_BTN)
         self.dead_btn = self.aspect2d.attachNewNode(cm.generate())
-        self.dead_btn.setColor(0.10, 0.17, 0.26, 0.9)
+        self.dead_btn.setColorBTN_C
         self.dead_btn.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(self.dead_btn)
         self.dead_btn_text = OnscreenText(text="Loadout konfigurieren", pos=(0, -0.825), scale=0.05, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=False)
         self.dead_btn.hide()
@@ -111275,6 +111329,7 @@ class Game(ShowBase):
         cmb.setFrame(0, 0.68, 0, 0.18)
         self.end["btn"] = root.attachNewNode(cmb.generate())
         self.end["btn"].setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(self.end["btn"])
         self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, fg=(1, 1, 1, 1),
                                          shadow=(0, 0, 0, 0.8), mayChange=True)
         self.end["note"] = OnscreenText(text="", parent=root, pos=(0, -0.58), scale=0.042, fg=(0.6, 1.0, 0.6, 1),
@@ -111285,6 +111340,7 @@ class Game(ShowBase):
         for nm in ("menu", "set"):                          # Zurück zum Hauptmenü / Rundeneinstellungen ändern
             nd = root.attachNewNode(cmu.generate())
             nd.setTransparency(TransparencyAttrib.MAlpha)
+            btn3d(nd)
             self.end[nm + "_btn"] = nd
             self.end[nm + "_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
                                                shadow=(0, 0, 0, 0.8), mayChange=True)
@@ -111395,12 +111451,12 @@ class Game(ShowBase):
         e["btn_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.06)
         if self.net_mode == "client":
             on_ = bool(self.player is not None and self.player.ready)
-            e["btn"].setColor(*((0.12, 0.45, 0.2, 0.98) if on_ else ((0.20, 0.62, 0.28, 0.98) if hov else START_BTN)))
+            e["btn"].setColor(*(BTN_ON if on_ else (START_BTN_HOT if hov else START_BTN)))
             self.set_text(e["btn_t"], "Bereit  (zum Abbrechen klicken)" if on_ else "Bereit")
             self.set_text(e["count"], "Drücke 'Bereit' - der Host startet dann die nächste Runde   (Esc: Menü)")
         else:
             ok_ = n_r >= n_g
-            e["btn"].setColor(*(((0.20, 0.62, 0.28, 0.98) if hov else START_BTN) if ok_ else (0.16, 0.19, 0.24, 0.9)))
+            e["btn"].setColor(*((START_BTN_HOT if hov else START_BTN) if ok_ else BTN_OFF))
             self.set_text(e["btn_t"], "Neue Runde starten" if ok_ else f"Warte auf Bereit ({n_r}/{n_g})")
             self.set_text(e["count"], ("Alle sind bereit" if ok_ else f"Bereit: {n_r} von {n_g} Mitspielern") + "   (Esc: Menü)")
         for i, (x0, x1, z0, z1, t) in enumerate(e["rects"]):   # Hover wie im Hauptmenü
@@ -111417,7 +111473,7 @@ class Game(ShowBase):
             on = p is not None and r[0] <= p[0] <= r[1] and r[2] <= p[1] <= r[3]
             e[nm + "_btn"].setPos(r[0], 0, r[2])
             e[nm + "_btn"].setScale(r[1] - r[0], 1, r[3] - r[2])
-            e[nm + "_btn"].setColor(*((0.22, 0.30, 0.42, 0.95) if on else (0.10, 0.17, 0.26, 0.9)))
+            e[nm + "_btn"].setColor(*(BTN_HC if on else BTN_C))
             e[nm + "_t"].setPos((r[0] + r[1]) / 2, r[2] + 0.062)
             self.set_text(e[nm + "_t"], lab)
             e[nm + "_btn"].show()
@@ -113790,7 +113846,7 @@ class Game(ShowBase):
             self.tip_show(card, mpos)
             b = self.DEAD_BTN
             hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
-            self.dead_btn.setColor(*((0.22, 0.30, 0.42, 0.95) if hov else (0.10, 0.17, 0.26, 0.9)))
+            self.dead_btn.setColor(*(BTN_HC if hov else BTN_C))
             self.dead_btn.show()
             self.dead_btn_text.show()
         else:
@@ -113804,7 +113860,7 @@ class Game(ShowBase):
             hov = ready and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
             self.resp_btn.setPos(rb[0], 0, rb[2])
             self.resp_btn_text.setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
-            self.resp_btn.setColor(*((0.20, 0.62, 0.28, 0.98) if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
+            self.resp_btn.setColor(*(START_BTN_HOT if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
             self.set_text(self.resp_btn_text, "Spawn" if ready else f"Spawn in {int(math.ceil(wait))} s")
             self.resp_btn.show()
             self.resp_btn_text.show()
@@ -113817,7 +113873,7 @@ class Game(ShowBase):
             hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
             self.back_btn.setPos(bb[0], 0, bb[2])
             self.back_btn_text.setPos((bb[0] + bb[1]) / 2, bb[2] + 0.062)
-            self.back_btn.setColor(*((0.22, 0.30, 0.42, 0.95) if hov else (0.10, 0.17, 0.26, 0.9)))
+            self.back_btn.setColor(*(BTN_HC if hov else BTN_C))
             self.set_text(self.back_btn_text, "Zurück zur Lobby" if equip_view else "Zurück ins Hauptmenü")
             self.back_btn.show()
             self.back_btn_text.show()
