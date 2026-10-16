@@ -14082,6 +14082,13 @@ class Deco:
     """Dekoknoten im Menü, wird wie ein Text mit destroy() entfernt."""
     def __init__(self, np):
         self.np = np
+        self.label, self.action = "", None
+
+    def hit(self, ax, az):
+        return False
+
+    def set(self, on):
+        pass
 
     def destroy(self):
         self.np.removeNode()
@@ -14095,6 +14102,7 @@ START_BTN = (0.22, 0.72, 0.36, 0.98)         # gruener Haupt-Knopf (Start, Verbi
 START_BTN_HOT = (0.30, 0.90, 0.47, 1.0)
 BTN_RED = (0.30, 0.13, 0.12, 0.96)           # 'Spiel beenden'
 BTN_RED_H = (0.44, 0.17, 0.15, 0.98)
+MODE_SEL = (0.40, 0.30, 0.16, 0.98)           # gewaehlte Option einer Knopfreihe
 BTN_ON = (0.14, 0.50, 0.25, 0.98)            # Bereit (zum Abbrechen klicken)
 ACCENT = (1.0, 0.62, 0.14, 1.0)              # Orange, Hauptakzent
 _BTN_TEX = []
@@ -14160,7 +14168,7 @@ def load_ui_fonts(loader):
         if all(fonts):
             for f in fonts:
                 f.setPixelsPerUnit(60)
-            TextNode.setDefaultFont(fonts[0])
+            TextNode.setDefaultFont(fonts[1])
             BOLD_FONT = fonts[1]
     except Exception:
         BOLD_FONT = None
@@ -14178,6 +14186,7 @@ class Hot:
         self.txt, self.action, self.on, self.label = txt, action, False, text
         self.sel = False                       # gewählte Option einer Knopfreihe (gelb)
         self.base = None                       # eigene Grundfarbe (rot bei 'Spiel beenden')
+        self.card = None                       # 3D-Knopffläche hinter dem Text (Pause-Menü)
         w = 0.0
         try:
             w = float(txt.textNode.getWidth()) * scale
@@ -14191,9 +14200,14 @@ class Hot:
     def hit(self, ax, az):
         return self.action is not None and self.x0 <= ax <= self.x1 and self.z0 <= az <= self.z1
 
+    def paint_card(self):
+        if self.card is not None:
+            self.card.setColor(*(BTN_HC if self.on else (MODE_SEL if self.sel else BTN_C)))
+
     def set(self, on):
         if on != self.on:
             self.on = on
+            self.paint_card()
             if self.base is not None and not self.sel:
                 self.txt.setFg(self.RED_ON if on else self.base)
                 return
@@ -113869,6 +113883,8 @@ class Game(ShowBase):
             return
         ti = OnscreenText(text="POLYBASH", pos=(0.012, 0.628), scale=0.2, font=BOLD_FONT, fg=(0, 0, 0, 0.55), mayChange=False)
         self.menu_items.append(ti)
+        self.menu_items.append(OnscreenText(text="POLYBASH", pos=(0.005, 0.64), scale=0.2, font=BOLD_FONT, fg=(1.0, 0.62, 0.14, 1),
+                                            mayChange=False))      # zweite Kopie, 0.005 versetzt: macht die Buchstaben fetter
         self.menu_items.append(OnscreenText(text="POLYBASH", pos=(0, 0.64), scale=0.2, font=BOLD_FONT, fg=(1.0, 0.62, 0.14, 1),
                                             shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False))
         card(-0.62, 0.62, 0.575, 0.585, (1.0, 0.62, 0.14), 0.9)
@@ -114764,7 +114780,8 @@ class Game(ShowBase):
         eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                             shadow=(0, 0, 0, 0.8), mayChange=True)
         tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
-                           bg=(0.02, 0.03, 0.05, 0.92), shadow=(0, 0, 0, 0.8), mayChange=True)
+                           bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
+        tip.setColorScale(1, 1, 1, 1)
         tip.setBin("fixed", 99)
         tip.hide()
         root.hide()
@@ -114981,12 +114998,25 @@ class Game(ShowBase):
         else:
             self.close_quit_box()
 
+    def overlay_card(self, x0, x1, z0, z1):
+        """3D-Knopffläche hinter einem Text im Pause-Menü (zwischen Hintergrund 90 und Text 95)."""
+        cm = CardMaker("ovbtn")
+        cm.setFrame(x0, x1, z0, z1)
+        nd = self.aspect2d.attachNewNode(cm.generate())
+        nd.setColor(*BTN_C)
+        nd.setTransparency(TransparencyAttrib.MAlpha)
+        nd.setBin("fixed", 92)
+        nd.setDepthTest(False)
+        nd.setDepthWrite(False)
+        btn3d(nd)
+        return nd
+
     def open_overlay(self, kind, title, items, hint="", width=1.1):
         """Senkrechte Liste (Pause-Menü, Einstellungen, Abfragen) über dem laufenden Spiel.
         items: (Text, Aktion oder None). Das Spiel läuft weiter, die Eingaben ruhen, die Maus ist frei."""
         self.close_quit_box(recapture=False)
         n = len(items)
-        hs = [0.19 if isinstance(it, SliderSpec) else (0.22 if isinstance(it, RowSpec) else 0.11) for it in items]     # Reglerzeilen sind höher
+        hs = [0.19 if isinstance(it, SliderSpec) else (0.25 if isinstance(it, RowSpec) else 0.13) for it in items]     # Reglerzeilen sind höher
         zs = []
         zc = 0.0
         for h_ in hs:
@@ -115006,7 +115036,7 @@ class Game(ShowBase):
         bg.setDepthTest(False)
         bg.setDepthWrite(False)
         txt = OnscreenText(text=title, pos=(0, z_title), scale=0.075, fg=(1, 1, 1, 1),
-                           shadow=(0, 0, 0, 0.9), mayChange=False)
+                           shadow=(0, 0, 0, 0.9), mayChange=False, font=BOLD_FONT)
         txt.setBin("fixed", 95)
         hots = []
         for i, it in enumerate(items):
@@ -115015,27 +115045,46 @@ class Game(ShowBase):
                 self.ui_sliders.append(UiSlider(self.aspect2d, it, -(width - 0.45), width - 0.45, z))
                 continue
             if isinstance(it, RowSpec):
-                lt = OnscreenText(text=it.label, pos=(0, z), scale=0.062, fg=Hot.PLAIN, shadow=(0, 0, 0, 0.9), mayChange=False)
+                lt = OnscreenText(text=it.label, pos=(0, z + 0.02), scale=0.062, fg=Hot.PLAIN, shadow=(0, 0, 0, 0.9), mayChange=False,
+                                  font=BOLD_FONT)
                 lt.setBin("fixed", 95)
-                hots.append(Hot(lt, 0.0, z, 0.062, None, it.label))
+                hots.append(Hot(lt, 0.0, z + 0.02, 0.062, None, it.label))
                 k = len(it.options)
                 span_ = 2 * (width - 0.45)
                 for j, name in enumerate(it.options):
                     x = -span_ / 2 + span_ * (j + 0.5) / k
-                    bt = OnscreenText(text=name, pos=(x, z - 0.11), scale=0.055, fg=Hot.BASE, shadow=(0, 0, 0, 0.9),
-                                      mayChange=True)
+                    bt = OnscreenText(text=name, pos=(x, z - 0.10), scale=0.055, fg=Hot.BASE, shadow=(0, 0, 0, 0.9),
+                                      mayChange=True, font=BOLD_FONT)
                     bt.setBin("fixed", 95)
-                    hb = Hot(bt, x, z - 0.11, 0.055, (lambda j=j, f=it.set_: f(j)), name)
+                    hb = Hot(bt, x, z - 0.10, 0.055, (lambda j=j, f=it.set_: f(j)), name)
                     hb.sel = j == it.cur
                     if hb.sel:
                         bt.setFg(Hot.ON)
+                    bw = span_ / k / 2 - 0.03
+                    hb.card = self.overlay_card(x - bw, x + bw, z - 0.10 - 0.3 * 0.055 - 0.012, z - 0.10 + 0.95 * 0.055 + 0.012)
+                    hb.x0, hb.x1 = x - bw, x + bw
+                    hb.z0, hb.z1 = z - 0.10 - 0.3 * 0.055 - 0.012, z - 0.10 + 0.95 * 0.055 + 0.012
+                    hb.paint_card()
+                    hots.append(Deco(hb.card))
                     hots.append(hb)
                 continue
             label, action = it
             t = OnscreenText(text=label, pos=(0, z), scale=0.062, fg=Hot.BASE if action else Hot.PLAIN,
-                             shadow=(0, 0, 0, 0.9), mayChange=True)
+                             shadow=(0, 0, 0, 0.9), mayChange=True, font=BOLD_FONT)
             t.setBin("fixed", 95)
-            hots.append(Hot(t, 0.0, z, 0.062, action, label))
+            hot = Hot(t, 0.0, z, 0.062, action, label)
+            if action is not None:                                       # 3D-Knopf wie im Hauptmenue, aber schmaler
+                try:
+                    tw = float(t.textNode.getWidth()) * 0.062
+                except Exception:
+                    tw = 0.0
+                bw = min(width - 0.1, max(0.55, tw / 2 + 0.12))
+                hot.card = self.overlay_card(-bw, bw, z - 0.3 * 0.062 - 0.012, z + 0.95 * 0.062 + 0.012)
+                hot.x0, hot.x1 = -bw, bw
+                hot.z0, hot.z1 = z - 0.3 * 0.062 - 0.012, z + 0.95 * 0.062 + 0.012
+                hot.paint_card()
+                hots.append(Deco(hot.card))
+            hots.append(hot)
         if hint:
             h = OnscreenText(text=hint, pos=(0, bottom + 0.06), scale=0.042, fg=(0.8, 0.8, 0.8, 1),
                              shadow=(0, 0, 0, 0.9), mayChange=False)
