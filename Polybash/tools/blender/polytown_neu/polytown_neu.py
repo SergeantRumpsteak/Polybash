@@ -17,6 +17,7 @@ if HERE not in sys.path:
 import bpy  # noqa: E402
 import talkessel as T  # noqa: E402
 import burg as B  # noqa: E402
+import texturen as TX  # noqa: E402
 
 
 def main():
@@ -24,6 +25,7 @@ def main():
     T.build_tal(loch=B.LOCH)          # Wiese mit Aussparung fuer das Burggelaende (Graben)
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
+    TX.anwenden()                     # Steintexturen aus texturen/<ordner>/ (falls vorhanden)
     T.build_marker()
     T.setup_view()
     path = os.path.join(T.out_dir(), "polytown_neu.blend")

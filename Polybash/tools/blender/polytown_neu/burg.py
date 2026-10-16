@@ -39,6 +39,8 @@ DAEMME = [(C - A - 12.0, C - 2.6, C - A - 0.5, C + 2.6), (C + A + 0.5, C - 2.6, 
 FARBEN = {
     "Beton hell":    ((0.64, 0.62, 0.57), 0.95, 0.0),
     "Beton dunkel":  ((0.52, 0.50, 0.46), 0.95, 0.0),
+    "Mauerwerk":       ((0.64, 0.62, 0.57), 0.95, 0.0),   # Mauern, Tuerme, Wachhaeuser (hier kommt die Steintextur drauf)
+    "Mauerwerk dunkel": ((0.52, 0.50, 0.46), 0.95, 0.0),  # Sockel, Pfeiler, Bruestungen daran
     "Beton grau":    ((0.55, 0.55, 0.57), 0.95, 0.0),
     "Brueckenbeton": ((0.47, 0.47, 0.49), 0.95, 0.0),
     "Bruestung":     ((0.64, 0.63, 0.60), 0.95, 0.0),
@@ -192,6 +194,10 @@ def fahne(b, x, y, z, h, mat, w=2.0, hh=1.2, ang=0.0):
     f = Bau("fahne")
     f.box(0.08, -0.015, -hh, 0.08 + w, 0.015, 0.0, mat)
     b.merge(f, x, y, z + h - 0.1, ang)
+    cs, sn = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+    ecken = [(x + px * cs - py * sn, y + px * sn + py * cs) for px, py in ((0.08, -0.015), (0.08 + w, -0.015), (0.08 + w, 0.015), (0.08, 0.015))]
+    b.bx.append((min(e[0] for e in ecken), min(e[1] for e in ecken), z + h - 0.1 - hh,
+                 max(e[0] for e in ecken), max(e[1] for e in ecken), z + h - 0.1))
 
 
 # ------------------------------------------------------------------ Teile der Burg
@@ -200,10 +206,10 @@ def mauern(b):
     g0, g1 = C - G, C + G
     for a, bb, c, d in ((x0, y0, g0, y0 + TD), (g1, y0, x1, y0 + TD), (x0, y1 - TD, g0, y1), (g1, y1 - TD, x1, y1),
                         (x0, y0, x0 + TD, y1), (x1 - TD, y0, x1, y1)):
-        b.box(a, bb, 0.0, c, d, ZW, "Beton hell")                       # Mauern mit Wehrgang
+        b.box(a, bb, 0.0, c, d, ZW, "Mauerwerk")                       # Mauern mit Wehrgang
     for a, bb, c, d in ((x0, y0, g0, y0 + PW), (g1, y0, x1, y0 + PW), (x0, y1 - PW, g0, y1), (g1, y1 - PW, x1, y1),
                         (x0, y0, x0 + PW, y1), (x1 - PW, y0, x1, y1)):
-        b.box(a, bb, ZW, c, d, ZW + 1.2, "Beton dunkel")                # Bruestung aussen
+        b.box(a, bb, ZW, c, d, ZW + 1.2, "Mauerwerk dunkel")                # Bruestung aussen
     # Fassade: Sockel, Gesims, Fugen, Schlitzfenster, Pfeiler, Stacheldraht
     walls = [("S", C - H, [(C - H, g0), (g1, C + H)]), ("N", C + H, [(C - H, g0), (g1, C + H)]),
              ("W", C - H, [(C - H, C + H)]), ("E", C + H, [(C - H, C + H)])]
@@ -218,21 +224,21 @@ def mauern(b):
                 else:
                     b.box(pos + nrm[0] * o0, c0, z0, pos + nrm[0] * o1, c1, z1, mat)
 
-            wb(a0, a1, 0.0, 1.0, 0.0, 0.2, "Beton dunkel")                       # Sockel
-            wb(a0, a1, ZW - 0.35, ZW, 0.0, 0.22, "Beton hell")                   # Kranzgesims
+            wb(a0, a1, 0.0, 1.0, 0.0, 0.2, "Mauerwerk dunkel")                       # Sockel
+            wb(a0, a1, ZW - 0.35, ZW, 0.0, 0.22, "Mauerwerk")                   # Kranzgesims
             ns = max(2, int(L // 4.0))
             for k in range(1, ns):                                               # Dehnungsfugen
                 cc = a0 + L * k / ns
                 wb(cc - 0.04, cc + 0.04, 1.0, ZW - 0.35, 0.0, 0.03, "Draht")
             for k in range(ns):                                                  # liegende Schlitzfenster
                 cc = a0 + L * (k + 0.5) / ns
-                wb(cc - 0.8, cc + 0.8, 2.45, 2.9, 0.0, 0.02, "Beton hell")
+                wb(cc - 0.8, cc + 0.8, 2.45, 2.9, 0.0, 0.02, "Mauerwerk")
                 wb(cc - 0.7, cc + 0.7, 2.5, 2.85, 0.0, 0.04, "Fenster")
             for k in range(0, ns + 1):                                           # Pfeiler
                 cc = a0 + L * k / ns
                 if k in (0, ns) and s in "NS" and (a0 == C - H and k == 0 or a1 == C + H and k == ns):
                     continue
-                wb(cc - 0.3, cc + 0.3, 0.0, ZW - 0.35, 0.0, 0.4, "Beton dunkel")
+                wb(cc - 0.3, cc + 0.3, 0.0, ZW - 0.35, 0.0, 0.4, "Mauerwerk dunkel")
             # Stacheldraht auf der Bruestung: Pfosten mit Y-Arm und drei Draehte
             zt_ = ZW + 1.2
             nposts = max(2, int(L // 2.0))
@@ -250,10 +256,10 @@ def ecktuerme(b):
     for sx in (-1, 1):
         for sy in (-1, 1):
             tx, ty = C + sx * H, C + sy * H
-            b.box(tx - 3.5, ty - 3.5, 0.0, tx + 3.5, ty + 3.5, ZT, "Beton hell")                 # Turm
+            b.box(tx - 3.5, ty - 3.5, 0.0, tx + 3.5, ty + 3.5, ZT, "Mauerwerk")                 # Turm
             ex, ey = tx + sx * 3.5, ty + sy * 3.5
-            b.box(min(ex, ex - sx * PW), ty - 3.5, ZT, max(ex, ex - sx * PW), ty + 3.5, ZT + 1.2, "Beton dunkel")
-            b.box(tx - 3.5, min(ey, ey - sy * PW), ZT, tx + 3.5, max(ey, ey - sy * PW), ZT + 1.2, "Beton dunkel")
+            b.box(min(ex, ex - sx * PW), ty - 3.5, ZT, max(ex, ex - sx * PW), ty + 3.5, ZT + 1.2, "Mauerwerk dunkel")
+            b.box(tx - 3.5, min(ey, ey - sy * PW), ZT, tx + 3.5, max(ey, ey - sy * PW), ZT + 1.2, "Mauerwerk dunkel")
             fx, fy = tx - sx * 3.5, ty - sy * 3.5                    # Innenkanten des Turms
             wy = (C - H + PW) if sy < 0 else (C + H - TD)            # Wehrgang der Nord/Sued-Mauer
             wxx = (C - H + PW) if sx < 0 else (C + H - TD)           # Wehrgang der West/Ost-Mauer
@@ -270,16 +276,16 @@ def ecktuerme(b):
                 for zz in (3.2, 5.6):
                     if side[0]:
                         xf = tx + side[0] * 3.5
-                        b.box(xf, ty - 2.75, zz - 0.35, xf + side[0] * 0.05, ty + 2.75, zz + 0.35, "Beton hell")
+                        b.box(xf, ty - 2.75, zz - 0.35, xf + side[0] * 0.05, ty + 2.75, zz + 0.35, "Mauerwerk")
                         b.box(xf, ty - 2.6, zz - 0.25, xf + side[0] * 0.08, ty + 2.6, zz + 0.25, "Fenster")
                     else:
                         yf = ty + side[1] * 3.5
-                        b.box(tx - 2.75, yf, zz - 0.35, tx + 2.75, yf + side[1] * 0.05, zz + 0.35, "Beton hell")
+                        b.box(tx - 2.75, yf, zz - 0.35, tx + 2.75, yf + side[1] * 0.05, zz + 0.35, "Mauerwerk")
                         b.box(tx - 2.6, yf, zz - 0.25, tx + 2.6, yf + side[1] * 0.08, zz + 0.25, "Fenster")
                 if side[0]:
-                    b.cbox(tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, "Beton hell")
+                    b.cbox(tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, "Mauerwerk")
                 else:
-                    b.cbox(tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, "Beton hell")
+                    b.cbox(tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, "Mauerwerk")
     # Treppen im Hof hinauf zu den Wehrgaengen West und Ost
     treppe(b, C - H + TD, C - 10, "N", 10, 2.5, 0, sd=0.8)
     treppe(b, C + H - TD - 2.5, C + 10, "S", 10, 2.5, 0, sd=0.8)
@@ -291,7 +297,7 @@ def tore(b):
         yw = (C + H) if sgn > 0 else (C - H)                         # Aussenseite der Mauer
         ya, yb = (yw, yw + 2.7) if sgn > 0 else (yw - 2.7, yw)
         wy0, wy1 = (C + H - TD, C + H) if sgn > 0 else (C - H, C - H + TD)
-        b.box(g0, wy0, 4.0, g1, wy1, ZW, "Beton hell")                # Sturz ueber dem Tor
+        b.box(g0, wy0, 4.0, g1, wy1, ZW, "Mauerwerk")                # Sturz ueber dem Tor
         # Warnstreifen (rot/weiss) an der Aussenseite des Sturzes
         nst = 16
         wst = (g1 - g0) / nst
@@ -315,14 +321,14 @@ def tore(b):
             b.cbox(gew[0], gew[1], gew[2] - 0.15, 0.3, 0.3, 0.3, "Metall")
         # Wachhaeuser links und rechts vom Tor
         for gx0, gx1 in ((g0 - 3.0, g0), (g1, g1 + 3.0)):
-            b.box(gx0, ya, 0.0, gx1, yb, 7.2, "Beton hell")
-            b.box(gx0, ya, 7.2, gx1, yb, 7.5, "Beton dunkel")
+            b.box(gx0, ya, 0.0, gx1, yb, 7.2, "Mauerwerk")
+            b.box(gx0, ya, 7.2, gx1, yb, 7.5, "Mauerwerk dunkel")
             outer = (yb - 0.45, yb) if sgn > 0 else (ya, ya + 0.45)
-            b.box(gx0, outer[0], 7.5, gx1, outer[1], 8.2, "Beton dunkel")
+            b.box(gx0, outer[0], 7.5, gx1, outer[1], 8.2, "Mauerwerk dunkel")
             if gx0 < C:
-                b.box(gx0, ya, 7.5, gx0 + 0.45, yb, 8.2, "Beton dunkel")
+                b.box(gx0, ya, 7.5, gx0 + 0.45, yb, 8.2, "Mauerwerk dunkel")
             else:
-                b.box(gx1 - 0.45, ya, 7.5, gx1, yb, 8.2, "Beton dunkel")
+                b.box(gx1 - 0.45, ya, 7.5, gx1, yb, 8.2, "Mauerwerk dunkel")
             cxm = (gx0 + gx1) / 2
             yface = yb if sgn > 0 else ya                              # Aussenwand des Wachhauses
             for zz0 in (2.4, 4.8):                                      # Fensterbaender zur Strasse
@@ -412,10 +418,10 @@ def hof(b):
         b.beam((fx, fy, 0.0), (fx, fy, 4.6), 0.14, 0.14, "Metall")
         b.beam((fx, fy, 4.5), (fx + 0.7, fy, 4.75), 0.1, 0.1, "Metall")
         b.cbox(fx + 0.8, fy, 4.62, 0.5, 0.3, 0.14, "Lampe")
-    # Fahnen auf zwei Tuermen und dem Betriebsgebaeude
-    for (sx, sy), mat in (((-1, -1), "Fahne oliv"), ((1, 1), "Fahne gelb")):
-        fahne(b, c + sx * H, c + sy * H - sy * 2.6, ZT, 5.4, mat, 2.4, 1.4, 0.0)
-    fahne(b, c + 3.4, c + 3.4, 7.2, 4.0, "Fahne weiss", 2.6, 1.5, 0.0)
+    # Fahnen auf den beiden Flak-Tuermen (auf den Tuermen mit Freya-Antenne und neben der Radarschuessel waeren sie im Weg:
+    # die Antennen drehen sich im Spiel, eine Fahne dort wuerde durchdrungen)
+    for (sx, sy), mat, ang in (((-1, 1), "Fahne oliv", 0.0), ((1, -1), "Fahne gelb", 180.0)):
+        fahne(b, c + sx * H + sx * 2.7, c + sy * H + sy * 2.7, ZT, 5.4, mat, 2.4, 1.4, ang)
 
 
 # ------------------------------------------------------------------ Antennen und Flak
@@ -507,45 +513,52 @@ def freya(b, W=5.4, Hh=3.2, mast=4.2):
     b.cbox(0.0, -0.9, z0 + 0.7, 1.2, 0.9, 1.1, "Oliv")
 
 
-def flak(b, tx, ty):
-    """Flak-Geschuetz auf dem Eckturm (tx, ty), das Rohr zeigt zur Burgmitte und schraeg nach oben."""
-    b.box(tx - 0.45, ty - 0.45, ZT, tx + 0.45, ty + 0.45, ZT + 0.9, "Metall")         # Sockel
-    piv = (tx, ty, ZT + 1.35)
-    dx, dy = C - tx, C - ty
-    l = math.hypot(dx, dy)
-    hx, hy = dx / l, dy / l                                                     # Richtung zur Mitte
-    el = math.radians(55.0)
-    d = (hx * math.cos(el), hy * math.cos(el), math.sin(el))
-    side = (-hy, hx, 0.0)
-    b.prism(tx, ty, ZT + 0.9, 0.38, 0.45, 10, "Metall hell")                    # Drehkranz
-    b.cbox(tx, ty, ZT + 1.35, 0.9, 0.9, 0.6, "Oliv")                            # Lafette
-    for sg in (-1, 1):                                                          # zwei Rohre
-        a = tuple(piv[i] + side[i] * 0.25 * sg for i in range(3))
+ELEV = 55.0     # Rohrerhoehung des modellierten Geschuetzes (Grad)
+
+
+def flak_sockel(b, tx, ty):
+    """Fester Teil der Flak auf dem Eckturm (tx, ty): Sockel und Drehkranz."""
+    b.box(tx - 0.45, ty - 0.45, ZT, tx + 0.45, ty + 0.45, ZT + 0.9, "Metall")
+    b.prism(tx, ty, ZT + 0.9, 0.38, 0.45, 10, "Metall hell")
+
+
+def flak_rohr(g):
+    """Drehbares Geschuetz in Ortskoordinaten um den Drehpunkt (Rohre zeigen nach +y, um ELEV nach oben)."""
+    el = math.radians(ELEV)
+    d = (0.0, math.cos(el), math.sin(el))
+    side = (-1.0, 0.0, 0.0)
+    g.cbox(0.0, 0.0, 0.0, 0.9, 0.9, 0.6, "Oliv")                                   # Lafette
+    for sg in (-1, 1):                                                              # zwei Rohre
+        a = tuple(side[i] * 0.25 * sg for i in range(3))
         e = tuple(a[i] + d[i] * 3.2 for i in range(3))
-        b.beam(a, e, 0.16, 0.16, "Metall", up=side)
+        g.beam(a, e, 0.16, 0.16, "Metall", up=side)
         m = tuple(a[i] + d[i] * 3.0 for i in range(3))
-        b.beam(m, e, 0.24, 0.24, "Metall hell", up=side)                        # Muendungsbremse
-    s0 = tuple(piv[i] + d[i] * 0.45 for i in range(3))
-    s1 = tuple(piv[i] + d[i] * 0.55 for i in range(3))
-    b.beam(s0, s1, 1.3, 0.8, "Oliv", up=side)                                   # Schutzschild
-    b.cbox(tx - hx * 0.7, ty - hy * 0.7, ZT + 1.2, 0.5, 0.5, 0.4, "Metall")     # Munitionskasten
-    return piv, d
+        g.beam(m, e, 0.24, 0.24, "Metall hell", up=side)                            # Muendungsbremse
+    s0 = tuple(d[i] * 0.45 for i in range(3))
+    s1 = tuple(d[i] * 0.55 for i in range(3))
+    g.beam(s0, s1, 1.3, 0.8, "Oliv", up=side)                                       # Schutzschild
+    g.cbox(0.0, -0.7, -0.15, 0.5, 0.5, 0.4, "Metall")                               # Munitionskasten
 
 
-def antennen(b):
-    ff = Bau("freya")
-    freya(ff)
-    for (sx, sy) in ((-1, -1), (1, 1)):
-        tx, ty = C + sx * H, C + sy * H
-        b.merge(ff, tx, ty, ZT, 90.0 * sx)
-    sch = Bau("schuessel")
+def antennen():
+    """Drehbare Teile als eigene Objekte: Liste (Name, Bau in Ortskoordinaten, Drehpunkt, Drehung um z in Grad).
+
+    Die Drehpunkte sind dort, wo sich die Teile im Spiel drehen; so lassen sie sich in Blender mit R, Z auch von Hand drehen."""
+    teile = []
+    sch = Bau("radar_schuessel")
     radarschuessel(sch)
-    b.merge(sch, C, C, 6.3, 20.0)
-    marken = []
-    for sx, sy in ((-1, 1), (1, -1)):
-        piv, d = flak(b, C + sx * H, C + sy * H)
-        marken.append((piv, d))
-    return marken
+    teile.append(("radar_schuessel", sch, (C, C, 6.3), 20.0))
+    for name, (sx, sy) in (("freya_sw", (-1, -1)), ("freya_no", (1, 1))):
+        ff = Bau(name)
+        freya(ff)
+        teile.append((name, ff, (C + sx * H, C + sy * H, ZT + 0.08), 90.0 * sx))
+    for name, (sx, sy) in (("flak_nw", (-1, 1)), ("flak_so", (1, -1))):
+        tx, ty = C + sx * H, C + sy * H
+        g = Bau(name)
+        flak_rohr(g)
+        winkel = math.degrees(math.atan2(-(C - tx), C - ty))                       # Rohr zeigt zur Burgmitte (wie im Spiel)
+        teile.append((name, g, (tx, ty, ZT + 1.35), winkel))
+    return teile
 
 
 # ------------------------------------------------------------------ Graben und Bruecken
@@ -696,33 +709,48 @@ def bruecken(b):
 
 
 # ------------------------------------------------------------------ Aufbau in Blender
-def marken_liste(flakmarken):
+def marken_liste():
     """Platzhalter-Daten der Spielobjekte: (Name, x, y, z, Art, Groesse)."""
     out = [("kiste_burg_0", C - 12.0, C + 8.0, 0.0, 'CUBE', 0.4), ("kiste_burg_1", C + 12.0, C - 8.0, 0.0, 'CUBE', 0.4),
            ("koth_zone", C, C, 0.1, 'CIRCLE', 15.0)]
     for name, (sx, sy) in (("flak_nw", (-1, 1)), ("flak_so", (1, -1))):
-        out.append((name, C + sx * H, C + sy * H, ZT + 1.35, 'SPHERE', 0.8))
+        out.append(("marker_" + name, C + sx * H, C + sy * H, ZT + 1.35, 'SPHERE', 0.8))
     return out
 
 
+def uv_in_metern(ob):
+    """Legt UVs an, die der Groesse in Metern entsprechen (1 UV-Einheit = 1 m, je Flaeche entlang der dominanten Achse
+    projiziert). So haben Texturen ueberall dieselbe Dichte; die Kachelgroesse stellt texturen.py im Material ein."""
+    me = ob.data
+    if not len(me.polygons):
+        return
+    uvl = me.uv_layers.new(name="UVMap")
+    for p in me.polygons:
+        n = p.normal
+        ax = 0 if (abs(n.x) >= abs(n.y) and abs(n.x) >= abs(n.z)) else (1 if abs(n.y) >= abs(n.z) else 2)
+        for li in p.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            uvl.data[li].uv = ((co.y, co.z), (co.x, co.z), (co.x, co.y))[ax]
+
+
 def baue_alles():
-    """Gibt (Baugruppen, Gelaende, Wasser, Marken) zurueck - ohne bpy aufrufbar (zum Testen)."""
-    mauer, turm, tor, berg, hf, br, ant = (Bau("burg_mauern"), Bau("burg_ecktuerme"), Bau("burg_tore"),
-                                           Bau("burg_bergfried"), Bau("burg_hof"), Bau("burg_bruecken"),
-                                           Bau("burg_radar_flak"))
+    """Gibt (feste Baugruppen, Gelaende, Wasser, Marken, drehbare Teile) zurueck - ohne bpy aufrufbar (zum Testen)."""
+    mauer, turm, tor, berg, hf, br = (Bau("burg_mauern"), Bau("burg_ecktuerme"), Bau("burg_tore"),
+                                      Bau("burg_bergfried"), Bau("burg_hof"), Bau("burg_bruecken"))
     mauern(mauer)
     ecktuerme(turm)
     tore(tor)
     bergfried(berg)
     hof(hf)
     bruecken(br)
-    fm = antennen(ant)
-    return [mauer, turm, tor, berg, hf, br, ant], gelaende_netz(), wasser_netz(), marken_liste(fm)
+    for sx, sy in ((-1, 1), (1, -1)):
+        flak_sockel(turm, C + sx * H, C + sy * H)
+    return ([mauer, turm, tor, berg, hf, br], gelaende_netz(), wasser_netz(), marken_liste(), antennen())
 
 
 def bauen():
     """Legt die Burg in der aktuellen Blender-Szene an (Collection "Burg")."""
-    gruppen, (gv, gt, gm), (wv, wf), marken = baue_alles()
+    gruppen, (gv, gt, gm), (wv, wf), marken, dreh = baue_alles()
     coll = T.collection("Burg")
     for g in gruppen:
         namen = []
@@ -731,7 +759,8 @@ def bauen():
                 namen.append(mname)
         mats = [T.material(n, *FARBEN[n]) if n in FARBEN else T.material(n, dict(T.STOFFE)[n]) for n in namen]
         idx = [namen.index(mname) for mname in g.m]
-        T.add_mesh(coll, g.name, g.v, g.f, mats, idx)
+        ob = T.add_mesh(coll, g.name, g.v, g.f, mats, idx)
+        uv_in_metern(ob)
     namen = []
     for mname in gm:
         if mname not in namen:
@@ -739,9 +768,20 @@ def bauen():
     mats = [T.material(n, *FARBEN[n]) if n in FARBEN else T.material(n, dict(T.STOFFE)[n]) for n in namen]
     T.add_mesh(coll, "burg_gelaende", gv, gt, mats, [namen.index(mname) for mname in gm])
     T.add_mesh(coll, "burggraben_wasser", wv, wf, [T.material("Wasser", *FARBEN["Wasser"])])
+    nf = sum(len(g.f) for g in gruppen)
+    for name, g, (px, py, pz), rot in dreh:                      # drehbare Teile: Objektursprung = Drehpunkt
+        namen = []
+        for mname in g.m:
+            if mname not in namen:
+                namen.append(mname)
+        mats = [T.material(n, *FARBEN[n]) for n in namen]
+        ob = T.add_mesh(coll, name, g.v, g.f, mats, [namen.index(mname) for mname in g.m])
+        ob.location = (px, py, pz)
+        ob.rotation_euler = (0.0, 0.0, math.radians(rot))
+        nf += len(g.f)
     mc = T.collection("Burg-Marker")
     for name, x, y, z, art, gr in marken:
         T.marker(mc, name, x, y, z, art, gr)
     T.kamera(mc, "kamera_burg_sued", (C, C - 75.0, 24.0), (C, C, 5.0), 28.0)
     T.kamera(mc, "kamera_burg_ecke", (C - 58.0, C - 58.0, 30.0), (C, C, 4.0), 28.0)
-    return sum(len(g.f) for g in gruppen)
+    return nf
