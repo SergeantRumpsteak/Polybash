@@ -114587,7 +114587,9 @@ class Game(ShowBase):
         return (a - 0.76, a - 0.08, -0.94, -0.76)
 
     LOBBY_EQ_BTN = (-0.42, 0.42, -0.90, -0.76)
-    LOBBY_EQUIP = True           # Ausrüstungsmenü-Knopf in der Lobby (Experimental: Aufsätze, Visier, Gadget - Waffen nur aus Kisten)
+    LOBBY_EQUIP = False          # Ausrüstungsmenü in der Lobby benutzbar (im Experimental nicht: immer Pistole)
+    LOBBY_EQ_LOCKED = True       # Knopf trotzdem zeigen, aber ausgegraut; beim Darüberfahren erscheint der Hinweis
+    LOBBY_EQ_TIP = "In diesem Spielmodus nicht verfügbar."
 
     def back_btn_rect(self):
         a = float(self.getAspectRatio())
@@ -114618,7 +114620,7 @@ class Game(ShowBase):
             elif self.net_mode == "client":
                 self.toggle_ready()
         elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
-            self.open_loadscreen()                  # Experimental: gleich 'Loadout konfigurieren' (Waffen gibt es nur in Kisten)
+            self.lobby_equip = True                 # erst das Waffenmenü
 
     def build_lobby_ui(self):
         """Runden-Lobby (vor dem ersten Spawn von Host und Mitspielern): Spielerliste, 'Spiel starten', Ausrüstungsmenü."""
@@ -114654,10 +114656,14 @@ class Game(ShowBase):
         eq.setColor(0.10, 0.17, 0.26, 0.9)
         eq.setTransparency(TransparencyAttrib.MAlpha)
         eq_t = OnscreenText(text="Ausrüstungsmenü", parent=root, pos=(0, -0.855), scale=0.05, fg=(1, 1, 1, 1),
-                            shadow=(0, 0, 0, 0.8), mayChange=False)
+                            shadow=(0, 0, 0, 0.8), mayChange=True)
+        tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
+                           bg=(0.02, 0.03, 0.05, 0.92), shadow=(0, 0, 0, 0.8), mayChange=True)
+        tip.setBin("fixed", 99)
+        tip.hide()
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
-                         "start_t": start_t, "eq": eq, "eq_t": eq_t}
+                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip}
 
     def update_lobby_ui(self, show, mpos):
         ui = getattr(self, "lobby_ui", None)
@@ -114716,10 +114722,23 @@ class Game(ShowBase):
                 ui["start"].setColor(0.20, 0.62, 0.28, 0.98) if hov_c else ui["start"].setColor(*(0.12, 0.45, 0.18, 0.92))
                 self.set_text(ui["start_t"], "Bereit")
         e = self.LOBBY_EQ_BTN
-        hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
+        over_e = mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
+        hov_e = self.LOBBY_EQUIP and over_e
         for nd in (ui["eq"], ui["eq_t"]):
-            (nd.show if self.LOBBY_EQUIP else nd.hide)()
-        ui["eq"].setColor(*((0.22, 0.30, 0.42, 0.95) if hov_e else (0.10, 0.17, 0.26, 0.9)))
+            (nd.show if (self.LOBBY_EQUIP or self.LOBBY_EQ_LOCKED) else nd.hide)()
+        if self.LOBBY_EQ_LOCKED and not self.LOBBY_EQUIP:        # ausgegraut + Hinweis beim Darüberfahren
+            ui["eq"].setColor(0.11, 0.12, 0.14, 0.8)
+            ui["eq_t"].setFg((0.45, 0.47, 0.50, 1))
+            if over_e:
+                asp = float(self.getAspectRatio())
+                ui["tip"].setPos(max(-asp + 0.5, min(asp - 0.5, mpos[0])), mpos[1] + 0.07)
+                ui["tip"].show()
+            else:
+                ui["tip"].hide()
+        else:
+            ui["tip"].hide()
+            ui["eq_t"].setFg((1, 1, 1, 1))
+            ui["eq"].setColor(*((0.22, 0.30, 0.42, 0.95) if hov_e else (0.10, 0.17, 0.26, 0.9)))
 
     def build_respawn_btn(self):
         cm = CardMaker("respbtn")
