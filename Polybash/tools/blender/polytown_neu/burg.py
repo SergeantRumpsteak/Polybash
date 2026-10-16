@@ -286,10 +286,51 @@ def ecktuerme(b):
                     b.cbox(tx + side[0] * 3.6, ty, ZT - 0.2, 0.3, 7.3, 0.4, "Mauerwerk")
                 else:
                     b.cbox(tx, ty + side[1] * 3.6, ZT - 0.2, 7.3, 0.3, 0.4, "Mauerwerk")
-    # Treppen im Hof hinauf zu den Wehrgaengen West und Ost: senkrecht zur Mauer, die oberste Stufe (z = ZW) stoesst an
-    # die Mauer, geradeaus geht es auf den Wehrgang (Bruestung aussen verhindert das Herunterfallen)
-    treppe(b, C - H + TD + 10 * 0.8, C - 8.0, "W", 10, 2.5, 0, sd=0.8)
-    treppe(b, C + H - TD - 10 * 0.8, C + 5.5, "E", 10, 2.5, 0, sd=0.8)
+    # Treppen im Hof hinauf zu den Wehrgaengen West und Ost
+    for s_ in (-1, 1):
+        wehrgang_treppe(b, s_)
+
+
+def wehrgang_treppe(b, s):
+    """Hoftreppe (s = -1 West, +1 Ost) laengs der Mauer hinauf, oben ein Podest mit rechtwinkliger Biegung zur Mauer hin.
+
+    Die Stufen steigen an der Mauer entlang; das Podest (z = ZW) liegt buendig an der Wehrgang-Kante, der Weg geht dort nach
+    links/rechts auf den Wehrgang. Stirnseite des Podests und die Hofseite von Treppe und Podest sind mit einem Metallzaun
+    gesichert, damit man oben nicht geradeaus abstuerzt. Zur Mauer hin ist das Podest offen."""
+    n, sd, sh, w = 10, 0.8, 0.5, 2.5
+    dy = -s                                                   # Steigrichtung: West nach Norden, Ost nach Sueden
+    inner = C + s * (H - TD)                                  # Innenkante der Mauer
+    x_lo, x_hi = sorted((inner, inner - s * w))
+    y0 = C + s * 10.0
+    treppe(b, x_lo, y0, "N" if dy > 0 else "S", n, w, 0, sd=sd)
+    yt = y0 + dy * n * sd                                      # Ende der obersten Stufe
+    ye = yt + dy * w                                           # Ende des Podests
+    b.box(x_lo, min(yt, ye), 0.0, x_hi, max(yt, ye), ZW, "Stufen")
+    xf = C + s * (H - TD - w + 0.06)                           # Zaun an der Hofseite (Mitte der Zaunlinie)
+    yf = ye - dy * 0.06                                        # Zaun an der Stirnseite
+    hz = 1.05
+
+    def latte(xa, ya, xb, yb, z0, z1):
+        b.box(min(xa, xb) - 0.04, min(ya, yb) - 0.04, z0, max(xa, xb) + 0.04, max(ya, yb) + 0.04, z1, "Metall")
+
+    # Hofseite der Treppe: Pfosten auf den Stufen, schraege Handlaeufe
+    for i in (0, 3, 6, 9):
+        yc = y0 + dy * (i + 0.5) * sd
+        z = (i + 1) * sh
+        b.box(xf - 0.04, yc - 0.04, z, xf + 0.04, yc + 0.04, z + hz, "Metall")
+    a0 = (xf, y0 + dy * 0.5 * sd, sh)
+    a1 = (xf, y0 + dy * (n - 0.5) * sd, n * sh)
+    for dz in (hz, hz * 0.5):
+        b.beam((a0[0], a0[1], a0[2] + dz), (a1[0], a1[1], a1[2] + dz), 0.06, 0.06, "Metall")
+    # Podest: Hofseite und Stirnseite, jeweils Pfosten alle ~1,2 m und zwei Laengslatten
+    for yy in (yt + dy * 0.0, yt + dy * w / 2, ye - dy * 0.06):
+        b.box(xf - 0.04, yy - 0.04, ZW, xf + 0.04, yy + 0.04, ZW + hz, "Metall")
+    for dz0 in (hz - 0.04, hz * 0.5 - 0.03):
+        latte(xf, y0 + dy * (n - 0.5) * sd, xf, yf, ZW + dz0, ZW + dz0 + 0.06)
+    for xx in (xf, (xf + inner) / 2, inner - s * 0.04):
+        b.box(xx - 0.04, yf - 0.04, ZW, xx + 0.04, yf + 0.04, ZW + hz, "Metall")
+    for dz0 in (hz - 0.04, hz * 0.5 - 0.03):
+        latte(xf, yf, inner, yf, ZW + dz0, ZW + dz0 + 0.06)
 
 
 def tore(b):
