@@ -46,21 +46,23 @@ SX = 226.0
 Y_SUED, Y_NORD = 66.0, 234.0                                          # Umfahrung der Bahnenden
 TAXI_X, TAXI_B = 272.0, 8.0
 ANSCHLUESSE = (80.0, 150.0, 220.0)                                    # Rollweg-Anschluesse an die Bahn (y)
-# Hangarreihe: drei Tonnenhallen mit Teilung REIHE_B (= 1,3 x 16 m) in Bahnrichtung; der Bogenradius ist etwas groesser als
-# die halbe Teilung, damit die Bogen sich schneiden und die Hallen ohne Wand und ohne Luecke ineinander uebergehen
-REIHE_N, REIHE_B, REIHE_R = 3, 20.8, 12.0
+# Hangarreihe: drei getrennte Tonnenhallen mit je eigenem Halbkreis-Dach (Radius = halbe Teilung REIHE_B = 1,3 x 16 m); wo ein Dach
+# in den Boden geht, beginnt das naechste direkt wieder (die Halbkreise beruehren sich am Boden)
+REIHE_N, REIHE_B = 3, 20.8
+REIHE_R = REIHE_B / 2
 REIHE_X0, REIHE_T = 279.0, 19.0                                       # offene Westkante, Tiefe: Rueckwand bei x = 298 (Talkante 300)
 REIHE_YC = tuple(BY + (i - (REIHE_N - 1) / 2.0) * REIHE_B for i in range(REIHE_N))       # Achsen der drei Hallen
-REIHE_Y0, REIHE_Y1 = REIHE_YC[0] - REIHE_R, REIHE_YC[-1] + REIHE_R                       # gesamte Breite 65,6 m
+REIHE_Y0, REIHE_Y1 = REIHE_YC[0] - REIHE_R, REIHE_YC[-1] + REIHE_R                       # gesamte Breite 62,4 m
 VORFELD = (TAXI_X + TAXI_B / 2, REIHE_Y0, REIHE_X0, REIHE_Y1)                            # Vorfeld zwischen Rollweg und Hallen
 # Grosser Hangar am Suedende westlich der Bahn, offen nach Osten (zur Bahn), Tuer im Westen
-HX, HY, HW, HD, HH = 237.5, 90.0, 12.0, 14.0, 6.0                    # Mitte, Breite (x), Tiefe (y), Hoehe
-HANGAR = (HX - HW / 2, HY - HD / 2, HX + HW / 2, HY + HD / 2)       # (231.5, 83, 243.5, 97)
+HX, HY, HW, HD, HH = 237.5, 90.0, 12.0, 28.0, 6.0                    # Mitte, Breite (x), Tiefe (y), Hoehe
+HANGAR = (HX - HW / 2, HY - HD / 2, HX + HW / 2, HY + HD / 2)       # (231.5, 76, 243.5, 104): 28 m lang in Bahnrichtung
 # Tower westlich der Bahn auf halber Bahnlaenge: Sockelgebaeude (12 x 10 m) mit dem Treppenschacht (6 x 6 m) in der Nordhaelfte
 TX, TY = 240.0, 162.0
 TOWER_ANNEX = (TX - 6.0, TY - 5.0, TX + 6.0, TY + 5.0)
 SCY = TY + 1.6                                                        # Mitte des Schachts (y); Schachtnordwand sitzt an der Sockelnordwand
-Z_BODEN, Z_KAB = 0.07, 13.3                                           # Hallenboden, Kanzelboden
+Z_BODEN, Z_KAB = 0.07, 13.3
+RADAR_Z = 17.0                                                        # Drehpunkt der Radaranlage auf dem Kanzeldach                                           # Hallenboden, Kanzelboden
 # Zaun und Eingang
 GATE_X = 214.0                                                        # Zaunlinie im Westen (zwischen Ring und Flughafenstrasse)
 ZAUN = (GATE_X, 60.0, 299.0, 240.0)
@@ -87,6 +89,7 @@ FARBEN = {
     "Tower Stufen":    ((0.36, 0.38, 0.38), 0.5, 0.0),
     "Schranke rot":    ((0.75, 0.10, 0.08), 0.6, 0.0),
     "Schranke weiss":  ((0.93, 0.93, 0.90), 0.6, 0.0),
+    "Windsack orange": ((0.95, 0.45, 0.08), 0.7, 0.0),
     "Insel":           ((0.55, 0.55, 0.53), 0.95, 0.0),
 }
 
@@ -213,10 +216,8 @@ def landebahn():
         gelbe_linie_x(b, x1, TAXI_X - GELB_B / 2, yc, sp)
     for yc in REIHE_YC:                                          # Rollweg -> Vorfeld -> bis hinten in jede Halle
         gelbe_linie_x(b, TAXI_X + GELB_B / 2, REIHE_X0 + REIHE_T - 3.0, yc)
-    sp = haltelinie(b, x0, -1, C, 6.0)                           # Zufahrt von Westen
-    gelbe_linie_x(b, x0 - 11.0, x0, C, sp)
-    sp = haltelinie(b, x0, -1, HY, 8.0)                          # grosser Hangar: von der Bahn bis in die Halle
-    gelbe_linie_x(b, HANGAR[0] + 2.5, x0, HY, sp)
+    gelbe_linie_x(b, x0 - 11.0, x0, C)                           # Zufahrt von Westen (ohne Haltelinie)
+    gelbe_linie_x(b, HANGAR[0] + 2.5, x0, HY)                    # grosser Hangar: von der Bahn bis in die Halle (ohne Haltelinie)
     # ---- weisse Markierungen (Oberkante Z_MARK) ----
     m = "Markierung weiss"
 
@@ -285,7 +286,7 @@ def hangar():
     for dx in (-3.0, 3.0):
         B.fenster(b, HX + dx, y1, 3.0, 1.6, 1.1, 0, 1)
         B.fenster(b, HX + dx, y0, 3.0, 1.6, 1.1, 0, -1)
-    for dy in (-3.5, 3.5):
+    for dy in (-9.5, -3.5, 3.5, 9.5):
         B.fenster(b, x0, HY + dy, 3.0, 1.6, 1.1, -1, 0)
     return b
 
@@ -349,10 +350,11 @@ def tonnenreihe(b, x0, x1, ycs, R, dicke=0.4, n=12, mat="Hangar Dach", mat_boden
 
 
 def hangarreihe():
-    """Drei runde Hangars nahtlos nebeneinander zwischen Vorfeld und Bergen, nach Westen (zur Burg) ganz offen."""
+    """Drei runde Hangars nebeneinander (getrennt, Daecher beruehren sich am Boden) zwischen Vorfeld und Bergen, nach Westen (zur Burg) ganz offen."""
     b = Bau("umgebung_hangarreihe")
     x0, x1 = REIHE_X0, REIHE_X0 + REIHE_T
-    tonnenreihe(b, x0, x1, REIHE_YC, REIHE_R)
+    for yc in REIHE_YC:                                                           # jede Halle mit eigenem Rundbogen
+        tonnenreihe(b, x0, x1, [yc], REIHE_R, n=16)
     for i, yc in enumerate(REIHE_YC):
         if i != 1:                                                                # Kisten in zwei der Hallen
             b.box(x1 - 4.4, yc - 3.0, 0.07, x1 - 2.0, yc - 0.6, 1.3, "Kiste")
@@ -488,8 +490,8 @@ def tower():
             b.box(TX + sx * 3.5 - 0.15, SCY + sy * 3.5 - 0.15, Z_KAB, TX + sx * 3.5 + 0.15, SCY + sy * 3.5 + 0.15, 15.2, "Tower Beton")
     b.box(kx1 - 0.9, SCY - 1.5, Z_KAB, kx1 - kt, SCY + 1.5, 14.3, "Metall")                 # Lotsenpult an der Ostwand
     b.box(kx0 - 0.5, ky0 - 0.5, 15.2, kx1 + 0.5, ky1 + 0.5, 15.6, "Tower Dach")             # Kanzeldach
-    b.box(TX - 0.08, SCY - 0.08, 15.6, TX + 0.08, SCY + 0.08, 19.0, "Metall")               # Antennenmast
-    b.box(TX - 1.2, SCY - 0.05, 18.0, TX + 1.2, SCY + 0.05, 18.2, "Metall")                 # Querantenne
+    b.box(TX - 0.5, SCY - 0.5, 15.6, TX + 0.5, SCY + 0.5, 16.2, "Tower Beton")              # Sockel der Radaranlage
+    b.box(TX - 0.12, SCY - 0.12, 16.2, TX + 0.12, SCY + 0.12, RADAR_Z, "Metall")             # Stuetze (dreht nicht)
     b.box(TX + 1.6, SCY + 1.6, 15.6, TX + 2.4, SCY + 2.4, 16.4, "Metall")                   # Geraetekasten
     # ---- Gelaender der Rundumplattform: Fussleiste, Mittel- und Handlauf, Pfosten alle ~1,6 m
     g = 4.85
@@ -602,9 +604,57 @@ def zaun():
     return b
 
 
+def windsaecke():
+    """Je ein Windsack an beiden Enden der Landebahn (westlich neben der Bahn, ausserhalb der Rollwege): Mast, Auslegerring, Sack."""
+    b = Bau("umgebung_windsaecke")
+    for yy in (BAHN[1] - 2.5, BAHN[3] + 2.5):
+        x = BAHN[0] - 2.5
+        b.box(x - 0.4, yy - 0.4, 0.0, x + 0.4, yy + 0.4, 0.3, "Insel")
+        b.prism(x, yy, 0.3, 0.12, 6.2, 8, "Metall")
+        ringe = [(0.62, 0.62), (0.55, 0.50), (0.46, 0.38), (0.36, 0.30), (0.26, 0.24)]      # (Radius vorn, hinten) je Segment
+        x0 = x + 0.3
+        b.beam((x, yy, 6.5), (x0, yy, 6.5), 0.1, 0.1, "Metall")
+        for k, (r0, r1) in enumerate(ringe):
+            xa, xb = x0 + 0.75 * k, x0 + 0.75 * (k + 1)
+            mat = "Windsack orange" if k % 2 == 0 else "Markierung weiss"
+            n = 8
+            for i in range(n):
+                a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+                am = (a0 + a1) / 2
+                _quad_orient(b, [(xa, yy + r0 * math.cos(a0), 6.5 + r0 * math.sin(a0)), (xb, yy + r1 * math.cos(a0), 6.5 + r1 * math.sin(a0)),
+                                 (xb, yy + r1 * math.cos(a1), 6.5 + r1 * math.sin(a1)), (xa, yy + r0 * math.cos(a1), 6.5 + r0 * math.sin(a1))],
+                             (0.0, math.cos(am), math.sin(am)), mat)
+    return b
+
+
+def radar_tower():
+    """Drehende Radaranlage auf dem Kanzeldach des Towers (Ortskoordinaten um den Drehpunkt; Antenne blickt nach +y)."""
+    g = Bau("tower_radar")
+    g.prism(0.0, 0.0, 0.0, 0.25, 0.5, 8, "Metall")                                  # Drehkranz
+    g.box(-0.9, -0.12, 0.5, 0.9, 0.12, 0.7, "Metall")                              # Ausleger/Tragbalken
+    W, Hh = 4.4, 1.3                                                                # Reflektor: Gitterrahmen mit Querstreben
+    for sx in (-1, 1):
+        g.box(sx * W / 2 - 0.05, 0.35, 0.7, sx * W / 2 + 0.05, 0.45, 0.7 + Hh + 0.1, "Rahmen")
+    for zz in (0.7, 0.7 + Hh + 0.05):
+        g.box(-W / 2, 0.35, zz, W / 2, 0.45, zz + 0.05, "Rahmen")
+    for k in range(1, 5):
+        g.box(-W / 2, 0.37, 0.7 + Hh * k / 5, W / 2, 0.43, 0.7 + Hh * k / 5 + 0.04, "Rahmen")
+    for k in range(1, 10):
+        g.box(-W / 2 + W * k / 10 - 0.02, 0.37, 0.7, -W / 2 + W * k / 10 + 0.02, 0.43, 0.7 + Hh + 0.05, "Rahmen")
+    for sx in (-1, 1):
+        g.beam((sx * 0.6, 0.0, 0.6), (sx * W / 2 - 0.02, 0.38, 0.7 + Hh * 0.5), 0.07, 0.07, "Metall")
+    g.box(-0.15, 0.45, 0.7 + Hh + 0.05, 0.15, 0.95, 0.7 + Hh + 0.3, "Metall")      # Speisehorn oben
+    return g
+
+
+def drehteile():
+    """Drehbare Teile als eigene Objekte: Liste (Name, Bau in Ortskoordinaten, Drehpunkt, Anfangsdrehung um z in Grad, Grad pro Bild)."""
+    return [("tower_radar", radar_tower(), (TX, SCY, RADAR_Z), 0.0, 6.0)]
+
+
 def baue_alles():
     """Gibt die Baugruppen zurueck (ohne bpy aufrufbar)."""
-    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun()]
+    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke()]
 
 
 def bauen():
@@ -618,5 +668,21 @@ def bauen():
                 namen.append(mname)
         mats = [T.material(n, *FARBEN[n]) for n in namen]
         T.add_mesh(coll, g.name, g.v, g.f, mats, [namen.index(mname) for mname in g.m])
+        nf += len(g.f)
+    for name, g, (px, py, pz), rot, grad_je_bild in drehteile():                # drehbar: Objektursprung = Drehpunkt
+        namen = []
+        for mname in g.m:
+            if mname not in namen:
+                namen.append(mname)
+        mats = [T.material(n, *FARBEN[n]) for n in namen]
+        ob = T.add_mesh(coll, name, g.v, g.f, mats, [namen.index(mname) for mname in g.m])
+        ob.location = (px, py, pz)
+        ob.rotation_euler = (0.0, 0.0, math.radians(rot))
+        try:                                                                     # Dauerdrehung ueber einen Treiber (kein Keyframe noetig)
+            fc = ob.driver_add("rotation_euler", 2)
+            fc.driver.type = 'SCRIPTED'
+            fc.driver.expression = "%.6f + frame * %.6f" % (math.radians(rot), math.radians(grad_je_bild))
+        except Exception:
+            pass
         nf += len(g.f)
     return nf
