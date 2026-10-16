@@ -20,7 +20,7 @@ TEXTUREN = {
     "Hof":              {"ordner": "festung_boden", "kachel_m": 2.0, "tint": 0.0},
     # Feuerwehrtreppe: Trittbleche, Wangen, Podest (Metall) und Stuetzsaeulen
     "Stufen":           {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0},
-    "Treppensaeule":    {"ordner": "festung_treppenseule", "kachel_m": 1.0, "tint": 0.0},
+    "Treppensaeule":    {"ordner": "festung_treppe", "kachel_m": 1.0, "tint": 0.0},   # eigener Ordner festung_treppenseule moeglich
     # Waende: Mauern, Tuerme, Wachhaeuser, Bergfried-Details
     "Mauerwerk":        {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.0},
     "Mauerwerk dunkel": {"ordner": "festung_wand", "kachel_m": 2.0, "tint": 0.6},
