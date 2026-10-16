@@ -1,7 +1,7 @@
 """Polybash - Burg (Radarstation) in der Mitte des Talkessels.
 
 Nachbau der Burg aus der Standardkarte (spiel.py bleibt unveraendert): quadratische Betonburg 44 x 44 m mit zwei Toren
-(Nord, Ssued) samt Wachhaeusern und Schranken, Ecktuerme, Bergfried mit Radarschuessel, zwei Flak-Geschuetzen auf den
+(Nord, Ssued) samt Wachhaeusern und Schranken, Ecktuerme, Radarschuessel auf rundem Betonsockel (kein Haus mehr), zwei Flak-Geschuetzen auf den
 Tuermen NW und SO, zwei Freya-Antennen auf den Tuermen SW und NO, Kasematten, Wassergraben mit zwei Bruecken (Nord, Sued) vor den beiden Toren.
 West- und Ostmauer haben keinen Eingang und damit auch keinen Uebergang ueber den Graben.
 
@@ -413,34 +413,12 @@ def tore(b):
             fahne(b, gx, (ya + yb) / 2, 7.5, 4.7, "Fahne weiss" if sgn > 0 else "Fahne gelb", 2.2, 1.3, 90.0 if sgn > 0 else -90.0)
 
 
-def bergfried(b):
+def radar_sockel(b):
+    """Sockel der Radarschuessel in der Hofmitte (das Haus mit der Schuessel auf dem Dach gibt es nicht mehr):
+    runder Betonturm bis zum Drehkranz bei z = 6,3 m (Drehpunkt der Schuessel)."""
     c = C
-    b.box(c - 4, c - 4, 0.0, c + 4, c + 4, 6.0, "Mauerwerk")                     # Betriebsgebaeude
-    b.box(c - 4, c + 4 - PW, 6.0, c + 4, c + 4, 7.2, "Mauerwerk dunkel")               # Bruestung Nord
-    b.box(c - 4, c - 4, 6.0, c - 4 + PW, c + 4, 7.2, "Mauerwerk dunkel")               # Bruestung West
-    # Treppe aufs Dach an der Ostseite (die Suedseite hat den Eingang): steigt von Norden nach Sueden und endet an der
-    # offenen Suedost-Ecke des Daches (Bruestung nur Nord und West)
-    treppe(b, c + 4, c - 4 + 12 * 0.8, "S", 12, 2.5, 0, sd=0.8)
-    # Eingang auf der Suedseite, Vordach, Fenster
-    kx, ky = c, c - 4.0
-    b.cbox(kx, ky - 0.1, 1.3, 2.6, 0.2, 2.6, "Mauerwerk")
-    b.cbox(kx, ky - 0.2, 1.15, 1.7, 0.1, 2.3, "Oliv")
-    b.cbox(kx, ky - 0.27, 1.15, 0.05, 0.05, 2.3, "Draht")
-    b.cbox(kx, ky - 0.7, 2.75, 3.4, 1.2, 0.18, "Mauerwerk")                       # Vordach
-    b.cbox(kx - 1.0, ky - 0.2, 2.5, 0.2, 0.2, 0.24, "Lampe")
-    for dx in (-2.6, 2.6):
-        fenster(b, kx + dx, ky, 3.2, 1.3, 1.0, 0, -1)
-    for ox_, ux_ in ((-4.0, 0), (0.0, 1)):                                          # Ostseite: Treppe davor, dort keine Fenster
-        for dd in (-2.0, 2.0):
-            if ux_ == 0:
-                fenster(b, c + ox_, c + dd, 3.0, 1.5, 1.2, 1 if ox_ > 0 else -1, 0)
-            else:
-                fenster(b, c + dd, c + 4.0, 3.0, 1.5, 1.2, 0, 1)
-    # Dachaufbauten, Fundament des Drehkranzes
-    for dx, dy, hh in ((-2.4, -2.4, 0.9), (2.5, 2.4, 0.7)):
-        b.cbox(c + dx, c + dy, 6.0 + hh / 2, 1.0, 1.0, hh, "Metall hell")
-        b.prism(c + dx, c + dy, 6.0 + hh, 0.3, 0.25, 8, "Metall")
-    b.cbox(c, c, 6.15, 3.2, 3.2, 0.3, "Beton dunkel")                           # Drehkranz-Fundament der Schuessel (bleibt Beton)
+    b.prism(c, c, 0.0, 1.7, 6.0, 12, "Beton dunkel")
+    b.cbox(c, c, 6.15, 3.2, 3.2, 0.3, "Beton dunkel")                               # Drehkranz-Fundament
 
 
 def hof(b):
@@ -475,7 +453,7 @@ def hof(b):
     kasematte(c - 14, c + 14, c - 6, c + 19, "S")
     kasematte(c - 19, c + 4, c - 14, c + 14, "E")
     kasematte(c + 14, c - 14, c + 19, c - 4, "W")
-    # freistehende Mauerstuecke um den Bergfried und Sprengschutz hinter den Toren
+    # freistehende Mauerstuecke um den Radarsockel und Sprengschutz hinter den Toren
     for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
         b.box(c + sx * 10 - 2.5, c + sy * 10, 0.0, c + sx * 10 + 2.5, c + sy * 10 + 0.6, 2.0, "Mauerwerk dunkel")
     for sy in (-1, 1):
@@ -788,11 +766,11 @@ def uv_in_metern(ob):
 def baue_alles():
     """Gibt (feste Baugruppen, Gelaende, Wasser, Marken, drehbare Teile) zurueck - ohne bpy aufrufbar (zum Testen)."""
     mauer, turm, tor, berg, hf, br = (Bau("burg_mauern"), Bau("burg_ecktuerme"), Bau("burg_tore"),
-                                      Bau("burg_bergfried"), Bau("burg_hof"), Bau("burg_bruecken"))
+                                      Bau("burg_radarsockel"), Bau("burg_hof"), Bau("burg_bruecken"))
     mauern(mauer)
     ecktuerme(turm)
     tore(tor)
-    bergfried(berg)
+    radar_sockel(berg)
     hof(hf)
     bruecken(br)
     for sx, sy in ((-1, 1), (1, -1)):

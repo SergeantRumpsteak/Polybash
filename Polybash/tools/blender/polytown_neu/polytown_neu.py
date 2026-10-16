@@ -17,6 +17,7 @@ if HERE not in sys.path:
 import bpy  # noqa: E402
 import talkessel as T  # noqa: E402
 import burg as B  # noqa: E402
+import umgebung as U  # noqa: E402
 import texturen as TX  # noqa: E402
 
 
@@ -25,6 +26,7 @@ def main():
     T.build_tal(loch=B.LOCH)          # Wiese mit Aussparung fuer das Burggelaende (Graben)
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
+    nu = U.bauen()                    # Ringweg, Abzweige, Landebahn, Hangar, Tower
     TX.anwenden()                     # Texturen aus texturen/<ordner>/ (falls vorhanden)
     T.build_marker()
     T.setup_view()
@@ -32,7 +34,7 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=path)
     zmax = max(v[2] for v in verts)
     print(f"[Polybash] Polytown neu: Tal {T.TAL:.0f} x {T.TAL:.0f} m, hoechster Gipfel {zmax:.0f} m, "
-          f"{len(tris)} Dreiecke Berge, {nb} Flaechen Burg")
+          f"{len(tris)} Dreiecke Berge, {nb} Flaechen Burg, {nu} Flaechen Umgebung")
     print("[Polybash] gespeichert:", path)
 
 

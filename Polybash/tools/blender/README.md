@@ -38,11 +38,11 @@ die dieses Skript einbindet - der Befehl bleibt immer gleich.)
 Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `talkessel.py`).
 
 * Burg: Mauern 44 x 44 m mit Wehrgang, Bruestung und Stacheldraht; vier Ecktuerme (Flak auf NW und SO, Freya-Antennen auf SW und NO);
-  zwei Tore (Nord, Sued) mit Wachhaeusern, Warnstreifen und hochgeklappten Schranken; Bergfried mit Radarschuessel;
+  zwei Tore (Nord, Sued) mit Wachhaeusern, Warnstreifen und hochgeklappten Schranken; Radarschuessel auf Betonsockel;
   Kasematten, Deckungen, Loeschwasserbehaelter, Lampen, Fahnen.
 * Graben um die Burg (2 m tief, Wasserspiegel -1,2 m, geschlossener Ring) mit Nordbruecke (Stahlfachwerk) und Suedbruecke (Beton) vor den beiden Toren; West- und Ostmauer haben keinen Eingang.
   Abweichung vom Spiel: die Bruecken Nord/Sued spannen ueber offenes Wasser (im Spiel liegt dort Boden unter den Bruecken).
-* Collections: `Burg` (Objekte `burg_mauern`, `burg_ecktuerme`, `burg_tore`, `burg_bergfried`, `burg_hof`, `burg_bruecken`,
+* Collections: `Burg` (Objekte `burg_mauern`, `burg_ecktuerme`, `burg_tore`, `burg_radarsockel`, `burg_hof`, `burg_bruecken`,
   `burg_radar_flak`, `burg_gelaende`, `burggraben_wasser`) und `Burg-Marker` (`flak_nw`, `flak_so`, `kiste_burg_*`, `koth_zone`, Kameras).
 * Die Positionen von Flak und Kisten stimmen mit der Standardkarte ueberein (128/172 und 172/128, z = 9,35).
 
@@ -50,3 +50,9 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 ### Drehbare Teile und Texturen (polytown_neu)
 - Radarschüssel, Freya-Antennen und Flakrohre sind eigene Objekte (`radar_schuessel`, `freya_sw/no`, `flak_nw/so`) mit Drehpunkt als Objekt-Ursprung. Im Blender-Modell sind sie statisch (Animation gibt es nur im Spiel); zum Ansehen: Objekt wählen, `R` `Z` drehen. Die Platzhalter-Empties heißen `marker_flak_nw/so`.
 - Texturen: Poly-Haven-Satz (Diffuse, Normal **GL**, Roughness, optional AO) in `tools/blender/polytown_neu/texturen/festung_boden/` legen, `./build_blender.sh` ausführen. Details in `texturen/README.txt`; Kachelgröße (Standard 2 m) in `texturen.py` (`TEXTUREN`).
+
+### Umgebung der Burg (polytown_neu/umgebung.py)
+- Bezugskante ist die Ostkante der Karte (die Ostmauer der Burg hat keinen Ausgang). Ringweg um die Burg (Mittelradius 52 m, 8 m breit, ausserhalb des Grabens), Zufahrten von Nord-/Suedbruecke zum Ring, zwei gerade Abzweige vom Ring (45 Grad) in Richtung der Ecken (300/300) und (300/0), Zubringer nach Osten zur Landebahn.
+- Landebahn Nord-Sued bei x = 270 (100 x 14 m wie im klassischen Polytown) mit weissen Markierungen: Randlinien, Mittelstriche, Schwellenstreifen, Zielpunkt- und Aufsetzzonenmarkierung. Hangar (offen zur Bahn) am Suedende, Tower mit Glaskanzel westlich der Bahnmitte, Fussweg zum Tower, Zufahrt zum Hangar.
+- Noch ohne Texturen (nur Farben). Objekte in der Collection `Umgebung`: `umgebung_wege`, `umgebung_landebahn`, `umgebung_hangar`, `umgebung_tower`.
+- Das Haus mit der Radarschuessel ist entfernt; die Schuessel steht auf einem runden Betonsockel (`burg_radarsockel`).
