@@ -23,7 +23,7 @@ import texturen as TX  # noqa: E402
 
 def main():
     T.clear_scene()
-    T.build_tal(loch=B.LOCH)          # Wiese mit Aussparung fuer das Burggelaende (Graben)
+    T.build_tal(loch=B.LOCH, hf=U.gelaende_hoehe)   # huegelige Wiese mit Aussparung fuer das Burggelaende (Graben)
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
     nu = U.bauen()                    # Ringweg, Abzweige, Landebahn, Hangar, Tower

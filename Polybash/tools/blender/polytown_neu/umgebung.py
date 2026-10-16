@@ -9,7 +9,7 @@ Lage (Spielflaeche 0..300 m, Burgmitte C = 150/150, Tore der Burg im Norden und 
       - oestlich der Bahn: Rollweg (parallel, ueber drei Anschluesse an die Bahn und an den Enden um die Bahn herum mit der
         Strasse verbunden), Vorfeld und davor die Hangarreihe: drei Tonnenhallen, die ohne Zwischenraum ineinander uebergehen
         und bis kurz vor die Berge reichen, zur Burg (nach Westen) ganz offen.
-  * Das Gelaende ist eingezaeunt (Zaun x = 214 .. 299, y = 60 .. 240). Haupteingang ist der Zubringer (Checkpoint mit zwei
+  * Das Gelaende ist eingezaeunt (Zaun x = 217 .. 299, y = 60 .. 240). Haupteingang ist der Zubringer (Checkpoint mit zwei
     Schranken); die beiden Abzweige vom Ring haben je ein Tor mit Schranke.
 Gelbe Rollwegmittellinien laufen von den Bahnanschluessen ueber den Rollweg bis in alle Hangars; vor der Bahn stehen
 Haltelinien (hold short: zwei Vollstriche auf der Wartseite, zwei Strichlinien zur Bahn hin).
@@ -64,7 +64,7 @@ SCY = TY + 1.6                                                        # Mitte de
 Z_BODEN, Z_KAB = 0.07, 13.3
 RADAR_Z = 17.0                                                        # Drehpunkt der Radaranlage auf dem Kanzeldach                                           # Hallenboden, Kanzelboden
 # Zaun und Eingang
-GATE_X = 214.0                                                        # Zaunlinie im Westen (zwischen Ring und Flughafenstrasse)
+GATE_X = 217.0                                                        # Zaunlinie im Westen (zwischen Ring und Flughafenstrasse)
 ZAUN = (GATE_X, 60.0, 299.0, 240.0)
 GELB_B, Z_GELB0, Z_GELB1 = 0.4, 0.07, 0.10
 HOLD_D = (1.5, 2.1, 2.7, 3.3)                                         # Abstand der Haltelinien von der Bahnkante (Strich, Strich, voll, voll)
@@ -94,23 +94,121 @@ FARBEN = {
 }
 
 
+# ------------------------------------------------------------------ Gelaende: Huegel und Senken, Ringweg
+# Der Ringweg ist nicht exakt kreisfoermig: sein Mittelradius schwankt natuerlich zwischen RING_R und RING_R + 5,5 m
+# (nach innen darf er nicht, dort liegt der Wassergraben). Festgelegte Phasen -> reproduzierbar.
+_RING_OBERWELLEN = ((2, 0.55, 0.9), (3, 0.30, 4.1), (5, 0.17, 2.2), (7, 0.09, 5.3))
+
+
+def ring_r(a):
+    """Mittelradius des Ringwegs in Richtung a (Bogenmass, 0 = Osten)."""
+    s = sum(am * math.sin(k * a + ph) for k, am, ph in _RING_OBERWELLEN)
+    s /= sum(am for _, am, _ in _RING_OBERWELLEN)                     # -1..1
+    return RING_R + 2.75 + 2.75 * s
+
+
+def ring_punkt(a, versatz=0.0):
+    r = ring_r(a) + versatz
+    return (C + r * math.cos(a), C + r * math.sin(a))
+
+
+def abzweig(s):
+    """Gerader Abzweig vom Ring (Richtung +-45 Grad) bis zur Flughafenstrasse: Anfang (auf dem Ring), Ende (x = SX)."""
+    u = (math.sqrt(0.5), s * math.sqrt(0.5))
+    a0 = ring_punkt(s * math.pi / 4)
+    d_end = (SX - a0[0]) / u[0]
+    return a0, (a0[0] + u[0] * d_end, a0[1] + u[1] * d_end)
+
+
+def strassen_achsen():
+    """Mittellinien der Wege im Huegelland (Strecken), fuer die Abflachung der Huegel entlang der Wege."""
+    ach = []
+    for s in (-1, 1):
+        ach.append(((C, C + s * (B.A + 11.0)), ring_punkt(s * math.pi / 2)))
+        ach.append(abzweig(s))
+    ach.append((ring_punkt(0.0), (BAHN[0], C)))
+    return ach
+
+
+def _seg_abstand(x, y, p, q):
+    dx, dy = q[0] - p[0], q[1] - p[1]
+    t = max(0.0, min(1.0, ((x - p[0]) * dx + (y - p[1]) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(x - p[0] - t * dx, y - p[1] - t * dy)
+
+
+_ACHSEN = None
+
+
+def huegel_roh(x, y):
+    """Huegel (bis etwa 12 m) und flache Senken (bis etwa -4 m) als weiche Landschaft: grosse Wellen (Wellenlaenge ~110 m), dazu
+    kleinere Kuppen (~55 m) und feine Bodenwellen (~26 m)."""
+    n = T.fbm(x / 110.0, y / 110.0, T.SEED + 21, 3)
+    v = (n - 0.5) * 4.5 + 0.12
+    h = 11.0 * v if v > 0 else 4.5 * v
+    h += 3.2 * (T.fbm(x / 55.0, y / 55.0, T.SEED + 25, 2) - 0.5) * 2.0
+    return h + 1.4 * (T.fbm(x / 26.0, y / 26.0, T.SEED + 23, 2) - 0.5) * 2.0
+
+
+def _flach(x, y):
+    """Gemeinsame Maske (0..1) ausser der Wegabflachung: Burggelaende, Flugplatz mit Zaun, Talrand."""
+    m = B.smoothstep(0.0, 45.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))   # Flugplatz: x >= 205, y 52..248
+    return m * B.smoothstep(0.0, 35.0, min(x, T.TAL - x, y, T.TAL - y))                          # Talrand (dort schliessen die Berge an, z = 0)
+
+
+def gelaende_maske(x, y):
+    """0 = eben, 1 = volle Huegel. Eben: Burggelaende (Quadrat), Flughafengelaende (mit Zaun) und Talrand; entlang der Wege
+    (Ring, Abzweige, Zubringer) nur schwache Bodenwellen."""
+    global _ACHSEN
+    if _ACHSEN is None:
+        _ACHSEN = strassen_achsen()
+    c = max(abs(x - C), abs(y - C))
+    m = B.smoothstep(42.0, 72.0, c) * _flach(x, y)                     # Burg: Chebyshev-Abstand 42 m (Patch endet bei 40 m)
+    d = abs(math.hypot(x - C, y - C) - ring_r(math.atan2(y - C, x - C)))
+    for p, q in _ACHSEN:
+        d = min(d, _seg_abstand(x, y, p, q))
+    return m * (0.18 + 0.82 * B.smoothstep(7.0, 28.0, d))              # Wege: nur kleine Unebenheiten
+
+
+def gelaende_hoehe(x, y):
+    """Hoehe der Wiese im Tal bei (x, y)."""
+    m = gelaende_maske(x, y)
+    c = max(abs(x - C), abs(y - C))
+    ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
+    h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
+    return 0.0 if abs(h) < 1e-9 else h
+
+
+def _z_auf(x, y, z0, hf):
+    h = hf(x, y) if hf else 0.0
+    return h + z0 + 0.03 * min(1.0, abs(h) / 0.05)                     # kleiner Zuschlag, damit die Wiese nicht durchsticht
+
+
 # ------------------------------------------------------------------ flache Wegstuecke (Oberflaechen)
-def streifen(b, p0, p1, w, z, mat):
-    """Gerades Wegstueck von p0 nach p1 (Breite w) als ebene Flaeche bei Hoehe z, Normale nach oben."""
+def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=3.0):
+    """Gerades Wegstueck von p0 nach p1 (Breite w), dem Gelaende folgend (Hoehe z ueber der Wiese), Normale nach oben."""
     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
     ln = math.hypot(dx, dy)
     nx, ny = -dy / ln * w / 2, dx / ln * w / 2
-    v = [(p0[0] + nx, p0[1] + ny, z), (p0[0] - nx, p0[1] - ny, z), (p1[0] - nx, p1[1] - ny, z), (p1[0] + nx, p1[1] + ny, z)]
-    b.add(v, [(0, 1, 2, 3)], mat)
+    n = max(1, int(math.ceil(ln / schritt)))
+    v = []
+    for i in range(n + 1):
+        cx, cy = p0[0] + dx * i / n, p0[1] + dy * i / n
+        for sg in (1, -1):
+            x, y = cx + sg * nx, cy + sg * ny
+            v.append((x, y, _z_auf(x, y, z, hf)))
+    f = [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)]
+    b.add(v, f, mat)
 
 
-def ring(b, r, w, z, mat, n=120):
-    """Kreisring (Mittelradius r, Breite w) um die Burgmitte aus n Vierecken, Normale nach oben."""
-    ri, ra = r - w / 2, r + w / 2
+def ring(b, w, z, mat, n=180, hf=gelaende_hoehe):
+    """Ringweg (Breite w) um die Burgmitte mit schwankendem Mittelradius ring_r(a), dem Gelaende folgend; n Vierecke."""
     v = []
     for i in range(n):
         a = 2 * math.pi * i / n
-        v += [(C + ri * math.cos(a), C + ri * math.sin(a), z), (C + ra * math.cos(a), C + ra * math.sin(a), z)]
+        r = ring_r(a)
+        for rr in (r - w / 2, r + w / 2):
+            x, y = C + rr * math.cos(a), C + rr * math.sin(a)
+            v.append((x, y, _z_auf(x, y, z, hf)))
     f = []
     for i in range(n):
         j = (i + 1) % n
@@ -125,23 +223,20 @@ def platte(b, x0, y0, x1, y1, z_oben, mat, dicke=0.12):
 # ------------------------------------------------------------------ Wege
 def wege():
     b = Bau("umgebung_wege")
-    ring(b, RING_R, BREITE_WEG, Z_RING, "Weg")
+    ring(b, BREITE_WEG, Z_RING, "Weg")
     # Zufahrten von den beiden Bruecken (Bruecken enden bei C +- 36,5) bis zur Mitte des Rings
     for s in (-1, 1):
-        streifen(b, (C, C + s * (B.A + 11.0)), (C, C + s * RING_R), BREITE_WEG, Z_WEG, "Weg")
+        streifen(b, (C, C + s * (B.A + 11.0)), ring_punkt(s * math.pi / 2), BREITE_WEG, Z_WEG, "Weg")
     # Flughafenstrasse (Nord-Sued) westlich der Bahn, mit Umfahrung der Bahnenden zum Rollweg
     streifen(b, (SX, Y_SUED), (SX, Y_NORD), BREITE_WEG, Z_WEG, "Weg")
     streifen(b, (SX, Y_SUED), (TAXI_X, Y_SUED), BREITE_WEG, Z_WEG, "Weg")
     streifen(b, (SX, Y_NORD), (TAXI_X, Y_NORD), BREITE_WEG, Z_WEG, "Weg")
     # zwei gerade Abzweige vom Ring (bei +-45 Grad); sie enden dort, wo sie auf die Flughafenstrasse treffen
     for s in (-1, 1):
-        u = (math.sqrt(0.5), s * math.sqrt(0.5))
-        a0 = (C + u[0] * RING_R, C + u[1] * RING_R)
-        d_end = (SX - C) / u[0]
-        a1 = (C + u[0] * d_end, C + u[1] * d_end)
+        a0, a1 = abzweig(s)
         streifen(b, a0, a1, BREITE_WEG, Z_WEG, "Weg")
     # Zubringer vom Ring nach Osten: ueber die Strasse bis zur Bahnmitte (Rollweg-Anschluss von Westen)
-    streifen(b, (C + RING_R, C), (BAHN[0], C), BREITE_WEG, Z_WEG, "Weg")
+    streifen(b, ring_punkt(0.0), (BAHN[0], C), BREITE_WEG, Z_WEG, "Weg")
     # Zugang zum Tower (Westtuer) und zum Hangar (Westtuer) von der Strasse
     streifen(b, (TX, C + BREITE_WEG / 2 - 0.5), (TX, TOWER_ANNEX[1]), 3.0, Z_WEG, "Weg")
     streifen(b, (SX + BREITE_WEG / 2 - 0.5, HY), (HANGAR[0], HY), 3.0, Z_WEG, "Weg")
@@ -572,7 +667,10 @@ def zaun():
     b = Bau("umgebung_zaun")
     x0, y0, x1, y1 = ZAUN
     yz = (C - 4.8, C + 4.8)                                                                  # Haupteingang (Zubringer, Fahrbahn 146..154)
-    yb = [C + s * (GATE_X - C) for s in (-1, 1)]                                             # Abzweige kreuzen den Zaun hier (45 Grad)
+    yb = []                                                                                  # Abzweige kreuzen den Zaun hier (45 Grad)
+    for s in (-1, 1):
+        a0, _ = abzweig(s)
+        yb.append(a0[1] + s * (GATE_X - a0[0]))
     lw = BREITE_WEG / math.sqrt(0.5) / 2.0 + 0.9                                             # halbe Torbreite entlang des Zauns
     luecken = [yz] + [(y - lw, y + lw) for y in yb]
     zaunstrecke(b, "y", x0, y0, y1, luecken)                                                 # Westzaun mit den drei Toren

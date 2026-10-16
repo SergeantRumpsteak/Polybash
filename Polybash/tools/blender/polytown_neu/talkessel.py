@@ -1,6 +1,6 @@
 """Polybash - Talkessel: Polytown von Grund auf, Schritt 1 (Gelaende).
 
-Ein voellig ebenes Wiesental mit den Massen der Standardkarte (Spielflaeche 0..300 m in x und y, Mitte bei
+Ein Wiesental (eben; Huegel und Senken liefert umgebung.gelaende_hoehe) mit den Massen der Standardkarte (Spielflaeche 0..300 m in x und y, Mitte bei
 150/150), ringsum alpine Berge. Strassen, Gebaeude usw. folgen in spaeteren Schritten; spiel.py bleibt unveraendert.
 
 Start:    blender --background --python talkessel.py
@@ -24,7 +24,7 @@ BREITE = 150.0      # Abstand vom Talrand, bei dem der Bergkamm seine volle Hoeh
 HOEHE = 105.0       # Grundhoehe der Berge; die Gipfel werden durch die Gratform deutlich hoeher
 SCHNEE_H = 90.0     # Schneegrenze (m), schwankt um etwa 15 m
 SOCKEL = -40.0      # Unterkante der Aussenwand (ausserhalb des Blickfelds)
-WIESE_ZELLE = 10.0  # Raster der Wiesenflaeche (zum spaeteren Bearbeiten und Texturieren)
+WIESE_ZELLE = 5.0   # Raster der Wiesenflaeche (zum spaeteren Bearbeiten und Texturieren; auch Aufloesung der Huegel)
 SEED = 7
 
 _MATS = {}
@@ -142,10 +142,11 @@ def berg_netz():
     return verts, tris, rand
 
 
-def wiesen_netz(loch=None):
-    """Ebene Wiese (z = 0), Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben).
+def wiesen_netz(loch=None, hf=None):
+    """Wiese, Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben).
 
-    loch = (x0, y0, x1, y1): Rechteck (auf dem Raster), das ausgespart wird, z. B. fuer das Burggelaende."""
+    loch = (x0, y0, x1, y1): Rechteck (auf dem Raster), das ausgespart wird, z. B. fuer das Burggelaende.
+    hf(x, y) -> Hoehe: Huegel und Senken im Tal (muss am Talrand und am Lochrand 0 sein); ohne hf ist die Wiese eben (z = 0)."""
     n = int(round(TAL / WIESE_ZELLE))
     st = TAL / n
     verts, vid, faces = [], {}, []
@@ -153,7 +154,7 @@ def wiesen_netz(loch=None):
     def vert(i, j):
         if (i, j) not in vid:
             vid[(i, j)] = len(verts)
-            verts.append((i * st, j * st, 0.0))
+            verts.append((i * st, j * st, hf(i * st, j * st) if hf else 0.0))
         return vid[(i, j)]
 
     for j in range(n):
@@ -318,9 +319,9 @@ def kamera(coll, name, pos, ziel, brennweite=24.0):
     return ob
 
 
-def build_tal(loch=None):
+def build_tal(loch=None, hf=None):
     coll = collection("Tal")
-    v, f = wiesen_netz(loch)
+    v, f = wiesen_netz(loch, hf)
     add_mesh(coll, "wiese", v, f, [material(*STOFFE[0])])
     # Umriss der Spielflaeche (nur Linien) - zeigt die 300 x 300 m
     r = [(0, 0, 0.05), (TAL, 0, 0.05), (TAL, TAL, 0.05), (0, TAL, 0.05)]

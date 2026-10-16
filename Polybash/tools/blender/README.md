@@ -51,6 +51,13 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 - Radarschüssel, Freya-Antennen und Flakrohre sind eigene Objekte (`radar_schuessel`, `freya_sw/no`, `flak_nw/so`) mit Drehpunkt als Objekt-Ursprung. Im Blender-Modell sind sie statisch (Animation gibt es nur im Spiel); zum Ansehen: Objekt wählen, `R` `Z` drehen. Die Platzhalter-Empties heißen `marker_flak_nw/so`.
 - Texturen: Poly-Haven-Satz (Diffuse, Normal **GL**, Roughness, optional AO) in `tools/blender/polytown_neu/texturen/festung_boden/` legen, `./build_blender.sh` ausführen. Details in `texturen/README.txt`; Kachelgröße (Standard 2 m) in `texturen.py` (`TEXTUREN`).
 
+### Huegel und Senken (polytown_neu/umgebung.py: gelaende_hoehe)
+- Das Tal ist nicht mehr eben: weiche Huegel (bis ca. 11 m) und flache Senken (bis ca. -5 m), grosse Wellen (~110 m), kleinere Kuppen (~55 m) und feine Bodenwellen. Die Wiese (`wiese`) hat ein 5-m-Raster und folgt der Hoehenfunktion `gelaende_hoehe(x, y)`.
+- Eben bleiben: Burggelaende (Quadrat 42 m um die Mitte), das ganze Flughafengelaende (x >= 205, y 52..248, mit Zaun) und der Talrand (dort schliessen die Berge bei z = 0 an). Zwischen ebenen Flaechen und Huegeln gibt es weiche Uebergaenge.
+- Entlang der Wege (Ring, Zufahrten, Abzweige) werden die Huegel stark abgeschwaecht, es bleiben nur kleine Bodenwellen (Ring: etwa -0,3 .. +0,5 m, hoechstens ca. 7 % Steigung). Alle Wege folgen dem Gelaende (je 3 m ein Querschnitt).
+- Der Ringweg ist nicht mehr kreisrund: sein Mittelradius schwankt natuerlich zwischen 52 und 57,5 m (`ring_r(a)`, nach innen nie, dort liegt der Graben). Zufahrten, Abzweige und Zubringer docken an der echten Ringlinie an. Der Haupteingang des Flugplatzes liegt deshalb bei x = 217.
+- Texturen koennen die Form spaeter nur zusaetzlich verfeinern; die Abweichung vom Kreis steckt in der Geometrie.
+
 ### Umgebung der Burg (polytown_neu/umgebung.py)
 - Bezugskante ist die Ostkante der Karte (die Ostmauer der Burg hat keinen Ausgang). Ringweg um die Burg (Mittelradius 52 m, 8 m breit, ausserhalb des Grabens) mit Zufahrten von Nord-/Suedbruecke. Zwei gerade Abzweige (45 Grad) enden an der Flughafenstrasse (x = 226), dazu ein Zubringer nach Osten zur Bahnmitte.
 - Flughafen: Landebahn Nord-Sued bei x = 256, 150 x 14 m. Westlich der Bahn die Flughafenstrasse, auf halber Bahnlaenge der Tower neben dem Zubringer, am Suedende der grosse Hangar (offen zur Bahn). Oestlich der Bahn der parallele Rollweg (drei Anschluesse an die Bahn, an den Enden ueber Umfahrungen mit der Strasse verbunden), Vorfeld und die Hangarreihe zwischen Vorfeld und Bergen.
