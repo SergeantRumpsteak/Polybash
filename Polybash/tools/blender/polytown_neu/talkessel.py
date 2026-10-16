@@ -24,7 +24,7 @@ BREITE = 150.0      # Abstand vom Talrand, bei dem der Bergkamm seine volle Hoeh
 HOEHE = 105.0       # Grundhoehe der Berge; die Gipfel werden durch die Gratform deutlich hoeher
 SCHNEE_H = 90.0     # Schneegrenze (m), schwankt um etwa 15 m
 SOCKEL = -40.0      # Unterkante der Aussenwand (ausserhalb des Blickfelds)
-WIESE_ZELLE = 20.0  # Raster der Wiesenflaeche (zum spaeteren Bearbeiten und Texturieren)
+WIESE_ZELLE = 10.0  # Raster der Wiesenflaeche (zum spaeteren Bearbeiten und Texturieren)
 SEED = 7
 
 _MATS = {}
@@ -142,12 +142,27 @@ def berg_netz():
     return verts, tris, rand
 
 
-def wiesen_netz():
-    """Ebene Wiese (z = 0), Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben)."""
+def wiesen_netz(loch=None):
+    """Ebene Wiese (z = 0), Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben).
+
+    loch = (x0, y0, x1, y1): Rechteck (auf dem Raster), das ausgespart wird, z. B. fuer das Burggelaende."""
     n = int(round(TAL / WIESE_ZELLE))
-    verts = [(i * TAL / n, j * TAL / n, 0.0) for j in range(n + 1) for i in range(n + 1)]
-    faces = [(j * (n + 1) + i, j * (n + 1) + i + 1, (j + 1) * (n + 1) + i + 1, (j + 1) * (n + 1) + i)
-             for j in range(n) for i in range(n)]
+    st = TAL / n
+    verts, vid, faces = [], {}, []
+
+    def vert(i, j):
+        if (i, j) not in vid:
+            vid[(i, j)] = len(verts)
+            verts.append((i * st, j * st, 0.0))
+        return vid[(i, j)]
+
+    for j in range(n):
+        for i in range(n):
+            if loch is not None:
+                cx, cy = (i + 0.5) * st, (j + 0.5) * st
+                if loch[0] < cx < loch[2] and loch[1] < cy < loch[3]:
+                    continue
+            faces.append((vert(i, j), vert(i + 1, j), vert(i + 1, j + 1), vert(i, j + 1)))
     return verts, faces
 
 
@@ -232,7 +247,8 @@ def clear_scene():
         bpy.data.meshes.remove(me)
 
 
-def material(name, rgb):
+def material(name, rgb, rauh=0.95, emit=0.0):
+    """Material mit Farbe (Solid-Ansicht und Base Color); emit > 0 laesst es leuchten (Lampen)."""
     if name in _MATS:
         return _MATS[name]
     m = bpy.data.materials.new(name)
@@ -242,7 +258,10 @@ def material(name, rgb):
         bsdf = m.node_tree.nodes.get("Principled BSDF")
         if bsdf is not None:
             bsdf.inputs["Base Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)   # Material Preview / Export
-            bsdf.inputs["Roughness"].default_value = 0.95
+            bsdf.inputs["Roughness"].default_value = rauh
+            if emit > 0.0:
+                bsdf.inputs["Emission Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
+                bsdf.inputs["Emission Strength"].default_value = emit
     except Exception:
         pass
     _MATS[name] = m
@@ -299,9 +318,9 @@ def kamera(coll, name, pos, ziel, brennweite=24.0):
     return ob
 
 
-def build_tal():
+def build_tal(loch=None):
     coll = collection("Tal")
-    v, f = wiesen_netz()
+    v, f = wiesen_netz(loch)
     add_mesh(coll, "wiese", v, f, [material(*STOFFE[0])])
     # Umriss der Spielflaeche (nur Linien) - zeigt die 300 x 300 m
     r = [(0, 0, 0.05), (TAL, 0, 0.05), (TAL, TAL, 0.05), (0, TAL, 0.05)]
