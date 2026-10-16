@@ -5,11 +5,11 @@ Lage (Spielflaeche 0..300 m, Burgmitte C = 150/150, Tore der Burg im Norden und 
   * Ringweg um die Burg (Mittelradius 52 m, ausserhalb des Wassergrabens) mit Zufahrten von den Bruecken.
   * Flughafen im Osten, Landebahn Nord-Sued (150 x 14 m) bei x = 256:
       - westlich der Bahn die Flughafenstrasse (x = 226): an ihr enden die beiden Abzweige vom Ring (45 Grad) und der Zubringer;
-        Tower am Nordende, grosser Hangar am Suedende (offen zur Bahn), je ein Fussweg bzw. eine Zufahrt zur Strasse;
+        Tower auf halber Bahnlaenge neben dem Zubringer, grosser Hangar am Suedende (offen zur Bahn);
       - oestlich der Bahn: Rollweg (parallel, ueber drei Anschluesse an die Bahn und an den Enden um die Bahn herum mit der
-        Strasse verbunden), Vorfeld und davor die Reihe aus sechs Hangars, alle zur Burg (nach Westen) offen.
-Noch ohne Texturen (nur Farben); die Bahn hat weisse Markierungen: Zebrastreifen an beiden Enden, Aufsetzzonen in beide
-Richtungen, in der Mitte nur Striche.
+        Strasse verbunden), Vorfeld und davor drei runde Hangars (Tonnenhallen), zur Burg (nach Westen) ganz offen.
+Noch ohne Texturen (nur Farben); die Bahn hat weisse Markierungen: Zebrastreifen an beiden Enden, je ein Touchdown-Paar in
+beide Richtungen und durchgehend die Mittelstriche - sonst nichts.
 Ohne bpy testbar (baue_alles); bauen() legt die Objekte in der Collection "Umgebung" an.
 """
 import math
@@ -40,14 +40,14 @@ Y_SUED, Y_NORD = 66.0, 234.0                                          # Umfahrun
 TAXI_X, TAXI_B = 272.0, 8.0
 ANSCHLUESSE = (80.0, 150.0, 220.0)                                    # Rollweg-Anschluesse an die Bahn (y)
 # Vorfeld und Hangarreihe (offen nach Westen)
-VORFELD = (276.0, 88.0, 283.0, 212.0)
-REIHE_N, REIHE_B, REIHE_T, REIHE_LUECKE, REIHE_H = 6, 16.0, 12.0, 3.0, 6.0   # Anzahl, Breite (y), Tiefe (x), Abstand, Hoehe
+VORFELD = (276.0, 100.0, 283.0, 200.0)
+REIHE_N, REIHE_B, REIHE_T, REIHE_LUECKE = 3, 20.8, 12.0, 12.0     # Anzahl, Laenge in Bahnrichtung (y; = 1,3 x 16 m), Tiefe (x), Abstand
 REIHE_X0 = 283.0
 # Grosser Hangar am Suedende westlich der Bahn, offen nach Osten (zur Bahn)
 HX, HY, HW, HD, HH = 239.5, 90.0, 15.0, 14.0, 6.0                    # Mitte, Breite (x), Tiefe (y), Hoehe
 HANGAR = (HX - HW / 2, HY - HD / 2, HX + HW / 2, HY + HD / 2)
 # Tower am Nordende westlich der Bahn
-TX, TY = 240.0, 212.0
+TX, TY = 240.0, 162.0                                                 # Tower auf halber Bahnlaenge (y = 150), neben dem Zubringer
 TOWER_ANNEX = (TX - 5.0, TY - 4.0, TX + 5.0, TY + 4.0)
 
 FARBEN = {
@@ -118,7 +118,7 @@ def wege():
     # Zubringer vom Ring nach Osten: ueber die Strasse bis zur Bahnmitte (Rollweg-Anschluss von Westen)
     streifen(b, (C + RING_R, C), (BAHN[0], C), BREITE_WEG, Z_WEG, "Weg")
     # Zugang zum Tower (Westtuer) und zum Hangar (Westtuer) von der Strasse
-    streifen(b, (SX + BREITE_WEG / 2 - 0.5, TY), (TOWER_ANNEX[0], TY), 3.0, Z_WEG, "Weg")
+    streifen(b, (TX, C + BREITE_WEG / 2 - 0.5), (TX, TOWER_ANNEX[1]), 3.0, Z_WEG, "Weg")
     streifen(b, (SX + BREITE_WEG / 2 - 0.5, HY), (HANGAR[0], HY), 3.0, Z_WEG, "Weg")
     return b
 
@@ -144,11 +144,11 @@ def landebahn():
     def mk(xa, ya, xb, yb):
         b.box(xa, ya, Z_BAHN, xb, yb, Z_MARK, m)
 
-    # Mittellinie: Striche 4 m lang, alle 8 m, symmetrisch zur Bahnmitte, zwischen den Schwellen (17 m Abstand zu den Enden)
-    for k in range(15):
-        ya = BY - 58.0 + 8.0 * k
+    # Mittellinie durchgehend: Striche 4 m lang, alle 8 m, symmetrisch zur Bahnmitte (16 Striche, erster 13 m vom Bahnende)
+    for k in range(16):
+        ya = BY - 62.0 + 8.0 * k
         mk(BX - 0.2, ya, BX + 0.2, ya + 4.0)
-    for ende in (-1, 1):                                          # -1 = Suedende, +1 = Nordende; jede Richtung gleich ausgestattet
+    for ende in (-1, 1):                                          # -1 = Suedende, +1 = Nordende; jede Richtung gleich
         def y_ab(d0, d1):
             """Abstand d0..d1 (m) von der Schwelle am Ende -> (ya, yb)"""
             return (y0 + d0, y0 + d1) if ende < 0 else (y1 - d1, y1 - d0)
@@ -158,20 +158,10 @@ def landebahn():
             off = 0.9 + 1.2 * k
             for sgn in (-1, 1):
                 mk(BX + sgn * off - 0.4, ya, BX + sgn * off + 0.4, yb)
-        # Aufsetzzonen-Markierungen (Touchdown) in dieser Anflugrichtung
-        for d0, anz in ((22.0, 3), (32.0, 2)):                    # Gruppen aus 3 und 2 Balken je Seite (5 m lang)
-            ya, yb = y_ab(d0, d0 + 5.0)
-            for k in range(anz):
-                off = 2.2 + 0.9 * k
-                for sgn in (-1, 1):
-                    mk(BX + sgn * off - 0.22, ya, BX + sgn * off + 0.22, yb)
-        ya, yb = y_ab(42.0, 54.0)                                 # Zielpunkt: zwei breite Balken
+        # Touchdown-Markierung: zwei breite Balken beiderseits der Mittellinie, 42..54 m hinter der Schwelle
+        ya, yb = y_ab(42.0, 54.0)
         for sgn in (-1, 1):
             mk(BX + sgn * 4.4 - 0.9, ya, BX + sgn * 4.4 + 0.9, yb)
-        for d0 in (60.0, 69.0):                                   # je ein Balken pro Seite
-            ya, yb = y_ab(d0, d0 + 5.0)
-            for sgn in (-1, 1):
-                mk(BX + sgn * 2.8 - 0.22, ya, BX + sgn * 2.8 + 0.22, yb)
     return b
 
 
@@ -213,17 +203,58 @@ def hangar():
     return b
 
 
+def _quad_orient(b, verts, richtung, mat):
+    """Fuegt ein Vieleck so ein, dass seine Normale in 'richtung' zeigt (Newell-Verfahren)."""
+    nx = ny = nz = 0.0
+    for k in range(len(verts)):
+        a, c = verts[k], verts[(k + 1) % len(verts)]
+        nx += (a[1] - c[1]) * (a[2] + c[2])
+        ny += (a[2] - c[2]) * (a[0] + c[0])
+        nz += (a[0] - c[0]) * (a[1] + c[1])
+    if nx * richtung[0] + ny * richtung[1] + nz * richtung[2] < 0:
+        verts = verts[::-1]
+    b.add(verts, [tuple(range(len(verts)))], mat)
+
+
+def tonnenhalle(b, x0, x1, yc, R, dicke=0.4, n=16, mat="Hangar Dach", mat_boden="Hangar Boden"):
+    """Runder Hangar (Tonnengewoelbe, Halbkreis-Querschnitt mit Radius R um die Achse (y = yc, z = 0)), Achse in x-Richtung.
+    Die Westseite (x0) ist komplett offen, im Osten (x1) schliesst eine Rueckwand ab."""
+    Ri = R - dicke
+    t = dicke
+    th = [math.pi * i / n for i in range(n + 1)]
+    P = lambda r, a, x: (x, yc + r * math.cos(a), r * math.sin(a))
+    b.box(x0, yc - R, -0.12, x1, yc + R, 0.07, mat_boden)                       # Boden
+    for i in range(n):
+        am = (th[i] + th[i + 1]) / 2
+        rad = (0.0, math.cos(am), math.sin(am))
+        _quad_orient(b, [P(R, th[i], x0), P(R, th[i], x1), P(R, th[i + 1], x1), P(R, th[i + 1], x0)], rad, mat)         # aussen
+        _quad_orient(b, [P(Ri, th[i], x0), P(Ri, th[i], x1 - t), P(Ri, th[i + 1], x1 - t), P(Ri, th[i + 1], x0)],
+                     (0.0, -rad[1], -rad[2]), mat)                                                                       # innen
+        _quad_orient(b, [P(Ri, th[i], x0), P(R, th[i], x0), P(R, th[i + 1], x0), P(Ri, th[i + 1], x0)], (-1.0, 0.0, 0.0), mat)  # Stirnkante offen
+    # Rueckwand (Halbscheibe, Dicke t) aus Dreiecken
+    for xx, r, d in ((x1, R, (1.0, 0.0, 0.0)), (x1 - t, Ri, (-1.0, 0.0, 0.0))):
+        for i in range(n):
+            _quad_orient(b, [P(0.0, 0.0, xx), P(r, th[i], xx), P(r, th[i + 1], xx)], d, mat)
+        # Bodenkante der Scheibe wird vom Boden verdeckt
+    # Dachrippen innen (sichtbare Bogenbinder)
+    for xr in (x0 + 0.3, x0 + (x1 - x0) / 2, x1 - t - 0.2):
+        for i in range(n):
+            b.beam(P(Ri - 0.12, th[i], xr), P(Ri - 0.12, th[i + 1], xr), 0.25, 0.25, "Metall", up=(1.0, 0.0, 0.0))
+
+
 def hangarreihe():
-    """Sechs gleiche Hangars nebeneinander zwischen Vorfeld und Bergen, alle nach Westen (zur Burg) offen."""
+    """Drei runde Hangars (Tonnenhallen) nebeneinander zwischen Vorfeld und Bergen, nach Westen (zur Burg) ganz offen."""
     b = Bau("umgebung_hangarreihe")
+    R = REIHE_B / 2
     gesamt = REIHE_N * REIHE_B + (REIHE_N - 1) * REIHE_LUECKE
     ya0 = BY - gesamt / 2
     for i in range(REIHE_N):
-        y0 = ya0 + i * (REIHE_B + REIHE_LUECKE)
-        y1 = y0 + REIHE_B
+        yc = ya0 + R + i * (REIHE_B + REIHE_LUECKE)
         x0, x1 = REIHE_X0, REIHE_X0 + REIHE_T
-        halle(b, x0, y0, x1, y1, "W", REIHE_H, kisten=(i % 2 == 0))
-        B.fenster(b, x1, (y0 + y1) / 2, 3.4, 2.0, 1.2, 1, 0)                              # Fenster in der Rueckwand
+        tonnenhalle(b, x0, x1, yc, R)
+        if i != 1:                                                                # Kisten in zwei der Hallen
+            b.box(x1 - 4.4, yc - 3.0, 0.07, x1 - 2.0, yc - 0.6, 1.3, "Kiste")
+            b.box(x1 - 4.4, yc - 3.0, 1.3, x1 - 3.2, yc - 1.8, 2.6, "Kiste")
     return b
 
 
@@ -251,13 +282,15 @@ def tower():
     b.box(TX - 0.08, TY - 0.08, 15.6, TX + 0.08, TY + 0.08, 19.0, "Metall")                   # Antennenmast
     b.box(TX - 1.2, TY - 0.05, 18.0, TX + 1.2, TY + 0.05, 18.2, "Metall")                     # Querantenne
     b.box(TX + 1.6, TY + 1.6, 15.6, TX + 2.4, TY + 2.4, 16.4, "Metall")                       # Geraetekasten
-    # Eingang auf der Westseite (zur Strasse), Fenster an den uebrigen Seiten des Sockelgebaeudes
-    b.box(ax0 - 0.06, TY - 0.55, 0.0, ax0, TY + 0.55, 2.3, "Tuer")
+    # Eingang auf der Suedseite (zum Zubringer), Fenster an den uebrigen Seiten des Sockelgebaeudes
+    b.box(TX - 0.55, ay0 - 0.06, 0.0, TX + 0.55, ay0, 2.3, "Tuer")
+    for dx in (-3.2, 3.2):
+        B.fenster(b, TX + dx, ay0, 1.9, 1.5, 1.0, 0, -1)
+    for dx in (-3.2, 0.0, 3.2):
+        B.fenster(b, TX + dx, ay1, 1.9, 1.5, 1.0, 0, 1)
     for dy in (-2.4, 2.4):
         B.fenster(b, ax1, TY + dy, 1.9, 1.5, 1.0, 1, 0)
-    for dx in (-3.2, 0.0, 3.2):
-        B.fenster(b, TX + dx, ay0, 1.9, 1.5, 1.0, 0, -1)
-        B.fenster(b, TX + dx, ay1, 1.9, 1.5, 1.0, 0, 1)
+        B.fenster(b, ax0, TY + dy, 1.9, 1.5, 1.0, -1, 0)
     return b
 
 
