@@ -248,7 +248,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 107               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 108               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -9923,6 +9923,8 @@ BTN_HC = (0.30, 0.37, 0.50, 0.98)            # Knopf unter der Maus
 BTN_OFF = (0.17, 0.19, 0.23, 0.92)           # Knopf nicht verfuegbar
 START_BTN = (0.22, 0.72, 0.36, 0.98)         # gruener Haupt-Knopf (Start, Verbinden, Bereit)
 START_BTN_HOT = (0.30, 0.90, 0.47, 1.0)
+BTN_RED = (0.30, 0.13, 0.12, 0.96)           # 'Spiel beenden'
+BTN_RED_H = (0.44, 0.17, 0.15, 0.98)
 BTN_ON = (0.14, 0.50, 0.25, 0.98)            # Bereit (zum Abbrechen klicken)
 ACCENT = (1.0, 0.62, 0.14, 1.0)              # Orange, Hauptakzent
 _BTN_TEX = []
@@ -9965,15 +9967,47 @@ def btn3d(nd):
         pass
 
 
+BOLD_FONT = None           # fette UI-Schrift (Knoepfe, Titel); None = Panda3D-Standardschrift
+UI_FONT_FILES = ("DejaVuSansCondensed.ttf", "DejaVuSansCondensed-Bold.ttf")
+
+
+def load_ui_fonts(loader):
+    """Laedt die mitgelieferte Schrift (Ordner fonts/) und macht sie zur Standardschrift; fehlt sie, bleibt alles wie vorher."""
+    global BOLD_FONT
+    try:
+        base = os.path.dirname(os.path.abspath(__file__))
+        dirs = [os.path.join(base, "fonts"), os.path.join(os.getcwd(), "fonts")]
+        if getattr(sys, "frozen", False):
+            dirs.insert(0, os.path.join(os.path.dirname(sys.executable), "fonts"))
+        if getattr(sys, "_MEIPASS", None):
+            dirs.append(os.path.join(sys._MEIPASS, "fonts"))
+        fonts = []
+        for fn in UI_FONT_FILES:
+            p = next((os.path.join(d, fn) for d in dirs if os.path.isfile(os.path.join(d, fn))), None)
+            if p is None:
+                return
+            fonts.append(loader.loadFont(Filename.fromOsSpecific(p)))
+        if all(fonts):
+            for f in fonts:
+                f.setPixelsPerUnit(60)
+            TextNode.setDefaultFont(fonts[0])
+            BOLD_FONT = fonts[1]
+    except Exception:
+        BOLD_FONT = None
+
+
 class Hot:
     """Anklickbarer Text: Rechteck für die Maus; beim Überfahren wird er gelb hervorgehoben."""
     BASE = (0.91, 0.94, 0.97, 1.0)
     PLAIN = (1.0, 1.0, 1.0, 1.0)
     ON = (1.0, 0.70, 0.28, 1.0)
+    RED = (0.86, 0.30, 0.25, 1.0)
+    RED_ON = (1.0, 0.45, 0.38, 1.0)
 
     def __init__(self, txt, x, z, scale, action=None, text=""):
         self.txt, self.action, self.on, self.label = txt, action, False, text
         self.sel = False                       # gewählte Option einer Knopfreihe (gelb)
+        self.base = None                       # eigene Grundfarbe (rot bei 'Spiel beenden')
         w = 0.0
         try:
             w = float(txt.textNode.getWidth()) * scale
@@ -9990,6 +10024,9 @@ class Hot:
     def set(self, on):
         if on != self.on:
             self.on = on
+            if self.base is not None and not self.sel:
+                self.txt.setFg(self.RED_ON if on else self.base)
+                return
             self.txt.setFg(self.ON if on else (self.ON if self.sel else (self.BASE if self.action else self.PLAIN)))
 
     def destroy(self):
@@ -11283,6 +11320,7 @@ class SetupPage:
     def text(self, i, s, x, z, scale, col=None, al="c"):
         col = col if col is not None else self.style(i)
         t = OnscreenText(text=s, pos=(x, z), scale=scale, fg=col, shadow=(0, 0, 0, 0.8), mayChange=True,
+                         font=BOLD_FONT if (i or "").startswith(("t_", "mt", "lt", "rt", "vt")) else None,
                          align={"c": TextNode.ACenter, "l": TextNode.ALeft, "r": TextNode.ARight}[al])
         self.g.menu_items.append(t)
         if i:
@@ -108481,6 +108519,7 @@ class Game(ShowBase):
     def __init__(self, adopt=False):
         if not adopt:                         # adopt=True: Fenster/ShowBase existieren schon (Rückkehr aus Experimental)
             ShowBase.__init__(self)
+            load_ui_fonts(self.loader)
             self._pb_base = _pb_snapshot(self)
             default_fullscreen(self)
         self.disableMouse()
@@ -108774,9 +108813,9 @@ class Game(ShowBase):
                                   rg.choice((-1, 1)) * rg.uniform(3.0, 10.0), rg.uniform(0, math.tau), r])
         if not title:                                           # Ausrüstung: ohne Titel (Platz für die Waffenauswahl)
             return
-        ti = OnscreenText(text="POLYBASH", pos=(0.012, 0.628), scale=0.2, fg=(0, 0, 0, 0.55), mayChange=False)
+        ti = OnscreenText(text="POLYBASH", pos=(0.012, 0.628), scale=0.2, font=BOLD_FONT, fg=(0, 0, 0, 0.55), mayChange=False)
         self.menu_items.append(ti)
-        self.menu_items.append(OnscreenText(text="POLYBASH", pos=(0, 0.64), scale=0.2, fg=(1.0, 0.62, 0.14, 1),
+        self.menu_items.append(OnscreenText(text="POLYBASH", pos=(0, 0.64), scale=0.2, font=BOLD_FONT, fg=(1.0, 0.62, 0.14, 1),
                                             shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False))
         card(-0.62, 0.62, 0.575, 0.585, (1.0, 0.62, 0.14), 0.9)
         self.menu_items.append(OnscreenText(text="Low-Poly-Partybox für lustige Abende", pos=(0, 0.52),
@@ -108840,10 +108879,10 @@ class Game(ShowBase):
             spec = [("Dein Name", None), (f"{self.my_name}_", None), ("(Namen tippen)", None),
                     ("Weiter   (Enter)", self.menu_enter)]
             if self.name_back == "main":
-                spec.append(("Beenden   (Esc)", self.open_quit_box))
+                spec.append(("Spiel beenden", self.open_quit_box))
         elif st == "main":
             spec = [("Spiel hosten", dig(1)), ("Spiel beitreten", dig(2)), ("Charakter personalisieren", dig(3)),
-                    ("Einstellungen", dig(4)), ("Beenden   (Esc)", self.open_quit_box)]
+                    ("Einstellungen", dig(4)), ("Spiel beenden", self.open_quit_box)]
         elif st == "quit":
             spec = [("Spiel wirklich beenden?", None), ("Ja, beenden   (J / Enter)", lambda: self.on_confirm(True)),
                     ("Nein, weiterspielen   (N / Esc)", back)]
@@ -108966,13 +109005,16 @@ class Game(ShowBase):
                     cm = CardMaker("btn")
                     cm.setFrame(-0.78, 0.78, zz - 0.3 * sc - 0.012, zz + 0.95 * sc + 0.012)
                     card = self.aspect2d.attachNewNode(cm.generate())
-                    card.setColor(*(START_BTN if label.startswith(("Spiel starten", "Verbinden")) else BTN_C))
+                    card.setColor(*(START_BTN if label.startswith(("Spiel starten", "Verbinden")) else (BTN_RED if label.startswith("Spiel beenden") else BTN_C)))
                     card.setTransparency(TransparencyAttrib.MAlpha)
                     btn3d(card)
-                t = OnscreenText(text=(label.upper() if (action is not None and big) else label), pos=(0, zz), scale=sc,
+                t = OnscreenText(text=(label.upper() if (action is not None and big) else label), pos=(0, zz), scale=sc, font=BOLD_FONT,
                                  fg=Hot.BASE if action else ((1.0, 0.78, 0.3, 1) if head else (0.82, 0.88, 0.95, 1)),
                                  shadow=(0, 0, 0, 0.8), mayChange=True)
                 hot = Hot(t, 0.0, zz, sc, action, label)
+                if action is not None and label.startswith("Spiel beenden"):
+                    hot.base = Hot.RED
+                    t.setFg(Hot.RED)
                 self.menu_lines.append(hot)
                 if card is not None:
                     hot.x0, hot.x1 = -0.78, 0.78
@@ -109011,6 +109053,8 @@ class Game(ShowBase):
         for h, nd in self.menu_cards:
             if h.label.startswith(("Spiel starten", "Verbinden")):   # grüne Knöpfe (Start, Verbinden)
                 nd.setColor(*(START_BTN_HOT if h is hit else START_BTN))
+            elif h.label.startswith("Spiel beenden"):
+                nd.setColor(*(BTN_RED_H if h is hit else BTN_RED))
             else:
                 nd.setColor(*(BTN_HC if h is hit else BTN_C))
         if self.quit_box is not None:
@@ -109434,7 +109478,7 @@ class Game(ShowBase):
     def dead_screen_now(self):
         return self.player.hp <= 0 and self.world.phase == "play"
 
-    DEAD_BTN = (-0.45, 0.45, -0.86, -0.74)
+    DEAD_BTN = (-0.60, 0.60, -0.86, -0.74)
 
     def dead_click(self, m):
         """Klick auf dem Todesbildschirm: Waffenkarte, Gadget oder 'Loadout konfigurieren'."""
@@ -109616,17 +109660,26 @@ class Game(ShowBase):
         if self.net_mode != "client" and w is not None and w.phase == "play" and not w.lobby:
             w.end_match()
 
+    def big_btn_w(self):
+        """Breite der drei unteren Knoepfe (Rundenende: Menue / Einstellungen / Start); schmaler bei 4:3."""
+        a = float(self.getAspectRatio())
+        return max(0.6, min(1.06, (2 * a - 0.16 - 0.16) / 3.0))
+
+    def end_set_rect(self):
+        w = self.big_btn_w() / 2
+        return (-w, w, -0.94, -0.76)
+
     def right_btn_rect(self):
         """Grosser Knopf unten rechts (Respawn bzw. 'Spiel starten'), folgt dem Bildschirmrand."""
         a = float(self.getAspectRatio())
-        return (a - 0.76, a - 0.08, -0.94, -0.76)
+        return (a - 0.08 - self.big_btn_w(), a - 0.08, -0.94, -0.76)
 
-    LOBBY_EQ_BTN = (-0.42, 0.42, -0.90, -0.76)
+    LOBBY_EQ_BTN = (-0.60, 0.60, -0.90, -0.76)
     LOBBY_EQUIP = True          # Ausrüstungsmenü-Knopf in der Lobby (im Experimental gibt es keins: immer Pistole)
 
     def back_btn_rect(self):
         a = float(self.getAspectRatio())
-        return (-a + 0.08, -a + 0.80, -0.94, -0.76)
+        return (-a + 0.08, -a + 0.08 + self.big_btn_w(), -0.94, -0.76)
 
     def lobby_click(self, m):
         rb = self.right_btn_rect()
@@ -109678,19 +109731,19 @@ class Game(ShowBase):
             rows.append((nm, tg))
         addr = OnscreenText(text="", parent=root, pos=(0, -0.20), scale=0.043, fg=(0.7, 0.9, 0.7, 1), mayChange=True)
         hint = OnscreenText(text="", parent=root, pos=(0, -0.30), scale=0.042, fg=(0.85, 0.85, 0.9, 1), mayChange=True)
-        cm.setFrame(0, 0.68, 0, 0.18)
+        cm.setFrame(0, 1, 0, 0.18)
         start = root.attachNewNode(cm.generate())
         start.setColor(*START_BTN)
         start.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(start)
-        start_t = OnscreenText(text="Spiel starten", parent=root, pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
+        start_t = OnscreenText(text="SPIEL STARTEN", parent=root, pos=(0, 0), scale=0.07, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                shadow=(0, 0, 0, 0.8), mayChange=True)
         cm.setFrame(*self.LOBBY_EQ_BTN)
         eq = root.attachNewNode(cm.generate())
-        eq.setColorBTN_C
+        eq.setColor(*BTN_C)
         eq.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(eq)
-        eq_t = OnscreenText(text="Ausrüstungsmenü", parent=root, pos=(0, -0.855), scale=0.05, fg=(1, 1, 1, 1),
+        eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                             shadow=(0, 0, 0, 0.8), mayChange=False)
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
@@ -109733,25 +109786,26 @@ class Game(ShowBase):
         rb = self.right_btn_rect()
         hov_s = host and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
         ui["start"].setPos(rb[0], 0, rb[2])
+        ui["start"].setSx(rb[1] - rb[0])
         ui["start_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
         if host:
             n_r, n_g = w.ready_counts()
             if n_r >= n_g:
-                ui["start"].setColorSTART_BTN_HOT if hov_s else ui["start"].setColor(*START_BTN)
-                self.set_text(ui["start_t"], "Spiel starten")
+                ui["start"].setColor(*START_BTN_HOT) if hov_s else ui["start"].setColor(*START_BTN)
+                self.set_text(ui["start_t"], "SPIEL STARTEN")
             else:
-                ui["start"].setColorBTN_OFF
+                ui["start"].setColor(*BTN_OFF)
                 self.set_text(ui["start_t"], f"Warte auf Bereit ({n_r}/{n_g})")
         else:
             me_ = self.player
             on_ = bool(me_ is not None and me_.ready)
             hov_c = mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
             if on_:
-                ui["start"].setColorBTN_ON
+                ui["start"].setColor(*BTN_ON)
                 self.set_text(ui["start_t"], "Bereit  (zum Abbrechen klicken)")
             else:
-                ui["start"].setColorSTART_BTN_HOT if hov_c else ui["start"].setColor(*START_BTN)
-                self.set_text(ui["start_t"], "Bereit")
+                ui["start"].setColor(*START_BTN_HOT) if hov_c else ui["start"].setColor(*START_BTN)
+                self.set_text(ui["start_t"], "BEREIT")
         e = self.LOBBY_EQ_BTN
         hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
         for nd in (ui["eq"], ui["eq_t"]):
@@ -109760,21 +109814,21 @@ class Game(ShowBase):
 
     def build_respawn_btn(self):
         cm = CardMaker("respbtn")
-        cm.setFrame(0, 0.68, 0, 0.18)
+        cm.setFrame(0, 1, 0, 0.18)
         self.resp_btn = self.aspect2d.attachNewNode(cm.generate())
         self.resp_btn.setColor(*START_BTN)
         self.resp_btn.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(self.resp_btn)
-        self.resp_btn_text = OnscreenText(text="Spawn", pos=(0, 0), scale=0.07, fg=(1, 1, 1, 1),
+        self.resp_btn_text = OnscreenText(text="SPAWN", pos=(0, 0), scale=0.07, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.resp_btn.hide()
         self.resp_btn_text.hide()
-        cm.setFrame(0, 0.72, 0, 0.18)
+        cm.setFrame(0, 1, 0, 0.18)
         self.back_btn = self.aspect2d.attachNewNode(cm.generate())
-        self.back_btn.setColorBTN_C
+        self.back_btn.setColor(*BTN_C)
         self.back_btn.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(self.back_btn)
-        self.back_btn_text = OnscreenText(text="Zurück ins Hauptmenü", pos=(0, 0), scale=0.05, fg=(1, 1, 1, 1),
+        self.back_btn_text = OnscreenText(text="ZURÜCK INS HAUPTMENÜ", pos=(0, 0), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=True)
         self.back_btn.hide()
         self.back_btn_text.hide()
@@ -111137,10 +111191,10 @@ class Game(ShowBase):
         cm = CardMaker("deadbtn")
         cm.setFrame(*self.DEAD_BTN)
         self.dead_btn = self.aspect2d.attachNewNode(cm.generate())
-        self.dead_btn.setColorBTN_C
+        self.dead_btn.setColor(*BTN_C)
         self.dead_btn.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(self.dead_btn)
-        self.dead_btn_text = OnscreenText(text="Loadout konfigurieren", pos=(0, -0.825), scale=0.05, fg=(1, 1, 1, 1),
+        self.dead_btn_text = OnscreenText(text="LOADOUT KONFIGURIEREN", pos=(0, -0.825), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                           shadow=(0, 0, 0, 0.8), mayChange=False)
         self.dead_btn.hide()
         self.dead_btn_text.hide()
@@ -111326,11 +111380,11 @@ class Game(ShowBase):
         self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.74), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
                                          mayChange=True)
         cmb = CardMaker("endbtn")
-        cmb.setFrame(0, 0.68, 0, 0.18)
+        cmb.setFrame(0, 1, 0, 0.18)
         self.end["btn"] = root.attachNewNode(cmb.generate())
         self.end["btn"].setTransparency(TransparencyAttrib.MAlpha)
         btn3d(self.end["btn"])
-        self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, fg=(1, 1, 1, 1),
+        self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                          shadow=(0, 0, 0, 0.8), mayChange=True)
         self.end["note"] = OnscreenText(text="", parent=root, pos=(0, -0.58), scale=0.042, fg=(0.6, 1.0, 0.6, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
@@ -111342,7 +111396,7 @@ class Game(ShowBase):
             nd.setTransparency(TransparencyAttrib.MAlpha)
             btn3d(nd)
             self.end[nm + "_btn"] = nd
-            self.end[nm + "_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
+            self.end[nm + "_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.045, font=BOLD_FONT, fg=(1, 1, 1, 1),
                                                shadow=(0, 0, 0, 0.8), mayChange=True)
         self.show_end_tab(0)
         self.set_capture(False)
@@ -111406,7 +111460,7 @@ class Game(ShowBase):
         if bb[0] <= p[0] <= bb[1] and bb[2] <= p[1] <= bb[3]:
             self.show_pause("leave")                       # zurück ins Hauptmenü (mit Sicherheitsabfrage)
             return
-        sb = self.END_SET_BTN
+        sb = self.end_set_rect()
         if self.can_edit_round() and sb[0] <= p[0] <= sb[1] and sb[2] <= p[1] <= sb[3]:
             self.end_cfg_open()
             return
@@ -111448,24 +111502,25 @@ class Game(ShowBase):
         rb = self.right_btn_rect()
         hov = p is not None and rb[0] <= p[0] <= rb[1] and rb[2] <= p[1] <= rb[3]
         e["btn"].setPos(rb[0], 0, rb[2])
+        e["btn"].setSx(rb[1] - rb[0])
         e["btn_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.06)
         if self.net_mode == "client":
             on_ = bool(self.player is not None and self.player.ready)
             e["btn"].setColor(*(BTN_ON if on_ else (START_BTN_HOT if hov else START_BTN)))
-            self.set_text(e["btn_t"], "Bereit  (zum Abbrechen klicken)" if on_ else "Bereit")
+            self.set_text(e["btn_t"], "BEREIT  (ZUM ABBRECHEN KLICKEN)" if on_ else "BEREIT")
             self.set_text(e["count"], "Drücke 'Bereit' - der Host startet dann die nächste Runde   (Esc: Menü)")
         else:
             ok_ = n_r >= n_g
             e["btn"].setColor(*((START_BTN_HOT if hov else START_BTN) if ok_ else BTN_OFF))
-            self.set_text(e["btn_t"], "Neue Runde starten" if ok_ else f"Warte auf Bereit ({n_r}/{n_g})")
+            self.set_text(e["btn_t"], "NEUE RUNDE STARTEN" if ok_ else f"Warte auf Bereit ({n_r}/{n_g})")
             self.set_text(e["count"], ("Alle sind bereit" if ok_ else f"Bereit: {n_r} von {n_g} Mitspielern") + "   (Esc: Menü)")
         for i, (x0, x1, z0, z1, t) in enumerate(e["rects"]):   # Hover wie im Hauptmenü
             if i != e["tab"]:
                 on = p is not None and x0 <= p[0] <= x1 and z0 <= p[1] <= z1
                 t.setFg(Hot.ON if on else Hot.BASE)
-        bb, sb = self.back_btn_rect(), self.END_SET_BTN
-        for nm, r, lab, vis in (("menu", bb, "Zurück ins Hauptmenü", True),
-                                ("set", sb, "Rundeneinstellungen ändern", self.can_edit_round())):
+        bb, sb = self.back_btn_rect(), self.end_set_rect()
+        for nm, r, lab, vis in (("menu", bb, "ZURÜCK INS HAUPTMENÜ", True),
+                                ("set", sb, "RUNDENEINSTELLUNGEN ÄNDERN", self.can_edit_round())):
             if not vis:
                 e[nm + "_btn"].hide()
                 e[nm + "_t"].hide()
@@ -113859,9 +113914,10 @@ class Game(ShowBase):
             ready = wait <= 0
             hov = ready and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
             self.resp_btn.setPos(rb[0], 0, rb[2])
+            self.resp_btn.setSx(rb[1] - rb[0])
             self.resp_btn_text.setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
             self.resp_btn.setColor(*(START_BTN_HOT if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
-            self.set_text(self.resp_btn_text, "Spawn" if ready else f"Spawn in {int(math.ceil(wait))} s")
+            self.set_text(self.resp_btn_text, "SPAWN" if ready else f"SPAWN IN {int(math.ceil(wait))} S")
             self.resp_btn.show()
             self.resp_btn_text.show()
         else:
@@ -113872,9 +113928,10 @@ class Game(ShowBase):
             bb = self.back_btn_rect()
             hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
             self.back_btn.setPos(bb[0], 0, bb[2])
+            self.back_btn.setSx(bb[1] - bb[0])
             self.back_btn_text.setPos((bb[0] + bb[1]) / 2, bb[2] + 0.062)
             self.back_btn.setColor(*(BTN_HC if hov else BTN_C))
-            self.set_text(self.back_btn_text, "Zurück zur Lobby" if equip_view else "Zurück ins Hauptmenü")
+            self.set_text(self.back_btn_text, "ZURÜCK ZUR LOBBY" if equip_view else "ZURÜCK INS HAUPTMENÜ")
             self.back_btn.show()
             self.back_btn_text.show()
         else:
