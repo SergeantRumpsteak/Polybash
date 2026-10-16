@@ -16,3 +16,6 @@ Fehlt ein Ordner, bleibt das Material einfarbig.
   festung_wand/  -> Materialien "Mauerwerk" und "Mauerwerk dunkel" (Mauern, Tuerme, Wachhaeuser, Wehrgang)
   festung_treppe/      -> Material "Stufen" (Trittbleche, Wangen, Podest der Feuerwehrtreppen); auch <name>_metal_2k wird erkannt
   festung_treppenseule/-> Material "Treppensaeule" (Stuetzsaeulen unter den Treppen); solange der Ordner leer ist, bleibt die Saeule einfarbig
+
+Anti-Kachelung: Pro Material gibt es in texturen.py den Regler "variation" (0 = aus ... 1 = stark). Er legt eine zweite, gedrehte
+und anders skalierte Abtastung der Textur per Noise-Maske darueber und fuegt grosse weiche Helligkeitsflecken hinzu.
