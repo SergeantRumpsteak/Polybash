@@ -79,7 +79,20 @@ def dichte(x, y):
     wald = B.smoothstep(0.26, 0.56, n)
     streu = 0.65 * B.smoothstep(0.44, 0.68, n)
     fw = _fw(x, y)
-    return streu + (wald - streu) * fw
+    return (streu + (wald - streu) * fw) * _nord_licht(x, y)
+
+
+def _nord_licht(x, y):
+    """Faktor 0..1 fuer die Baumdichte im Huegelland nordlich des Flugplatzes: der dichte Wald ist entfernt (nur noch ~30 % Einzelbaeume und kleine
+    Gruppen), rund um Muehle, Koehlerhuette, Jagdhuette und Hochsitz sind Lichtungen."""
+    n = B.smoothstep(198.0, 212.0, x) * B.smoothstep(242.0, 254.0, y)
+    if n <= 0.0:
+        return 1.0
+    f = 1.0 - 0.7 * n
+    import muehle as MU
+    for (px, py, r) in MU.BAUPLAETZE:
+        f *= B.smoothstep(r - 1.0, r + 7.0, math.hypot(x - px, y - py))
+    return f
 
 
 def _zone_nah(x, y, m=3.5):

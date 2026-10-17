@@ -168,7 +168,7 @@ def huegel_roh(x, y):
     kleinere Kuppen (~55 m) und feine Bodenwellen (~26 m)."""
     n = T.fbm(x / 110.0, y / 110.0, T.SEED + 21, 3)
     v = (n - 0.5) * 4.5 + 0.12
-    h = 15.0 * v if v > 0 else 5.5 * v
+    h = (17.0 if v > 0 else 6.5) * v * abs(v) / (abs(v) + 0.25)                                 # weicher Anlauf: Huegel beginnen flach, ohne Knick entlang einer Hoehenlinie
     h += 5.0 * (T.fbm(x / 55.0, y / 55.0, T.SEED + 25, 2) - 0.5) * 2.0
     for kx, ky, kr, kh in KUPPEN:                                                                # einzelne markante Huegel mit Gesteinsrippen
         d2 = ((x - kx) ** 2 + (y - ky) ** 2) / (kr * kr)
@@ -203,8 +203,34 @@ def gelaende_maske(x, y):
     return m * (0.18 + 0.82 * B.smoothstep(7.0, 22.0, d))              # Wege: nur kleine Unebenheiten
 
 
+# Bauplaetze im Huegelland nordlich des Flugplatzes (muehle.py): (x, y, r_eben, r_aus) - innen ebener Grund, aussen weich in das Gelaende uebergehend
+PLATEAUS = ((236.0, 276.0, 10.0, 24.0), (263.0, 263.0, 7.0, 14.0), (285.0, 256.0, 9.5, 14.5), (274.0, 282.0, 6.0, 12.0))
+PLATEAU_DZ = (-3.0, 0.0, 0.0, 0.0)                         # Kuppe der Muehle etwas tiefer kappen (sanftere Haenge)
+_PZ = {}
+
+
+def plateau_z(i):
+    """Hoehe des Bauplatzes i: Mittel aus dem natuerlichen Gelaende in der Mitte und auf einem Ring (Huegelkuppen werden gekappt, Senken aufgefuellt)."""
+    if i not in _PZ:
+        px, py, ri, _ro = PLATEAUS[i]
+        pts = [(px, py)] + [(px + 0.7 * ri * math.cos(k * math.pi / 4), py + 0.7 * ri * math.sin(k * math.pi / 4)) for k in range(8)]
+        _PZ[i] = round(sum(_gelaende_basis(a, b) for a, b in pts) / len(pts) + PLATEAU_DZ[i], 2)
+    return _PZ[i]
+
+
 def gelaende_hoehe(x, y):
-    """Hoehe der Wiese im Tal bei (x, y)."""
+    """Hoehe der Wiese im Tal bei (x, y) (mit den ebenen Bauplaetzen PLATEAUS)."""
+    h = _gelaende_basis(x, y)
+    if x > 200.0 and y > 240.0:
+        for i, (px, py, ri, ro) in enumerate(PLATEAUS):
+            d = math.hypot(x - px, y - py)
+            if d < ro:
+                h += (plateau_z(i) - h) * (1.0 - B.smoothstep(ri, ro, d))
+    return h
+
+
+def _gelaende_basis(x, y):
+    """Hoehe der Wiese im Tal bei (x, y) ohne Bauplaetze."""
     m = gelaende_maske(x, y)
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)

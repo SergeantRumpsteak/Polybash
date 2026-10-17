@@ -6,7 +6,7 @@ Arten (jeweils als Rauschen: Flecken dichter Bestaende, dazwischen Lichtungen):
   * Pfeifengras: dichter Horst aus 9 ueberhaengenden Halmen, 70..130 cm.
   * Blumen (weiss, gelb, violett, rosa): Stiel und sechseckige Bluete, 25..55 cm.
   * Farn: Faecher aus 6 Wedeln in Waldnaehe und an Huegeln; Schilf/Rohrkolben an den Teichen (1,2..2 m).
-Nicht gewachsen wird auf Strassen, Wegen, Plaetzen, in/an Gebaeuden, Hoefen, Feldern, im Steinbruch, im Burggelaende samt Ringweg, an den Gleisen und auf
+Nicht gewachsen wird auf Strassen, Wegen, Plaetzen, in/an Gebaeuden, Hoefen, Feldern, im Steinbruch, im Burgumfeld nur auf Graben, Bruecken und Ringweg (die Wiese zwischen Festung und Kreisstrasse waechst zu), an den Gleisen und auf
 dem Burgplateau. Am Flugplatz wachsen sie dort, wo kein Belag, keine Halle, kein Zaun usw. ist (Raster aus allen Flaechen der Umgebung); die Halme
 sind kein Hindernis."""
 import math
@@ -63,6 +63,18 @@ class Maske:
         self.aussen += [(um[i], um[(i + 1) % len(um)]) for i in range(len(um))]
         self.flug = _flug_raster()
 
+    def _burg_gras(self, x, y):
+        """Gras im Burgumfeld nur dort, wo wirklich Wiese ist: nicht in der Burg, im Graben samt Boeschung, auf den Bruecken-Zufahrten und dem Ringweg."""
+        dx, dy = abs(x - U.C), abs(y - U.C)
+        if max(dx, dy) > 70.0:
+            return True
+        o = math.hypot(max(dx - B.A, 0.0), max(dy - B.A, 0.0))                      # Abstand zum Burgquadrat (wie burg.graben_tiefe)
+        if o < B.GRABEN[3] + 1.2:
+            return False
+        if dx < 5.6 and dy < B.A + 12.0:                                              # Bruecken und ihre Zufahrten
+            return False
+        return abs(math.hypot(x - U.C, y - U.C) - U.ring_r(math.atan2(y - U.C, x - U.C))) > U.BREITE_WEG / 2 + 0.7
+
     def im_flug(self, x, y):
         return x >= 200.0 and 46.0 <= y <= 254.0
 
@@ -70,7 +82,9 @@ class Maske:
         P = self.P
         if not (1.0 < x < 299.0 and 1.0 < y < 299.0):
             return False
-        if math.hypot(x - U.C, y - U.C) < 63.0:                                          # Burg, Graben, Ringweg
+        if baum and math.hypot(x - U.C, y - U.C) < 63.0:                                 # Baeume: nicht rund um die Burg und den Ringweg
+            return False
+        if not self._burg_gras(x, y):
             return False
         if 19.0 < y < 35.0 and x > 84.0:                                                  # Gleiskorridor
             return False

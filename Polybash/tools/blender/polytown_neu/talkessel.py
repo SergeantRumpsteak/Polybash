@@ -24,7 +24,8 @@ BREITE = 150.0      # Abstand vom Talrand, bei dem der Bergkamm seine volle Hoeh
 HOEHE = 105.0       # Grundhoehe der Berge; die Gipfel werden durch die Gratform deutlich hoeher
 SCHNEE_H = 90.0     # Schneegrenze (m), schwankt um etwa 15 m
 SOCKEL = -40.0      # Unterkante der Aussenwand (ausserhalb des Blickfelds)
-WIESE_ZELLE = 5.0   # Raster der Wiesenflaeche (zum spaeteren Bearbeiten und Texturieren; auch Aufloesung der Huegel)
+WIESE_ZELLE = 2.5   # Raster der Wiesenflaeche (auch Aufloesung der Huegel); die Gitterpunkte sind unregelmaessig verschoben
+WIESE_JITTER = 0.3  # maximale Verschiebung der inneren Gitterpunkte in Zellen
 SEED = 7
 
 _MATS = {}
@@ -168,9 +169,17 @@ def berg_netz():
     return verts, tris, rand
 
 
-def wiesen_netz(loch=None, hf=None):
-    """Wiese, Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben).
+def _flaeche(verts, t):
+    a, b, c = verts[t[0]], verts[t[1]], verts[t[2]]
+    return ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2.0
 
+
+def wiesen_netz(loch=None, hf=None):
+    """Wiese aus Dreiecken (Gitterweite WIESE_ZELLE), Flaechen gegen den Uhrzeigersinn (Normale nach oben).
+
+    Damit Huegel nicht an einer langen geraden Gitterkante beginnen, sind alle inneren Gitterpunkte deterministisch verschoben
+    (WIESE_JITTER) und die Diagonalen der Zellen wechseln unregelmaessig; die Hoehe wird erst am verschobenen Punkt berechnet.
+    Feste, unverschobene Punkte: Talrand und Rand der Aussparungen (dort muessen Burggelaende bzw. Grube exakt anschliessen).
     loch = (x0, y0, x1, y1) oder Liste solcher Rechtecke (auf dem Raster), die ausgespart werden, z. B. Burggelaende und Steinbruchgrube.
     hf(x, y) -> Hoehe: Huegel und Senken im Tal (muss am Talrand und am Lochrand 0 sein); ohne hf ist die Wiese eben (z = 0)."""
     n = int(round(TAL / WIESE_ZELLE))
@@ -178,19 +187,35 @@ def wiesen_netz(loch=None, hf=None):
     verts, vid, faces = [], {}, []
     loecher = [] if loch is None else ([loch] if not isinstance(loch[0], (tuple, list)) else list(loch))
 
+    def leer(i, j):
+        cx, cy = (i + 0.5) * st, (j + 0.5) * st
+        return any(l[0] < cx < l[2] and l[1] < cy < l[3] for l in loecher)
+
+    def fest(i, j):
+        return i in (0, n) or j in (0, n) or any(0 <= a < n and 0 <= b < n and leer(a, b) for a in (i - 1, i) for b in (j - 1, j))
+
     def vert(i, j):
         if (i, j) not in vid:
+            px, py = i * st, j * st
+            if not fest(i, j):
+                px += (_h01(i, j, 9101) - 0.5) * 2.0 * WIESE_JITTER * st
+                py += (_h01(i, j, 9102) - 0.5) * 2.0 * WIESE_JITTER * st
             vid[(i, j)] = len(verts)
-            verts.append((i * st, j * st, hf(i * st, j * st) if hf else 0.0))
+            verts.append((px, py, hf(px, py) if hf else 0.0))
         return vid[(i, j)]
 
     for j in range(n):
         for i in range(n):
-            if loch is not None:
-                cx, cy = (i + 0.5) * st, (j + 0.5) * st
-                if any(l[0] < cx < l[2] and l[1] < cy < l[3] for l in loecher):
-                    continue
-            faces.append((vert(i, j), vert(i + 1, j), vert(i + 1, j + 1), vert(i, j + 1)))
+            if loecher and leer(i, j):
+                continue
+            a, b, c, d = vert(i, j), vert(i + 1, j), vert(i + 1, j + 1), vert(i, j + 1)
+            opt = [[(a, b, c), (a, c, d)], [(a, b, d), (b, c, d)]]
+            if _h01(i, j, 9103) < 0.5:
+                opt.reverse()
+            best = max(opt, key=lambda tr: min(_flaeche(verts, t) for t in tr))                  # keine umgeklappten Dreiecke (die zweite Diagonale, falls noetig)
+            if _flaeche(verts, opt[0][0]) > 0.3 and _flaeche(verts, opt[0][1]) > 0.3:
+                best = opt[0]
+            faces += best
     return verts, faces
 
 
