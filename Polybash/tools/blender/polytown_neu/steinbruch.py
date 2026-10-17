@@ -1,7 +1,7 @@
 """Polybash - Steinbruch in der Suedwestecke der Map (Norden = +y): abgetreppte Grube mit Rampe, Schraegaufzug, Brecherturm, Verladebunker ueber dem
 Gleis, Werkstatt (begehbar), Sprengstoffhaeuschen, Bagger, Kipper, Fels- und Schotterhaufen.
 
-Die Grube ist ein Loch in der Wiese (talkessel.wiesen_netz) mit selbst gebautem Boden aus 1,25-m-Zellen (Hoehenfeld mit Baenken zu je 3 m Hoehe).
+Die Grube ist eine natuerliche Talsenke (unregelmaessiger Umriss) in einem Loch der Wiese (talkessel.wiesen_netz), gebaut aus einem Netz verschobener Dreiecke mit Felsbaendern und eckigen Felsbrocken; alles begehbar, keine Zaeune.
 Wird von stadt.baue_alles() eingebunden."""
 import math
 
@@ -17,12 +17,12 @@ S.FARBEN.update({
     "Faesser rot": ((0.60, 0.15, 0.10), 0.6, 0.2),
     "Reifen":      ((0.07, 0.07, 0.07), 1.0, 0.0),
     "Kipper blau": ((0.18, 0.30, 0.45), 0.7, 0.1),
+    "Wiese Rand":  ((0.34, 0.52, 0.21), 1.0, 0.0),
 })
 
 PIT = (15.0, 15.0, 60.0, 55.0)                  # Loch in der Wiese (Raster 5 m)
 PIT_Z = -9.0
 G = 1.25                                          # Zellengroesse der Grube
-RAMPE = (15.0, 20.0)                              # Rampe: y-Streifen am Suedrand, steigt von x = 15 (z = -9) nach x = 60 (z = 0)
 ZONE = (8.0, 8.0, 100.0, 74.0)                   # ebener Baugrund (STADT_ZONEN)
 YARD = (60.0, 14.0, 90.0, 60.0)                  # Schotterplatz oestlich der Grube
 GLEIS_Y = BA.GLEIS_Y[3]                          # Verladegleis (y = 27)
@@ -36,129 +36,118 @@ BELEGT = ((12.0, 12.0, 63.0, 58.0),              # Grube mit Rand
           (24.0, 60.0, 33.0, 68.0))              # Sprengstoffhaeuschen
 
 
-# ------------------------------------------------------------------ Hoehenfeld der Grube
+# ------------------------------------------------------------------ Talsenke
+SENKE_C = (37.5, 34.0)                           # Mitte der Sohle
+SENKE_R = (10.5, 8.8)                           # Halbachsen der ebenen Sohle (vor der Randstoerung)
+RIM = 2.15                                        # Rand der Senke bei r = RIM (Hoehe 0)
+
+
+def _glatt(t):
+    t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+    return t * t * (3.0 - 2.0 * t)
+
+
+def senke_r(x, y):
+    """Normierter Abstand von der Mitte; Umriss durch Winkelrauschen und Buchten unregelmaessig (Sohle bei r < 1, Rand bei r = RIM)."""
+    dx, dy = (x - SENKE_C[0]) / SENKE_R[0], (y - SENKE_C[1]) / SENKE_R[1]
+    a = math.atan2(dy, dx)
+    st = 1.0 + 0.12 * (T.noise(2.0 + 1.3 * math.cos(a), 2.0 + 1.3 * math.sin(a), 7) - 0.5) * 2.0 + 0.07 * math.sin(3.0 * a + 1.1)
+    return math.hypot(dx, dy) / st
+
+
 def pit_z(x, y):
-    """Hoehe des Grubenbodens in der Zelle mit Mittelpunkt (x, y): Rampe, Bucht am Rampenende, Baenke (3 m), Sohle (-9 m)."""
-    if RAMPE[0] <= y < RAMPE[1]:
-        zr = max(PIT_Z, -9.0 * (PIT[2] - x) / (PIT[2] - PIT[0]))
-        return -0.25 * math.floor(-zr / 0.25)                 # Stufen von genau 0,25 m (Zellenmitte -0,125 -> 0; -0,375 -> -0,25; ...)
-    if x < 36.0 and y < 32.0:
-        return PIT_Z
-    d = min(x - PIT[0], PIT[3] - y) + 3.0 * (T.noise(x / 10.0, y / 10.0, 91) - 0.5)
-    k = 0 if d < 7.0 else 1 if d < 14.0 else 2 if d < 21.0 else 3
-    return -3.0 * k
+    """Hoehe der Senke: ebene Sohle (-9 m), Hang mit Felsbaendern (flache Absaetze alle ~1,5 m) und Rauschen, am Rand auslaufend in die Wiese."""
+    r = senke_r(x, y)
+    s = _glatt((r - 1.0) / (RIM - 1.0))
+    z = PIT_Z * (1.0 - s)
+    if s > 0.0:
+        terr = 1.5 * math.floor(z / 1.5 + 0.5)
+        z = z + 0.15 * (terr - z) * math.sin(math.pi * min(1.0, 3.0 * s * (1.0 - s) * 2.0))
+        z += (T.noise(x / 3.5, y / 3.5, 21) - 0.5) * 0.55 * s * (1.0 - s) * 4.0
+    e = min(x - PIT[0], PIT[2] - x, y - PIT[1], PIT[3] - y)
+    return z * _glatt(e / 2.5) if z < 0.0 else 0.0
 
 
-def zellen():
-    ni, nj = int(round((PIT[2] - PIT[0]) / G)), int(round((PIT[3] - PIT[1]) / G))
-    return ni, nj, {(i, j): pit_z(PIT[0] + (i + 0.5) * G, PIT[1] + (j + 0.5) * G) for i in range(ni) for j in range(nj)}
+def _mat_tri(zs, rs, nz, k):
+    zm = sum(zs) / 3.0
+    if zm > -0.04 and min(rs) > RIM - 0.05:
+        return "Wiese Rand"
+    if zm <= PIT_Z + 0.05:
+        return "Schotter" if (k % 7) else "Bruch Fels dunkel"
+    if nz > 0.82:
+        return "Bruch Erde" if zm > -2.5 else ("Schotter" if k % 3 else "Bruch Fels hell")
+    return ("Bruch Fels", "Bruch Fels dunkel", "Bruch Fels hell")[(int(math.floor(-zm / 1.5)) + k % 2) % 3]
 
 
-def _saeule(b, x0, y0, x1, y1, zlow, zhigh, top, tag):
-    """Felssaeule von zlow bis zhigh in Scheiben von 1,5 m (Schichtung: abwechselnd hell/dunkel); oberste Scheibe mit Material top."""
-    z1, k = zhigh, 0
-    strata = ("Bruch Fels", "Bruch Fels dunkel", "Bruch Fels hell", "Bruch Fels")
-    while z1 > zlow + 1e-6:
-        z0 = max(zlow, z1 - 1.5)
-        b.box(x0, y0, z0, x1, y1, z1, top if k == 0 else strata[(k + tag) % 4])
-        z1, k = z0, k + 1
-
-
-def _zlow(Z, i, j):
-    z = Z[(i, j)]
-    m = min([z] + [v for v in (Z.get((i + 1, j)), Z.get((i - 1, j)), Z.get((i, j + 1)), Z.get((i, j - 1))) if v is not None])
-    return min(m, z - 0.3)
-
-
-def _top(z, y):
-    if z >= -0.01:
-        return "Bruch Erde"
-    if z <= PIT_Z + 0.01 or RAMPE[0] <= y < RAMPE[1]:
-        return "Schotter"
-    return "Bruch Fels hell"
+def felsbrocken(b, x, y, z, r, rnd, mat):
+    """Eckiger Felsbrocken: verzerrtes Oktaeder mit zusaetzlich abgeschnittenem Gipfel (8 bis 12 Dreiecke), zur Haelfte im Boden."""
+    ang0 = rnd.uniform(0.0, 6.28)
+    k = rnd.choice((5, 6, 7))
+    ring = []
+    for i in range(k):
+        a = ang0 + 2 * math.pi * i / k + rnd.uniform(-0.25, 0.25)
+        rr = r * rnd.uniform(0.7, 1.2)
+        ring.append((x + rr * math.cos(a), y + rr * math.sin(a) * rnd.uniform(0.75, 1.1), z + rnd.uniform(-0.05, 0.25) * r))
+    top = (x + rnd.uniform(-0.25, 0.25) * r, y + rnd.uniform(-0.25, 0.25) * r, z + r * rnd.uniform(0.6, 1.1))
+    bot = (x, y, z - r * 0.6)
+    v = ring + [top, bot]
+    f = []
+    for i in range(k):
+        j = (i + 1) % k
+        f.append((i, j, k))
+        f.append((j, i, k + 1))
+    b.add(v, f, mat)
 
 
 def grube(b):
-    """Baut Boden und Waende der Grube; Rueckgabe: Liste der Zaunsegmente (fuer Tests)."""
-    ni, nj, Z = zellen()
-    for j in range(nj):
-        i = 0
-        while i < ni:
-            z, zl = Z[(i, j)], _zlow(Z, i, j)
-            i1 = i + 1
-            while i1 < ni and Z[(i1, j)] == z and abs(_zlow(Z, i1, j) - zl) < 1e-9:
-                i1 += 1
-            y0, y1 = PIT[1] + j * G, PIT[1] + (j + 1) * G
-            _saeule(b, PIT[0] + i * G, y0, PIT[0] + i1 * G, y1, zl, z, _top(z, y0), i + 2 * j)
-            i = i1
-    # Randwand an der Wiesenkante (Aussenseite, oben bei -0,02 unter der Wiese)
-    for j in range(nj):
-        for (i, sx) in ((0, -1), (ni - 1, 1)):
-            z = Z[(i, j)]
-            if z < -0.01:
-                x0 = PIT[0] - 1.0 if sx < 0 else PIT[2]
-                _saeule(b, x0, PIT[1] + j * G, x0 + 1.0, PIT[1] + (j + 1) * G, z - 0.3, -0.02, "Bruch Fels", j)
-    for i in range(ni):
-        for (j, sy) in ((0, -1), (nj - 1, 1)):
-            z = Z[(i, j)]
-            if z < -0.01:
-                y0 = PIT[1] - 1.0 if sy < 0 else PIT[3]
-                _saeule(b, PIT[0] + i * G, y0, PIT[0] + (i + 1) * G, y0 + 1.0, z - 0.3, -0.02, "Bruch Fels", i + 3)
-    return zaeune(b, Z, ni, nj)
-
-
-def _zaun_segment(b, x0, y0, x1, y1, z, mat="Metall"):
-    """Gelaender (Pfosten alle ~2,5 m, zwei Holme von 14 cm Staerke) entlang einer achsparallelen Strecke in Hoehe z."""
-    ln = max(abs(x1 - x0), abs(y1 - y0))
-    n = max(1, int(round(ln / 2.5)))
-    for i in range(n + 1):
-        px, py = x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n
-        b.box(px - 0.06, py - 0.06, z, px + 0.06, py + 0.06, z + 1.1, mat)
-    for (za, zb_) in ((0.5, 0.57), (1.0, 1.07)):
-        b.box(min(x0, x1) - (0.07 if x0 == x1 else 0.0), min(y0, y1) - (0.07 if y0 == y1 else 0.0), z + za,
-              max(x0, x1) + (0.07 if x0 == x1 else 0.0), max(y0, y1) + (0.07 if y0 == y1 else 0.0), z + zb_, mat)
-
-
-def zaeune(b, Z, ni, nj):
-    """Gelaender/Leitplanken: um jede begehbare Kante mit mehr als 0,3 m Absturz (Wiesenkante, Bankkanten) - ausser an der Rampeneinfahrt."""
-    seg = []
-    for j in range(nj):
-        for i in range(ni):
-            z = Z[(i, j)]
-            x0, y0 = PIT[0] + i * G, PIT[1] + j * G
-            for (di, dj, kante) in ((1, 0, (x0 + G, y0, x0 + G, y0 + G)), (-1, 0, (x0, y0, x0, y0 + G)), (0, 1, (x0, y0 + G, x0 + G, y0 + G)), (0, -1, (x0, y0, x0 + G, y0))):
-                n = Z.get((i + di, j + dj))
-                if n is None:                                                    # Kante zur Wiese: Zaun an der Aussenseite, wenn die Zelle tiefer liegt
-                    if z < -0.3:
-                        kx0, ky0, kx1, ky1 = kante
-                        o = 0.0
-                        if di:
-                            kx0 = kx1 = kx0 + di * o
-                        else:
-                            ky0 = ky1 = ky0 + dj * o
-                        # Einfahrt der Rampe (Ostkante, Zellen y 15..20) bleibt offen
-                        if di == 1 and RAMPE[0] <= ky0 and ky1 <= RAMPE[1]:
-                            continue
-                        seg.append((kx0, ky0, kx1, ky1, 0.0))
-                elif z - n > 0.3 and z > -0.01:                                      # begehbare Hoehe (Wiesenniveau) neben tieferer Zelle
-                    kx0, ky0, kx1, ky1 = kante
-                    o = 0.05
-                    if di:
-                        kx0 = kx1 = kx0 - di * o
-                    else:
-                        ky0 = ky1 = ky0 - dj * o
-                        if dj == 1 and RAMPE[0] <= y0 < RAMPE[1] and i == ni - 1:                 # Rampenausgang: Zaun bis zum Randzaun verlaengern (kein Spalt)
-                            kx1 += 0.3
-                    seg.append((kx0, ky0, kx1, ky1, z))
-                elif RAMPE[0] <= y0 < RAMPE[1] and dj == 1 and z - n > 0.3:           # Rampe: Leitplanke zur tieferen Nordseite
-                    seg.append((x0 - (0.3 if i == 0 else 0.0), y0 + G - 0.08, x0 + G + (0.3 if i == ni - 1 else 0.0), y0 + G - 0.08, z, "platte"))
-    for s in seg:
-        if len(s) == 6:
-            b.box(s[0], s[1] - 0.06, s[4], s[2], s[1] + 0.08, s[4] + 0.95, "Bruch Beton")
-            b.box(s[0], s[1] - 0.08, s[4] + 0.95, s[2], s[1] + 0.1, s[4] + 1.02, "Metall")
-        else:
-            _zaun_segment(b, *s)
-    return seg
+    """Baut die Talsenke aus einem Netz leicht verschobener Punkte (Dreiecke mit Neigung -> Felsbaender), dazu eckige Felsbrocken. Rueckgabe: []."""
+    import random
+    rnd = random.Random(5)
+    nx, ny = 30, 27
+    dx, dy = (PIT[2] - PIT[0]) / nx, (PIT[3] - PIT[1]) / ny
+    P = {}
+    for j in range(ny + 1):
+        for i in range(nx + 1):
+            x, y = PIT[0] + i * dx, PIT[1] + j * dy
+            if 0 < i < nx and 0 < j < ny:
+                x += rnd.uniform(-0.38, 0.38) * dx
+                y += rnd.uniform(-0.38, 0.38) * dy
+            P[(i, j)] = (x, y, pit_z(x, y))
+    k = 0
+    for j in range(ny):
+        for i in range(nx):
+            a, c, d, e = P[(i, j)], P[(i + 1, j)], P[(i + 1, j + 1)], P[(i, j + 1)]
+            tris = ((a, c, d), (a, d, e)) if (i + j) % 2 == 0 else ((a, c, e), (c, d, e))
+            for t in tris:
+                ux, uy, uz = t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]
+                vx, vy, vz = t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]
+                nxx, nyy, nzz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+                ln = math.sqrt(nxx * nxx + nyy * nyy + nzz * nzz) or 1.0
+                zs = [p[2] for p in t]
+                rs = [senke_r(p[0], p[1]) for p in t]
+                k += 1
+                b.add(list(t), [(0, 1, 2)], _mat_tri(zs, rs, nzz / ln, k))
+    # Felsbrocken: Halden am Fuss der Haenge, verstreute Brocken an den Haengen, wenige grosse Felsnasen am Rand
+    def brocken(n, rmin, rmax, r0, r1, big):
+        done = 0
+        tries = 0
+        while done < n and tries < 40 * n:
+            tries += 1
+            x, y = rnd.uniform(PIT[0] + 2, PIT[2] - 2), rnd.uniform(PIT[1] + 2, PIT[3] - 2)
+            r = senke_r(x, y)
+            if not (r0 <= r <= r1):
+                continue
+            if 38.0 < x < 52.0 and 29.5 < y < 36.0:                       # Aufgabestelle und Kuebelbahn frei halten
+                continue
+            if 28.0 < x < 36.0 and 28.0 < y < 33.0 or 38.0 < x < 48.0 and 36.5 < y < 41.5:   # Standorte von Bagger und Kipper
+                continue
+            rad = rnd.uniform(rmin, rmax)
+            felsbrocken(b, x, y, pit_z(x, y) + (0.15 if not big else 0.0), rad, rnd, rnd.choice(("Bruch Fels", "Bruch Fels dunkel", "Bruch Fels hell", "Bruch Fels")))
+            done += 1
+    brocken(22, 0.4, 0.8, 0.97, 1.25, False)
+    brocken(70, 0.3, 0.7, 1.25, 1.75, False)
+    brocken(9, 1.4, 2.2, 1.35, 1.7, True)
+    return []
 
 
 # ------------------------------------------------------------------ Schraegaufzug, Brecherturm, Verladebunker
@@ -178,15 +167,16 @@ def schraegaufzug(b):
         b.beam((HOIST_A[0], yy, HOIST_A[1]), (HOIST_B[0], yy, HOIST_B[1]), 0.18, 0.22, "Metall")
     for x in (41.0, 45.0, 49.0, 53.0, 57.0):
         z = hoist_z(x) - 0.2
+        zg = pit_z(x, HOIST_Y) - 0.4
         for sg in (-1, 1):
-            b.box(x - 0.12, HOIST_Y + sg * 1.05 - 0.12, PIT_Z, x + 0.12, HOIST_Y + sg * 1.05 + 0.12, z, "Holz alt")
+            b.box(x - 0.12, HOIST_Y + sg * 1.05 - 0.12, min(zg, pit_z(x, HOIST_Y + sg * 1.05) - 0.4), x + 0.12, HOIST_Y + sg * 1.05 + 0.12, z, "Holz alt")
         b.box(x - 0.1, HOIST_Y - 1.1, z - 0.3, x + 0.1, HOIST_Y + 1.1, z - 0.15, "Holz alt")
         for k in range(2):
-            za = PIT_Z + 0.5 + k * (z - PIT_Z) / 2.0
-            b.beam((x, HOIST_Y - 1.05, za), (x, HOIST_Y + 1.05, za + (z - PIT_Z) / 2.0 - 0.3), 0.08, 0.1, "Holz alt")
+            za = zg + 0.9 + k * (z - zg) / 2.0
+            b.beam((x, HOIST_Y - 1.05, za), (x, HOIST_Y + 1.05, za + (z - zg) / 2.0 - 0.3), 0.08, 0.1, "Holz alt")
     for (xa, xb) in ((41.0, 45.0), (45.0, 49.0), (49.0, 53.0), (53.0, 57.0)):                      # Querstreben in x
         for sg in (-1, 1):
-            b.beam((xa, HOIST_Y + sg * 1.05, PIT_Z + 1.0), (xb, HOIST_Y + sg * 1.05, hoist_z(xb) - 1.2), 0.08, 0.1, "Holz alt")
+            b.beam((xa, HOIST_Y + sg * 1.05, pit_z(xa, HOIST_Y) + 1.0), (xb, HOIST_Y + sg * 1.05, hoist_z(xb) - 1.2), 0.08, 0.1, "Holz alt")
     xk = 50.0                                                                                    # Kuebel
     b.beam((xk - 1.0, HOIST_Y, hoist_z(xk - 1.0) + 0.55), (xk + 1.0, HOIST_Y, hoist_z(xk + 1.0) + 0.55), 1.5, 1.0, "Rost")
     b.beam((xk - 0.9, HOIST_Y, hoist_z(xk - 0.9) + 1.05), (xk + 0.9, HOIST_Y, hoist_z(xk + 0.9) + 1.05), 1.1, 0.3, "Bruch Fels")
@@ -570,9 +560,9 @@ def bauen_bruch():
     sprengstoff(ge)
     waechterhaus(ge)
     fz = Bau("bruch_fahrzeuge")
-    bagger(fz, 42.0, 26.0, 0.5)
-    kipper(fz, 53.0, 24.0, math.pi + 0.2, PIT_Z)
-    BA.kegel(fz, 47.0, 30.0, PIT_Z, 3.2, 2.4, "Bruch Fels dunkel", n=9)
-    BA.kegel(fz, 55.0, 30.5, PIT_Z, 2.2, 1.6, "Bruch Fels", n=8, rot=0.3)
+    bagger(fz, 31.5, 30.0, 0.5)
+    kipper(fz, 43.0, 39.0, math.pi + 0.2, PIT_Z)
+    BA.kegel(fz, 33.0, 40.0, PIT_Z, 3.2, 2.4, "Bruch Fels dunkel", n=9)
+    BA.kegel(fz, 31.0, 38.0, PIT_Z, 2.2, 1.6, "Bruch Fels", n=8, rot=0.3)
     kipper(fz, 77.0, 37.5, 0.25, 0.0)                                                              # Kipper im Hof
     return [gr, an, ge, fz]

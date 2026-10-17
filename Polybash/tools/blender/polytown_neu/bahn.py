@@ -9,6 +9,7 @@ import math
 import stadt as S
 from stadt import Lok, pbox, wand, aussenwand, fensterschmuck, tuerrahmen, dach, F0, WD, TH
 import oeffentlich as O
+import talkessel as T
 from burg import Bau
 
 S.FARBEN.update({
@@ -47,7 +48,8 @@ STATION = (150.0, 47.5)                                 # Mitte des Empfangsgeba
 VORPLATZ = (134.0, 52.0, 166.0, 62.0)                   # Bahnhofsvorplatz, endet an der Suedstrasse
 BALLAST_H = 0.18
 UEBERGANG_X = 108.0                                     # Bahnuebergang der Gueterstrasse (Gleis 3 und Gleis 2)
-BELEGT = ((130.0, 33.0, 188.0, 64.0),                   # Bahnhof: Bahnsteig, Empfangsgebaeude, Vorplatz, Wasserturm
+BELEGT = ((184.0, 23.0, 300.0, 31.2),                     # Gleis 3 weiter zum Tunnel (Baeume freihalten)
+          (130.0, 33.0, 188.0, 64.0),                   # Bahnhof: Bahnsteig, Empfangsgebaeude, Vorplatz, Wasserturm
           (60.0, 23.0, 190.0, 37.0),                    # Gleiskorridor Steinbruch -> Bahnhof
           (114.0, 13.0, 138.0, 26.5))                   # Gueterschuppen mit Rampe
 
@@ -590,7 +592,7 @@ WEICHE = {2: (X_WEICHE, X_WEICHE + 12.0), 1: (X_WEICHE + 12.0, X_WEICHE + 24.0)}
 
 def gleise(b):
     """Gleis 3 (durchgehend vom Steinbruch-Prellbock bis zum Gleisende am Bahnhof), Gleis 2 und 1 ueber S-Kurven (Weichenstrassen) mit Prellboecken, Signalen."""
-    gleis_gerade(b, GLEIS_Y[3], X_PRELL_W, X_PRELL_O)
+    gleis_gerade(b, GLEIS_Y[3], X_PRELL_W, T.TUNNEL_X + 8.0)                          # Gleis 3 laeuft weiter bis in den Tunnel (tunnel.py)
     a0, a1 = WEICHE[2]
     gleis_kurve(b, s_kurve(a0, GLEIS_Y[3], a1, GLEIS_Y[2], 8))
     gleis_gerade(b, GLEIS_Y[2], a1, X_PRELL_O)
@@ -598,7 +600,7 @@ def gleise(b):
     gleis_kurve(b, s_kurve(c0, GLEIS_Y[2], c1, GLEIS_Y[1], 8))
     gleis_gerade(b, GLEIS_Y[1], c1, X_PRELL_O)
     prellbock(b, X_PRELL_W, GLEIS_Y[3], 1)
-    for k in (1, 2, 3):
+    for k in (1, 2):
         prellbock(b, X_PRELL_O, GLEIS_Y[k], -1)
     # Weichenlaterne, Signale
     b.box(a0 + 0.5, GLEIS_Y[3] - 1.75, 0.0, a0 + 0.6, GLEIS_Y[3] - 1.65, 0.7, "Metall")
@@ -692,4 +694,5 @@ def bauen_bahn():
     vorplatz(ge)
     zg = Bau("bahn_zuege")
     zuege(zg)
-    return [gl, ge, zg]
+    import tunnel
+    return [gl, ge, zg, tunnel.bauen_tunnel()]

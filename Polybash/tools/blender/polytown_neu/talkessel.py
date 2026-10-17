@@ -86,8 +86,28 @@ def abstand(x, y):
     return math.hypot(max(-x, x - TAL, 0.0), max(-y, y - TAL, 0.0))
 
 
+TUNNEL_Y = 27.0          # Gleis 3 verlaesst das Tal nach Osten und verschwindet bei x = TUNNEL_X im Berg (ausserhalb der Spielflaeche)
+TUNNEL_X = 352.0
+TUNNEL_L = 16.0          # Laenge des Felsblocks (bahn/tunnel.py) hinter dem Portal, in dem das Gelaende ausgeschnitten bleibt
+
+
+def _glatt(a, b, x):
+    t = max(0.0, min(1.0, (x - a) / (b - a)))
+    return t * t * (3.0 - 2.0 * t)
+
+
 def hoehe(x, y):
-    """Gelaendehoehe: exakt 0 im Tal, ausserhalb steigen erst sanfte Auslaeufer, dann Felswaende und Gipfel."""
+    """Gelaendehoehe mit Bahneinschnitt: das Gleis laeuft in einer Schlucht (Sohle z = 0, Boeschung ueber 12 m) bis zum Tunnelportal; dahinter
+    ersetzt ein Felsblock den ausgeschnittenen Berg (tunnel.py)."""
+    h = hoehe_roh(x, y)
+    if x > TAL and x < TUNNEL_X + TUNNEL_L:
+        cut = (1.0 - _glatt(5.0, 17.0, abs(y - TUNNEL_Y)))
+        h *= 1.0 - cut
+    return h
+
+
+def hoehe_roh(x, y):
+    """Gelaendehoehe ohne Einschnitt: exakt 0 im Tal, ausserhalb steigen erst sanfte Auslaeufer, dann Felswaende und Gipfel."""
     d = abstand(x, y)
     if d <= 0.0:
         return 0.0

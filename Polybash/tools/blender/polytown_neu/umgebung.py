@@ -74,7 +74,8 @@ STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz,
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
                (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
                (8.0, 8.0, 100.0, 74.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
-               (84.0, 8.0, 196.0, 40.0))          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
+               (84.0, 8.0, 196.0, 40.0),          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
+               (190.0, 20.0, 300.0, 34.0))        # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand)
 TEICHE = ((36.0, 233.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
 TEICH_Z = -0.4                                    # Wasserspiegel
 # Zaun und Eingang
@@ -155,22 +156,30 @@ def _seg_abstand(x, y, p, q):
 _ACHSEN = None
 
 
+KUPPEN = ((255.0, 10.0, 22.0, 9.0), (232.0, 12.0, 14.0, 5.0), (285.0, 14.0, 16.0, 7.0), (60.0, 262.0, 20.0, 9.0), (100.0, 288.0, 16.0, 6.0),
+          (22.0, 268.0, 16.0, 7.0), (236.0, 272.0, 16.0, 7.0), (276.0, 284.0, 14.0, 6.0), (196.0, 290.0, 12.0, 5.0))
+
+
 def huegel_roh(x, y):
     """Huegel (bis etwa 12 m) und flache Senken (bis etwa -4 m) als weiche Landschaft: grosse Wellen (Wellenlaenge ~110 m), dazu
     kleinere Kuppen (~55 m) und feine Bodenwellen (~26 m)."""
     n = T.fbm(x / 110.0, y / 110.0, T.SEED + 21, 3)
     v = (n - 0.5) * 4.5 + 0.12
-    h = 11.0 * v if v > 0 else 4.5 * v
-    h += 3.2 * (T.fbm(x / 55.0, y / 55.0, T.SEED + 25, 2) - 0.5) * 2.0
+    h = 15.0 * v if v > 0 else 5.5 * v
+    h += 5.0 * (T.fbm(x / 55.0, y / 55.0, T.SEED + 25, 2) - 0.5) * 2.0
+    for kx, ky, kr, kh in KUPPEN:                                                                # einzelne markante Huegel mit Gesteinsrippen
+        d2 = ((x - kx) ** 2 + (y - ky) ** 2) / (kr * kr)
+        if d2 < 6.0:
+            h += kh * math.exp(-d2) * (0.85 + 0.3 * T.noise(x / 9.0, y / 9.0, T.SEED + 41))
     return h + 1.4 * (T.fbm(x / 26.0, y / 26.0, T.SEED + 23, 2) - 0.5) * 2.0
 
 
 def _flach(x, y):
     """Gemeinsame Maske (0..1) ausser der Wegabflachung: Burggelaende, Flugplatz mit Zaun, Talrand."""
-    m = B.smoothstep(0.0, 45.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))   # Flugplatz: x >= 205, y 52..248
-    m *= B.smoothstep(0.0, 35.0, min(x, T.TAL - x, y, T.TAL - y))                                # Talrand (dort schliessen die Berge an, z = 0)
+    m = B.smoothstep(0.0, 26.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))   # Flugplatz: x >= 205, y 52..248
+    m *= B.smoothstep(0.0, 14.0, min(x, T.TAL - x, y, T.TAL - y))                                # Talrand (dort schliessen die Berge an, z = 0)
     for x0, y0, x1, y1 in STADT_ZONEN:                                                           # Stadt und Doerfer: ebener Baugrund
-        m *= B.smoothstep(0.0, 30.0, math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
+        m *= B.smoothstep(0.0, 20.0, math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
     for tx, ty, tr in TEICHE:                                                                    # rund um Teiche flaches Ufer
         m *= B.smoothstep(tr + 2.0, tr + 20.0, math.hypot(x - tx, y - ty))
     return m
@@ -183,11 +192,11 @@ def gelaende_maske(x, y):
     if _ACHSEN is None:
         _ACHSEN = strassen_achsen()
     c = max(abs(x - C), abs(y - C))
-    m = B.smoothstep(42.0, 72.0, c) * _flach(x, y)                     # Burg: Chebyshev-Abstand 42 m (Patch endet bei 40 m)
+    m = B.smoothstep(42.0, 62.0, c) * _flach(x, y)                     # Burg: Chebyshev-Abstand 42 m (Patch endet bei 40 m)
     d = abs(math.hypot(x - C, y - C) - ring_r(math.atan2(y - C, x - C)))
     for p, q in _ACHSEN:
         d = min(d, _seg_abstand(x, y, p, q))
-    return m * (0.18 + 0.82 * B.smoothstep(7.0, 28.0, d))              # Wege: nur kleine Unebenheiten
+    return m * (0.18 + 0.82 * B.smoothstep(7.0, 22.0, d))              # Wege: nur kleine Unebenheiten
 
 
 def gelaende_hoehe(x, y):
