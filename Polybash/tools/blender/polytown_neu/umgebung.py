@@ -73,7 +73,7 @@ RADAR_Z = 17.0                                                        # Drehpunk
 STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz, Rathaus, Wohnviertel)
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
                (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
-               (8.0, 3.0, 100.0, 80.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
+               (0.0, 3.0, 100.0, 80.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
                (84.0, 8.0, 196.0, 40.0),          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
                (190.0, 22.0, 300.0, 32.0, 12.0))   # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand); schmal, Huegel duerfen direkt daneben beginnen
 TEICHE = ((16.0, 236.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
@@ -160,9 +160,7 @@ def _seg_abstand(x, y, p, q):
 _ACHSEN = None
 
 
-KUPPEN = ((255.0, 10.0, 22.0, 9.0), (232.0, 12.0, 14.0, 5.0), (285.0, 14.0, 16.0, 7.0), (100.0, 288.0, 16.0, 6.0),
-          (22.0, 268.0, 16.0, 7.0), (236.0, 272.0, 16.0, 7.0), (276.0, 284.0, 14.0, 6.0), (196.0, 290.0, 12.0, 5.0),
-          (213.0, 7.0, 11.0, 6.0), (268.0, 6.0, 13.0, 8.0), (244.0, 41.0, 11.0, 6.0), (272.0, 42.0, 12.0, 7.0), (214.0, 40.0, 9.0, 4.0))   # Waldhuegel an der Bahnstrecke
+KUPPEN = ((100.0, 288.0, 16.0, 6.0), (22.0, 268.0, 16.0, 7.0), (236.0, 272.0, 16.0, 7.0), (276.0, 284.0, 14.0, 6.0), (196.0, 290.0, 12.0, 5.0))
 
 
 def huegel_roh(x, y):
@@ -211,17 +209,78 @@ def gelaende_hoehe(x, y):
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
     h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
-    dr = math.hypot(x - RUINE[0], y - RUINE[1])                                                  # Burgberg: ebener Gipfel, Flanken mit Felsrippen
-    if dr < RUINE_R1 + 22.0:
-        h *= 0.35 + 0.65 * B.smoothstep(RUINE_R1, RUINE_R1 + 22.0, dr)                       # rund um den Burgberg flacheres Land: er ragt heraus
+    rw = _bahnband(x, y)                                                                          # Bahnwald: weniger grosse Huegel, dafuer Bodenunebenheiten
+    if rw > 1e-6:
+        h = h * (1.0 - 0.8 * rw) + rw * _bahnrelief(x, y)
+    dd = _burgberg_abstand(x, y)                                                                 # Burgberg: ebener Gipfel, Kamm bis zur Nordwestecke
+    if dd < RUINE_R1 + 22.0:
+        h *= 0.35 + 0.65 * B.smoothstep(RUINE_R1, RUINE_R1 + 22.0, dd)                       # rund um den Burgberg flacheres Land: er ragt heraus
     for tx, ty, tr in TEICHE:                                                                    # Teichmulden
         d = math.hypot(x - tx, y - ty)
         if d < tr + 3.5:
             h -= 2.4 * (1.0 - B.smoothstep(tr - 2.0, tr + 3.5, d))
-    if dr < RUINE_R1:
-        w = (1.0 - B.smoothstep(RUINE_R0, RUINE_R1, dr)) * B.smoothstep(0.0, 14.0, min(x, T.TAL - x, y, T.TAL - y))
-        h = h * (1.0 - w) + (RUINE_Z + 3.2 * (T.fbm(x / 9.0, y / 9.0, T.SEED + 51, 2) - 0.5) * 4.0 * w * (1.0 - w)) * w
+    if dd < RUINE_R1:
+        wc, wr, s = _burgberg_gewichte(x, y)
+        w = max(wc, wr)
+        zr = RUINE_Z + KAMM_RISE * B.smoothstep(KAMM_S0, KAMM_L, s)
+        zt = (wc * RUINE_Z + wr * zr) / (wc + wr + 1e-9)
+        h = h * (1.0 - w) + (zt + 3.2 * (T.fbm(x / 9.0, y / 9.0, T.SEED + 51, 2) - 0.5) * 4.0 * w * (1.0 - w)) * w
     return 0.0 if abs(h) < 1e-9 else h
+
+
+# ------------------------------------------------------------------ Bahnwald (wald.py): Bodenunebenheiten statt zweier Huegel
+def _bahnband(x, y):
+    """0..1: Streifen beiderseits der Bahn suedlich des Flugplatzes (x ab ~200, y bis zum Flugplatzrand), weich auslaufend."""
+    return B.smoothstep(196.0, 216.0, x) * (1.0 - B.smoothstep(40.0, 54.0, y)) * B.smoothstep(0.0, 8.0, min(y, T.TAL - y)) * B.smoothstep(0.0, 14.0, T.TAL - x)
+
+
+def _bahnrelief(x, y):
+    """Noise-Relief (Wellenlaengen ~14..40 m, bis ~6 m hoch, im Mittel +2 m), nur ausserhalb des ebenen Gleiskorridors (y 22..32)."""
+    dk = max(22.0 - y, y - 32.0, 0.0)
+    e = B.smoothstep(2.0, 12.0, dk)
+    n = T.fbm(x / 34.0, y / 34.0, T.SEED + 61, 3) * 1.4 + T.fbm(x / 13.0, y / 13.0, T.SEED + 63, 2) * 0.6
+    return e * max(0.0, 1.8 + 9.0 * (n / 2.0 - 0.42))
+
+
+# ------------------------------------------------------------------ Burgberg mit Kamm zur Nordwestecke (siehe ruine.py)
+_KX, _KY = -0.8, 0.585                                        # Richtung vom Gipfel zur Ecke (0, 300)
+_KL = math.hypot(_KX, _KY)
+_KX, _KY = _KX / _KL, _KY / _KL
+KAMM_L = 100.0                                                # Laenge des Kamms ueber den Talrand hinaus
+KAMM_S0 = 22.0                                                # ab hier steigt der Kamm (Gipfelplateau bleibt eben)
+KAMM_RISE = 9.0                                               # Anstieg bis zum Ende
+
+
+def _burgberg_gewichte(x, y):
+    """(Gewicht Gipfelkreis, Gewicht Kamm, Position s laengs des Kamms)."""
+    dr = math.hypot(x - RUINE[0], y - RUINE[1])
+    wc = 1.0 - B.smoothstep(RUINE_R0, RUINE_R1, dr)
+    px, py = x - RUINE[0], y - RUINE[1]
+    s = px * _KX + py * _KY
+    q = abs(-px * _KY + py * _KX)
+    wr = 0.0
+    if s > 0.0:
+        wr = 1.0 - B.smoothstep(12.0, 34.0, math.hypot(q, max(s - KAMM_L, 0.0)))
+    return wc, wr, max(s, 0.0)
+
+
+def _burgberg_abstand(x, y):
+    """Abstand zum Burgberg (Kreis um den Gipfel oder Kamm); fuer die Daempfung der Umgebung."""
+    dr = math.hypot(x - RUINE[0], y - RUINE[1])
+    px, py = x - RUINE[0], y - RUINE[1]
+    s = px * _KX + py * _KY
+    if s <= 0.0:
+        return dr
+    q = abs(-px * _KY + py * _KX)
+    return min(dr, math.hypot(q, max(s - KAMM_L, 0.0)) + 6.0)
+
+
+def rand_anschluss(x, y):
+    """Hoehe der Wiese am naechsten Punkt des Talrands, nur im Nordwesten (Burgberg-Kamm): die Berge setzen dort auf dem Kamm an
+    (talkessel.hoehe); sonst 0."""
+    if x > 130.0 or y < 190.0:
+        return 0.0
+    return gelaende_hoehe(min(max(x, 0.0), T.TAL), min(max(y, 0.0), T.TAL))
 
 
 def _z_auf(x, y, z0, hf):

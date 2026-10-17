@@ -17,9 +17,7 @@ S.FARBEN.setdefault("Laub", ((0.20, 0.36, 0.14), 0.95, 0.0))
 S.FARBEN.setdefault("Laub hell", ((0.30, 0.45, 0.17), 0.95, 0.0))
 
 X0, X1 = 197.0, 293.0
-SUED = (6.0, 21.0)                       # Waldstreifen suedlich der Strecke (y von .. bis)
-NORD = (34.0, 50.0)                      # Waldstreifen nordlich der Strecke
-RASTER = 3.6
+RASTER = 2.6
 
 
 def _h(ix, iy, s):
@@ -68,26 +66,25 @@ def busch(b, x, y, zb, rnd):
     b.add(ring + [(x, y, zb + 0.4 + r)], [tuple(range(n - 1, -1, -1))] + [(i, (i + 1) % n, n) for i in range(n)], "Busch" if rnd(2) < 0.7 else "Farn")
 
 
-def frei(x, y):
-    if not (X0 <= x <= X1):
-        return False
-    if not (SUED[0] <= y <= SUED[1] or NORD[0] <= y <= NORD[1]):
-        return False
+def dichte(x, y):
+    """Baumdichte 0..1 als Rauschen (Dickichte und Lichtungen, keine Streifen); fehlt am Gleiskorridor (y 22..32), am Flugplatz und an den Raendern."""
+    if not (X0 <= x <= X1) or not (6.0 <= y <= 52.0):
+        return 0.0
     if math.hypot(x - 192.0, y - 50.0) < 11.0:                            # Teich am Stationsende
-        return False
-    return True
+        return 0.0
+    dk = max(22.0 - y, y - 32.0, 0.0)
+    rand = B.smoothstep(2.5, 9.0, dk) * B.smoothstep(X0, X0 + 16.0, x) * (1.0 - B.smoothstep(X1 - 10.0, X1, x)) * B.smoothstep(6.0, 11.0, y) * (1.0 - B.smoothstep(42.0, 52.0, y))
+    n = 0.6 * T.fbm(x / 17.0, y / 17.0, T.SEED + 77, 3) + 0.4 * T.fbm(x / 6.5, y / 6.5, T.SEED + 79, 2)
+    return rand * B.smoothstep(0.16, 0.46, n)
 
 
 def baeume_liste():
     out = []
-    for ix in range(int(X0 / RASTER), int(X1 / RASTER) + 1):
-        for iy in range(0, int(52 / RASTER) + 1):
-            x = ix * RASTER + (_h(ix, iy, 1) - 0.5) * 3.0
-            y = iy * RASTER + (_h(ix, iy, 2) - 0.5) * 3.0
-            if not frei(x, y):
-                continue
-            dicht = T.fbm(x / 22.0, y / 22.0, T.SEED + 77, 2)               # Lichtungen bei kleinem Wert
-            if dicht < 0.30 or _h(ix, iy, 3) > 0.50 + 1.1 * dicht:
+    for ix in range(int(X0 / RASTER) - 1, int(X1 / RASTER) + 2):
+        for iy in range(0, int(54 / RASTER) + 1):
+            x = ix * RASTER + (_h(ix, iy, 1) - 0.5) * 2.8
+            y = iy * RASTER + (_h(ix, iy, 2) - 0.5) * 2.8
+            if _h(ix, iy, 3) > dichte(x, y) * 1.05:
                 continue
             out.append((x, y, int(_h(ix, iy, 4) * 10)))
     return out

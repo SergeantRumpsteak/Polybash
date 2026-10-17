@@ -100,6 +100,12 @@ def hoehe(x, y):
     """Gelaendehoehe mit Bahneinschnitt: das Gleis laeuft in einer Schlucht (Sohle z = 0, Boeschung ueber 12 m) bis zum Tunnelportal; dahinter
     ersetzt ein Felsblock den ausgeschnittenen Berg (tunnel.py)."""
     h = hoehe_roh(x, y)
+    if x < 130.0 and y > 190.0 and not (0.0 < x < TAL and 0.0 < y < TAL):                                              # Burgberg-Kamm (umgebung.rand_anschluss): Berge setzen auf seiner Hoehe an
+        try:
+            import umgebung as _U
+            h += _U.rand_anschluss(x, y) * (1.0 - _glatt(0.0, 120.0, abstand(x, y)))
+        except ImportError:
+            pass
     if x > TAL and x < TUNNEL_X + TUNNEL_L:
         cut = (1.0 - _glatt(5.0, 17.0, abs(y - TUNNEL_Y)))
         h *= 1.0 - cut

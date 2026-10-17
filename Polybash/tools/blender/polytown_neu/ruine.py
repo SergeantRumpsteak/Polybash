@@ -339,16 +339,17 @@ def bewuchs(R):
 
 
 def berghang(zb_fn=None):
-    """Baeume am Burgberg (Flanken d 17..37 m um den Gipfel), nicht auf dem Karrenweg."""
+    """Baeume am Burgberg und auf dem Kamm zur Nordwestecke (nicht auf dem Gipfelplateau und nicht auf dem Karrenweg)."""
     b = B.Bau("ruine_hang")
-    for ix in range(-9, 10):
-        for iy in range(-9, 10):
-            x = RX + ix * 4.5 + (T._h01(ix, iy, 4150) - 0.5) * 3.6
-            y = RY + iy * 4.5 + (T._h01(ix, iy, 4151) - 0.5) * 3.6
-            d = math.hypot(x - RX, y - RY)
-            if not (17.0 < d < 37.0) or y > 292.0 or y < 226.0:
+    for ix in range(0, 24):
+        for iy in range(0, 16):
+            x = 6.0 + ix * 4.4 + (T._h01(ix, iy, 4150) - 0.5) * 3.6
+            y = 226.0 + iy * 4.6 + (T._h01(ix, iy, 4151) - 0.5) * 3.6
+            dr = math.hypot(x - RX, y - RY)
+            if dr < 17.0 or U._burgberg_abstand(x, y) > 37.0 or y > 293.0 or x < 5.0:
                 continue
-            if T._h01(ix, iy, 4152) > 0.62 or min(_dist_weg(x, y), 99.0) < 4.5:
+            dichte = 0.25 + 0.5 * T.fbm(x / 16.0, y / 16.0, T.SEED + 91, 2)
+            if T._h01(ix, iy, 4152) > dichte or min(_dist_weg(x, y), 99.0) < 4.5:
                 continue
             zb = U.gelaende_hoehe(x, y)
             k = int(T._h01(ix, iy, 4153) * 10)

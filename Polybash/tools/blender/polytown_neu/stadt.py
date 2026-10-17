@@ -1109,7 +1109,8 @@ def plane_stadt():
     import steinbruch as SB
     import bauernhof as FA
     import ruine as RU
-    belegt.rechtecke.extend(BA.BELEGT + SB.BELEGT + FA.BELEGT + RU.BELEGT)
+    import felder as FE
+    belegt.rechtecke.extend(BA.BELEGT + SB.BELEGT + FA.BELEGT + RU.BELEGT + FE.BELEGT)
     # Haeuser entlang der Strassen
     zaehler = [0]
     for nm in ("Marktring",):
@@ -1199,7 +1200,11 @@ def baue_alles():
     import bauernhof as FA
     import wald as WA
     import ruine as RU
-    return [w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + WA.bauen_wald() + RU.bauen_ruine()
+    import felder as FE
+    import laternen as LA
+    import gras as GR
+    return ([w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + FE.bauen_felder() + WA.bauen_wald() + RU.bauen_ruine()
+            + [LA.bauen_laternen(P), GR.bauen_gras(P)])
 
 
 def bauen():
