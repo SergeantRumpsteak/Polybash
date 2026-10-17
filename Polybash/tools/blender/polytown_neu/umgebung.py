@@ -74,6 +74,7 @@ STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz,
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
                (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
                (0.0, 3.0, 100.0, 80.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
+               (94.0, 176.0, 132.0, 214.0, 6.0),   # Gruenflaeche zwischen Ringweg und Spange Nord (Wohnhaeuser am Ringweg)
                (84.0, 8.0, 196.0, 40.0),          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
                (190.0, 22.0, 300.0, 32.0, 12.0))   # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand); schmal, Huegel duerfen direkt daneben beginnen
 TEICHE = ((16.0, 236.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
@@ -204,8 +205,8 @@ def gelaende_maske(x, y):
 
 
 # Bauplaetze im Huegelland nordlich des Flugplatzes (muehle.py): (x, y, r_eben, r_aus) - innen ebener Grund, aussen weich in das Gelaende uebergehend
-PLATEAUS = ((236.0, 276.0, 10.0, 24.0), (263.0, 263.0, 7.0, 14.0), (285.0, 256.0, 9.5, 14.5), (274.0, 282.0, 6.0, 12.0))
-PLATEAU_DZ = (-3.0, 0.0, 0.0, 0.0)                         # Kuppe der Muehle etwas tiefer kappen (sanftere Haenge)
+PLATEAUS = ((270.0, 284.0, 10.0, 14.0), (257.0, 262.0, 7.0, 14.0), (285.0, 264.0, 9.5, 14.5), (246.0, 288.0, 6.0, 12.0), (290.0, 290.0, 7.0, 10.0), (250.0, 43.0, 6.0, 9.0))
+PLATEAU_DZ = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PZ = {}
 
 
@@ -221,11 +222,12 @@ def plateau_z(i):
 def gelaende_hoehe(x, y):
     """Hoehe der Wiese im Tal bei (x, y) (mit den ebenen Bauplaetzen PLATEAUS)."""
     h = _gelaende_basis(x, y)
-    if x > 200.0 and y > 240.0:
+    if x > 200.0:
         for i, (px, py, ri, ro) in enumerate(PLATEAUS):
-            d = math.hypot(x - px, y - py)
-            if d < ro:
-                h += (plateau_z(i) - h) * (1.0 - B.smoothstep(ri, ro, d))
+            if abs(x - px) < ro and abs(y - py) < ro:
+                d = math.hypot(x - px, y - py)
+                if d < ro:
+                    h += (plateau_z(i) - h) * (1.0 - B.smoothstep(ri, ro, d))
     return h
 
 
@@ -235,6 +237,7 @@ def _gelaende_basis(x, y):
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
     h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
+    h *= 1.0 - 0.6 * B.smoothstep(200.0, 214.0, x) * B.smoothstep(240.0, 254.0, y)               # Huegelland nordlich des Flugplatzes: deutlich flacher
     h += _wiesenrauschen(x, y)                                                                   # generelle Unebenheit aller Gruenflaechen (nicht Flugplatz, Bauzonen, Burg, Grube)
     rw = _bahnband(x, y)                                                                          # Bahnwald: weniger grosse Huegel, dafuer Bodenunebenheiten
     if rw > 1e-6:

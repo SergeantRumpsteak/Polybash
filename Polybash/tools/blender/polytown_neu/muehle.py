@@ -33,13 +33,15 @@ for _n, _c in (("Sack", ((0.66, 0.60, 0.46), 1.0, 0.0)), ("Kohle", ((0.07, 0.07,
                ("Gras 2", ((0.36, 0.52, 0.19), 1.0, 0.0)), ("Gras 3", ((0.21, 0.37, 0.13), 1.0, 0.0)), ("Bruch Erde", ((0.34, 0.27, 0.20), 1.0, 0.0)), ("Stroh", ((0.82, 0.72, 0.40), 1.0, 0.0))):
     S.FARBEN.setdefault(_n, _c)
 
-MUEHLE = (236.0, 276.0, -90.0)           # Mitte, Drehung in Grad (nur Vielfache von 90: die Hindernisse sind achsenparallele Quader); Fluegel nach Westen
-KOEHLER = (279.5, 254.5, 90.0)           # Huette, Tuer nach Osten zum Meiler
-MEILER = (288.5, 254.5)
-JAGD = (261.3, 264.5, 0.0)               # Blockhaus, Tuer nach Sueden
-HOCHSITZ = (274.0, 282.0, -90.0)         # Treppe zeigt nach Westen
-FUTTER = (277.0, 270.0, 0.0)             # Futterkrippe am Waldrand
-BAUPLAETZE = ((236.0, 276.0, 15.0), (263.0, 263.0, 10.0), (285.0, 256.0, 12.0), (274.0, 282.0, 7.0), (277.0, 270.0, 4.0))
+MUEHLE = (270.0, 284.0, -90.0)           # Mitte, Drehung in Grad (nur Vielfache von 90: die Hindernisse sind achsenparallele Quader); Fluegel nach Westen
+KOEHLER = (279.5, 264.0, 90.0)           # Huette, Tuer nach Osten zum Meiler
+MEILER = (288.5, 264.0)
+JAGD = (255.3, 263.5, 0.0)               # Blockhaus, Tuer nach Sueden
+HOCHSITZ = (246.0, 288.0, -90.0)         # Treppe zeigt nach Westen
+FUTTER = (240.0, 272.0, 0.0)             # Futterkrippe am Waldrand
+ZELT = (290.0, 290.0)                     # Zeltplatz mit Feuerstelle in der Nordostecke
+HOCHSITZ_WALD = (250.0, 43.0, -90.0)     # zweiter Hochsitz im Wald suedlich des Flugplatzes
+BAUPLAETZE = ((270.0, 284.0, 15.0), (257.0, 262.0, 10.0), (285.0, 264.0, 12.0), (246.0, 288.0, 7.0), (290.0, 290.0, 9.0), (240.0, 272.0, 4.0), (250.0, 43.0, 7.0))
 
 
 def _wr(cx, cy, th, x0, y0, x1, y1, m=0.4):
@@ -65,6 +67,9 @@ def _belegt():
     out.append(_wr(jx, jy, jt, -3.5, -4.3, 5.9, 2.7, 0.5))                                   # Haus, Veranda, Schuppen
     hx, hy, ht = HOCHSITZ
     out.append(_wr(hx, hy, ht, -1.3, -4.6, 1.3, 1.3, 0.4))
+    hx2, hy2, ht2 = HOCHSITZ_WALD
+    out.append(_wr(hx2, hy2, ht2, -1.3, -4.6, 1.3, 1.3, 0.4))
+    out.append((ZELT[0] - 7.5, ZELT[1] - 7.5, ZELT[0] + 7.5, ZELT[1] + 7.5))
     fx, fy, _ = FUTTER
     out.append((fx - 2.0, fy - 1.4, fx + 2.0, fy + 1.4))
     return out
@@ -266,6 +271,9 @@ def meiler(b):
     out.append(_wr(jx, jy, jt, -3.5, -4.3, 5.9, 2.7, 0.5))                                   # Haus, Veranda, Schuppen
     hx, hy, ht = HOCHSITZ
     out.append(_wr(hx, hy, ht, -1.3, -4.6, 1.3, 1.3, 0.4))
+    hx2, hy2, ht2 = HOCHSITZ_WALD
+    out.append(_wr(hx2, hy2, ht2, -1.3, -4.6, 1.3, 1.3, 0.4))
+    out.append((ZELT[0] - 7.5, ZELT[1] - 7.5, ZELT[0] + 7.5, ZELT[1] + 7.5))
     fx, fy, _ = FUTTER
     out.append((fx - 2.0, fy - 1.4, fx + 2.0, fy + 1.4))
     return out
@@ -576,8 +584,8 @@ def jagdhuette(b):
     BA.kegel(b, *g.P((W / 2 + 1.8, D / 2 - 1.0, 0.0))[:2], zb, 0.7, 0.45, "Reisig", n=7)
 
 
-def hochsitz(b):
-    cx, cy, th = HOCHSITZ
+def hochsitz(b, site=None):
+    cx, cy, th = site or HOCHSITZ
     zb = _z(cx, cy)
     g = Lok(b, cx, cy, zb, math.radians(th))
     FZ = 3.19
@@ -619,13 +627,72 @@ def futterkrippe(b):
     g.box(1.0, 0.8, 0.0, 1.5, 1.3, 0.3, "Stein alt")                                          # Salzleckstein
 
 
+S.FARBEN.update({"Zelt gruen": ((0.22, 0.34, 0.20), 1.0, 0.0), "Zelt ocker": ((0.62, 0.50, 0.28), 1.0, 0.0), "Zelt grau": ((0.45, 0.47, 0.46), 1.0, 0.0),
+                 "Glut": ((1.0, 0.45, 0.10), 0.8, 3.0), "Asche": ((0.16, 0.15, 0.14), 1.0, 0.0)})
+
+
+def zelt(b, x, y, th, mat):
+    """Firstzelt (Zeltbahn ueber Firststange, offene Vorderseite mit dunklem Eingang), 2,4 x 3,2 m, 1,6 m hoch; Kern als niedriges Hindernis."""
+    g = Lok(b, x, y, _z(x, y), math.radians(th))
+    hw, hd, h = 1.2, 1.6, 1.6
+    for sx in (-1, 1):
+        g.poly([(sx * hw, -hd, 0.0), (sx * hw, hd, 0.0), (0.0, hd, h), (0.0, -hd, h)], (sx * h, 0.0, hw), mat)
+        g.poly([(sx * (hw - 0.04), -hd, 0.0), (0.0, -hd, h - 0.04), (0.0, hd, h - 0.04), (sx * (hw - 0.04), hd, 0.0)], (-sx * h, 0.0, -hw), "Holz dunkel")
+    g.poly([(-hw, hd, 0.0), (hw, hd, 0.0), (0.0, hd, h)], (0.0, 1.0, 0.0), mat)
+    g.poly([(-hw, -hd, 0.0), (hw, -hd, 0.0), (0.0, -hd, h)], (0.0, -1.0, 0.0), "Zelt grau")
+    g.poly([(-0.45, -hd - 0.01, 0.0), (0.45, -hd - 0.01, 0.0), (0.0, -hd - 0.01, 1.2)], (0.0, -1.0, 0.0), "Fenster")
+    for sx in (-1, 1):
+        _bm(g, (sx * 0.9, -hd - 0.6, 0.0), (0.0, -hd, h), 0.04, 0.04, "Holz")           # abgespannte Leinen
+        g.box(sx * 0.9 - 0.03, -hd - 0.63, 0.0, sx * 0.9 + 0.03, -hd - 0.57, 0.15, "Holz dunkel")
+    g.box(-0.9, -1.3, 0.0, 0.9, 1.3, 0.8, "Zelt grau")                                         # Hindernis (Zeltkoerper unten)
+    g.box(-0.5, -hd - 0.9, 0.0, 0.5, -hd - 0.4, 0.4, "Sack")                                   # Rucksack vor dem Eingang
+
+
+def zeltplatz(b):
+    """Zeltplatz mit Feuerstelle in der Nordostecke: drei Zelte im Kreis, Steinring mit Glut, Baumstamm-Sitze, Tisch mit Baenken, Holzstapel, Dreibein."""
+    x, y = ZELT
+    z = _z(x, y)
+    n = 10
+    ring = [(x + 1.1 * math.cos(2 * math.pi * k / n), y + 1.1 * math.sin(2 * math.pi * k / n), z + 0.03) for k in range(n)]
+    b.add(ring, [tuple(range(n))], "Asche")
+    for k in range(n):                                                                       # Steinring
+        a = 2 * math.pi * k / n
+        px, py = x + 1.2 * math.cos(a), y + 1.2 * math.sin(a)
+        b.box(px - 0.17, py - 0.17, z, px + 0.17, py + 0.17, z + 0.22 + 0.04 * (k % 3), "Stein dunkel" if k % 2 else "Stein alt")
+    BA.kegel(b, x, y, z + 0.03, 0.55, 0.3, "Glut", n=6)
+    for (a, l) in ((0.4, 1.4), (-0.7, 1.2), (2.6, 1.3)):                                    # Holzscheite im Feuer
+        b.beam((x - 0.5 * math.cos(a), y - 0.5 * math.sin(a), z + 0.28), (x + 0.5 * math.cos(a), y + 0.5 * math.sin(a), z + 0.4), 0.1, 0.1, "Rinde")
+    for sx in (-0.75, 0.75):                                                                # Dreibein mit Kessel
+        b.beam((x + sx * 1.6, y + 0.3, z), (x, y, z + 1.9), 0.06, 0.06, "Holz dunkel")
+    b.beam((x, y - 1.6, z), (x, y, z + 1.9), 0.06, 0.06, "Holz dunkel")
+    b.prism(x, y, z + 0.95, 0.2, 0.28, 8, "Eisen")
+    for (a, l) in ((0.3, 2.6), (1.9, 2.6), (3.6, 2.6), (5.0, 2.6)):                         # liegende Baumstaemme als Sitze
+        cx_, cy_ = x + l * math.cos(a), y + l * math.sin(a)
+        tx, ty = -math.sin(a), math.cos(a)
+        b.beam((cx_ - tx * 0.9, cy_ - ty * 0.9, z + 0.2), (cx_ + tx * 0.9, cy_ + ty * 0.9, z + 0.2), 0.36, 0.34, "Rinde")
+        b.bx.append((cx_ - 0.5, cy_ - 0.5, z, cx_ + 0.5, cy_ + 0.5, z + 0.38))
+    for (tx_, ty_, th, mat) in ((x - 5.2, y + 1.0, 100.0, "Zelt gruen"), (x + 1.5, y + 5.0, -10.0, "Zelt ocker"), (x - 3.0, y - 5.0, 190.0, "Zelt gruen")):
+        zelt(b, tx_, ty_, th - th % 90.0 if th % 90.0 else th, mat)
+    tx, ty = x + 4.6, y - 3.4                                                               # Tisch mit Baenken
+    b.box(tx - 0.9, ty - 0.45, z + 0.72, tx + 0.9, ty + 0.45, z + 0.8, "Holz")
+    for (px, py) in ((-0.8, -0.35), (0.8, -0.35), (-0.8, 0.35), (0.8, 0.35)):
+        b.box(tx + px - 0.05, ty + py - 0.05, z, tx + px + 0.05, ty + py + 0.05, z + 0.72, "Holz dunkel")
+    for sy in (-0.85, 0.85):
+        b.box(tx - 0.85, ty + sy - 0.14, z, tx + 0.85, ty + sy + 0.14, z + 0.44, "Holz alt")
+    for k in range(3):                                                                       # Holzstapel
+        b.box(x + 3.0, y + 4.6 + 0.0, z + 0.35 * k, x + 5.0, y + 5.4, z + 0.35 * (k + 1), "Holz" if k % 2 else "Holz alt")
+    b.prism(x - 4.2, y - 2.0, z, 0.35, 0.9, 8, "Holz alt")                                  # Wasserfass
+
+
 def bauen_nord():
     """Liefert [nord_muehle, nord_koehler, nord_jagd]."""
-    a, c, d = Bau("nord_muehle"), Bau("nord_koehler"), Bau("nord_jagd")
+    a, c, d, e, f = Bau("nord_muehle"), Bau("nord_koehler"), Bau("nord_jagd"), Bau("nord_zeltplatz"), Bau("wald_hochsitz")
     muehle(a)
     koehlerhuette(c)
     meiler(c)
     jagdhuette(d)
     hochsitz(d)
     futterkrippe(d)
-    return [a, c, d]
+    zeltplatz(e)
+    hochsitz(f, HOCHSITZ_WALD)
+    return [a, c, d, e, f]

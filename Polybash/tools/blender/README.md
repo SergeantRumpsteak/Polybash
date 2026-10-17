@@ -142,3 +142,11 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - **Gras ueberall**: die pauschale Sperre um die Burg (r < 63 m) ist weg; gesperrt sind jetzt nur noch Burg samt Graben, Boeschung, Bruecken mit Zufahrten, Ringweg und Wege. Damit waechst Gras auf der Wiese zwischen Festung und Kreisstrasse (Baeume bleiben dort weiter tabu).
 - **Huegel detaillierter** (`talkessel.wiesen_netz`): Gitterweite 5 m -> 2,5 m (rund 25 700 Dreiecke), alle inneren Gitterpunkte sind deterministisch bis 0,3 Zellen verschoben und die Diagonalen wechseln unregelmaessig (keine umgeklappten Dreiecke), Talrand und Lochraender bleiben exakt. Damit beginnt kein Huegel mehr an einer langen geraden Gitterkante; zusaetzlich startet `huegel_roh` weich (kein Knick mehr an der Nullhoehenlinie).
 - Hinweis: Tests laufen nur mit Mock-`bpy` (keine echte Blender-Pruefung); Begehbarkeit mit eigenem Raster-Test, Hoehenlinien/Neigungen per Stichprobe.
+
+### Nordanlage zusammengeruckt, Zeltplatz, zweiter Hochsitz, Haeuser am Ringweg (muehle.py, umgebung.py, stadt.py)
+- **Huegel im Huegelland nordlich des Flugplatzes** (x > 200, y > 240) sind um 60 % gedaempft (`umgebung._gelaende_basis`); die Hangneigung an den Bauplaetzen sinkt damit auf <= ~1,3.
+- **Anordnung**: Bockwindmuehle (270, 284), Koehlerhuette mit Meiler (279..289, 264) und der neue **Zeltplatz mit Feuerstelle** in der Nordostecke (290, 290) liegen jetzt dicht beieinander (je ~20 m); Jagdhuette (255, 263), Hochsitz (246, 288) und Futterkrippe bleiben im Westen davon. Weiterhin keine Strasse/kein Weg.
+- **Zeltplatz** (`muehle.zeltplatz`): Steinring mit Glut und Asche, Dreibein mit Kessel, vier Baumstamm-Sitze, drei Firstzelte (Zeltbahn, abgespannt, Rucksack), Tisch mit Baenken, Holzstapel, Wasserfass; Zelte sind niedrige Hindernisse, der Rest ist begehbar.
+- **Zweiter Hochsitz** im Wald suedlich des Flugplatzes bei (250, 43) auf eigenem ebenen Bauplatz (Treppe, Bruestung, Dach), Lichtung im Wald.
+- **Wohnhaeuser am Ringweg** (`stadt.ring_haeuser`): im Nordwest-Quartal zwischen Marktplatz und nordlichem Kreisel stehen auf der Gruenflaeche zwischen Ringweg und Spange Nord jetzt drei weitere Haeuser (Tuer zum Ring, Pfad zum Ringweg); die Flaeche ist als Bauzone eben (`STADT_ZONEN`).
+- Tests nur mit Mock-`bpy` (kein echtes Blender).

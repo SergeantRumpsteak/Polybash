@@ -822,10 +822,11 @@ class Belegt:
         self.strs = strs
         self.kreise = []                      # (x, y, r)
         self.rechtecke = []                   # (x0, y0, x1, y1)
+        self.ring_extra = 8.0                 # Zusatzabstand zum Ringweg (fuer Ringhaeuser kleiner)
 
     def frei(self, x, y, r, rand=0.4, strasse=True):
         ra = math.hypot(x - C, y - C)
-        if ra < U.ring_r(math.atan2(y - C, x - C)) + U.BREITE_WEG / 2 + r + 8.0 or max(abs(x - C), abs(y - C)) < 46.0 + r:
+        if ra < U.ring_r(math.atan2(y - C, x - C)) + U.BREITE_WEG / 2 + r + self.ring_extra or max(abs(x - C), abs(y - C)) < 46.0 + r:
             return False                                   # Burg, Graben und Ringweg
         if not (4.0 + r < x < 296.0 - r and 4.0 + r < y < 296.0 - r):
             return False
@@ -969,6 +970,35 @@ def kreis_haeuser(zentrum, r_innen, strs, belegt, haeuser, pfade, n=9, ohne=(-ma
         door = (cx + (r_innen + 3.2 - vb) * math.cos(a), cy + (r_innen + 3.2 - vb) * math.sin(a))
         start = (cx + (r_innen - 0.3) * math.cos(a), cy + (r_innen - 0.3) * math.sin(a))
         pfade.append((start, door))
+
+
+def ring_haeuser(strs, belegt, haeuser, pfade, a0, a1, schritt=15.0):
+    """Wohnhaeuser an der Aussenseite des Ringwegs (Tuer zum Ring) zwischen den Winkeln a0 < a1 (Bogenmass, 0 = Osten, Mittelpunkt Burg)."""
+    belegt.ring_extra = -3.0
+    a = a0
+    while a < a1:
+        rr = U.ring_r(a)
+        cx, cy = U.C, U.C
+        rad = rr + U.BREITE_WEG / 2 + 3.2                          # Tuer-/Stufenpunkt
+        theta = math.atan2(-math.cos(a), math.sin(a))              # Tuer zeigt zur Burgmitte
+        for typ in typ_folge(len(haeuser)):
+            w, d = typ["w"], typ["d"]
+            tdx = typ["tuer_x"] * typ["spiegel"]
+            hx = cx + rad * math.cos(a) + math.cos(a) * d / 2 - math.sin(a) * tdx
+            hy = cy + rad * math.sin(a) + math.sin(a) * d / 2 + math.cos(a) * tdx
+            ok_e, zb = eben(hx, hy, min(w, d) / 2, 0.15)
+            if ok_e and belegt.frei_haus(hx, hy, theta, w, d, typ_vorbau(typ)):
+                r = max(w, d) / 2 + 1.0
+                belegt.kreise.append((hx, hy, r))
+                haeuser.append({"seed": len(haeuser) + 1, "x": hx, "y": hy, "r": r, "theta": theta, "typ": typ, "zb": zb, "w": w, "d": d, "strasse": "Ringweg"})
+                vb = typ_vorbau(typ) + 0.05
+                pfade.append(((cx + (rr + U.BREITE_WEG / 2 - 0.3) * math.cos(a), cy + (rr + U.BREITE_WEG / 2 - 0.3) * math.sin(a)),
+                              (cx + (rad - vb) * math.cos(a), cy + (rad - vb) * math.sin(a))))
+                a += schritt / (rad + 8.0)
+                break
+        else:
+            a += 0.04
+    belegt.ring_extra = 8.0
 
 
 # ------------------------------------------------------------------ Oeffentliche Gebaeude (ersetzen Wohnhaeuser)
@@ -1130,6 +1160,7 @@ def plane_stadt():
         haeuser_entlang(None, a, e, strs, belegt, haeuser, pfade, abstand=15.5, rand=14.0, zaehler=zaehler, strasse=s)
     # Dorf um den Kreisverkehr im Norden
     kreis_haeuser(DORF_N, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), strasse=S["Kreisverkehr Nord"], scheune_idx=3)
+    ring_haeuser(strs, belegt, haeuser, pfade, 1.95, 2.95)                        # Gruenflaeche im Nordwest-Quartal zwischen Ringweg und Spange Nord
     spezial, plaetze = setze_spezial(strs, belegt, haeuser, pfade)
     # Baeume: deterministisch gestreut in den Zonen, nur auf freiem Boden
     baeume = []
