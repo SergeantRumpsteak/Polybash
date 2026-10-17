@@ -22,25 +22,25 @@ S.FARBEN.update({
     "Fahrspur":    ((0.45, 0.42, 0.37), 1.0, 0.0),
 })
 
-PIT = (10.0, 10.0, 60.0, 60.0)                  # Loch in der Wiese (Raster 5 m)
+PIT = (10.0, 5.0, 60.0, 60.0)                  # Loch in der Wiese (Raster 5 m)
 PIT_Z = -9.0
 G = 1.25                                          # Zellengroesse der Grube
-ZONE = (8.0, 8.0, 100.0, 74.0)                   # ebener Baugrund (STADT_ZONEN)
+ZONE = (8.0, 3.0, 100.0, 80.0)                   # ebener Baugrund (STADT_ZONEN)
 YARD = (60.0, 14.0, 90.0, 60.0)                  # Schotterplatz oestlich der Grube
 GLEIS_Y = BA.GLEIS_Y[3]                          # Verladegleis (y = 27)
 WERKSTATT = (74.0, 63.0)                         # Mitte (16 x 10 m, Tuer nach Sueden)
 BRECHER = (62.0, 30.0, 68.0, 36.0)
 BUNKER = (72.0, 22.0, 80.0, 32.0)
 SPRENG = (28.0, 64.0)                            # Sprengstoffhaeuschen
-BELEGT = ((8.0, 8.0, 63.0, 62.0),              # Grube mit Rand
+BELEGT = ((8.0, 3.0, 63.0, 62.0),              # Grube mit Rand
           (60.0, 12.0, 100.0, 64.0),             # Schotterhof, Brecher, Bunker, Lager, Tor, Waechterhaus
           (62.0, 55.0, 86.0, 70.0),              # Werkstatt mit Vorplatz
           (24.0, 60.0, 33.0, 68.0))              # Sprengstoffhaeuschen
 
 
 # ------------------------------------------------------------------ Talsenke
-SENKE_C = (35.0, 35.0)                           # Mitte der Sohle
-SENKE_R = (10.5, 9.8)                           # Halbachsen der ebenen Sohle (vor der Randstoerung)
+SENKE_C = (35.0, 31.0)                           # Mitte der Sohle
+SENKE_R = (10.5, 12.5)                           # Halbachsen der ebenen Sohle (vor der Randstoerung)
 RIM = 2.1                                        # Rand der Senke bei r = RIM (Hoehe 0)
 
 
@@ -170,7 +170,7 @@ def felsbrocken(b, x, y, z, r, rnd, mat):
 
 
 BROCKEN = []
-NX, NY = 34, 34
+NX, NY = 34, 37
 
 
 def grube(b):

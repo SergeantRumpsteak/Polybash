@@ -73,10 +73,14 @@ RADAR_Z = 17.0                                                        # Drehpunk
 STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz, Rathaus, Wohnviertel)
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
                (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
-               (8.0, 8.0, 100.0, 74.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
+               (8.0, 3.0, 100.0, 80.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
                (84.0, 8.0, 196.0, 40.0),          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
-               (190.0, 20.0, 300.0, 34.0))        # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand)
-TEICHE = ((36.0, 233.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
+               (190.0, 22.0, 300.0, 32.0, 12.0))   # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand); schmal, Huegel duerfen direkt daneben beginnen
+TEICHE = ((16.0, 236.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
+# Burgberg nordlich der Stadt (hinter der Kirche): ebener Gipfel (Radius RUINE_R0) in Hoehe RUINE_Z, Flanken bis RUINE_R1 (siehe ruine.py)
+RUINE = (54.0, 261.0)
+RUINE_Z = 16.0
+RUINE_R0, RUINE_R1 = 14.0, 40.0
 TEICH_Z = -0.4                                    # Wasserspiegel
 # Zaun und Eingang
 GATE_X = 217.0                                                        # Zaunlinie im Westen (zwischen Ring und Flughafenstrasse)
@@ -156,8 +160,9 @@ def _seg_abstand(x, y, p, q):
 _ACHSEN = None
 
 
-KUPPEN = ((255.0, 10.0, 22.0, 9.0), (232.0, 12.0, 14.0, 5.0), (285.0, 14.0, 16.0, 7.0), (60.0, 262.0, 20.0, 9.0), (100.0, 288.0, 16.0, 6.0),
-          (22.0, 268.0, 16.0, 7.0), (236.0, 272.0, 16.0, 7.0), (276.0, 284.0, 14.0, 6.0), (196.0, 290.0, 12.0, 5.0))
+KUPPEN = ((255.0, 10.0, 22.0, 9.0), (232.0, 12.0, 14.0, 5.0), (285.0, 14.0, 16.0, 7.0), (100.0, 288.0, 16.0, 6.0),
+          (22.0, 268.0, 16.0, 7.0), (236.0, 272.0, 16.0, 7.0), (276.0, 284.0, 14.0, 6.0), (196.0, 290.0, 12.0, 5.0),
+          (213.0, 7.0, 11.0, 6.0), (268.0, 6.0, 13.0, 8.0), (244.0, 41.0, 11.0, 6.0), (272.0, 42.0, 12.0, 7.0), (214.0, 40.0, 9.0, 4.0))   # Waldhuegel an der Bahnstrecke
 
 
 def huegel_roh(x, y):
@@ -176,10 +181,11 @@ def huegel_roh(x, y):
 
 def _flach(x, y):
     """Gemeinsame Maske (0..1) ausser der Wegabflachung: Burggelaende, Flugplatz mit Zaun, Talrand."""
-    m = B.smoothstep(0.0, 26.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))   # Flugplatz: x >= 205, y 52..248
+    m = B.smoothstep(0.0, 1.0, math.hypot(max(205.0 - x, 0.0) / 26.0, max(52.0 - y, 0.0) / 14.0, max(y - 248.0, 0.0) / 26.0))   # Flugplatz: x >= 205, y 52..248
     m *= B.smoothstep(0.0, 14.0, min(x, T.TAL - x, y, T.TAL - y))                                # Talrand (dort schliessen die Berge an, z = 0)
-    for x0, y0, x1, y1 in STADT_ZONEN:                                                           # Stadt und Doerfer: ebener Baugrund
-        m *= B.smoothstep(0.0, 20.0, math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
+    for zz in STADT_ZONEN:                                                                       # Stadt und Doerfer: ebener Baugrund
+        x0, y0, x1, y1 = zz[:4]
+        m *= B.smoothstep(0.0, zz[4] if len(zz) > 4 else 20.0, math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
     for tx, ty, tr in TEICHE:                                                                    # rund um Teiche flaches Ufer
         m *= B.smoothstep(tr + 2.0, tr + 20.0, math.hypot(x - tx, y - ty))
     return m
@@ -205,10 +211,16 @@ def gelaende_hoehe(x, y):
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
     h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
+    dr = math.hypot(x - RUINE[0], y - RUINE[1])                                                  # Burgberg: ebener Gipfel, Flanken mit Felsrippen
+    if dr < RUINE_R1 + 22.0:
+        h *= 0.35 + 0.65 * B.smoothstep(RUINE_R1, RUINE_R1 + 22.0, dr)                       # rund um den Burgberg flacheres Land: er ragt heraus
     for tx, ty, tr in TEICHE:                                                                    # Teichmulden
         d = math.hypot(x - tx, y - ty)
         if d < tr + 3.5:
             h -= 2.4 * (1.0 - B.smoothstep(tr - 2.0, tr + 3.5, d))
+    if dr < RUINE_R1:
+        w = (1.0 - B.smoothstep(RUINE_R0, RUINE_R1, dr)) * B.smoothstep(0.0, 14.0, min(x, T.TAL - x, y, T.TAL - y))
+        h = h * (1.0 - w) + (RUINE_Z + 3.2 * (T.fbm(x / 9.0, y / 9.0, T.SEED + 51, 2) - 0.5) * 4.0 * w * (1.0 - w)) * w
     return 0.0 if abs(h) < 1e-9 else h
 
 

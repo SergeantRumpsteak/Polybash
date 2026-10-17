@@ -25,14 +25,24 @@ for _b, _n in (("Dach grau", "Dach grau dunkel"), ("Dach Schiefer", "Dach Schief
     _abgeleitet(_n, _b, 0.72)
 for _b, _n in (("Dach grau", "Dach grau hell"), ("Dach Schiefer", "Dach Schiefer hell")):
     _abgeleitet(_n, _b, 1.25)
+S.FARBEN.update({
+    "Dach rot braun":   ((0.40, 0.25, 0.17), 0.9, 0.0),
+    "Dach rot orange":  ((0.72, 0.38, 0.20), 0.85, 0.0),
+    "Dach rot grau":    ((0.40, 0.29, 0.27), 0.95, 0.0),
+    "Dach ocker":       ((0.66, 0.50, 0.30), 0.9, 0.0),
+    "Dach schwarz":     ((0.14, 0.12, 0.12), 0.9, 0.0),
+    "Dach grau braun":  ((0.34, 0.30, 0.27), 0.9, 0.0),
+    "Dach grau gruen":  ((0.26, 0.31, 0.28), 0.9, 0.0),
+})
 S.FARBEN.setdefault("Stein dunkel", ((0.40, 0.38, 0.35), 0.95, 0.0))
 
+_ROT = (("Dach rot", 3), ("Dach rot alt", 3), ("Dach rot dunkel", 2), ("Dach rot hell", 1), ("Dach rot braun", 2), ("Dach rot orange", 1),
+        ("Dach rot grau", 1), ("Dach ocker", 1), ("Dach schwarz", 1), ("Moos", 1))
+_GRAU = (("Dach grau", 3), ("Dach grau alt", 3), ("Dach grau dunkel", 3), ("Dach grau hell", 1), ("Dach grau braun", 2), ("Dach grau gruen", 1),
+         ("Dach schwarz", 1), ("Dach rot alt", 1), ("Moos", 1))
 POOLS = {
-    "Dach rot":         (("Dach rot", 4), ("Dach rot alt", 4), ("Dach rot dunkel", 2), ("Dach rot hell", 1), ("Moos", 1)),
-    "Dach rot alt":     (("Dach rot", 2), ("Dach rot alt", 5), ("Dach rot dunkel", 3), ("Moos", 2)),
-    "Dach grau":        (("Dach grau", 4), ("Dach grau alt", 3), ("Dach grau dunkel", 2), ("Dach grau hell", 1), ("Moos", 1)),
-    "Dach grau alt":    (("Dach grau", 2), ("Dach grau alt", 4), ("Dach grau dunkel", 3), ("Moos", 2)),
-    "Dach Schiefer":    (("Dach Schiefer", 5), ("Dach Schiefer dunkel", 3), ("Dach Schiefer hell", 1), ("Moos", 1)),
+    "Dach rot": _ROT, "Dach rot alt": _ROT, "Ziegel": _ROT, "Ziegel alt": _ROT, "Ziegel dunkel": _ROT, "Ziegel dunkel alt": _ROT, "Dach grau": _GRAU, "Dach grau alt": _GRAU,
+    "Dach Schiefer": (("Dach Schiefer", 4), ("Dach Schiefer dunkel", 3), ("Dach Schiefer hell", 1), ("Dach grau gruen", 2), ("Dach schwarz", 1), ("Moos", 1)),
 }
 
 
@@ -74,6 +84,8 @@ def dachbelag(g, P, nrm, dm):
         hx, hy = 1.0, 0.0
     key = lambda p: p[0] * hx + p[1] * hy
     nr = max(3, min(40, int(round((z1 - z0) / 0.3))))
+    haupt = [rnd.choice(pl) for _ in range(3)]                                      # drei vorherrschende Toene dieses Dachs
+    flicken = [(rnd.randrange(nr), rnd.randint(1, 4), rnd.random(), rnd.uniform(0.15, 0.4), rnd.choice(pl)) for _ in range(rnd.randint(2, 5))]
     for k in range(nr):
         za, zb = z0 + (z1 - z0) * (k + 0.02) / nr, z0 + (z1 - z0) * (k + 0.98) / nr
         sa, sb = _schnitt(P, za), _schnitt(P, zb)
@@ -84,13 +96,17 @@ def dachbelag(g, P, nrm, dm):
         lng = math.hypot(b0[0] - a0[0], b0[1] - a0[1])
         t = (0.0 if k % 2 == 0 else rnd.uniform(0.0, 0.8) / max(lng, 0.5))
         while t < 0.999:
-            w = rnd.uniform(0.8, 2.6) / max(lng, 0.5)
+            w = rnd.uniform(0.5, 1.8) / max(lng, 0.5)
             t1 = min(1.0, t + w)
             if rnd.random() > 0.04 and t1 - t > 0.02:
                 o = rnd.uniform(0.02, 0.07)
                 o2 = o + 0.015
                 lerp = lambda A, B, u, off: (A[0] + (B[0] - A[0]) * u + nx * off, A[1] + (B[1] - A[1]) * u + ny * off, A[2] + (B[2] - A[2]) * u + nz * off)
-                g.poly([lerp(a0, b0, t, o), lerp(a0, b0, t1, o), lerp(a1, b1, t1, o2), lerp(a1, b1, t, o2)], nrm, rnd.choice(pl))
+                m = rnd.choice(haupt) if rnd.random() < 0.45 else rnd.choice(pl)
+                for (fk, fh, ft, fw, fm) in flicken:
+                    if fk <= k < fk + fh and ft <= t < ft + fw:
+                        m = fm
+                g.poly([lerp(a0, b0, t, o), lerp(a0, b0, t1, o), lerp(a1, b1, t1, o2), lerp(a1, b1, t, o2)], nrm, m)
             t = t1
 
 

@@ -1107,7 +1107,9 @@ def plane_stadt():
     belegt.rechtecke.append(PLATZ)
     import bahn as BA                                  # Steinbruch + Bahnhof (importieren stadt -> erst hier)
     import steinbruch as SB
-    belegt.rechtecke.extend(BA.BELEGT + SB.BELEGT)
+    import bauernhof as FA
+    import ruine as RU
+    belegt.rechtecke.extend(BA.BELEGT + SB.BELEGT + FA.BELEGT + RU.BELEGT)
     # Haeuser entlang der Strassen
     zaehler = [0]
     for nm in ("Marktring",):
@@ -1136,7 +1138,7 @@ def plane_stadt():
                 continue
             x = ix + 6 * T._h01(ix, iy, 992)
             y = iy + 6 * T._h01(ix, iy, 993)
-            if not any(z0 - 6 <= x <= z2 + 6 and z1 - 6 <= y <= z3 + 6 for z0, z1, z2, z3 in U.STADT_ZONEN):
+            if not any(z0 - 6 <= x <= z2 + 6 and z1 - 6 <= y <= z3 + 6 for z0, z1, z2, z3 in (zz[:4] for zz in U.STADT_ZONEN)):
                 continue
             if abs(U.gelaende_hoehe(x, y)) > 0.35 or not belegt.frei(x, y, 2.0, rand=1.5):
                 continue
@@ -1194,7 +1196,10 @@ def baue_alles():
         t.add([(tx + rr * math.cos(2 * math.pi * i / n), ty + rr * math.sin(2 * math.pi * i / n), U.TEICH_Z) for i in range(n)], [tuple(range(n))], "Teichwasser")
     import bahn as BA                                  # Gleise, Bahnhof, Zuege und Steinbruch (steinbruch.py)
     import steinbruch as SB
-    return [w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch()
+    import bauernhof as FA
+    import wald as WA
+    import ruine as RU
+    return [w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + WA.bauen_wald() + RU.bauen_ruine()
 
 
 def bauen():
