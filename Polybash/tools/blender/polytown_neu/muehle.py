@@ -33,7 +33,7 @@ for _n, _c in (("Sack", ((0.66, 0.60, 0.46), 1.0, 0.0)), ("Kohle", ((0.07, 0.07,
                ("Gras 2", ((0.36, 0.52, 0.19), 1.0, 0.0)), ("Gras 3", ((0.21, 0.37, 0.13), 1.0, 0.0)), ("Bruch Erde", ((0.34, 0.27, 0.20), 1.0, 0.0)), ("Stroh", ((0.82, 0.72, 0.40), 1.0, 0.0))):
     S.FARBEN.setdefault(_n, _c)
 
-MUEHLE = (270.0, 284.0, -90.0)           # Mitte, Drehung in Grad (nur Vielfache von 90: die Hindernisse sind achsenparallele Quader); Fluegel nach Westen
+MUEHLE = (270.0, 284.0, -45.0)           # Mitte, Drehung in Grad (-45: Fluegel nach Suedwesten; schraege Hindernisse werden als Kacheln gebaut)
 KOEHLER = (279.5, 264.0, 90.0)           # Huette, Tuer nach Osten zum Meiler
 MEILER = (288.5, 264.0)
 JAGD = (255.3, 263.5, 0.0)               # Blockhaus, Tuer nach Sueden
@@ -92,6 +92,7 @@ def muehle(b):
     cx, cy, th = MUEHLE
     zb = _z(cx, cy)
     g = Lok(b, cx, cy, zb, math.radians(th))
+    g.kachel = 0.25
     rnd = random.Random(404)
     ZF, hw, hd, t = 2.8, 1.9, 2.5, 0.14
     H = ZF + 3.1
@@ -296,6 +297,7 @@ def muehle(b):
     cx, cy, th = MUEHLE
     zb = _z(cx, cy)
     g = Lok(b, cx, cy, zb, math.radians(th))
+    g.kachel = 0.25
     rnd = random.Random(404)
     ZF, hw, hd, t = 2.8, 1.9, 2.5, 0.14
     H = ZF + 3.1

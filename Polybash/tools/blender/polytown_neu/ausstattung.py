@@ -169,7 +169,7 @@ def _footprint(x, y, th, w, d):
     return (x - w / 2, y - d / 2, x + w / 2, y + d / 2)
 
 
-def _ort_ok(R, P, x, y, th, w, d, zb_tol=0.3):
+def _ort_ok(R, P, x, y, th, w, d, zb_tol=0.3, teich_ok=False):
     x0, y0, x1, y1 = _footprint(x, y, th, w, d)
     if x0 < 6 or y0 < 6 or x1 > 294 or y1 > 294:
         return False, 0.0
@@ -185,23 +185,21 @@ def _ort_ok(R, P, x, y, th, w, d, zb_tol=0.3):
             if S.strassenabstand(px, py, strs) < 0.15:
                 return False, 0.0
     for tx, ty, tr in U.TEICHE:
-        if math.hypot(x - tx, y - ty) < tr + 3.0:
+        if math.hypot(x - tx, y - ty) < tr + (2.6 if teich_ok else 3.0):
             return False, 0.0
     return True, zb
 
 
 # Kandidaten: (x, y, th)
-BRUNNEN_STEIN = ((41.6, 137.6, 90), (68.4, 137.6, 270), (41.6, 162.4, 90), (68.4, 162.4, 270),            # Marktplatz (Ecken)
-                 (207.5, 137.0, 270), (207.5, 163.0, 270), (92.0, 144.0, 0),                              # Burgring, Hauptstrasse
-                 (143.5, 230.0, 90), (156.5, 232.0, 270), (143.5, 214.0, 90),                             # Dorf Nord
-                 (136.5, 54.5, 90), (163.5, 54.5, 270), (141.0, 50.0, 90),                                # Bahnhofsvorplatz
-                 (53.0, 80.2, 180), (47.0, 80.2, 180))                                                    # Bauernhof Zufahrt
-BRUNNEN_STAHL = ((232.2, 146.0, 270), (232.2, 156.0, 270), (221.0, 146.0, 90), (221.0, 156.0, 90),        # Flugplatz (Strasse x = 226)
-                 (283.5, 281.0, 90), (284.0, 297.0, 0), (294.0, 281.0, 270),                             # Zeltplatz
-                 (86.0, 36.0, 180), (86.0, 66.0, 90), (90.0, 52.0, 270),                                  # Steinbruch
-                 (262.5, 36.0, 0), (196.0, 36.0, 0), (210.0, 40.0, 0))                                    # an der Bahn
+# Trinkbrunnen: je Gebiet nur einer (erster passender Kandidat) - dort, wo Menschen sich aufhalten
+BRUNNEN_STEIN = (("Marktplatz", ((68.4, 137.6, 270), (41.6, 137.6, 90), (68.4, 162.4, 270), (41.6, 162.4, 90))),
+                 ("Dorf Nord", ((143.5, 230.0, 90), (156.5, 232.0, 270), (143.5, 214.0, 90))),
+                 ("Bahnhofsvorplatz", ((136.5, 54.5, 90), (163.5, 54.5, 270), (141.0, 50.0, 90))))
+BRUNNEN_STAHL = (("Flugplatz Tower", ((232.2, 156.0, 270), (232.2, 146.0, 270), (221.0, 156.0, 90))),
+                 ("Zeltplatz", ((283.5, 281.0, 90), (284.0, 297.0, 0), (294.0, 281.0, 270))),
+                 ("Steinbruch", ((86.0, 36.0, 180), (86.0, 66.0, 90), (90.0, 52.0, 270))))
 
-HALT = (  # (Name, Kandidaten (x, y, th)) - Vorderseite zur Strasse
+HALT = (  # (Name, Kandidaten (x, y, th)) - Vorderseite zur Strasse; keine Haltestellen im Flughafen (x > 205)
     ("Nordstrasse O", [(154.7, y, 270) for y in (222.0, 214.0, 232.0, 208.0)]),
     ("Nordstrasse W", [(145.3, y, 90) for y in (232.0, 222.0, 214.0)]),
     ("Suedstrasse W", [(145.3, y, 90) for y in (82.0, 76.0, 88.0, 70.0)]),
@@ -209,45 +207,67 @@ HALT = (  # (Name, Kandidaten (x, y, th)) - Vorderseite zur Strasse
     ("Markt Ost", [(x, 145.5, 180) for x in (74.5, 77.5, 72.0)]),
     ("Markt West", [(x, 154.5, 0) for x in (33.0, 35.5, 31.0)]),
     ("Hauptstrasse", [(x, 154.5, 0) for x in (88.0, 85.0, 90.5)]),
-    ("Flughafenstrasse O", [(231.9, y, 270) for y in (120.0, 112.0, 128.0, 135.0, 120.0)]),
-    ("Flughafenstrasse W", [(220.1, y, 90) for y in (190.0, 200.0, 125.0, 105.0, 175.0)]),
-    ("Flughafenstrasse W2", [(220.1, y, 90) for y in (95.0, 85.0, 135.0, 210.0)]),
 )
 
-BAENKE_PLATZ = ((55.0, 144.2, 180), (55.0, 155.8, 0), (49.2, 150.0, 90), (60.8, 150.0, 270))              # um den Marktbrunnen, Blick zur Mitte
-# Strassenbaenke: Strassenmitten (achsenparallel), Seite, Bereich, Abstand
-STRASSEN = (("x", 150.0, 207.0, 238.0, 3.9), ("x", 150.0, 66.0, 94.0, 3.9),                              # Nord-/Suedstrasse (x = const)
-            ("y", 150.0, 29.0, 39.0, 3.9), ("y", 150.0, 71.0, 81.0, 3.9), ("y", 150.0, 83.0, 93.0, 3.9),  # Markt West/Ost, Hauptstrasse
-            ("x", 226.0, 70.0, 230.0, 5.2), ("y", 150.0, 150.0, 220.0, 5.2))                             # Flughafenstrasse, Zubringer
+# Rastplaetze auf Gruenflaechen: Anker (x, y, Suchradius) - dort wird der naechste ebene, freie Grasplatz fuer Tisch + zwei Baenke gesucht
+RASTPLAETZE = ((113.0, 192.0, 14.0), (30.0, 108.0, 16.0), (25.0, 205.0, 14.0), (172.0, 226.0, 16.0), (186.0, 118.0, 18.0),
+               (118.0, 100.0, 14.0), (176.0, 74.0, 14.0), (208.0, 270.0, 14.0), (70.0, 255.0, 14.0))
 
 
-def _kandidaten_baenke():
-    out = []
-    for (ach, c, a0, a1, off) in STRASSEN:
-        pos = a0 + 3.0
-        k = 0
-        while pos < a1 - 2.0:
-            for sg in (-1, 1):
-                if (k + (1 if sg > 0 else 0)) % 2:
-                    continue
-                if ach == "x":                                  # Strasse laeuft in y, Bank neben ihr, Blick zur Strasse
-                    out.append((c + sg * off, pos, 90 if sg < 0 else 270))
-                else:
-                    out.append((pos, c + sg * off, 180 if sg < 0 else 0))
-            pos += 14.0
-            k += 1
-    return out
+def tisch(b, x, y, zb, th):
+    """Picknicktisch 1,8 x 0,8 m (Tischlaenge lokal x) mit Beinpaaren."""
+    g = Lok(b, x, y, zb, math.radians(th))
+    g.box(-0.9, -0.4, 0.74, 0.9, 0.4, 0.78, "Holz")
+    for sx in (-0.7, 0.7):
+        g.box(sx - 0.05, -0.33, 0.0, sx + 0.05, 0.33, 0.74, "Holz dunkel")
+    return b
+
+
+def seerosen(b, tx, ty, tr, nr):
+    """Seerosenblaetter (achteckige Scheiben mit Einschnitt, in Flecken) und Bluetenkelche auf dem Teich (Wasserspiegel U.TEICH_Z)."""
+    import talkessel as T
+    z = U.TEICH_Z + 0.03
+    for k in range(70 + 14 * nr):
+        a = T._h01(k, nr, 7001) * 6.2832
+        r = (tr + 0.5) * math.sqrt(T._h01(k, nr, 7002)) * 0.93
+        px, py = tx + r * math.cos(a), ty + r * math.sin(a)
+        fl = T.fbm(px / 3.0, py / 3.0, T.SEED + 611, 2)
+        if fl < 0.42 and T._h01(k, nr, 7003) > 0.12:
+            continue
+        rad = 0.22 + 0.30 * T._h01(k, nr, 7004)
+        ph = T._h01(k, nr, 7005) * 6.2832
+        n = 9
+        ring = [(px + rad * math.cos(ph + 0.35 + (6.2832 - 0.7) * i / (n - 1)), py + rad * math.sin(ph + 0.35 + (6.2832 - 0.7) * i / (n - 1)), z) for i in range(n)]
+        b.add([(px, py, z + 0.015)] + ring, [(0, 1 + i, 2 + i) for i in range(n - 1)], "Seerose Blatt" if T._h01(k, nr, 7006) > 0.3 else "Seerose Blatt hell")
+        if T._h01(k, nr, 7007) < 0.28:                                              # Bluete: Kranz aus 6 Blaettern ueber einer gelben Mitte
+            bx_, by_ = px + 0.1 * math.cos(ph), py + 0.1 * math.sin(ph)
+            mat = "Seerose weiss" if T._h01(k, nr, 7008) < 0.6 else "Seerose rosa"
+            for j in range(6):
+                aj = ph + j * 1.0472
+                tip = (bx_ + 0.16 * math.cos(aj), by_ + 0.16 * math.sin(aj), z + 0.13)
+                l_ = (bx_ + 0.05 * math.cos(aj - 0.5), by_ + 0.05 * math.sin(aj - 0.5), z + 0.02)
+                r_ = (bx_ + 0.05 * math.cos(aj + 0.5), by_ + 0.05 * math.sin(aj + 0.5), z + 0.02)
+                b.add([l_, r_, tip], [(0, 1, 2), (2, 1, 0)], mat)
+            b.prism(bx_, by_, z + 0.01, 0.04, 0.06, 5, "Seerose Mitte")
+
+
+S.FARBEN.update({"Seerose Blatt": ((0.12, 0.34, 0.14), 0.7, 0.0), "Seerose Blatt hell": ((0.22, 0.45, 0.18), 0.7, 0.0),
+                 "Seerose weiss": ((0.95, 0.94, 0.88), 0.6, 0.0), "Seerose rosa": ((0.93, 0.60, 0.72), 0.6, 0.0), "Seerose Mitte": ((0.95, 0.78, 0.15), 0.6, 0.0)})
+for _k in ("Seerose Blatt", "Seerose Blatt hell", "Seerose weiss", "Seerose rosa", "Seerose Mitte"):
+    U.FARBEN.setdefault(_k, S.FARBEN[_k])
 
 
 def bauen(gruppen, P):
-    """Gruppe 'ausstattung': Trinkbrunnen, Bushaltestellen und Baenke (nach allen anderen Gruppen aufrufen)."""
+    """Gruppen 'ausstattung' (Brunnen, Haltestellen, Rastplaetze mit Tisch und Baenken, Teichbaenke) und 'seerosen'."""
+    import gras as GR
     R = _Raster(gruppen)
+    M = GR.maske(P)
     del PLATZIERT[:]
     b = Bau("ausstattung")
     belegt = []
 
-    def setze(fn, x, y, th, w, d):
-        ok, zb = _ort_ok(R, P, x, y, th, w, d)
+    def setze(fn, x, y, th, w, d, **kw):
+        ok, zb = _ort_ok(R, P, x, y, th, w, d, **kw)
         if not ok:
             return False
         for (bx0, by0, bx1, by1) in belegt:
@@ -259,29 +279,71 @@ def bauen(gruppen, P):
         belegt.append(_footprint(x, y, th, w, d))
         return True
 
-    for kand in (BRUNNEN_STEIN, BRUNNEN_STAHL):
-        fn = trinkbrunnen_stein if kand is BRUNNEN_STEIN else trinkbrunnen_stahl
-        w, d = (2.6, 2.0) if kand is BRUNNEN_STEIN else (1.4, 1.4)
-        gesetzt = 0
-        for (x, y, th) in kand:
-            if gesetzt >= (4 if kand is BRUNNEN_STEIN else 4):
-                break
-            # nur ein Brunnen je Gebiet (Abstand > 25 m zu bereits gesetzten gleicher Art)
-            if any(math.hypot(x - bx, y - by) < 25.0 for (bx, by) in ABGESETZT.get(fn.__name__, [])):
-                continue
-            if setze(fn, x, y, th, w, d):
-                ABGESETZT.setdefault(fn.__name__, []).append((x, y))
-                gesetzt += 1
+    def gras_ok(x0, y0, x1, y1):
+        """Alle Stichproben des Rechtecks sind Grasflaeche (nicht Strasse, Wasser, Graben, Hof, Flugplatz)."""
+        for k in range(5):
+            for m in range(5):
+                px, py = x0 + (x1 - x0) * k / 4, y0 + (y1 - y0) * m / 4
+                if M.im_flug(px, py) or not M.ok(px, py, flug_gras=False):
+                    return False
+        return True
+
+    for kand, fn, (w, d) in ((BRUNNEN_STEIN, trinkbrunnen_stein, (2.6, 2.0)), (BRUNNEN_STAHL, trinkbrunnen_stahl, (1.4, 1.4))):
+        for (_name, liste) in kand:
+            for (x, y, th) in liste:
+                if setze(fn, x, y, th, w, d):
+                    break
     for (name, kand) in HALT:
         for (x, y, th) in kand:
-            if setze(bushaltestelle, x, y, th, 5.8, 2.6):
+            if x < 205.0 and setze(bushaltestelle, x, y, th, 5.8, 2.6):
                 break
-    for (x, y, th) in BAENKE_PLATZ:
-        setze(bank, x, y, th, 1.8, 0.7)
-    for (x, y, th) in _kandidaten_baenke():
-        setze(bank, x, y, th, 1.8, 0.7)
+    # Rastplaetze: Tisch (Laenge entlang u) mit zwei einander gegenueberstehenden Baenken, nur auf Gras, nicht im Flughafen
+    for si, (ax, ay, rad) in enumerate(RASTPLAETZE):
+        gefunden = False
+        for ring in range(0, int(rad // 2) + 1):
+            if gefunden:
+                break
+            for k in range(max(1, 8 * ring)):
+                a = 6.2832 * k / max(1, 8 * ring) + si
+                x, y = ax + 2.0 * ring * math.cos(a), ay + 2.0 * ring * math.sin(a)
+                for rot in ((0, 90) if si % 2 == 0 else (90, 0)):
+                    w, d = 2.2, 3.7
+                    x0, y0, x1, y1 = _footprint(x, y, rot, w, d)
+                    if not gras_ok(x0 - 1.0, y0 - 1.0, x1 + 1.0, y1 + 1.0):
+                        continue
+                    ok0, _zb = _ort_ok(R, P, x, y, rot, w + 0.6, d + 0.6)
+                    if not ok0:
+                        continue
+                    c, sn = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+                    ok1 = setze(tisch, x, y, rot, 1.8, 0.8)
+                    if not ok1:
+                        continue
+                    for v, th in ((1.15, rot), (-1.15, rot + 180)):
+                        setze(bank, x - v * sn, y + v * c, th % 360, 1.8, 0.7)
+                    gefunden = True
+                    break
+                if gefunden:
+                    break
+    # Teiche: Einzelbaenke am Ufer mit Blick zum Wasser (Achsenrichtungen; hoechstens zwei je Teich, auf Gras)
+    for ti, (tx, ty, tr) in enumerate(U.TEICHE):
+        d = tr + 3.6
+        n = 0
+        for (dx, dy, th) in ((0, -1, 180), (-1, 0, 90), (1, 0, 270), (0, 1, 0)):     # Bank steht in Richtung (dx, dy) vom Teich, schaut zur Mitte
+            if n >= 2:
+                break
+            x, y = tx + dx * d, ty + dy * d
+            w, dd = 1.8, 0.7
+            x0, y0, x1, y1 = _footprint(x, y, th, w, dd)
+            if not gras_ok(x0, y0, x1, y1):
+                continue
+            if setze(bank, x, y, th, w, dd, zb_tol=0.5, teich_ok=True):
+                n += 1
     ABGESETZT.clear()
-    return [b]
+    # Seerosen auf allen Teichen
+    sr = Bau("seerosen")
+    for ti, (tx, ty, tr) in enumerate(U.TEICHE):
+        seerosen(sr, tx, ty, tr, ti)
+    return [b, sr]
 
 
 ABGESETZT = {}

@@ -51,6 +51,68 @@ def _flug_raster():
     return belegt
 
 
+GRUPPEN = []                  # alle fertigen Baugruppen (von stadt.baue_alles gesetzt): Grundlage fuer den Belag-Raster der Grosszonen
+GROSSZONE = 700.0             # Rechtecke ab dieser Flaeche sind Zonen (Bahnhof, Steinbruch, Hof ...), keine Gebaeude: dort zaehlt nur echter Belag
+_ZONEN_AUS = ((40.0, 135.0, 70.0, 165.0),)                               # Marktplatz: gepflastert, bleibt gesperrt
+
+
+def _grosszonen(P):
+    return [r for r in P["belegt"].rechtecke if (r[2] - r[0]) * (r[3] - r[1]) >= GROSSZONE and tuple(r) not in _ZONEN_AUS]
+
+
+def _belag_raster(P):
+    """0,5-m-Zellen in den Grosszonen, die von echter Geometrie belegt sind (Flaechen/Waende/Quader knapp ueber dem Boden, Grube/Loecher)."""
+    key = ("belag", id(P))
+    if key in _MASKE:
+        return _MASKE[key]
+    zonen = _grosszonen(P)
+    belegt = set()
+    Q = 0.5
+
+    def in_zone(x0, y0, x1, y1):
+        return any(x0 < r[2] and x1 > r[0] and y0 < r[3] and y1 > r[1] for r in zonen)
+
+    for g in GRUPPEN:
+        if g.name in ("gras", "wald", "laternen") or g.name.startswith("grenze"):
+            continue
+        v = g.v
+        for f in g.f:
+            vs = [v[i] for i in f]
+            x0, x1 = min(p[0] for p in vs), max(p[0] for p in vs)
+            y0, y1 = min(p[1] for p in vs), max(p[1] for p in vs)
+            if not in_zone(x0, y0, x1, y1):
+                continue
+            zmin = min(p[2] for p in vs)
+            if zmin > U.gelaende_hoehe((x0 + x1) / 2, (y0 + y1) / 2) + 1.0 and zmin > 1.5:
+                continue
+            # flache Polygone (Belag): Zellmitten im Polygon; steile/duenne (Waende, Pfosten): Bounding Box
+            n = len(vs)
+            area = 0.0
+            for k in range(n):
+                area += vs[k][0] * vs[(k + 1) % n][1] - vs[(k + 1) % n][0] * vs[k][1]
+            area = abs(area) / 2
+            ix0, ix1, iy0, iy1 = int(x0 / Q), int(x1 / Q), int(y0 / Q), int(y1 / Q)
+            if area < 0.02 or (ix1 - ix0 + 1) * (iy1 - iy0 + 1) <= 4:
+                for ix in range(ix0, ix1 + 1):
+                    for iy in range(iy0, iy1 + 1):
+                        belegt.add((ix, iy))
+                continue
+            for ix in range(ix0, ix1 + 1):
+                px = (ix + 0.5) * Q
+                for iy in range(iy0, iy1 + 1):
+                    py = (iy + 0.5) * Q
+                    ins = False
+                    j = n - 1
+                    for k in range(n):
+                        if (vs[k][1] > py) != (vs[j][1] > py) and px < (vs[j][0] - vs[k][0]) * (py - vs[k][1]) / (vs[j][1] - vs[k][1]) + vs[k][0]:
+                            ins = not ins
+                        j = k
+                    if ins:
+                        belegt.add((ix, iy))
+    _MASKE[key] = belegt
+    return belegt
+
+
 class Maske:
     """Entscheidet, ob (x, y) Grasflaeche ist (fuer Gras und Baeume)."""
 
@@ -62,6 +124,9 @@ class Maske:
         um = U.rund(U.UMFAHRUNG, U.RC, geschlossen=True)
         self.aussen += [(um[i], um[(i + 1) % len(um)]) for i in range(len(um))]
         self.flug = _flug_raster()
+        self.haus_kreise = {(round(h["x"], 3), round(h["y"], 3)) for h in P["haeuser"]}
+        self.haus_rechtecke = [(h["x"], h["y"], math.cos(h["theta"]), math.sin(h["theta"]), h["w"] / 2, h["d"] / 2) for h in P["haeuser"]]
+        self.zonen = _grosszonen(P)
 
     def _burg_gras(self, x, y):
         """Gras im Burgumfeld nur dort, wo wirklich Wiese ist: nicht in der Burg, im Graben samt Boeschung, auf den Bruecken-Zufahrten und dem Ringweg."""
@@ -75,50 +140,68 @@ class Maske:
             return False
         return abs(math.hypot(x - U.C, y - U.C) - U.ring_r(math.atan2(y - U.C, x - U.C))) > U.BREITE_WEG / 2 + 0.7
 
+    @property
+    def belag(self):
+        return _belag_raster(self.P) if GRUPPEN else set()
+
     def im_flug(self, x, y):
         return x >= 200.0 and 46.0 <= y <= 254.0
 
-    def ok(self, x, y, flug_gras=True, baum=False):
+    def grund(self, x, y, flug_gras=True, baum=False):
+        """Grund, warum (x, y) keine Grasflaeche ist (None = Grasflaeche)."""
         P = self.P
         if not (1.0 < x < 299.0 and 1.0 < y < 299.0):
-            return False
+            return 'rand'
         if baum and math.hypot(x - U.C, y - U.C) < 63.0:                                 # Baeume: nicht rund um die Burg und den Ringweg
-            return False
+            return 'baum_burg'
         if not self._burg_gras(x, y):
-            return False
+            return 'burg'
         if 19.0 < y < 35.0 and x > 84.0:                                                  # Gleiskorridor
-            return False
+            return 'gleis'
         if math.hypot(x - U.RUINE[0], y - U.RUINE[1]) < 15.5:                            # Burgplateau
-            return False
+            return 'ruine'
         if baum:                                                                          # Baeume: nur der eingezaeunte Flugplatz ist tabu (Wald reicht bis an den Zaun)
             gx0, gy0, gx1, gy1 = U.ZAUN
             if gx0 - 3.0 < x and gy0 - 2.5 < y < gy1 + 2.5:
-                return False
+                return 'baum_flug'
         elif self.im_flug(x, y):
             if not flug_gras or (int(x), int(y)) in self.flug:
-                return False
+                return 'flug'
         b = P["belegt"]
         for (x0, y0, x1, y1) in b.rechtecke:
             if x0 - 0.5 < x < x1 + 0.5 and y0 - 0.5 < y < y1 + 0.5:
-                return False
+                if not baum and (x1 - x0) * (y1 - y0) >= GROSSZONE and tuple((x0, y0, x1, y1)) not in _ZONEN_AUS and self.belag:
+                    if (int(x / 0.5), int(y / 0.5)) in self.belag or U.gelaende_hoehe(x, y) < -0.4:
+                        return 'belag'
+                    continue
+                return 'rechtecke'
         for (cx, cy, r) in b.kreise:
-            if math.hypot(x - cx, y - cy) < r + 0.3:
-                return False
+            if math.hypot(x - cx, y - cy) < r + 0.3 and (round(cx, 3), round(cy, 3)) not in self.haus_kreise:
+                return 'kreise'
+        for (hx, hy, c, sn, w2, d2) in self.haus_rechtecke:                               # Haeuser: nur der echte Grundriss samt Stufen (nicht der Sicherheitskreis)
+            if abs(x - hx) < 12.0 and abs(y - hy) < 12.0:
+                dx, dy = x - hx, y - hy
+                lx, ly = dx * c + dy * sn, -dx * sn + dy * c
+                if abs(lx) < w2 + 0.9 and -d2 - 1.8 < ly < d2 + 0.9:
+                    return 'haus'
         for (x0, y0, x1, y1) in P["plaetze"]:
             if x0 - 0.5 < x < x1 + 0.5 and y0 - 0.5 < y < y1 + 0.5:
-                return False
+                return 'plaetze'
         for tx, ty, tr in U.TEICHE:
             if math.hypot(x - tx, y - ty) < tr + 1.2:
-                return False
+                return 'teich'
         if S.strassenabstand(x, y, self.strs) < 0.6:
-            return False
+            return 'strasse'
         for a, c in P["pfade"]:
             if U._seg_abstand(x, y, a, c) < 1.4:
-                return False
+                return 'pfad'
         for a, c in self.aussen:
             if U._seg_abstand(x, y, a, c) < U.BREITE_WEG / 2 + 0.6:
-                return False
-        return True
+                return 'aussen'
+        return None
+
+    def ok(self, x, y, flug_gras=True, baum=False):
+        return self.grund(x, y, flug_gras, baum) is None
 
     def pistennah(self, x, y):
         """Abstand zum Belag am Flugplatz < 4 m (dort nur Kurzgras)."""

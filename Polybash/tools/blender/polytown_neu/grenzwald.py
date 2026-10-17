@@ -2,8 +2,7 @@
 
 Das Bergland beginnt am Talrand mit sanften Auslaeufern (talkessel.hoehe_roh: nur wenige Meter in den ersten 15 m) - ohne diesen Guertel
 koennte man einfach hinauslaufen. Deshalb:
-  * Sperrriegel (Abstand d = 0,6 .. 5 m vom Rand): zwei gegeneinander versetzte Reihen grosser Felsbloecke (Radius 1,4 .. 2,2 m, Abstand 2,2 m);
-    die Hindernisquader ueberlappen sich, es bleibt keine Luecke - auch nicht in den abgerundeten Ecken.
+  * Randsteine (Abstand d = 1,3 .. 3,7 m vom Rand): nur vereinzelt liegende Steine und kleine Bloecke (keine geschlossene Wand);
   * Dichter Nadel-/Mischwald dahinter (d = 4 .. 32 m, Reihen mit wachsendem Abstand) mit Stamm-Hindernissen,
   * zunehmend grosse Felsen und Felsgruppen (d bis 45 m), die in die Felswaende des Gebirges (talkessel.berg_netz) uebergehen,
   * steile Haenge bekommen statt Baeumen Felsbrocken.
@@ -119,9 +118,11 @@ def objekte():
             h = T._h01(k, ri, 91)
             if _bahn_luecke(x, y, d):
                 continue
-            x += (T._h01(k, ri, 92) - 0.5) * 0.5
-            y += (T._h01(k, ri, 93) - 0.5) * 0.5
-            out.append((x, y, "fels", 1.5 + 0.7 * h, d))
+            if T._h01(k, ri, 97) > 0.17:                                   # nur vereinzelte Steine, keine geschlossene Wand
+                continue
+            x += (T._h01(k, ri, 92) - 0.5) * 3.0
+            y += (T._h01(k, ri, 93) - 0.5) * 3.0
+            out.append((x, y, "fels", 0.45 + 0.35 * h * h * 2.6 if h > 0.8 else 0.4 + 0.7 * h, d))
     # --- Bahneinschnitt: Felsen beidseits der Schlucht (Gleis 3) bis zum Tunnelportal, damit man nicht seitlich hinter den Riegel gelangt
     for sg in (-1, 1):
         for ri in range(2):
@@ -130,7 +131,11 @@ def objekte():
             xx = TAL + 0.5 + 1.1 * ri
             while xx < T.TUNNEL_X + T.TUNNEL_L + 4.0:
                 h = T._h01(k, ri + 5 * (sg + 1), 95)
-                out.append((xx, yy + (T._h01(k, ri, 96) - 0.5) * 0.5, "fels", 1.5 + 0.7 * h, 5.0))
+                if h < 0.8:                                                    # nur einzelne Felsen an den Boeschungen
+                    xx += SCHRITT
+                    k += 1
+                    continue
+                out.append((xx, yy + (T._h01(k, ri, 96) - 0.5) * 1.5, "fels", 0.9 + 0.8 * (h - 0.8) * 5, 5.0))
                 xx += SCHRITT
                 k += 1
     # --- Waldguertel in Reihen, nach aussen lockerer; Haenge steil -> Fels

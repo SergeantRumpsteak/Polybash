@@ -83,13 +83,13 @@ def dichte(x, y):
 
 
 def _nord_licht(x, y):
-    """Faktor 0..1 fuer die Baumdichte im Huegelland nordlich des Flugplatzes: der dichte Wald ist entfernt (nur noch ~30 % Einzelbaeume und kleine
+    """Faktor 0..1 fuer die Baumdichte im Huegelland nordlich des Flugplatzes: der dichte Wald ist entfernt (70 % der normalen Dichte, eher lockere
     Gruppen), rund um Muehle, Koehlerhuette, Jagdhuette und Hochsitz sind Lichtungen."""
     n = B.smoothstep(198.0, 212.0, x) * B.smoothstep(242.0, 254.0, y)
-    f = 1.0 - 0.7 * n
+    f = 1.0 - 0.3 * n
     import muehle as MU
     for (px, py, r) in MU.BAUPLAETZE:
-        f *= B.smoothstep(r - 1.0, r + 7.0, math.hypot(x - px, y - py))
+        f *= B.smoothstep(r - 1.0, r + 4.0, math.hypot(x - px, y - py))
     return f
 
 

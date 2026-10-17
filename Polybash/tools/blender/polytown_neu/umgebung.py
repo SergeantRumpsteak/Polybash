@@ -1070,7 +1070,7 @@ def drehteile():
 
 def flugzeuge():
     """Flugzeuge des 2. Weltkriegs: drei Ju 87 (Stuka) auf der Gruenflaeche nordlich der Hangarreihe (Nase nach Suedwesten, 225 Grad),
-    je ein Jaeger in den drei Tonnenhallen (Bf 109 E, Fw 190 A, Spitfire I; Nase zur offenen Westseite) und eine Bf 109 im grossen Hangar.
+    je ein Jaeger in den drei Tonnenhallen (Bf 109 E, Fw 190 A, Spitfire I; Nase zur offenen Westseite).
 
     Die Gruenflaeche ist nur ca. 22 m breit (Rollweg x = 276, Zaun x = 299): drei Stukas mit 13,8 m Spannweite und Kurs 225 Grad
     brauchen nebeneinander 39 m - sie stehen deshalb in Staffel (je 16,5 m versetzt, Fluegel ueberlappen nicht)."""
@@ -1079,7 +1079,7 @@ def flugzeuge():
         FL.stuka(b, STUKA_X, yy, 225.0)
     for yc, typ in zip(REIHE_YC, ("bf109", "fw190", "spitfire")):
         FL.jaeger(b, REIHE_X0 + 7.6, yc, 180.0, typ, Z_BODEN)
-    FL.jaeger(b, 238.0, 96.0, 0.0, "bf109", Z_BODEN, anstrich=("Flug Sand", "Flug Hellblau"))
+    FL.hubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)                       # Hubschrauber auf dem Helipad
     return b
 
 

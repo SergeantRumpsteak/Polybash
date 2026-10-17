@@ -504,6 +504,103 @@ def post(b, cx, cy, zb, theta, lvl=1):
     return g
 
 
+S.FARBEN.setdefault("Marmor", ((0.78, 0.77, 0.74), 0.35, 0.0))
+S.FARBEN.setdefault("Tresor", ((0.22, 0.25, 0.27), 0.4, 0.0))
+S.FARBEN.setdefault("Messing", ((0.70, 0.55, 0.20), 0.35, 0.0))
+
+# ------------------------------------------------------------------ Bank
+def bankhaus(b, cx, cy, zb, theta, lvl=1):
+    """Sparkasse 12 x 10 m (Sandstein, Walmdach): Portikus mit vier Saeulen, Gebaelk mit Schriftzug BANK, Freitreppe, Messing-Tuer. Innen begehbar:
+    Schalterhalle mit Kundentisch und Wartebank, Schalterwand mit drei Schaltern und Durchgang, Buero hinten rechts, Tresorraum hinten links
+    (Stahltuer, Schliessfachwand, Tisch). Tuer in der Mitte (x = 0), Dienstzugang hinten."""
+    g = Lok(b, cx, cy, zb, theta, 1)
+    g.kachel = 0.25                                           # schraeg zum Ringweg gedreht: Hindernisse als Kacheln
+    w, d = 12.0, 10.0
+    hw, hd = w / 2, d / 2
+    ZE = F0 + 4.2
+    H = ZE + 0.3
+    mat = "Putz sand alt" if lvl else "Putz sand"
+    stein = "Stein alt" if lvl else "Stein"
+    hoch = F0 + 3.3
+    oef_v = [(-1.0, 1.0, F0, F0 + 3.0)] + [(x - 0.7, x + 0.7, F0 + 0.9, hoch) for x in (-5.0, 5.0, -3.6, 3.6)]
+    oef_h = [(3.6, 4.7, F0, F0 + 2.3)] + [(x - 0.6, x + 0.6, F0 + 1.0, F0 + 3.0) for x in (-4.5, -1.5, 1.2)]
+    oef_w = [(y - 0.6, y + 0.6, F0 + 1.0, F0 + 3.2) for y in (-2.6, 0.2, 2.8)]
+    oef_o = [(y - 0.6, y + 0.6, F0 + 1.0, F0 + 3.2) for y in (-2.6, 0.2, 2.8)]
+    aussenwand(g, "x", -hd, -1, -hw, hw, H, mat, oef_v)
+    aussenwand(g, "x", hd, 1, -hw, hw, H, mat, oef_h)
+    aussenwand(g, "y", -hw, -1, -hd + WD, hd - WD, H, mat, oef_w)
+    aussenwand(g, "y", hw, 1, -hd + WD, hd - WD, H, mat, oef_o)
+    for x in (-5.0, 5.0, -3.6, 3.6):
+        fensterschmuck(g, "x", -hd, -1, x, F0 + 2.1, 1.4, 2.4, "Laden gruen alt" if lvl else "Laden gruen")
+    for x in (-4.5, -1.5, 1.2):
+        fensterschmuck(g, "x", hd, 1, x, F0 + 2.0, 1.2, 2.0, None)
+    for y in (-2.6, 0.2, 2.8):
+        fensterschmuck(g, "y", -hw, -1, y, F0 + 2.1, 1.2, 2.2, None)
+        fensterschmuck(g, "y", hw, 1, y, F0 + 2.1, 1.2, 2.2, None)
+    # Portikus: vier Saeulen, Gebaelk, Dreiecksgiebel mit Schriftzug
+    tuerrahmen(g, "x", -hd - 0.07, -hd, -1.0, 1.0, F0, F0 + 3.0, stein, t=0.18)
+    for sx in (-1, 1):
+        g.box(sx * 1.0 - (0.0 if sx < 0 else 0.05), -hd + WD, F0, sx * 1.0 + (0.05 if sx < 0 else 0.0), -hd + WD + 0.95, F0 + 2.9, "Tuer")
+    px = (-3.4, -1.3, 1.3, 3.4)
+    for x in px:
+        g.box(x - 0.45, -hd - 2.15, F0, x + 0.45, -hd - 1.25, F0 + 0.3, stein)
+        g.prism(x, -hd - 1.7, F0 + 0.3, 0.3, 3.5, 12, stein)
+        g.box(x - 0.4, -hd - 2.1, F0 + 3.8, x + 0.4, -hd - 1.3, F0 + 4.1, stein)
+    g.box(-4.4, -hd - 2.2, F0 + 4.1, 4.4, -hd - 1.2, F0 + 4.55, stein)
+    g.box(-4.4, -hd - 2.2, F0 + 4.55, 4.4, -hd, F0 + 4.7, stein)                       # Decke des Portikus
+    g.poly([(-4.6, -hd - 2.3, F0 + 4.7), (4.6, -hd - 2.3, F0 + 4.7), (0.0, -hd - 2.3, F0 + 6.0)], (0.0, -1.0, 0.0), stein)
+    g.box(-1.75, -hd - 2.18, F0 + 4.1, 1.75, -hd - 2.12, F0 + 4.55, "Schild gelb")
+    schrift(g, "BANK", 0.0, F0 + 4.17, -hd - 2.12, 0.07, "Schrift schwarz", 0.04)
+    for k in range(3):                                                                   # Freitreppe: Stufen von der Strasse zur Schwelle
+        g.box(-4.6, -hd - 2.7 + 0.45 * k, -0.6, 4.6, -hd - 0.07, F0 - 0.09 * (2 - k) * 1.0, "Beton")
+    g.box(-1.0, -hd - 0.1, F0 - 0.04, 1.0, -hd + WD, F0, "Beton")
+    # Boden (Marmor), Decke, Walmdach mit Kamin
+    ix0, ix1, iy0, iy1 = -hw + WD, hw - WD, -hd + WD, hd - WD
+    g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Beton")
+    altbau_boden = (ix0 + 0.0, iy0 + 0.0, F0, ix1, iy1, F0 + 0.02)
+    g.box(altbau_boden[0], altbau_boden[1], F0 - 0.02, altbau_boden[3], altbau_boden[4], F0, "Marmor")
+    g.box(ix0, iy0, ZE, ix1, iy1, ZE + 0.3, "Decke")
+    # Schalterwand bei y = 0.3: Theke, Panzerglas mit drei Schaltern, Durchgang bei x 3.4 .. 4.5
+    g.box(ix0, 0.1, F0, 3.35, 0.5, F0 + 1.1, "Holz")
+    g.box(ix0, 0.05, F0 + 1.1, 3.35, 0.55, F0 + 1.18, "Holz alt")
+    sal = [(x - 0.45, x + 0.45, F0 + 1.5, F0 + 2.2) for x in (-4.2, -1.9, 0.5)]
+    wand(g, "x", 0.22, 0.34, ix0, 3.35, F0 + 1.18, F0 + 2.8, "Glas", sal)
+    g.box(ix0, 0.15, F0 + 2.8, 3.35, 0.45, F0 + 2.95, "Holz")
+    for xx in (ix0, -3.0, -0.7, 1.7, 3.2):
+        g.box(xx, 0.15, F0 + 1.18, xx + 0.12, 0.45, F0 + 2.95, "Holz")
+    # Schalterhalle: Kundentisch mit Schreibzeug, Wartebank, Pflanzkuebel, Tafel mit Zinssaetzen
+    g.box(-1.6, -2.9, F0, 0.4, -2.3, F0 + 1.05, "Holz")
+    g.box(-1.6, -2.9, F0 + 1.05, 0.4, -2.3, F0 + 1.12, "Holz alt")
+    for sx in (-1, 1):
+        g.box(sx * 4.5 - 0.3, -3.9, F0, sx * 4.5 + 0.3, -2.2, F0 + 0.45, "Bank")
+        g.box(sx * 4.5 + (0.2 if sx < 0 else -0.3), -3.9, F0 + 0.45, sx * 4.5 + (0.3 if sx < 0 else -0.2), -2.2, F0 + 0.95, "Bank")
+    g.prism(-5.6, -4.1, F0, 0.35, 0.9, 8, "Ware blau")
+    g.box(ix1 - 0.1, -3.0, F0 + 1.4, ix1 - 0.02, -1.0, F0 + 2.4, "Schild gelb")
+    # Tresorraum hinten links (x -5.9 .. -1.4, y 1.4 .. 4.7): dicke Waende 0,45, Tuer zur Halle bei x -4.2 .. -3.0
+    tx0, tx1, ty0, ty1 = -5.9, -1.4, 1.4, 4.7
+    wand(g, "x", ty0, ty0 + 0.45, tx0, tx1, F0, ZE, "Beton", [(-4.2, -3.0, F0, F0 + 2.1)])
+    wand(g, "y", tx1 - 0.45, tx1, ty0 + 0.45, ty1, F0, ZE, "Beton", [])
+    wand(g, "y", tx0, tx0 + 0.45, ty0 + 0.45, ty1, F0, ZE, "Beton", [])
+    g.box(-4.35, ty0 - 0.2, F0, -4.2, ty0 + 0.3, F0 + 2.1, "Tresor")                    # Tuerblatt aufgeschwenkt (liegt an der Laibung)
+    g.box(-3.0, ty0 - 0.25, F0, -2.85, ty0 + 0.0, F0 + 2.1, "Messing")                    # Bolzenriegel
+    for k in range(5):                                                                    # Schliessfachwand an der Rueckwand
+        for j in range(4):
+            g.box(tx0 + 0.5 + k * 0.8, ty1 - 0.55, F0 + 0.4 + j * 0.45, tx0 + 1.2 + k * 0.8, ty1 - 0.12, F0 + 0.8 + j * 0.45, "Tresor" if (k + j) % 2 else "Messing")
+    g.box(-4.4, 2.9, F0, -2.9, 3.5, F0 + 0.9, "Holz")                                    # Pruftisch im Tresor
+    # Buero hinten rechts: Trennwand mit Tuer an der Schalterwand-Durchgangsseite, Schreibtisch, Aktenregal
+    wand(g, "y", 1.0, 1.12, 1.0, iy1, F0, ZE, mat, [(2.1, 3.3, F0, F0 + 2.2)])
+    g.box(2.6, 2.0, F0, 4.6, 2.7, F0 + 0.8, "Holz")
+    g.box(ix1 - 0.5, 1.3, F0, ix1 - 0.05, 4.4, F0 + 2.0, "Regal")
+    g.box(2.2, 3.4, F0, 3.2, 3.8, F0 + 0.45, "Bank")
+    # Dienstzugang hinten
+    tuerrahmen(g, "x", hd, hd + 0.07, 3.6, 4.7, F0, F0 + 2.3)
+    g.box(3.4, hd, -0.6, 4.9, hd + 1.0, F0, "Beton")
+    rz = dach(g, "walm", w, d, H, 2.6, "Dach grau alt" if lvl else "Dach grau", mat, e=0.55)
+    g.box(3.6, 2.5, H - 0.1, 4.3, 3.2, rz(3.9, 2.8) + 0.9, "Klinker alt" if lvl else "Klinker")
+    g.box(3.5, 2.4, rz(3.9, 2.8) + 0.9, 4.4, 3.3, rz(3.9, 2.8) + 1.02, "Stein")
+    return g
+
+
 # ------------------------------------------------------------------ Kirche
 def _spitzbogen(a, br, z0):
     """Gestufte Spitzbogen-Oeffnung um die Achse a: Liste (alo, ahi, zlo, zhi) mit drei Stufen (br = Breite unten, z0 = Kaempfer)."""

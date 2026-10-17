@@ -159,3 +159,14 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - **Zweite Muehle + Schaeferhuette** (`muehle2.py`): gemauerte Hollaender-Turmmuehle (Galerie mit Treppe, Innentreppe, Mahlgaenge) bei (224, 286) und Schaeferwagen mit Pferch bei (216, 262) am Nordrand; die NO-Ecke selbst ist durch Meiler, Zeltplatz und Airfield belegt.
 - **Nordwest-Gruenflaeche**: Zone vergroessert, ein zusaetzliches Wohnhaus an der Spange Nord (viel mehr passt ohne neue Strasse nicht).
 - Tests sind reine Mock-Tests (ohne echtes Blender).
+
+### Feinschliff Ausstattung, Gras, Randsteine, Bank, Hubschrauber (ausstattung.py, gras.py, stadt.py, muehle*.py, bauernhof.py, felder.py)
+- Bushaltestellen nur noch im Ort (4), keine im Flughafen; keine Baenke auf dem Airfield.
+- Baenke: Rastplaetze an Gruenflaechen (Tisch, zwei Baenke gegenueber, 16) und Einzelbaenke an kleinen Teichen mit Blick zum Wasser (8); keine Bank auf Wasser. Brunnen (3 Stein, 2 Stahl) je an einem benannten Platz. Seerosen auf allen Teichen.
+- Gras: Maske rasterbasiert (Belag/Wege/Plaetze), Haeuser mit echtem gedrehtem Grundriss statt Schutzkreisen; Grosszonen werden nicht mehr pauschal ausgeschlossen.
+- Kartenrand: nur noch vereinzelte Steine/Felsen, keine lueckenlose Wand (der Rand ist damit absichtlich nicht mehr dicht).
+- Beide Muehlen schauen nach Südwest; schraege Bauten registrieren Hindernisse als Kacheln (`Lok.kachel`), Innenraeume bleiben begehbar. Gilt auch fuer schraeg stehende Haeuser (Treppenloch im OG dafuer eine Stufe frueher).
+- Hubschrauber auf dem Helipad (`flugzeug.hubschrauber`); Flugzeug aus dem Hangar am 36er Ende entfernt.
+- Bankgebaeude (`oeffentlich.bankhaus`) auf der NW-Gruenflaeche im Kreis; Eckhaus an der Strassenbiegung zur Feuerwehr (45 Grad).
+- Bauernhof-Zufahrt als geschwungener Feldweg; Getreidefelder gerade ausgerichtet; mehr Baeume im Nordosten.
+- Tests sind reine Mock-Tests (kein echtes Blender).

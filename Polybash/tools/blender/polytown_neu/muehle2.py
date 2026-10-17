@@ -3,7 +3,7 @@
 Beide Bauten stehen auf ebenen Bauplaetzen (umgebung.PLATEAUS), sind mit keiner Strasse verbunden und sehen bewusst anders aus als die
 Bockwindmuehle und die Blockhuetten weiter oestlich (muehle.py):
   * Turmmuehle (224, 286): runder, nach oben verjuengter weisser Putzturm (16 Segmente, Sockel aus Stein), drehbare Kappe mit schwarzer Haube
-    und Steert (Schwanzbalken mit Windenrad), vier Gatterfluegel (Windbrett, Latten, Querrippen) nach Westen. Tuer im Sueden, davor Stufen.
+    und Steert (Schwanzbalken mit Windenrad), vier Gatterfluegel (Windbrett, Latten, Querrippen) nach Westen. Tuer im Sueden, davor Stufen; Kappe dreht die Fluegel nach Suedwesten (Steert nach Nordosten).
     Rundherum eine Galerie (Stellage, 1,1 m breit, Gelaender) in 3 m Hoehe mit gerader Treppe von Norden. Innen: Mehlboden mit Saecken und
     Mehlkasten, gerade Treppe (12 Stufen) in den Steinboden mit zwei Mahlgaengen (Zargen und Laeufer), mittig die Koenigswelle.
   * Schaeferhuette (211, 261): Schaeferwagen (Holzkasten mit Tonnendach aus Blech auf Eisenraedern, Treppe, Deichsel, Bett, Ofen mit Rohr),
@@ -272,7 +272,7 @@ def muehle(b):
     turm(g, b)
     innen(g)
     galerie(g)
-    kappe(g)
+    kappe(Lok(b, cx, cy, zb, math.radians(45.0)))                                          # Kappe samt Fluegeln nach Suedwesten, Steert nach Nordosten
     # Zubehoer vor der Muehle: Sackkarre-artige Karre, Saecke, Holzblock mit Beil
     g.box(-2.7, -5.2, 0.0, -2.1, -4.6, 0.55, "Sack")
     g.box(-2.6, -5.0, 0.55, -2.2, -4.7, 1.05, "Sack")

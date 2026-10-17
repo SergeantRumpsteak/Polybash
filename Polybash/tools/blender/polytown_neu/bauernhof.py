@@ -1,5 +1,5 @@
 """Polybash - Bauernhof zwischen Steinbruch und Ort (x 34..64, y 64..95): Wohnhaus (Fachwerk, begehbar), grosse Scheune mit Heuboden und Treppe, Stall,
-Silo, Brunnen, Heu- und Strohhaufen, Misthaufen, Weidezaun und Schotterzufahrt von der Werkstrasse. Alles aus den Altbau-Bausteinen (altbau.py, rustik.py)."""
+Silo, Brunnen, Heu- und Strohhaufen, Misthaufen, Weidezaun und geschwungene Schotterzufahrt von der Werkstrasse. Alles aus den Altbau-Bausteinen (altbau.py, rustik.py)."""
 import math
 import random
 
@@ -15,13 +15,14 @@ S.FARBEN.update({
     "Stroh":    ((0.82, 0.72, 0.40), 1.0, 0.0),
     "Silo":     ((0.60, 0.60, 0.56), 0.9, 0.0),
 })
-BELEGT = ((33.0, 62.5, 65.0, 93.5), (62.0, 73.0, 90.5, 79.0))          # Hof, Zufahrt
+BELEGT = ((33.0, 62.5, 65.0, 93.5), (62.0, 72.0, 90.5, 83.5))          # Hof, Zufahrt (geschwungen)
 HAUS = (48.0, 87.5)                                                    # Wohnhaus 13 x 8.6, Tuer nach Sueden (zum Hof)
 SCHEUNE = (38.0, 74.0)                                                 # 15 x 10, Tor nach Osten
 STALL = (57.5, 74.0)                                                   # 12 x 7, Tuer nach Westen
 SILO = (60.0, 88.0)
 BRUNNEN = (48.0, 74.0)
 ZUFAHRT_Y = 76.0
+ZUFAHRT_PUNKTE = ((90.4, 75.2), (85.0, 76.8), (79.5, 75.9), (74.0, 78.3), (68.6, 80.9), (63.0, 81.3), (58.0, 80.7), (53.6, 80.0))     # Mittellinie des Hofwegs
 
 
 def halle(b, cx, cy, theta, w, d, H, rh, wm, dm, tor, fenster, rnd, zusatz=None):
@@ -162,9 +163,20 @@ def bauen_hof():
     bo = Bau("hof_boden")
     z = 0.032
     bo.add([(35.0, 65.0, z), (63.0, 65.0, z), (63.0, 83.0, z), (35.0, 83.0, z)], [(0, 1, 2, 3)], "Hofboden")
-    bo.add([(62.0, ZUFAHRT_Y - 2.0, z + 0.003), (90.5, ZUFAHRT_Y - 2.0, z + 0.003), (90.5, ZUFAHRT_Y + 2.0, z + 0.003), (62.0, ZUFAHRT_Y + 2.0, z + 0.003)], [(0, 1, 2, 3)], "Schotterstrasse")
-    for dy in (-1.0, 1.0):
-        bo.add([(62.0, ZUFAHRT_Y + dy - 0.35, z + 0.006), (90.5, ZUFAHRT_Y + dy - 0.35, z + 0.006), (90.5, ZUFAHRT_Y + dy + 0.35, z + 0.006), (62.0, ZUFAHRT_Y + dy + 0.35, z + 0.006)], [(0, 1, 2, 3)], "Fahrspur")
+    # Zufahrt: geschwungener Schotterweg von der Werkstrasse (x ~ 90) in den Hof, zwischen Stall (Nordwand y = 77.5) und Wohnhaus (Suedwand y = 83.2)
+    # hindurch zum Brunnen - nicht gerade gegen die Stallrueckwand
+    import umgebung as U
+    track = ZUFAHRT_PUNKTE
+    U.pfad(bo, track, 3.8, z + 0.003, "Schotterstrasse", schritt=2.0)
+    for sg in (-1, 1):                                                                       # zwei Fahrspuren (Radspuren) entlang der Mittellinie
+        spur = []
+        for i, p in enumerate(track):
+            a = track[max(0, i - 1)]
+            c = track[min(len(track) - 1, i + 1)]
+            dx, dy = c[0] - a[0], c[1] - a[1]
+            ln = math.hypot(dx, dy) or 1.0
+            spur.append((p[0] - dy / ln * 0.95 * sg, p[1] + dx / ln * 0.95 * sg))
+        U.pfad(bo, spur, 0.55, z + 0.006, "Fahrspur", schritt=2.0)
     bo.add([(46.0, 83.0, z + 0.004), (50.0, 83.0, z + 0.004), (50.0, 89.0, z + 0.004), (46.0, 89.0, z + 0.004)], [(0, 1, 2, 3)], "Pfad")
     # Wohnhaus
     ha = Bau("hof_haus")
@@ -184,8 +196,8 @@ def bauen_hof():
     heuballen(de, 38.0, 85.0, 0.0, n=2)
     for (hx, hy, r_, hh) in ((37.5, 89.5, 2.4, 3.6), (36.5, 86.2, 1.6, 2.4)):               # Heuschober
         BA.kegel(de, hx, hy, 0.0, r_, hh, "Heu", n=9, rot=0.3)
-    BA.kegel(de, 62.0, 80.2, 0.0, 2.6, 1.3, "Bruch Erde", n=9)                                # Misthaufen
-    BA.kegel(de, 61.2, 78.6, 0.0, 1.2, 0.8, "Stroh", n=7)
+    BA.kegel(de, 60.6, 67.0, 0.0, 2.4, 1.3, "Bruch Erde", n=9)                                # Misthaufen (abseits des Wegs)
+    BA.kegel(de, 59.6, 68.8, 0.0, 1.2, 0.8, "Stroh", n=7)
     de.box(51.0, 79.6, 0.0, 52.8, 80.0, 0.45, "Holz alt")                                    # Wassertrog
     de.box(51.0, 79.6, 0.45, 52.8, 79.7, 0.8, "Holz alt")
     de.box(51.0, 79.9, 0.45, 52.8, 80.0, 0.8, "Holz alt")

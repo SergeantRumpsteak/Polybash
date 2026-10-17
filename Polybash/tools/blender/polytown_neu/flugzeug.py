@@ -527,3 +527,72 @@ def tankwagen(b, ox, oy, psi, z0=0.0):
         xs, ys = [p[0] for p in hw], [p[1] for p in hw]
         b.bx.append((min(xs), min(ys), z0, max(xs), max(ys), z0 + 3.3))
     return b
+
+
+# ------------------------------------------------------------------ Hubschrauber
+def hubschrauber(b, ox, oy, psi, z0=0.0):
+    """Leichter Mehrzweck-Hubschrauber (Bauart Bell 47 / Sikorsky R-4, 1940er): Glaskanzel, offenes Rohrrahmen-Heck mit Triebwerk und Tanks,
+    Kufenfahrwerk, Zweiblatt-Hauptrotor mit Stabilisatorstange, Heckrotor, Balkenkreuze auf dem Heckausleger. Nase nach psi."""
+    f = Fz(b, ox, oy, psi, z0)
+    ell = lambda x, w, h, zc, n=12: [(x, w * math.cos(2 * math.pi * k / n), zc + h * math.sin(2 * math.pi * k / n)) for k in range(n)]
+    # Kabine: unterer Rumpf (Wanne) und Glaskuppel
+    f.loft([ell(1.95, 0.18, 0.18, 0.78), ell(1.55, 0.50, 0.40, 0.85), ell(0.7, 0.62, 0.48, 0.95), ell(-0.35, 0.58, 0.46, 0.95), ell(-0.9, 0.34, 0.30, 0.90)],
+           "Flug Gruen", nick=False)
+    kuppel = lambda x, w, h: [(x, w * math.cos(math.pi * k / 10), 0.98 + h * math.sin(math.pi * k / 10)) for k in range(11)]
+    f.loft([kuppel(1.92, 0.16, 0.16), kuppel(1.50, 0.50, 0.62), kuppel(0.65, 0.60, 0.74), kuppel(-0.2, 0.55, 0.66), kuppel(-0.6, 0.38, 0.40)],
+           "Flug Glas", caps=(True, True), nick=False)
+    f.kasten(0.05, 0.55, -0.45, 0.45, 0.78, 1.0, "Flug Braun", nick=False)                      # Sitzbank, Lehne und Steuerknueppel
+    f.kasten(0.05, 0.12, -0.45, 0.45, 1.0, 1.55, "Flug Braun", nick=False)
+    f.beam((1.05, 0.0, 0.8), (0.95, 0.0, 1.3), 0.05, 0.05, "Flug Metall", False, False)
+    # Heck: Triebwerk im Rohrrahmen, zwei Seitentanks, Auslegerrohr
+    f.kasten(-1.3, -0.7, -0.30, 0.30, 0.55, 1.1, "Flug Metall", nick=False)
+    for sg in (-1, 1):
+        f.loft([[(-0.55, sg * 0.55 + 0.18 * math.cos(2 * math.pi * k / 8), 0.9 + 0.18 * math.sin(2 * math.pi * k / 8)) for k in range(8)],
+                [(-1.15, sg * 0.55 + 0.18 * math.cos(2 * math.pi * k / 8), 0.9 + 0.18 * math.sin(2 * math.pi * k / 8)) for k in range(8)]], "Flug Hellgrau", nick=False)
+        for (x0, z0_, x1, z1_) in ((-0.9, 0.55, -2.3, 0.95), (-0.9, 1.1, -2.3, 1.0)):
+            f.beam((x0, sg * 0.28, z0_), (x1, sg * 0.09, z1_), 0.035, 0.035, "Flug Metall", False, False)
+    f.loft([[(-0.8, 0.14 * math.cos(2 * math.pi * k / 8), 0.95 + 0.14 * math.sin(2 * math.pi * k / 8)) for k in range(8)],
+            [(-5.6, 0.05 * math.cos(2 * math.pi * k / 8), 1.25 + 0.05 * math.sin(2 * math.pi * k / 8)) for k in range(8)]], "Flug Gruen", nick=False)
+    for sg in (-1, 1):                                                                              # Kreuzstreben am Ausleger
+        f.beam((-1.0, sg * 0.22, 0.65), (-4.3, sg * 0.05, 1.15), 0.03, 0.03, "Flug Metall", False, False)
+        f.beam((-1.0, sg * 0.22, 1.2), (-4.3, sg * 0.05, 1.2), 0.03, 0.03, "Flug Metall", False, False)
+    # Leitwerk: Seitenflosse nach oben/unten, kleiner Hoehenleitwerksstummel
+    f.poly([(-5.7, 0.0, 1.2), (-5.0, 0.0, 1.22), (-5.45, 0.0, 2.15), (-5.8, 0.0, 2.1)], "Flug Gruen", (0, 1, 0), nick=False)
+    f.poly([(-5.7, 0.0, 1.2), (-5.0, 0.0, 1.22), (-5.3, 0.0, 0.55), (-5.65, 0.0, 0.6)], "Flug Gruen", (0, 1, 0), nick=False)
+    f.poly([(-4.9, -0.7, 1.24), (-4.9, 0.7, 1.24), (-5.35, 0.7, 1.24), (-5.35, -0.7, 1.24)], "Flug Gruen", (0, 0, 1), nick=False)
+    # Heckrotor (Zweiblatt, rechts am Heck) und Nabe
+    f.kasten(-5.62, -5.5, -0.15, -0.0, 1.78, 1.86, "Flug Metall", nick=False)
+    for k in range(2):
+        a = math.radians(70.0 + 180.0 * k)
+        f.beam((-5.58, -0.12, 1.82), (-5.58, -0.12 + 0.75 * math.cos(a), 1.82 + 0.75 * math.sin(a)), 0.12, 0.03, "Flug Schwarz", False, False)
+    # Kufen und Querrohre
+    for sg in (-1, 1):
+        f.beam((-1.3, sg * 0.92, 0.1), (1.7, sg * 0.92, 0.1), 0.08, 0.08, "Flug Metall", False, False)
+        f.beam((1.7, sg * 0.92, 0.1), (2.1, sg * 0.92, 0.45), 0.07, 0.07, "Flug Metall", False, False)
+        f.beam((-1.3, sg * 0.92, 0.1), (-1.5, sg * 0.92, 0.22), 0.07, 0.07, "Flug Metall", False, False)
+    for xx in (1.15, -0.65):
+        for sg in (-1, 1):
+            f.beam((xx, sg * 0.92, 0.12), (xx, sg * 0.42, 0.62), 0.06, 0.06, "Flug Metall", False, False)
+        f.beam((xx, -0.92, 0.12), (xx, 0.92, 0.12), 0.05, 0.05, "Flug Metall", False, False)
+    # Rotormast, Nabe, Hauptrotorblaetter (parkend: Blatt nach hinten-rechts) und Stabilisatorstange mit Paddeln
+    f.beam((0.05, 0.0, 1.55), (0.05, 0.0, 2.45), 0.14, 0.14, "Flug Metall", False, False)
+    f.kasten(-0.12, 0.22, -0.12, 0.12, 2.43, 2.58, "Flug Metall", nick=False)
+    for k in range(2):
+        a = math.radians(200.0 + 180.0 * k)
+        f.beam((0.05, 0.0, 2.52), (0.05 + 5.4 * math.cos(a), 5.4 * math.sin(a), 2.5), 0.30, 0.035, "Flug Schwarz", False, False)
+        f.beam((0.05 + 4.9 * math.cos(a), 4.9 * math.sin(a), 2.52), (0.05 + 5.4 * math.cos(a), 5.4 * math.sin(a), 2.52), 0.31, 0.04, "Flug Gelb", False, False)
+    for k in range(2):
+        a = math.radians(110.0 + 180.0 * k)
+        f.beam((0.05, 0.0, 2.7), (0.05 + 1.3 * math.cos(a), 1.3 * math.sin(a), 2.7), 0.05, 0.05, "Flug Metall", False, False)
+        f.beam((0.05 + 1.0 * math.cos(a), 1.0 * math.sin(a), 2.7), (0.05 + 1.5 * math.cos(a), 1.5 * math.sin(a), 2.7), 0.2, 0.03, "Flug Weiss", False, False)
+    # Balkenkreuze auf dem Heckausleger (beide Seiten)
+    for sg in (-1, 1):
+        yy = sg * 0.085
+        for (u, v) in ((0.7, 0.12), (0.12, 0.7)):
+            f.poly([(-3.0 - u / 2, yy, 1.17 - v / 2), (-3.0 + u / 2, yy, 1.17 - v / 2), (-3.0 + u / 2, yy, 1.17 + v / 2), (-3.0 - u / 2, yy, 1.17 + v / 2)],
+                   "Flug Weiss", (0, sg, 0), nick=False)
+    if round(psi) % 90 == 0:                                                                        # Kollision: Kabine und Heck als Quader
+        for (x0, x1, hy_, hz) in ((-1.5, 2.1, 1.0, 1.9), (-5.7, -1.5, 0.3, 2.1)):
+            ps = [f.P(x, y, 0.0, False) for x in (x0, x1) for y in (-hy_, hy_)]
+            b.bx.append((min(p[0] for p in ps), min(p[1] for p in ps), z0, max(p[0] for p in ps), max(p[1] for p in ps), z0 + hz))
+    return b

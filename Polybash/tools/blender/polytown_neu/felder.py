@@ -22,8 +22,8 @@ for _n, _c in (("Pfad", ((0.52, 0.46, 0.36), 0.95, 0.0)), ("Holz alt", ((0.40, 0
 BELEGT = ((3.0, 68.5, 34.0, 95.0),)
 WEG_Y = (74.4, 77.6)                                   # Feldweg (west-ost)
 # (Mitte x, y, Halbe Laenge entlang der Reihen, halbe Breite, Reihenwinkel in Grad, Frucht)
-FELDER = ((11.0, 85.6, 7.2, 7.4, 82.0, "weizen"), (25.6, 85.6, 6.6, 7.4, 8.0, "gerste"),
-          (11.0, 71.6, 7.0, 2.6, 2.0, "jung"), (25.6, 71.6, 6.6, 2.6, -3.0, "stoppel"))
+FELDER = ((11.0, 85.6, 7.2, 7.4, 90.0, "weizen"), (25.6, 85.6, 6.6, 7.4, 0.0, "gerste"),                # alle Felder achsenparallel (Reihen genau Nord-Sued bzw. Ost-West)
+          (11.0, 71.6, 7.0, 2.6, 0.0, "jung"), (25.6, 71.6, 6.6, 2.6, 0.0, "stoppel"))
 
 
 def _lokal(f):
