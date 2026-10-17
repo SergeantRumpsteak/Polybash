@@ -72,7 +72,9 @@ RADAR_Z = 17.0                                                        # Drehpunk
 # Stadt (siehe stadt.py): ebene Zonen fuer Staedte/Doerfer (x0, y0, x1, y1) und Teiche (x, y, Radius) - das Gelaende richtet sich danach
 STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz, Rathaus, Wohnviertel)
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
-               (120.0, 20.0, 182.0, 84.0))        # Dorf im Sueden
+               (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
+               (8.0, 8.0, 100.0, 74.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
+               (84.0, 8.0, 196.0, 40.0))          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
 TEICHE = ((36.0, 233.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
 TEICH_Z = -0.4                                    # Wasserspiegel
 # Zaun und Eingang

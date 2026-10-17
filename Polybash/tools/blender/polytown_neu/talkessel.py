@@ -145,11 +145,12 @@ def berg_netz():
 def wiesen_netz(loch=None, hf=None):
     """Wiese, Raster WIESE_ZELLE, Flaechen gegen den Uhrzeigersinn (Normale nach oben).
 
-    loch = (x0, y0, x1, y1): Rechteck (auf dem Raster), das ausgespart wird, z. B. fuer das Burggelaende.
+    loch = (x0, y0, x1, y1) oder Liste solcher Rechtecke (auf dem Raster), die ausgespart werden, z. B. Burggelaende und Steinbruchgrube.
     hf(x, y) -> Hoehe: Huegel und Senken im Tal (muss am Talrand und am Lochrand 0 sein); ohne hf ist die Wiese eben (z = 0)."""
     n = int(round(TAL / WIESE_ZELLE))
     st = TAL / n
     verts, vid, faces = [], {}, []
+    loecher = [] if loch is None else ([loch] if not isinstance(loch[0], (tuple, list)) else list(loch))
 
     def vert(i, j):
         if (i, j) not in vid:
@@ -161,7 +162,7 @@ def wiesen_netz(loch=None, hf=None):
         for i in range(n):
             if loch is not None:
                 cx, cy = (i + 0.5) * st, (j + 0.5) * st
-                if loch[0] < cx < loch[2] and loch[1] < cy < loch[3]:
+                if any(l[0] < cx < l[2] and l[1] < cy < l[3] for l in loecher):
                     continue
             faces.append((vert(i, j), vert(i + 1, j), vert(i + 1, j + 1), vert(i, j + 1)))
     return verts, faces

@@ -19,12 +19,13 @@ import talkessel as T  # noqa: E402
 import burg as B  # noqa: E402
 import umgebung as U  # noqa: E402
 import stadt as S  # noqa: E402
+import steinbruch as SB  # noqa: E402
 import texturen as TX  # noqa: E402
 
 
 def main():
     T.clear_scene()
-    T.build_tal(loch=B.LOCH, hf=U.gelaende_hoehe)   # huegelige Wiese mit Aussparung fuer das Burggelaende (Graben)
+    T.build_tal(loch=[B.LOCH, SB.PIT], hf=U.gelaende_hoehe)   # huegelige Wiese mit Aussparungen: Burggelaende (Graben) und Steinbruchgrube
     verts, tris, idx = T.build_berge()
     nb = B.bauen()
     nu = U.bauen()                    # Ringweg, Abzweige, Landebahn, Hangar, Tower

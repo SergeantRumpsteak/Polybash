@@ -5,7 +5,9 @@ Aufbau (Spielflaeche 0..300 m, Burg in der Mitte, Ringweg, Flughafen im Osten - 
     (mit Uhrturm) im Norden, das Gasthaus im Sueden und je zwei Laeden im Westen und Osten. Um den Platz laeuft die runde
     Marktring-Strasse, an ihr und an der Hauptstrasse stehen die Wohnhaeuser.
   * Zwei Querspangen verbinden die Stadt mit der Nord- und der Suedstrasse (die vom Ringweg an den Burgtoren nach Norden bzw.
-    Sueden fuehren) - dort liegt je ein Dorf mit Kreisverkehr, Dorfbrunnen, Bauernhof und Haeusern.
+    Sueden fuehren). Im Norden liegt ein Dorf mit Kreisverkehr, Dorfbrunnen, Bauernhof und Haeusern; die Suedstrasse endet dagegen am
+    Bahnhofsvorplatz (bahn.py). Von der Spange Sued fuehrt die Werkstrasse zum Steinbruch (steinbruch.py) im Suedwesten, von dort die
+    Gueterstrasse ueber einen Bahnuebergang zum Gueterschuppen; die Gleise (Steinbruch -> Bahnhof) liegen auf y = 27 ... 34.
   * Teiche: vier Stueck in Mulden des Gelaendes (siehe umgebung.TEICHE).
   * Jedes Haus steht mit der Tuer zu einer Strasse und ist ueber einen Pfad mit ihr verbunden; Haeuser stehen nie auf Strassen,
     Plaetzen, Teichen oder im Burggelaende und nur auf ebenem Grund (umgebung.STADT_ZONEN). Das Wegenetz ist zusammenhaengend.
@@ -31,8 +33,10 @@ Z_STR, Z_PFAD, Z_PLATZ = 0.052, 0.056, 0.064
 W_STR, W_PFAD = 6.0, 1.6
 PLATZ = (40.0, 135.0, 70.0, 165.0)                       # Marktplatz 30 x 30 m
 PLATZ_M = (55.0, 150.0)
-DORF_N, DORF_S = (150.0, 250.0), (150.0, 50.0)           # Mitten der Kreisverkehre
+DORF_N = (150.0, 250.0)                                  # Mitte des Kreisverkehrs im Norden
 KV_R, KV_B = 9.0, 5.0                                    # Kreisverkehr: Mittelradius, Breite
+SUED_ENDE = (150.0, 62.0)                                # Suedstrasse endet am Bahnhofsvorplatz
+WERK_ABZW = (92.3, 100.0)                                # Abzweig der Werkstrasse von der Spange Sued
 
 FARBEN = {
     "Strasse":       ((0.33, 0.31, 0.28), 0.95, 0.0),
@@ -114,10 +118,12 @@ def strassen():
     add("Spange Nord", ((82, 178), (96, 208), (150, 226)), 14.0)
     add("Spange Sued", ((82, 122), (96, 92), (150, 74)), 14.0)
     add("Nordstrasse", (ringn, (DORF_N[0], DORF_N[1] - KV_R)), 0.0)
-    add("Suedstrasse", (rings, (DORF_S[0], DORF_S[1] + KV_R)), 0.0)
-    for nm, (cx, cy) in (("Kreisverkehr Nord", DORF_N), ("Kreisverkehr Sued", DORF_S)):
-        kreis = [(cx + KV_R * math.cos(2 * math.pi * k / 24), cy + KV_R * math.sin(2 * math.pi * k / 24)) for k in range(24)]
-        L.append({"name": nm, "roh": kreis, "pts": kreis, "w": KV_B, "zu": True})
+    add("Suedstrasse", (rings, SUED_ENDE), 0.0)
+    add("Werkstrasse", (WERK_ABZW, (88.0, 58.0)), 0.0)                    # Spange Sued -> Steinbruch (Einfahrt am Tor)
+    add("Gueterstrasse", ((88.0, 58.0), (98.0, 44.0), (108.0, 38.0), (108.0, 12.0), (126.0, 12.0)), 8.0)   # Hof -> Bahnuebergang -> Gueterschuppen
+    cx, cy = DORF_N
+    kreis = [(cx + KV_R * math.cos(2 * math.pi * k / 24), cy + KV_R * math.sin(2 * math.pi * k / 24)) for k in range(24)]
+    L.append({"name": "Kreisverkehr Nord", "roh": kreis, "pts": kreis, "w": KV_B, "zu": True})
     return L
 
 
@@ -1132,6 +1138,9 @@ def plane_stadt():
     for _, _, _, _, rc in zentrum:
         belegt.rechtecke.append(rc)
     belegt.rechtecke.append(PLATZ)
+    import bahn as BA                                  # Steinbruch + Bahnhof (importieren stadt -> erst hier)
+    import steinbruch as SB
+    belegt.rechtecke.extend(BA.BELEGT + SB.BELEGT)
     # Haeuser entlang der Strassen
     zaehler = [0]
     for nm in ("Marktring",):
@@ -1148,9 +1157,8 @@ def plane_stadt():
         s = S[nm]
         a, e = s["roh"]
         haeuser_entlang(None, a, e, strs, belegt, haeuser, pfade, abstand=15.5, rand=14.0, zaehler=zaehler, strasse=s)
-    # Doerfer um die Kreisverkehre
+    # Dorf um den Kreisverkehr im Norden
     kreis_haeuser(DORF_N, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), strasse=S["Kreisverkehr Nord"], scheune_idx=3)
-    kreis_haeuser(DORF_S, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(math.pi / 2,), strasse=S["Kreisverkehr Sued"], scheune_idx=6)
     spezial, plaetze = setze_spezial(strs, belegt, haeuser, pfade)
     # Baeume: deterministisch gestreut in den Zonen, nur auf freiem Boden
     baeume = []
@@ -1195,7 +1203,6 @@ def baue_alles():
                               (46.0, 141.0, math.pi, "Markt weiss"), (55.0, 141.0, math.pi, "Markt rot"), (64.0, 141.0, math.pi, "Markt weiss")):
         marktstand(z, x, y, th, farbe)
     dorfbrunnen(z, *DORF_N)
-    dorfbrunnen(z, *DORF_S)
     # Haeuser
     h = Bau("stadt_haeuser")
     for H in P["haeuser"]:
@@ -1218,7 +1225,9 @@ def baue_alles():
         n = 24
         rr = tr + 1.4
         t.add([(tx + rr * math.cos(2 * math.pi * i / n), ty + rr * math.sin(2 * math.pi * i / n), U.TEICH_Z) for i in range(n)], [tuple(range(n))], "Teichwasser")
-    return [w, z, h, oe, bm, t]
+    import bahn as BA                                  # Gleise, Bahnhof, Zuege und Steinbruch (steinbruch.py)
+    import steinbruch as SB
+    return [w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch()
 
 
 def bauen():
