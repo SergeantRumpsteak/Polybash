@@ -66,33 +66,67 @@ def busch(b, x, y, zb, rnd):
     b.add(ring + [(x, y, zb + 0.4 + r)], [tuple(range(n - 1, -1, -1))] + [(i, (i + 1) % n, n) for i in range(n)], "Busch" if rnd(2) < 0.7 else "Farn")
 
 
+def _fw(x, y):
+    """Waldgewicht 0..1 (Kerngebiet am Zaun des Flugplatzes und beiderseits der Strecke); ausserhalb geht der Wald nahtlos in das rauschartige Streugehoelz ueber."""
+    dk = max(19.5 - y, y - 34.5, 0.0)
+    return (B.smoothstep(170.0, 226.0, x) * (1.0 - B.smoothstep(270.0, 298.0, x)) * B.smoothstep(-4.0, 8.0, y) * (1.0 - B.smoothstep(62.0, 90.0, y)) * B.smoothstep(0.0, 9.0, dk))
+
+
 def dichte(x, y):
-    """Baumdichte 0..1 als Rauschen (Dickichte und Lichtungen, keine Streifen); fehlt am Gleiskorridor (y 22..32), am Flugplatz und an den Raendern."""
-    if not (X0 <= x <= X1) or not (6.0 <= y <= 52.0):
-        return 0.0
-    if math.hypot(x - 192.0, y - 50.0) < 11.0:                            # Teich am Stationsende
-        return 0.0
-    dk = max(22.0 - y, y - 32.0, 0.0)
-    rand = B.smoothstep(2.5, 9.0, dk) * B.smoothstep(X0, X0 + 16.0, x) * (1.0 - B.smoothstep(X1 - 10.0, X1, x)) * B.smoothstep(6.0, 11.0, y) * (1.0 - B.smoothstep(42.0, 52.0, y))
+    """Baumdichte 0..1 als Rauschen: im Waldgebiet Dickichte und Lichtungen, sonst vereinzelte Baumgruppen auf den angrenzenden Gruenflaechen (gleiches
+    Rauschfeld, daher keine Kante)."""
     n = 0.6 * T.fbm(x / 17.0, y / 17.0, T.SEED + 77, 3) + 0.4 * T.fbm(x / 6.5, y / 6.5, T.SEED + 79, 2)
-    return rand * B.smoothstep(0.16, 0.46, n)
+    wald = B.smoothstep(0.26, 0.56, n)
+    streu = 0.65 * B.smoothstep(0.44, 0.68, n)
+    fw = _fw(x, y)
+    return streu + (wald - streu) * fw
 
 
-def baeume_liste():
+def _zone_nah(x, y, m=3.5):
+    for zz in U.STADT_ZONEN:
+        if zz[0] - m < x < zz[2] + m and zz[1] - m < y < zz[3] + m:
+            return True
+    return False
+
+
+_CACHE = {}
+
+
+def alle_baeume(P):
+    """Alle Waldbaeume (x, y, Art) der Map: Wald an der Bahn und rauschartige Bebaumung der angrenzenden Gruenflaechen (ohne Burgberg: ruine.berghang)."""
+    if _CACHE.get("P") is P:
+        return _CACHE["l"]
+    import gras as GR
+    M = GR.maske(P)
     out = []
-    for ix in range(int(X0 / RASTER) - 1, int(X1 / RASTER) + 2):
-        for iy in range(0, int(54 / RASTER) + 1):
+    for ix in range(2, int(293 / RASTER) + 1):
+        for iy in range(2, int(293 / RASTER) + 1):
             x = ix * RASTER + (_h(ix, iy, 1) - 0.5) * 2.8
             y = iy * RASTER + (_h(ix, iy, 2) - 0.5) * 2.8
+            if not (7.0 < x < 293.0 and 7.0 < y < 293.0):
+                continue
             if _h(ix, iy, 3) > dichte(x, y) * 1.05:
                 continue
-            out.append((x, y, int(_h(ix, iy, 4) * 10)))
+            if U._burgberg_abstand(x, y) < 40.0 or _zone_nah(x, y) or not M.ok(x, y, baum=True):
+                continue
+            if abs(U.gelaende_hoehe(x, y)) > 40.0:
+                continue
+            fw = _fw(x, y)
+            k = int(_h(ix, iy, 4) * 10)
+            if fw < 0.5 and k < 5:                                                      # ausserhalb mehr Laubbaeume
+                k = 5 + k % 3
+            out.append((x, y, k))
+    _CACHE["P"], _CACHE["l"] = P, out
     return out
 
 
-def bauen_wald():
+def baeume_liste():
+    return alle_baeume(_CACHE["P"]) if "P" in _CACHE else []
+
+
+def bauen_wald(P):
     b = B.Bau("wald")
-    for x, y, k in baeume_liste():
+    for x, y, k in alle_baeume(P):
         zb = U.gelaende_hoehe(x, y)
         s = k * 131 + int(x * 7) + int(y * 13)
         rnd = lambda i, s=s: T._h01(s, i, 7777)

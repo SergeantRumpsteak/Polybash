@@ -129,3 +129,8 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - **Bahnwald**: statt zweier Huegel Rauschrelief (`umgebung._bahnrelief`, bis ~6 m) beiderseits des ebenen Gleiskorridors; die Baeume stehen rauschartig dicht (`wald.dichte`), ohne Streifen.
 - **Burgberg-Kamm**: der Burgberg setzt sich als Kamm bis zur Nordwestecke fort (`umgebung._burgberg_gewichte`) und steigt dabei weiter an; die Berge ausserhalb setzen auf der Hoehe des Kamms an (`umgebung.rand_anschluss`, `talkessel.hoehe`), der Talrand ist dort also nicht mehr z = 0.
 - **Steinbruchgrube** reicht bis zum Westrand der Map (`steinbruch.PIT` ab x = 0).
+
+### Gras-Arten, Bodenrauschen, Streugehoelz (gras.py, wald.py, umgebung._wiesenrauschen)
+- **Gras** waechst jetzt auch auf den Gruenflaechen des Flugplatzes (nur dort, wo kein Belag/Halle/Zaun liegt; Raster aus den Flaechen der Umgebung). Arten: Kurzgras, hohes Gras mit Samenstaenden (50..120 cm), Pfeifengras-Horste, Blumen (weiss/gelb/violett/rosa), Farn bei den Baeumen, Schilf mit Rohrkolben an den Teichen. Am Flugplatz in Belagsnaehe nur Kurzgras.
+- **Bodenrauschen**: alle Gruenflaechen ausser Flugplatz, ebenen Bauzonen, Burggelaende, Grubenrand, Talrand und Burgplateau sind durch ein Rauschen (+-1 m) uneben.
+- **Wald/Streugehoelz** (`wald.alle_baeume`): ein gemeinsames Dichtefeld; im Waldgebiet an der Bahn dichter (reicht bis an den Flugplatzzaun, bleibt nur am Gleiskorridor frei), sonst vereinzelte Baumgruppen. Dadurch keine Streifen mehr, der Wald geht nahtlos in die Bebaumung der Umgebung ueber.

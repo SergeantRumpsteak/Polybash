@@ -209,6 +209,7 @@ def gelaende_hoehe(x, y):
     c = max(abs(x - C), abs(y - C))
     ms = B.smoothstep(44.0, 54.0, c) * _flach(x, y)                    # kleine Bodenwellen auch entlang der Wege (nicht auf dem Burgplatz)
     h = (huegel_roh(x, y) * m if m > 1e-6 else 0.0) + (1.6 * (T.fbm(x / 30.0, y / 30.0, T.SEED + 31, 2) - 0.5) * ms if ms > 1e-6 else 0.0)
+    h += _wiesenrauschen(x, y)                                                                   # generelle Unebenheit aller Gruenflaechen (nicht Flugplatz, Bauzonen, Burg, Grube)
     rw = _bahnband(x, y)                                                                          # Bahnwald: weniger grosse Huegel, dafuer Bodenunebenheiten
     if rw > 1e-6:
         h = h * (1.0 - 0.8 * rw) + rw * _bahnrelief(x, y)
@@ -281,6 +282,31 @@ def rand_anschluss(x, y):
     if x > 130.0 or y < 190.0:
         return 0.0
     return gelaende_hoehe(min(max(x, 0.0), T.TAL), min(max(y, 0.0), T.TAL))
+
+# ------------------------------------------------------------------ allgemeine Bodenunebenheit
+PIT_RECHTECK = (0.0, 5.0, 60.0, 60.0)                       # Grubenloch (steinbruch.PIT)
+
+
+def _wiesenrauschen(x, y):
+    """Noise-Unebenheit (+-1 m, Wellenlaengen ~3..16 m) auf allen Gruenflaechen ausser Flugplatz, ebenen Bauzonen, Burggelaende samt Ring,
+    Grubenrand, Talrand und Burgplateau (dort jeweils weich auslaufend)."""
+    m = B.smoothstep(0.0, 10.0, math.hypot(max(205.0 - x, 0.0), max(52.0 - y, y - 248.0, 0.0)))
+    if m < 1e-4:
+        return 0.0
+    for zz in STADT_ZONEN:
+        m *= B.smoothstep(2.0, 12.0, math.hypot(max(zz[0] - x, 0.0, x - zz[2]), max(zz[1] - y, 0.0, y - zz[3])))
+        if m < 1e-4:
+            return 0.0
+    m *= B.smoothstep(60.0, 72.0, math.hypot(x - C, y - C))
+    px0, py0, px1, py1 = PIT_RECHTECK
+    m *= B.smoothstep(0.0, 6.0, math.hypot(max(px0 - x, 0.0, x - px1), max(py0 - y, 0.0, y - py1)))
+    m *= B.smoothstep(0.0, 14.0, min(x, T.TAL - x, y, T.TAL - y))
+    m *= B.smoothstep(14.0, 22.0, math.hypot(x - RUINE[0], y - RUINE[1]))
+    if m < 1e-4:
+        return 0.0
+    n = (T.fbm(x / 16.0, y / 16.0, T.SEED + 501, 2) - 0.5) * 2.0 * 0.7 + (T.fbm(x / 5.0, y / 5.0, T.SEED + 503, 2) - 0.5) * 2.0 * 0.45
+    return 1.8 * m * n
+
 
 
 def _z_auf(x, y, z0, hf):

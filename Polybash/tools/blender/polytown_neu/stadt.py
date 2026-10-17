@@ -1203,7 +1203,7 @@ def baue_alles():
     import felder as FE
     import laternen as LA
     import gras as GR
-    return ([w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + FE.bauen_felder() + WA.bauen_wald() + RU.bauen_ruine()
+    return ([w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + FE.bauen_felder() + WA.bauen_wald(P) + RU.bauen_ruine()
             + [LA.bauen_laternen(P), GR.bauen_gras(P)])
 
 
