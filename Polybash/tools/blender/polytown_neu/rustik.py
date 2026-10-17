@@ -24,6 +24,8 @@ S.FARBEN.setdefault("Holz dunkel", ((0.22, 0.15, 0.10), 0.95, 0.0))
 # ------------------------------------------------------------------ Bausteine
 def mauerwerk(g, ach, aussen, sg, a0, a1, z0, z1, rnd, oeff=(), mats=("Stein", "Stein alt", "Stein dunkel", "Stein alt")):
     """Bruchsteinmauer: Reihen unterschiedlicher Hoehe aus Quadern verschiedener Laenge, die unregelmaessig (1..7 cm) aus der Wand ragen."""
+    import altbau
+    g = altbau.Deko(g)
     z = z0
     while z < z1 - 0.1:
         h = min(rnd.uniform(0.26, 0.52), z1 - z)

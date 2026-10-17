@@ -193,6 +193,7 @@ class Lok:
 
 # ------------------------------------------------------------------ Gebaeude
 def satteldach(g, w, d, h, rh, mat_dach, mat_giebel, ueber=0.4):
+    g = altbau.DachLok(g, mat_dach)
     """Satteldach mit First in x-Richtung ueber dem Grundriss w x d (Traufe auf Hoehe h, First h + rh)."""
     x0, x1, y0, y1 = -w / 2 - ueber, w / 2 + ueber, -d / 2 - ueber, d / 2 + ueber
     g.poly([(x0, y0, h), (x1, y0, h), (x1, 0.0, h + rh), (x0, 0.0, h + rh)], (0.0, -rh, d / 2), mat_dach)
@@ -239,11 +240,12 @@ def wand(g, ach, p0, p1, a0, a1, z0, z1, mat, oeff=()):
 
 def aussenwand(g, ach, aussen, sg, a0, a1, z1, mat, oeff, sockel=True):
     """Aussenwand: Kern + Innenputz + Sockelvorsatz; aussen = Koordinate der Aussenflaeche, sg = Richtung nach aussen (+-1)."""
-    for (o0, o1, m, zl, zh) in ((-0.24, 0.0, mat, -1.0, z1), (-WD, -0.24, "Innenwand", -1.0, z1), (0.0, 0.07, "Sockel", -1.0, 0.6)):
-        if m == "Sockel" and not sockel:
-            continue
+    for (o0, o1, m, zl, zh) in ((-0.24, 0.0, mat, -1.0, z1), (-WD, -0.24, "Innenwand", -1.0, z1)):
         p0, p1 = sorted((aussen + sg * o0, aussen + sg * o1))
         wand(g, ach, p0, p1, a0, a1, zl, zh, m, oeff)
+    if sockel:
+        altbau.sockel(g, ach, aussen, sg, a0, a1, oeff)
+    altbau.putz_flecken(g, ach, aussen, sg, a0, a1, z1, mat, oeff)
 
 
 def _lok(ach, aussen, sg, a, o, z):
@@ -269,6 +271,7 @@ def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden, zustand="ok", lz=("o
     pb(al, ah, 0.0, 0.05, zh, zh + t, "Rahmen weiss")
     pb(al, ah, 0.0, 0.05, zl - t, zl, "Rahmen weiss")
     pb(al - 0.12, ah + 0.12, 0.0, 0.15, zl - t - 0.06, zl - t, "Stein")
+    altbau.fenster_zierde(g, ach, aussen, sg, ac, zc, w, h)
     if zustand == "bretter":                                                            # zugenagelt: drei Bretter quer
         for k, zz in enumerate((zl + 0.1, zc - 0.1, zh - 0.35)):
             da = 0.12 * (k - 1)
@@ -321,6 +324,13 @@ def gaube(g, ax, H, rh, d, wand_m, dach_m):
 
 
 def dach(g, form, w, d, H, rh, dm, gm, e=0.45):
+    """Siehe _dach_roh; zusaetzlich Ziegel-/Schieferbelag auf allen Dachflaechen und Sparrenkoepfe (altbau.py)."""
+    rz = _dach_roh(altbau.DachLok(g, dm), form, w, d, H, rh, dm, gm, e)
+    altbau.sparren(g, form, w, d, H, rh, e)
+    return rz
+
+
+def _dach_roh(g, form, w, d, H, rh, dm, gm, e=0.45):
     """Dach ueber dem Grundriss w x d (Traufe auf Hoehe H, Ueberstand e). form: 'x' Satteldach (First laengs, Traufe zur Strasse),
     'y' Satteldach (Giebel zur Strasse), 'walm' Walmdach, 'mansard' Mansarddach, 'pult' Pultdach. Rueckgabe: Dachhoehe z(x, y) (zum Aufsetzen von Kamin, Flicken)."""
     hw, hd = w / 2.0, d / 2.0
@@ -497,7 +507,7 @@ def verfall_dach(g, form, rz, w, d, H, rnd, lvl):
             pts = [(x0, y0), (x0 + bw_, y0), (x0 + bw_, y0 + bh_), (x0, y0 + bh_)]
         else:
             continue
-        P = [(x, y, rz(x, y) + 0.03) for x, y in pts]
+        P = [(x, y, rz(x, y) + 0.11) for x, y in pts]
         g.poly(P, (0.0, 0.0, 1.0), mat)
 
 
@@ -714,8 +724,7 @@ def haus(b, cx, cy, zb, theta, T, seed=0):
     cy_ = {"y": (d / 2 - 1.6) * (1 if ch >= 0 else -1), "pult": d / 2 - 1.0}.get(form, 0.0)
     kx, ky = (0.0, cy_) if form == "y" else (ch, cy_)
     ztop = max(rz(kx + a, ky + c) for a in (-0.45, 0.45) for c in (-0.45, 0.45)) + 0.9
-    g.box(kx - 0.35, ky - 0.35, H - 0.1, kx + 0.35, ky + 0.35, ztop, "Klinker alt" if lvl else "Klinker")
-    g.box(kx - 0.45, ky - 0.45, ztop, kx + 0.45, ky + 0.45, ztop + 0.12, "Stein")
+    rustik.kamin(g, kx, ky, H - 0.1, ztop + 0.1, rnd, 0.8)
     if lvl >= 2 and rnd.random() < 0.6:                                       # abgebrochener Kaminkopf: Ziegelhaufen daneben
         g.box(kx + 0.5, ky - 0.2, rz(kx + 0.5, ky) + 0.0, kx + 1.0, ky + 0.2, rz(kx + 1.0, ky) + 0.25, "Klinker alt")
     g.box(w / 2 - 0.15, -d / 2 - 0.12, 0.0, w / 2 - 0.03, -d / 2 - 0.02, H - 0.3, "Metall")                 # Fallrohr
@@ -728,6 +737,11 @@ def scheune(b, cx, cy, zb, theta, w=12.0, d=9.0):
     h, rh = 4.6, 3.4
     g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, "Holz")
     satteldach(g, w, d, h, rh, "Dach grau", "Holz")
+    dk = altbau.Deko(g)
+    for (ach, aus, sg, a0, a1) in (("x", -d / 2, -1, -w / 2, w / 2), ("x", d / 2, 1, -w / 2, w / 2), ("y", -w / 2, -1, -d / 2, d / 2), ("y", w / 2, 1, -d / 2, d / 2)):
+        altbau.scheunen_latten(dk, ach, aus, sg, a0, a1, 0.0, h)
+    altbau.sockel(g, "x", -d / 2, -1, -w / 2, w / 2, [(-1.6, 1.6, -1, 3.4)])
+    altbau.sockel(g, "x", d / 2, 1, -w / 2, w / 2, [])
     g.box(-1.6, -d / 2 - 0.08, 0.0, 1.6, -d / 2, 3.4, "Tuer")
     g.box(-0.05, -d / 2 - 0.12, 0.0, 0.05, -d / 2, 3.4, "Stein")
     for sx in (-1, 1):
@@ -1196,3 +1210,7 @@ def bauen():
         T.add_mesh(coll, g.name, g.v, g.f, mats, [namen.index(mname) for mname in g.m])
         nf += len(g.f)
     return nf
+
+
+import altbau  # noqa: E402  (Altbau-Bausteine; benutzt stadt.FARBEN)
+import rustik  # noqa: E402,F401  (Rathaus/Gasthaus; definiert Materialien)

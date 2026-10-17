@@ -18,9 +18,11 @@ S.FARBEN.update({
     "Reifen":      ((0.07, 0.07, 0.07), 1.0, 0.0),
     "Kipper blau": ((0.18, 0.30, 0.45), 0.7, 0.1),
     "Wiese Rand":  ((0.34, 0.52, 0.21), 1.0, 0.0),
+    "Schotterstrasse": ((0.62, 0.58, 0.51), 1.0, 0.0),
+    "Fahrspur":    ((0.45, 0.42, 0.37), 1.0, 0.0),
 })
 
-PIT = (15.0, 15.0, 60.0, 55.0)                  # Loch in der Wiese (Raster 5 m)
+PIT = (10.0, 10.0, 60.0, 60.0)                  # Loch in der Wiese (Raster 5 m)
 PIT_Z = -9.0
 G = 1.25                                          # Zellengroesse der Grube
 ZONE = (8.0, 8.0, 100.0, 74.0)                   # ebener Baugrund (STADT_ZONEN)
@@ -30,16 +32,16 @@ WERKSTATT = (74.0, 63.0)                         # Mitte (16 x 10 m, Tuer nach S
 BRECHER = (62.0, 30.0, 68.0, 36.0)
 BUNKER = (72.0, 22.0, 80.0, 32.0)
 SPRENG = (28.0, 64.0)                            # Sprengstoffhaeuschen
-BELEGT = ((12.0, 12.0, 63.0, 58.0),              # Grube mit Rand
+BELEGT = ((8.0, 8.0, 63.0, 62.0),              # Grube mit Rand
           (60.0, 12.0, 100.0, 64.0),             # Schotterhof, Brecher, Bunker, Lager, Tor, Waechterhaus
           (62.0, 55.0, 86.0, 70.0),              # Werkstatt mit Vorplatz
           (24.0, 60.0, 33.0, 68.0))              # Sprengstoffhaeuschen
 
 
 # ------------------------------------------------------------------ Talsenke
-SENKE_C = (37.5, 34.0)                           # Mitte der Sohle
-SENKE_R = (10.5, 8.8)                           # Halbachsen der ebenen Sohle (vor der Randstoerung)
-RIM = 2.15                                        # Rand der Senke bei r = RIM (Hoehe 0)
+SENKE_C = (35.0, 35.0)                           # Mitte der Sohle
+SENKE_R = (10.5, 9.8)                           # Halbachsen der ebenen Sohle (vor der Randstoerung)
+RIM = 2.1                                        # Rand der Senke bei r = RIM (Hoehe 0)
 
 
 def _glatt(t):
@@ -47,12 +49,74 @@ def _glatt(t):
     return t * t * (3.0 - 2.0 * t)
 
 
+def _stoer(a):
+    return 1.0 + 0.12 * (T.noise(2.0 + 1.3 * math.cos(a), 2.0 + 1.3 * math.sin(a), 7) - 0.5) * 2.0 + 0.07 * math.sin(3.0 * a + 1.1)
+
+
+def senke_punkt(r, a):
+    """Weltpunkt bei normiertem Radius r und Winkel a (Gegenstueck zu senke_r)."""
+    st = _stoer(a)
+    return SENKE_C[0] + SENKE_R[0] * r * st * math.cos(a), SENKE_C[1] + SENKE_R[1] * r * st * math.sin(a)
+
+
+# ------------------------------------------------------------------ Schotterstrasse in die Grube (Spirale an der Wand, zweispurig)
+STR_B = 7.0                                      # Fahrbahnbreite
+STR_A0 = math.radians(15.0)                      # Einfahrt im Osten/Nordosten (vom Hof), dann gegen den Uhrzeigersinn abwaerts
+STR_SWEEP = math.radians(300.0)
+_STR = None
+
+
+def strasse_linie():
+    """Mittellinie der Rampe als Liste (x, y, z), 1,5-m-Abstand; Gefaelle ca. 9 %, die letzten 8 % der Laenge eben auf der Sohle."""
+    global _STR
+    if _STR is not None:
+        return _STR
+    n = 200
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        r = RIM - 0.25 - (RIM - 1.2) * t
+        x, y = senke_punkt(r, STR_A0 + STR_SWEEP * t)
+        pts.append([x, y])
+    L = [0.0]
+    for p, q in zip(pts, pts[1:]):
+        L.append(L[-1] + math.hypot(q[0] - p[0], q[1] - p[1]))
+    out = []
+    for i, (x, y) in enumerate(pts):
+        f = min(1.0, L[i] / (0.94 * L[-1]))
+        out.append((x, y, PIT_Z * f))
+    # Zufahrt vom Hof: gerade Strecke ueber die Wiesenkante hinaus (ebenes Gelaende, z = 0)
+    x0, y0 = out[0][0], out[0][1]
+    ext = [(x0 + k * (62.0 - x0) / 6.0, y0, 0.0) for k in range(6, 0, -1)]
+    _STR = ext + out
+    _STRB = {}
+    for k in range(len(_STR) - 1):
+        for (px, py) in (_STR[k][:2], _STR[k + 1][:2]):
+            for bx in (-1, 0, 1):
+                for by in (-1, 0, 1):
+                    _STRB.setdefault((int(px // 9) + bx, int(py // 9) + by), set()).add(k)
+    globals()["_STRB"] = _STRB
+    return _STR
+
+
+def strasse_abstand(x, y):
+    """Kleinster Abstand zur Mittellinie und deren Hoehe dort (Abstand 99 und z = 0 weit weg)."""
+    P = strasse_linie()
+    best, bz = 99.0, 0.0
+    for k in _STRB.get((int(x // 9), int(y // 9)), ()):
+        (ax, ay, az), (bx_, by_, bz_) = P[k], P[k + 1]
+        dx, dy = bx_ - ax, by_ - ay
+        t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
+        d = math.hypot(x - ax - t * dx, y - ay - t * dy)
+        if d < best:
+            best, bz = d, az + (bz_ - az) * t
+    return best, bz
+
+
 def senke_r(x, y):
     """Normierter Abstand von der Mitte; Umriss durch Winkelrauschen und Buchten unregelmaessig (Sohle bei r < 1, Rand bei r = RIM)."""
     dx, dy = (x - SENKE_C[0]) / SENKE_R[0], (y - SENKE_C[1]) / SENKE_R[1]
-    a = math.atan2(dy, dx)
-    st = 1.0 + 0.12 * (T.noise(2.0 + 1.3 * math.cos(a), 2.0 + 1.3 * math.sin(a), 7) - 0.5) * 2.0 + 0.07 * math.sin(3.0 * a + 1.1)
-    return math.hypot(dx, dy) / st
+    return math.hypot(dx, dy) / _stoer(math.atan2(dy, dx))
 
 
 def pit_z(x, y):
@@ -65,7 +129,12 @@ def pit_z(x, y):
         z = z + 0.15 * (terr - z) * math.sin(math.pi * min(1.0, 3.0 * s * (1.0 - s) * 2.0))
         z += (T.noise(x / 3.5, y / 3.5, 21) - 0.5) * 0.55 * s * (1.0 - s) * 4.0
     e = min(x - PIT[0], PIT[2] - x, y - PIT[1], PIT[3] - y)
-    return z * _glatt(e / 2.5) if z < 0.0 else 0.0
+    z = z * _glatt(e / 2.5) if z < 0.0 else 0.0
+    d, zr = strasse_abstand(x, y)
+    if d < STR_B / 2 + 3.5:                                                    # Fahrbahn: ebene Trasse, Boeschung ueber 5 m
+        w = _glatt((d - STR_B / 2) / 3.5)
+        z = zr * (1.0 - w) + z * w
+    return z * _glatt(e / 2.5) if z < 0.0 else z
 
 
 def _mat_tri(zs, rs, nz, k):
@@ -97,13 +166,19 @@ def felsbrocken(b, x, y, z, r, rnd, mat):
         f.append((i, j, k))
         f.append((j, i, k + 1))
     b.add(v, f, mat)
+    BROCKEN.append((x, y, r))
+
+
+BROCKEN = []
+NX, NY = 34, 34
 
 
 def grube(b):
     """Baut die Talsenke aus einem Netz leicht verschobener Punkte (Dreiecke mit Neigung -> Felsbaender), dazu eckige Felsbrocken. Rueckgabe: []."""
     import random
     rnd = random.Random(5)
-    nx, ny = 30, 27
+    del BROCKEN[:]
+    nx, ny = NX, NY
     dx, dy = (PIT[2] - PIT[0]) / nx, (PIT[3] - PIT[1]) / ny
     P = {}
     for j in range(ny + 1):
@@ -137,6 +212,8 @@ def grube(b):
             r = senke_r(x, y)
             if not (r0 <= r <= r1):
                 continue
+            if strasse_abstand(x, y)[0] < STR_B / 2 + 2.5:
+                continue
             if 38.0 < x < 52.0 and 29.5 < y < 36.0:                       # Aufgabestelle und Kuebelbahn frei halten
                 continue
             if 28.0 < x < 36.0 and 28.0 < y < 33.0 or 38.0 < x < 48.0 and 36.5 < y < 41.5:   # Standorte von Bagger und Kipper
@@ -144,10 +221,41 @@ def grube(b):
             rad = rnd.uniform(rmin, rmax)
             felsbrocken(b, x, y, pit_z(x, y) + (0.15 if not big else 0.0), rad, rnd, rnd.choice(("Bruch Fels", "Bruch Fels dunkel", "Bruch Fels hell", "Bruch Fels")))
             done += 1
-    brocken(22, 0.4, 0.8, 0.97, 1.25, False)
-    brocken(70, 0.3, 0.7, 1.25, 1.75, False)
-    brocken(9, 1.4, 2.2, 1.35, 1.7, True)
+    brocken(30, 0.4, 0.8, 0.97, 1.25, False)
+    brocken(90, 0.3, 0.7, 1.25, 1.8, False)
+    brocken(12, 1.4, 2.2, 1.35, 1.7, True)
+    strasse_belag(b)
     return []
+
+
+def strasse_belag(b):
+    """Schotterbelag der Rampe (Band entlang der Mittellinie, folgt dem Gelaende) mit zwei dunklen Fahrspuren und Randsteinen aus Brocken."""
+    P = strasse_linie()
+    rnd = __import__("random").Random(9)
+    seg = []
+    for k, (x, y, z) in enumerate(P):
+        k1 = min(k + 1, len(P) - 1)
+        k0 = max(k - 1, 0)
+        dx, dy = P[k1][0] - P[k0][0], P[k1][1] - P[k0][1]
+        ln = math.hypot(dx, dy) or 1.0
+        nx_, ny_ = -dy / ln, dx / ln
+        seg.append((x, y, nx_, ny_))
+    for (o0, o1, mat) in ((-STR_B / 2, STR_B / 2, "Schotterstrasse"), (-2.3, -0.9, "Fahrspur"), (0.9, 2.3, "Fahrspur")):
+        dz = 0.03 if mat == "Schotterstrasse" else 0.045
+        for k in range(len(seg) - 1):
+            a, c = seg[k], seg[k + 1]
+            q = []
+            for (p, o) in ((a, o0), (a, o1), (c, o1), (c, o0)):
+                px, py = p[0] + p[2] * o, p[1] + p[3] * o
+                q.append((px, py, pit_z(px, py) + dz))
+            b.add(q, [(0, 3, 2, 1)] if False else [(0, 1, 2, 3)], mat)
+    for k in range(0, len(seg), 3):                                             # Randsteine entlang der Aussenkanten
+        for sg in (-1, 1):
+            if rnd.random() < 0.35:
+                continue
+            x, y, nx_, ny_ = seg[k]
+            px, py = x + nx_ * sg * (STR_B / 2 + 0.4), y + ny_ * sg * (STR_B / 2 + 0.4)
+            felsbrocken(b, px, py, pit_z(px, py) + 0.1, rnd.uniform(0.25, 0.45), rnd, "Bruch Fels")
 
 
 # ------------------------------------------------------------------ Schraegaufzug, Brecherturm, Verladebunker
