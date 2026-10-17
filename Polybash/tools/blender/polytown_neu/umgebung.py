@@ -31,6 +31,8 @@ import bpy  # noqa: E402
 import talkessel as T  # noqa: E402
 import burg as B  # noqa: E402
 from burg import Bau  # noqa: E402
+import flugzeug as FL  # noqa: E402
+import schilder as SC  # noqa: E402
 
 C = B.C
 BREITE_WEG = 8.0          # Fahrbahnbreite aller Wege (wie die Bruecken der Burg)
@@ -57,8 +59,10 @@ REIHE_YC = tuple(BY + (i - (REIHE_N - 1) / 2.0) * REIHE_B for i in range(REIHE_N
 REIHE_Y0, REIHE_Y1 = REIHE_YC[0] - REIHE_R, REIHE_YC[-1] + REIHE_R                       # gesamte Breite 62,4 m
 TANK_POS = (288.0, 108.0)                                             # Mitte der Abstellposition an der Tankstelle
 RC_GELB = 4.5                                                         # Radius der gelben Abbiegelinien
-TANK = (REIHE_X0, 88.0, 297.0, 116.0)                                 # Tankstelle (Asphaltflaeche) suedlich der Hallen, an Vorfeld/Rollweg
+TANK = (REIHE_X0, 72.0, 297.0, 116.0)                                 # Tankstelle (Asphaltflaeche) suedlich der Hallen, an Vorfeld/Rollweg; im Sueden Stellplatz fuer das Tankfahrzeug
+TANKWAGEN = (288.5, 79.5, 180.0)                                      # Tankfahrzeug (Mitte, Kurs): Nase nach Westen zum Rollweg
 VORFELD = (TAXI_X + TAXI_B / 2, TANK[1], REIHE_X0, REIHE_Y1)         # Vorfeld zwischen Rollweg und Hallen (reicht bis zur Tankstelle)
+STUKA_X, STUKA_Y = 287.5, (192.0, 208.5, 225.0)                      # drei Ju 87 nordlich der Hangarreihe (Staffel, Kurs 225 Grad)
 HELI = (240.0, 184.0, 8.0)                                            # Helipad nordlich vom Tower auf der Gruenflaeche: Mitte, Radius
 # Grosser Hangar am Suedende westlich der Bahn, offen nach Osten (zur Bahn), Tuer im Westen
 HX, HY, HW, HD, HH = 237.5, 90.0, 12.0, 28.0, 6.0                    # Mitte, Breite (x), Tiefe (y), Hoehe
@@ -74,7 +78,7 @@ STADT_ZONEN = ((10.0, 80.0, 100.0, 220.0),        # Stadt im Westen (Marktplatz,
                (120.0, 216.0, 182.0, 280.0),      # Dorf im Norden
                (120.0, 20.0, 182.0, 84.0),        # Bahnhof im Sueden (Empfangsgebaeude, Bahnsteig, Vorplatz; frueher Dorf mit Kreisverkehr)
                (0.0, 3.0, 100.0, 80.0),           # Steinbruch im Suedwesten (Grube, Hof, Werkstatt) - die Grube selbst ist ein Loch in der Wiese
-               (94.0, 176.0, 132.0, 214.0, 6.0),   # Gruenflaeche zwischen Ringweg und Spange Nord (Wohnhaeuser am Ringweg)
+               (90.0, 176.0, 148.0, 216.0, 6.0),   # Gruenflaeche zwischen Ringweg und Spange Nord (Wohnhaeuser am Ringweg)
                (84.0, 8.0, 196.0, 40.0),          # Gleiskorridor Steinbruch -> Bahnhof mit Gueterschuppen und Gueterstrasse
                (190.0, 22.0, 300.0, 32.0, 12.0))   # Gleiskorridor Bahnhof -> Gebirge (Tunnel hinter dem Talrand); schmal, Huegel duerfen direkt daneben beginnen
 TEICHE = ((16.0, 236.0, 9.0), (110.0, 60.0, 8.0), (190.0, 246.0, 9.0), (192.0, 50.0, 8.0))
@@ -205,8 +209,9 @@ def gelaende_maske(x, y):
 
 
 # Bauplaetze im Huegelland nordlich des Flugplatzes (muehle.py): (x, y, r_eben, r_aus) - innen ebener Grund, aussen weich in das Gelaende uebergehend
-PLATEAUS = ((270.0, 284.0, 10.0, 14.0), (257.0, 262.0, 7.0, 14.0), (285.0, 264.0, 9.5, 14.5), (246.0, 288.0, 6.0, 12.0), (290.0, 290.0, 7.0, 10.0), (250.0, 43.0, 6.0, 9.0))
-PLATEAU_DZ = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+PLATEAUS = ((270.0, 284.0, 10.0, 14.0), (257.0, 262.0, 7.0, 14.0), (285.0, 264.0, 9.5, 14.5), (246.0, 288.0, 6.0, 12.0), (290.0, 290.0, 7.0, 10.0), (250.0, 43.0, 6.0, 9.0),
+            (224.0, 286.0, 9.5, 13.0), (216.0, 262.0, 8.5, 12.0))                       # Turmmuehle und Schaeferhuette (muehle2.py)
+PLATEAU_DZ = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PZ = {}
 
 
@@ -570,6 +575,9 @@ def landebahn():
         ya, yb = y_ab(42.0, 54.0)
         for sgn in (-1, 1):
             mk(BX + sgn * 4.4 - 0.9, ya, BX + sgn * 4.4 + 0.9, yb)
+    # Pistennummern hinter den Zebrastreifen: 36 am Suedende (Anflug nach Norden), 18 am Nordende (Anflug nach Sueden)
+    SC.pistennummer(b, "36", BX, y0 + 15.0, True, Z_MARK + 0.001)
+    SC.pistennummer(b, "18", BX, y1 - 15.0, False, Z_MARK + 0.001)
     return b
 
 
@@ -976,6 +984,18 @@ def tankstelle():
     for (xa, ya, xb, yb) in ((px - 6.8, py - 6.8, px + 6.8, py - 6.6), (px - 6.8, py + 6.6, px + 6.8, py + 6.8),
                              (px - 6.8, py - 6.8, px - 6.6, py + 6.8), (px + 6.6, py - 6.8, px + 6.8, py + 6.8)):
         b.box(xa, ya, Z_GELB0, xb, yb, Z_GELB1, m)
+    # Stellplatz fuer das Tankfahrzeug im Sueden der Tankstelle: weisser Rahmen, gelbe Zufahrt vom Rollweg, Poller, Zapfstelle
+    tx, ty, tpsi = TANKWAGEN
+    for (xa, ya, xb, yb) in ((tx - 6.3, ty - 2.3, tx + 6.3, ty - 2.1), (tx - 6.3, ty + 2.1, tx + 6.3, ty + 2.3),
+                             (tx - 6.3, ty - 2.3, tx - 6.1, ty + 2.3), (tx + 6.1, ty - 2.3, tx + 6.3, ty + 2.3)):
+        b.box(xa, ya, Z_GELB0, xb, yb, Z_GELB1, m)
+    b.box(TAXI_X + TAXI_B / 2, ty - GELB_B / 2, Z_GELB0, tx - 6.3, ty + GELB_B / 2, Z_GELB1, "Markierung gelb")
+    for yy in (ty - 1.8, ty + 1.8):
+        b.prism(tx + 7.0, yy, Z_VORFELD, 0.14, 0.95, 8, "Metall")
+    b.box(tx + 0.5 - 1.2, ty + 2.9, Z_VORFELD, tx + 0.5 + 1.2, ty + 3.7, Z_VORFELD + 0.2, "Insel")
+    b.box(tx + 0.5 - 0.35, ty + 3.05, Z_VORFELD + 0.2, tx + 0.5 + 0.35, ty + 3.55, 1.8, "Zapfsaeule")
+    b.box(tx + 0.5 - 1.8, ty - 3.7, Z_VORFELD, tx + 0.5 - 0.6, ty - 3.1, Z_VORFELD + 0.9, "Metall")          # Erdungs-/Schlauchkasten
+    FL.tankwagen(b, tx, ty, tpsi, Z_VORFELD)
     return b
 
 
@@ -1048,9 +1068,48 @@ def drehteile():
     return [("tower_radar", radar_tower(), (TX, SCY, RADAR_Z), 0.0, 6.0)]
 
 
+def flugzeuge():
+    """Flugzeuge des 2. Weltkriegs: drei Ju 87 (Stuka) auf der Gruenflaeche nordlich der Hangarreihe (Nase nach Suedwesten, 225 Grad),
+    je ein Jaeger in den drei Tonnenhallen (Bf 109 E, Fw 190 A, Spitfire I; Nase zur offenen Westseite) und eine Bf 109 im grossen Hangar.
+
+    Die Gruenflaeche ist nur ca. 22 m breit (Rollweg x = 276, Zaun x = 299): drei Stukas mit 13,8 m Spannweite und Kurs 225 Grad
+    brauchen nebeneinander 39 m - sie stehen deshalb in Staffel (je 16,5 m versetzt, Fluegel ueberlappen nicht)."""
+    b = Bau("umgebung_flugzeuge")
+    for yy in STUKA_Y:
+        FL.stuka(b, STUKA_X, yy, 225.0)
+    for yc, typ in zip(REIHE_YC, ("bf109", "fw190", "spitfire")):
+        FL.jaeger(b, REIHE_X0 + 7.6, yc, 180.0, typ, Z_BODEN)
+    FL.jaeger(b, 238.0, 96.0, 0.0, "bf109", Z_BODEN, anstrich=("Flug Sand", "Flug Hellblau"))
+    return b
+
+
+def rollwegschilder():
+    """Flughafenschilder auf der Gruenflaeche entlang der Rollwege: Haltepunkt-Schilder 18-36 (rot) an den drei Anschluessen,
+    Standort-/Richtungsschilder A / A1..A3 am Rollweg A, Standortschilder B an den Umfahrungen."""
+    b = Bau("umgebung_schilder")
+    xs = BAHN[2] + 2.8                                            # Gruenstreifen zwischen Bahn (x = 263) und Rollweg (x = 268)
+    for yc in ANSCHLUESSE:
+        for sg in (-1, 1):
+            SC.schild(b, xs - 0.1, yc + sg * 5.9, "E", [("halt", "18-36", None)])
+    namen = {ANSCHLUESSE[0]: "A1", ANSCHLUESSE[1]: "A2", ANSCHLUESSE[2]: "A3"}
+    for yc in ANSCHLUESSE:
+        if yc > ANSCHLUESSE[0]:                                   # nach Norden fahrend: Bahn links, Schild blickt nach Sueden
+            SC.schild(b, xs - 1.0, yc - 11.0, "S", [("richtung", namen[yc], "links"), ("standort", "A", None)])
+        if yc < ANSCHLUESSE[-1]:                                  # nach Sueden fahrend: Bahn rechts, Schild blickt nach Norden
+            SC.schild(b, xs - 1.0, yc + 11.0, "N", [("standort", "A", None), ("richtung", namen[yc], "rechts")])
+    for yy in (Y_SUED + 5.6, Y_NORD - 5.6):                      # Umfahrung: Standort B, in beide Fahrtrichtungen lesbar
+        SC.schild(b, 257.0, yy, "W", [("standort", "B", None)])
+        SC.schild(b, 258.2, yy, "E", [("standort", "B", None)])
+    return b
+
+
+FARBEN.update(FL.FARBEN)
+FARBEN.update(SC.FARBEN)
+
+
 def baue_alles():
     """Gibt die Baugruppen zurueck (ohne bpy aufrufbar)."""
-    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad()]
+    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad(), flugzeuge(), rollwegschilder()]
 
 
 def bauen():

@@ -150,3 +150,12 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - **Zweiter Hochsitz** im Wald suedlich des Flugplatzes bei (250, 43) auf eigenem ebenen Bauplatz (Treppe, Bruestung, Dach), Lichtung im Wald.
 - **Wohnhaeuser am Ringweg** (`stadt.ring_haeuser`): im Nordwest-Quartal zwischen Marktplatz und nordlichem Kreisel stehen auf der Gruenflaeche zwischen Ringweg und Spange Nord jetzt drei weitere Haeuser (Tuer zum Ring, Pfad zum Ringweg); die Flaeche ist als Bauzone eben (`STADT_ZONEN`).
 - Tests nur mit Mock-`bpy` (kein echtes Blender).
+
+### Airfield-Ausbau, Randguertel, Ausstattung, zweite Muehle (flugzeug.py, schilder.py, grenzwald.py, ausstattung.py, muehle2.py)
+- **Flugzeuge** (`flugzeug.py`, detailliert aus Querschnittsringen): drei Sturzkampfbomber (Nase nach Suedwesten) auf der Gruenflaeche noerdlich der Hangars - die Wiese ist nur ca. 22 m breit, daher **gestaffelt statt exakt nebeneinander**; in jedem Hangar ein Weltkriegsflugzeug; Tankwagen auf eigenem Stellplatz an der erweiterten Tankstelle. Kein Hakenkreuz am Leitwerk (bewusst weggelassen).
+- **Schilder** (`schilder.py`): Rollweg-Beschilderung nach ICAO-Art (Standort schwarz/gelb, Richtung gelb/schwarz, Haltepunkt rot/weiss, 5x7-Pixelschrift) auf der Gruenflaeche entlang der Rollwege; **Pistennummern 36 (Suedende) und 18 (Nordende)**.
+- **Randguertel** (`grenzwald.py`): zwei Felsreihen direkt hinter dem Rand (lueckenlos, BFS-Lecktest 0 Zellen), danach dichter Wald und wachsende Felsgruppen, die in das Gebirge uebergehen; Bahneinschnitt mit Felswaenden bis zum Tunnelportal. Gruppen `grenze_felsen`/`grenze_wald` liegen bewusst ausserhalb 0..300 m.
+- **Ausstattung** (`ausstattung.py`, automatisch platziert): 7 Trinkbrunnen, 7 Bushaltestellen und 23 Baenke an Strassenraendern/Plaetzen.
+- **Zweite Muehle + Schaeferhuette** (`muehle2.py`): gemauerte Hollaender-Turmmuehle (Galerie mit Treppe, Innentreppe, Mahlgaenge) bei (224, 286) und Schaeferwagen mit Pferch bei (216, 262) am Nordrand; die NO-Ecke selbst ist durch Meiler, Zeltplatz und Airfield belegt.
+- **Nordwest-Gruenflaeche**: Zone vergroessert, ein zusaetzliches Wohnhaus an der Spange Nord (viel mehr passt ohne neue Strasse nicht).
+- Tests sind reine Mock-Tests (ohne echtes Blender).

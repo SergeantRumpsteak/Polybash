@@ -1001,6 +1001,16 @@ def ring_haeuser(strs, belegt, haeuser, pfade, a0, a1, schritt=15.0):
     belegt.ring_extra = 8.0
 
 
+def gruen_haeuser(strasse, strs, belegt, haeuser, pfade):
+    """Zusaetzliche Wohnhaeuser auf der NW-Gruenflaeche: Suedseite der Spange Nord, engerer Abstand und kleinerer Randabstand als sonst."""
+    zaehler = [0]
+    belegt.ring_extra = -3.0
+    for i in range(len(strasse["roh"]) - 1):
+        for ab, rd in ((11.5, 6.0), (10.0, 9.0)):
+            haeuser_entlang(None, strasse["roh"][i], strasse["roh"][i + 1], strs, belegt, haeuser, pfade, abstand=ab, rand=rd, zaehler=zaehler, strasse=strasse, seiten=(-1, 1))
+    belegt.ring_extra = 8.0
+
+
 # ------------------------------------------------------------------ Oeffentliche Gebaeude (ersetzen Wohnhaeuser)
 def _fuss(art, cx, cy, theta, zus=0.0):
     """Grundriss-Rechteck (x0, y0, x1, y1) eines oeffentlichen Gebaeudes; theta ist ein Vielfaches von 90 Grad."""
@@ -1161,6 +1171,8 @@ def plane_stadt():
     # Dorf um den Kreisverkehr im Norden
     kreis_haeuser(DORF_N, KV_R + KV_B / 2, strs, belegt, haeuser, pfade, n=9, ohne=(-math.pi / 2,), strasse=S["Kreisverkehr Nord"], scheune_idx=3)
     ring_haeuser(strs, belegt, haeuser, pfade, 1.95, 2.95)                        # Gruenflaeche im Nordwest-Quartal zwischen Ringweg und Spange Nord
+    ring_haeuser(strs, belegt, haeuser, pfade, 1.90, 3.00, schritt=9.5)           # weitere Ringhaeuser in den Luecken
+    gruen_haeuser(S["Spange Nord"], strs, belegt, haeuser, pfade)                 # Suedseite der Spange Nord auf derselben Gruenflaeche
     spezial, plaetze = setze_spezial(strs, belegt, haeuser, pfade)
     # Baeume: deterministisch gestreut in den Zonen, nur auf freiem Boden
     baeume = []
@@ -1236,8 +1248,12 @@ def baue_alles():
     import laternen as LA
     import gras as GR
     import muehle as MU
-    return ([w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + FE.bauen_felder() + WA.bauen_wald(P) + RU.bauen_ruine() + MU.bauen_nord()
-            + [LA.bauen_laternen(P), GR.bauen_gras(P)])
+    import grenzwald as GW
+    import ausstattung as AU
+    gr = ([w, z, h, oe, bm, t] + BA.bauen_bahn() + SB.bauen_bruch() + FA.bauen_hof() + FE.bauen_felder() + WA.bauen_wald(P) + RU.bauen_ruine() + MU.bauen_nord()
+          + GW.bauen_guertel())
+    gr += AU.bauen(gr + U.baue_alles(), P)
+    return gr + [LA.bauen_laternen(P), GR.bauen_gras(P)]
 
 
 def bauen():

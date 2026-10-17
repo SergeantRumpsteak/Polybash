@@ -685,7 +685,7 @@ def zeltplatz(b):
 
 
 def bauen_nord():
-    """Liefert [nord_muehle, nord_koehler, nord_jagd]."""
+    """Liefert [nord_muehle, nord_koehler, nord_jagd, nord_zeltplatz, wald_hochsitz, nord2_muehle, nord2_schaefer]."""
     a, c, d, e, f = Bau("nord_muehle"), Bau("nord_koehler"), Bau("nord_jagd"), Bau("nord_zeltplatz"), Bau("wald_hochsitz")
     muehle(a)
     koehlerhuette(c)
@@ -695,4 +695,9 @@ def bauen_nord():
     futterkrippe(d)
     zeltplatz(e)
     hochsitz(f, HOCHSITZ_WALD)
-    return [a, c, d, e, f]
+    import muehle2 as M2
+    return [a, c, d, e, f] + M2.bauen_ne()
+
+import muehle2 as _M2  # noqa: E402  (zweite Muehle und Schaeferhuette: Belegung und Lichtungen)
+BELEGT = BELEGT + _M2.BELEGT
+BAUPLAETZE = BAUPLAETZE + _M2.BAUPLAETZE
