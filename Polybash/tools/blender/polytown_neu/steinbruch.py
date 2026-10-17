@@ -239,7 +239,6 @@ def brecher(b):
         b.box(x0 + 2.5, y1, 0.4 + k * 0.5, x0 + 3.1, y1 + 0.1, 0.45 + k * 0.5, "Metall")
     # Schriftzug
     g = Lok(b, (x0 + x1) / 2, y0, 0.0, 0.0, 1)
-    O.schrift(g, "STEINBRUCH", 0.0, 7.3, 0.0, 0.11, "Schrift weiss", 0.03)
     return g
 
 
@@ -276,7 +275,6 @@ def bunker(b):
     b.box(74.8, 25.8, zdeck - 1.0, 77.2, 28.2, zdeck - 0.9, "Rost")
     # Aufschrift
     g = Lok(b, (x0 + x1) / 2, y0, 0.0, 0.0, 1)
-    O.schrift(g, "VERLADUNG", 0.0, 3.4, 0.0, 0.1, "Schrift weiss", 0.03)
     return g
 
 
@@ -317,8 +315,6 @@ def werkstatt(b, lvl=1):
     tuerrahmen(g, "x", hd, hd + 0.07, 3.6, 4.8, F0, F0 + 2.2)
     g.box(3.4, hd, -0.6, 5.0, hd + 1.0, F0, "Beton")
     # Schild
-    g.box(-1.0, -hd - 0.1, F0 + 3.3, 4.2, -hd - 0.02, F0 + 4.1, "Schild gelb")
-    O.schrift(g, "WERKSTATT", 1.6, F0 + 3.4, -hd - 0.1, 0.075, "Schrift schwarz", 0.03)
     # Boden, Decke
     ix0, ix1, iy0, iy1 = -hw + WD, hw - WD, -hd + WD, hd - WD
     g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Beton")
@@ -412,8 +408,6 @@ def sprengstoff(b):
     g.box(-1.0, -0.4 - 0.0, F0, -0.4, 0.6, F0 + 0.5, "Holz alt")
     g.box(hw - 0.9, -hd + 0.4, H - 0.2 - 0.0, hw - 0.4, hd - 0.4, H, "Decke")
     # Warnschild
-    g.box(-1.9, -hd - 0.1, H - 1.0, 1.9, -hd - 0.02, H - 0.2, "Schild rot")
-    O.schrift(g, "ACHTUNG", 0.0, H - 0.88, -hd - 0.1, 0.08, "Schrift weiss", 0.03)
     return g
 
 

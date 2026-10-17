@@ -209,8 +209,6 @@ def empfangsgebaeude(b, cx, cy, lvl=1):
     for sx in (-1, 1):
         g.box(sx * 1.3 - (0.0 if sx > 0 else 0.35), -hd - 0.3, F0, sx * 1.3 + (0.35 if sx > 0 else 0.0), -hd, F0 + 3.4, "Stein alt")
     g.box(-1.9, -hd - 0.35, F0 + 3.4, 1.9, -hd, F0 + 3.7, "Stein alt")
-    g.box(-1.6, -hd - 0.1, F0 + 3.75, 1.6, -hd, F0 + 4.55, "Schild gruen")
-    O.schrift(g, "BAHNHOF", 0.0, F0 + 3.85, -hd - 0.1, 0.095, "Schrift weiss", 0.03)
     tuerrahmen(g, "x", -hd - 0.07, -hd, -1.3, 1.3, F0, F0 + 3.2, "Rahmen weiss")
     g.box(-1.1, -hd + 0.05, F0 + 3.2, 1.1, -hd + 0.1, F0 + 3.9, "Glas")
     g.box(-1.3, -hd - 0.9, -0.6, 1.3, -hd - 0.07, F0, "Beton")
@@ -397,8 +395,6 @@ def stellwerk(b, lvl=1):
     g.box(1.6, 1.0, zf2, 2.0, 1.4, zf2 + 0.45, "Holz alt")
     g.box(1.4, 0.5, zf2 + 0.78, 1.8, 0.8, zf2 + 0.92, "Metall")                                  # Fernsprecher
     g.box(2.9, 1.0, zf2 + 1.2, 3.0, 1.9, zf2 + 2.0, "Schild gelb")                               # Fahrplantafel
-    g.box(-1.9, -hd - 0.03, zf2 + 0.1, 1.9, -hd, zf2 + 0.85, "Schild gruen")
-    O.schrift(g, "STELLWERK", 0.0, zf2 + 0.2, -hd - 0.03, 0.062, "Schrift weiss", 0.02)
     return g
 
 
@@ -457,7 +453,6 @@ def gueterschuppen(b, lvl=1):
     fensterschmuck(g, "y", hw, 1, 0.0, FG + 1.45, 1.0, 1.1, None)
     fensterschmuck(g, "y", -hw, -1, 0.0, FG + 1.45, 1.0, 1.1, None)
     # Aufschrift
-    O.schrift(g, "GUETERSCHUPPEN", 0.0, FG + 2.9, -hd - 0.0, 0.062, "Schrift weiss", 0.03)
     # Einrichtung innen
     for k in range(4):
         g.box(-7.4 + 1.0 * k, hd - 1.4, FG, -6.6 + 1.0 * k, hd - 0.6, FG + 0.7, "Ware")

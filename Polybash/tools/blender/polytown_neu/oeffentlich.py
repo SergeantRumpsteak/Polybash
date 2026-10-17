@@ -158,8 +158,6 @@ def feuerwehr(b, cx, cy, zb, theta, lvl=1, seed=3):
         _tor(g, x + TOR_B / 2, x + TOR_B / 2 + TOR_B / 2, -D / 2, TOR_H, tor)
     # --- Aufschrift
     sx0 = xs[1]
-    g.box(sx0 - 3.9, -D / 2 - 0.06, 4.75, sx0 + 3.9, -D / 2, 5.85, "Schild rot")
-    schrift(g, "FEUERWEHR", sx0, 4.95, -D / 2 - 0.06, 0.125, "Schrift weiss", 0.04)
     # --- Boden, Decke, Innenausbau
     ix0, ix1, iy0, iy1 = xa + WD, xb - WD, -D / 2 + WD, D / 2 - WD
     g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Beton")
@@ -357,8 +355,6 @@ def supermarkt(b, cx, cy, zb, theta, lvl=1):
     tuerrahmen(g, "y", hw, hw + 0.07, 1.9, 3.0, F0, F0 + 2.3)
     g.box(hw, 1.9, -0.6, hw + 0.9, 3.0, F0, "Beton")
     # Schild und Markise
-    g.box(-5.6, -hd - 0.12, 3.5, 2.8, -hd, 4.55, "Schild gruen")
-    schrift(g, "KONSUM", -1.4, 3.62, -hd - 0.12, 0.12, "Schrift weiss", 0.04)
     for k in range(10):
         xa = -5.7 + 0.86 * k
         pts = [(xa, -hd - 0.1, 3.35), (xa + 0.86, -hd - 0.1, 3.35), (xa + 0.86, -hd - 1.5, 2.85), (xa, -hd - 1.5, 2.85)]

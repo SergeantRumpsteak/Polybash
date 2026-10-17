@@ -736,62 +736,15 @@ def scheune(b, cx, cy, zb, theta, w=12.0, d=9.0):
 
 
 def rathaus(b, cx, cy, theta):
-    """Rathaus (22 x 12 m) mit Uhrturm ueber dem Eingang; Tuer/Fassade zeigt in lokale -y-Richtung (zum Platz)."""
-    g = Lok(b, cx, cy, 0.0, theta)
-    w, d, h, rh = 22.0, 12.0, 7.6, 3.6
-    g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, "Rathaus")
-    g.box(-w / 2 - 0.2, -d / 2 - 0.2, 0.0, w / 2 + 0.2, d / 2 + 0.2, 0.5, "Stein")                           # Sockel
-    satteldach(g, w, d, h, rh, "Dach rot", "Rathaus")
-    # Turm: 5 x 5 m, ragt 1,5 m vor die Fassade, 17 m hoch, Pyramidendach, Uhren auf allen vier Seiten
-    ty0, ty1 = -d / 2 - 1.5, -d / 2 + 3.5
-    g.box(-2.5, ty0, -1.0, 2.5, ty1, 17.0, "Rathaus")
-    tc = (ty0 + ty1) / 2
-    apex = (0.0, tc, 22.0)
-    ecken = [(-3.0, ty0 - 0.5, 17.0), (3.0, ty0 - 0.5, 17.0), (3.0, ty1 + 0.5, 17.0), (-3.0, ty1 + 0.5, 17.0)]
-    g.poly(ecken[::-1], (0.0, 0.0, -1.0), "Dach Kupfer")
-    for k in range(4):
-        a, c = ecken[k], ecken[(k + 1) % 4]
-        mx, my = (a[0] + c[0]) / 2 - apex[0], (a[1] + c[1]) / 2 - apex[1]
-        g.poly([a, c, apex], (mx, my, 3.0), "Dach Kupfer")
-    for (nx, ny, px, py) in ((0, -1, 0.0, ty0), (0, 1, 0.0, ty1), (-1, 0, -2.5, tc), (1, 0, 2.5, tc)):
-        if nx:
-            g.box(px, tc - 1.1, 13.0, px + nx * 0.08, tc + 1.1, 15.2, "Uhr")
-        else:
-            g.box(-1.1, py, 13.0, 1.1, py + ny * 0.08, 15.2, "Uhr")
-    # Portal mit Freitreppe
-    g.box(-1.5, ty0 - 0.08, 0.0, 1.5, ty0, 3.2, "Tuer")
-    for k in range(3):
-        g.box(-2.2, ty0 - 0.5 - 0.5 * k, 0.0, 2.2, ty0, 0.5 - 0.17 * k, "Stein")
-    # Fenster: zwei Reihen links und rechts vom Turm, sowie Seiten und Rueckseite
-    for zc in (1.9, 5.0):
-        for sx in (-1, 1):
-            for off in (4.0, 6.8, 9.4):
-                fenster_l(g, sx * off, -d / 2, 0, -1, zc, 1.0, 1.5)
-        for off in (-7.5, -2.5, 2.5, 7.5):
-            fenster_l(g, off, d / 2, 0, 1, zc, 1.0, 1.5)
-        for yy in (-2.5, 2.5):
-            fenster_l(g, w / 2, yy, 1, 0, zc, 1.0, 1.5)
-            fenster_l(g, -w / 2, yy, -1, 0, zc, 1.0, 1.5)
-    return g
+    """Altes Rathaus mit Uhrturm (rustikal, viele Polygone) - siehe rustik.py."""
+    import rustik
+    return rustik.rathaus(b, cx, cy, theta)
 
 
 def gasthaus(b, cx, cy, theta):
-    g = Lok(b, cx, cy, 0.0, theta)
-    w, d, h, rh = 18.0, 10.0, 6.6, 3.4
-    g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, "Putz gelb")
-    satteldach(g, w, d, h, rh, "Dach rot", "Putz gelb")
-    g.box(-0.8, -d / 2 - 0.08, 0.0, 0.8, -d / 2, 2.3, "Tuer")
-    for k in range(2):
-        g.box(-1.3, -d / 2 - 0.4 - 0.4 * k, 0.0, 1.3, -d / 2, 0.36 - 0.18 * k, "Stein")
-    for zc in (1.6, 4.5):
-        for off in (-6.5, -3.5, 3.5, 6.5):
-            fenster_l(g, off, -d / 2, 0, -1, zc, 1.1, 1.4)
-        for off in (-6.0, 0.0, 6.0):
-            fenster_l(g, off, d / 2, 0, 1, zc, 1.1, 1.4)
-    g.box(2.2, -d / 2 - 1.3, 3.6, 2.4, -d / 2, 3.8, "Metall")                                                  # Ausleger fuers Schild
-    g.box(2.2, -d / 2 - 1.3, 2.4, 3.6, -d / 2 - 1.25, 3.7, "Markt rot")                                         # Wirtshausschild
-    g.box(w / 2 - 0.3, -d / 2 + 1.2, h, w / 2 + 0.5, -d / 2 + 2.0, h + rh + 0.9, "Stein")
-    return g
+    """Altes Gasthaus mit Fachwerkobergeschoss - siehe rustik.py."""
+    import rustik
+    return rustik.gasthaus(b, cx, cy, theta)
 
 
 def laden(b, cx, cy, theta):
