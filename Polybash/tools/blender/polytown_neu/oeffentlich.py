@@ -162,8 +162,8 @@ def feuerwehr(b, cx, cy, zb, theta, lvl=1, seed=3):
     g.box(xs[0] - 1.5, iy1 - 0.35, F0 + 2.0, xs[0] + 1.5, iy1 - 0.05, F0 + 2.1, "Metall")                       # Leiterhalter
     g.box(xs[0] - 1.5, iy1 - 0.3, F0 + 2.1, xs[0] + 1.5, iy1 - 0.15, F0 + 2.2, "Holz alt")                      # Steckleiter
     # --- Dach der Halle
-    gh = Lok(b, cx + (xa + hl / 2) * math.cos(theta), cy + (xa + hl / 2) * math.sin(theta), zb, theta, 1)
-    dach(gh, "x", hl, D, HH, 2.5, ziegel, mat, e=0.5)
+    gh = Lok(b, cx + ((xa - 0.5 + xb) / 2) * math.cos(theta), cy + ((xa - 0.5 + xb) / 2) * math.sin(theta), zb, theta, 1)
+    dach(gh, "x", (xb - xa + 0.5) - 1.0, D, HH, 2.5, ziegel, mat, e=0.5)          # Dach reicht bis x = xb (westlicher Ueberstand 0,5 m)
     # --- Turm (Wachturm): lokale Mitte (tx, ty)
     tx = (TURM_X[0] + TURM_X[1]) / 2
     ty = -D / 2 + 2.8
@@ -178,7 +178,7 @@ def feuerwehr(b, cx, cy, zb, theta, lvl=1, seed=3):
     schlitz = [(ty, 3.4), (ty, 5.6), (ty, 7.8)]
     ot_v = [(tx - 2.15 + 0.0, tx - 1.05, F0, F0 + TH)] + [(a - 0.8, a + 0.8, ZW + 1.0, ZW + 2.3) for a in (tx - 1.15, tx + 1.15)]
     ot_h = [(a - 0.8, a + 0.8, ZW + 1.0, ZW + 2.3) for a in (tx - 1.15, tx + 1.15)]
-    ot_e = [(a - 0.8, a + 0.8, ZW + 1.0, ZW + 2.3) for a in (ty - 1.15, ty + 1.15)] + [(ty - 0.35, ty + 0.35, zc - 0.5, zc + 0.5) for _, zc in schlitz]
+    ot_e = [(a - 0.5, a + 0.5, ZW + 1.0, ZW + 2.3) for a in (ty - 1.75, ty + 1.75)] + [(ty - 0.55, ty + 0.55, ZW, ZW + 2.1)] + [(ty - 0.35, ty + 0.35, zc - 0.5, zc + 0.5) for _, zc in schlitz]
     ot_w = [(a - 0.8, a + 0.8, ZW + 1.0, ZW + 2.3) for a in (ty - 1.15, ty + 1.15)] + [(-1.6, -0.5, F0, F0 + TH)]
     aussenwand(g, "x", y0t, -1, t0, t1, HT, mat, ot_v)
     aussenwand(g, "x", y1t, 1, t0, t1, HT, mat, ot_h)
@@ -188,8 +188,11 @@ def feuerwehr(b, cx, cy, zb, theta, lvl=1, seed=3):
         fensterschmuck(g, "x", y0t, -1, a, ZW + 1.65, 1.6, 1.3, None)
         fensterschmuck(g, "x", y1t, 1, a, ZW + 1.65, 1.6, 1.3, None)
     for a in (ty - 1.15, ty + 1.15):
-        fensterschmuck(g, "y", t1, 1, a, ZW + 1.65, 1.6, 1.3, None)
         fensterschmuck(g, "y", t0 + 0.3, -1, a, ZW + 1.65, 1.6, 1.3, None)
+    for a in (ty - 1.75, ty + 1.75):
+        fensterschmuck(g, "y", t1, 1, a, ZW + 1.65, 1.0, 1.3, None)
+    tuerrahmen(g, "y", t1, t1 + 0.07, ty - 0.55, ty + 0.55, ZW, ZW + 2.1)                       # Tuer zur Plattform
+    g.box(t1 - 1.4, ty + 0.55, ZW, t1 - 0.3, ty + 0.62, ZW + 2.05, "Tuer")                       # Tuerfluegel, nach innen aufgeschwenkt
     for _, zc in schlitz:
         fensterschmuck(g, "y", t1, 1, ty, zc, 0.7, 1.0, None)
     tuerrahmen(g, "x", y0t - 0.07, y0t, ot_v[0][0], ot_v[0][1], F0, F0 + TH)                   # Turmtuer (Personal)
@@ -198,61 +201,92 @@ def feuerwehr(b, cx, cy, zb, theta, lvl=1, seed=3):
     g.box(ot_v[0][0] - 0.1, y0t - 0.12, 2.75, ot_v[0][1] + 0.1, y0t, 2.87, "Dach grau alt")
     # Durchgang Turm <-> Halle (Turmseite)
     wand(g, "y", t0, t0 + 0.3, tj0, tj1, -1.0, HT, mat, [(-1.6, -0.5, F0, F0 + TH)])
-    # Turmboden, Zwischenboeden (nur der Wachraum-Boden), Wachraumdecke
+    # Turmboden
     g.box(ti0 + 0.3, tj0, -0.7, ti1, tj1, F0, "Beton")
-    ti0 += 0.3
-    # Wachraum-Boden: y > -1.6 durchgehend, Westlandung (x < ti0 + 1.0)
-    ylane0, ylane1 = tj0, tj0 + 2.3                              # Treppenbereich y: tj0 .. tj0+2.3 (Spur A, Spur B)
+    ti0 += 0.3                                                    # Innenraum x 15,0 .. 19,7, y -3,9 .. 1,1
+
     def platte(x0, y0, x1, y1, z, mat1="Dielen"):
         g.box(x0, y0, z - 0.25, x1, y1, z - 0.05, "Decke")
         g.box(x0, y0, z - 0.05, x1, y1, z, mat1)
-    platte(ti0, ylane1, ti1, tj1, ZW)
-    platte(ti0, tj0, ti0 + 1.0, ylane1, ZW)
     g.box(ti0, tj0, HT - 0.25, ti1, tj1, HT, "Decke")
-    # Treppe: Spur A (y tj0 .. tj0+1.1), Spur B (y tj0+1.2 .. tj0+2.3); 11 Stufen je 0,27 m, Steigung 0,2
-    la, lb = (tj0, tj0 + 1.1), (tj0 + 1.2, ylane1)
-    xw = ti0 + 1.0                                               # westliches Ende der Laeufe
-    xe = xw + 11 * 0.27                                           # oestliches Ende (Landung dahinter)
-    z = F0
+    # Feuerwehrtreppe (wie im Flughafen-Tower): rechteckige Spirale gegen den Uhrzeigersinn um den freien Schacht, 1 m breite Laeufe an den
+    # Waenden, vier Eckpodeste, 4 x 11 Stufen (je 0,2 m hoch) von F0 bis zum Wachraum-Boden; Blechbruestung auf der Schachtseite waechst mit.
+    SD_X, SD_Y = (ti1 - 1.0 - (ti0 + 1.0)) / 11.0, ((tj1 - 1.0) - (tj0 + 1.0)) / 11.0
+    zs = F0
     for fl in range(4):
-        lane = la if fl % 2 == 0 else lb
         for k in range(11):
-            zt = z + 0.2 * (k + 1)
-            if fl % 2 == 0:
-                xx0 = xw + 0.27 * k
-            else:
-                xx0 = xe - 0.27 * (k + 1)
-            g.box(xx0, lane[0], zt - 0.1, xx0 + 0.27, lane[1], zt, "Holz")
-            # Gelaender: zwischen den Spuren (y = tj0+1.1 .. 1.2) und zur Schachtseite (y = ylane1)
-            for yy in (tj0 + 1.1, ylane1 - 0.06):
-                if yy == ylane1 - 0.06 and fl % 2 == 0:
-                    continue
-                if yy == tj0 + 1.1:
-                    g.box(xx0, yy, zt + 0.45, xx0 + 0.27, yy + 0.1, zt + 0.5, "Holz")
-                    g.box(xx0, yy, zt + 0.92, xx0 + 0.27, yy + 0.1, zt + 0.97, "Holz")
-                else:
-                    g.box(xx0, yy, zt + 0.45, xx0 + 0.27, yy + 0.05, zt + 0.5, "Holz")
-                    g.box(xx0, yy, zt + 0.92, xx0 + 0.27, yy + 0.05, zt + 0.97, "Holz")
-            if fl % 2 == 0 and k % 3 == 0:
-                g.box(xx0 + 0.1, tj0 + 1.1, zt, xx0 + 0.17, tj0 + 1.17, zt + 0.97, "Holz")
-        z += 2.2
-        # Landung am Ende des Laufs
-        if fl % 2 == 0:
-            platte(xe, tj0, ti1, ylane1, z, "Holz")                                  # Ostlandung
-            g.box(xe, ylane1 - 0.06, z + 0.45, ti1, ylane1 - 0.01, z + 0.5, "Holz")
-            g.box(xe, ylane1 - 0.06, z + 0.92, ti1, ylane1 - 0.01, z + 0.97, "Holz")
-        elif fl == 1:
-            platte(ti0, tj0, xw, ylane1, z, "Holz")                                  # Westlandung auf 4,6 m
-            g.box(ti0, ylane1 - 0.06, z + 0.45, xw, ylane1 - 0.01, z + 0.5, "Holz")
-            g.box(ti0, ylane1 - 0.06, z + 0.92, xw, ylane1 - 0.01, z + 0.97, "Holz")
-    # Gelaender am Schacht des Wachraums (Nordkante der Spuren) und quer ueber Spur A am Westende
-    for (x0, y0, x1, y1) in ((xw, ylane1 - 0.06, ti1, ylane1 - 0.01), (xw - 0.06, tj0, xw - 0.01, tj0 + 1.1)):
-        g.box(x0, y0, ZW + 0.45, x1, y1, ZW + 0.5, "Holz")
-        g.box(x0, y0, ZW + 0.92, x1, y1, ZW + 0.97, "Holz")
+            zt = zs + 0.2 * (k + 1)
+            if fl == 0:                                                      # Ostwand nach Norden
+                r = (ti1 - 1.0, tj0 + 1.0 + SD_Y * k, ti1, tj0 + 1.0 + SD_Y * (k + 1)); pn = (r[0], r[1], r[0] + 0.1, r[3]); wg = ((r[0], r[1], r[0] + 0.12, r[3]), (r[2] - 0.12, r[1], r[2], r[3]))
+            elif fl == 1:                                                    # Nordwand nach Westen
+                r = (ti1 - 1.0 - SD_X * (k + 1), tj1 - 1.0, ti1 - 1.0 - SD_X * k, tj1); pn = (r[0], r[1], r[2], r[1] + 0.1); wg = ((r[0], r[1], r[2], r[1] + 0.12), (r[0], r[3] - 0.12, r[2], r[3]))
+            elif fl == 2:                                                    # Westwand nach Sueden
+                r = (ti0, tj1 - 1.0 - SD_Y * (k + 1), ti0 + 1.0, tj1 - 1.0 - SD_Y * k); pn = (r[2] - 0.1, r[1], r[2], r[3]); wg = ((r[0], r[1], r[0] + 0.12, r[3]), (r[2] - 0.12, r[1], r[2], r[3]))
+            else:                                                            # Suedwand nach Osten
+                r = (ti0 + 1.0 + SD_X * k, tj0, ti0 + 1.0 + SD_X * (k + 1), tj0 + 1.0); pn = (r[0], r[3] - 0.1, r[2], r[3]); wg = ((r[0], r[1], r[2], r[1] + 0.12), (r[0], r[3] - 0.12, r[2], r[3]))
+            g.box(r[0], r[1], zt - 0.1, r[2], r[3], zt, "Holz")                                     # Trittbrett
+            g.box(pn[0], pn[1], zt - 0.1, pn[2], pn[3], zt + 1.0, "Metall")                          # Bruestungsblech zum Schacht
+            for w_ in wg:                                                                           # Wangen (gezackt) unter den Seitenkanten
+                g.box(w_[0], w_[1], zt - 0.45, w_[2], w_[3], zt - 0.1, "Holz alt")
+        zs += 2.2
+        px, py = ((ti1 - 1.0, tj1 - 1.0), (ti0, tj1 - 1.0), (ti0, tj0), (ti1 - 1.0, tj0))[fl]   # Eckpodest NO, NW, SW, SO
+        if fl < 3:
+            g.box(px, py, zs - 0.1, px + 1.0, py + 1.0, zs, "Holz")
+            g.box(px, py, zs - 0.4, px + 1.0, py + 1.0, zs - 0.1, "Holz alt")
+            # Stuetzpfosten an der Wandecke des Podests bis zum Boden
+            qx = px + (0.07 if px < (ti0 + ti1) / 2 else 0.93)
+            qy = py + (0.07 if py < (tj0 + tj1) / 2 else 0.93)
+            g.prism(qx, qy, F0, 0.1, zs - 0.4 - F0, 6, "Metall")
+    # Wachraum-Boden: ueber dem Schacht, den Nord-/West-/Ostlaeufen und dem SO-Podest; die Suedstrecke (Lauf 4) bleibt offen
+    platte(ti0, tj0 + 1.0, ti1, tj1, ZW)
+    platte(ti1 - 1.0, tj0, ti1, tj0 + 1.0, ZW)
+    # Gelaender an der Bodenkante ueber Lauf 4 (volle Blechbruestung, Eingang nur ueber das SO-Podest)
+    g.box(ti0, tj0 + 1.0 - 0.06, ZW, ti1 - 1.0, tj0 + 1.0, ZW + 1.0, "Metall")
     # Wachraum-Moebel
-    g.box(ti1 - 0.8, ylane1 + 0.3, ZW, ti1 - 0.1, ylane1 + 1.4, ZW + 0.8, "Holz")                       # Tisch mit Funkgeraet
-    g.box(ti1 - 0.7, ylane1 + 0.4, ZW + 0.8, ti1 - 0.3, ylane1 + 0.9, ZW + 1.0, "Metall")
-    g.box(ti0 + 0.2, tj1 - 0.5, ZW, ti0 + 1.6, tj1 - 0.1, ZW + 0.45, "Holz")                            # Bank
+    g.box(ti1 - 2.6, tj1 - 0.9, ZW, ti1 - 0.3, tj1 - 0.15, ZW + 0.8, "Holz")                              # Tisch mit Funkgeraet (Nordwand)
+    g.box(ti1 - 2.2, tj1 - 0.8, ZW + 0.8, ti1 - 1.6, tj1 - 0.35, ZW + 1.0, "Metall")
+    g.box(ti0 + 0.05, -1.4, ZW, ti0 + 0.5, 0.5, ZW + 0.45, "Holz")                                        # Bank an der Westwand
+    # --- Rundumplattform (Sued-, Ost- und Nordseite; Westseite grenzt an das Hallendach) mit Gelaender und Stuetzstreben
+    pw = 1.3
+    pxa, pxb = t0, t1 + pw
+    pya, pyb = y0t - pw, y1t + pw
+    for (x0_, y0_, x1_, y1_) in ((pxa, pya, pxb, y0t), (t1, y0t, pxb, y1t), (pxa, y1t, pxb, pyb)):
+        g.box(x0_, y0_, ZW - 0.3, x1_, y1_, ZW - 0.05, "Decke")
+        g.box(x0_, y0_, ZW - 0.05, x1_, y1_, ZW, "Holz")
+    # Stuetzstreben (dreieckige Knotenbleche) von der Turmwand unter den Rand der Plattform
+    def blech(achse, pos, wand_, aussen_, zu, zo):
+        if achse == "y":        # Strebe in der Ebene x = pos, von y = wand_ nach y = aussen_
+            pts = [(pos, wand_, zu), (pos, aussen_, zo - 0.3), (pos, wand_, zo - 0.3)]
+            g.poly(pts, (1.0, 0.0, 0.0), "Metall"); g.poly(pts[::-1], (-1.0, 0.0, 0.0), "Metall")
+        else:                   # Ebene y = pos, von x = wand_ nach x = aussen_
+            pts = [(wand_, pos, zu), (aussen_, pos, zo - 0.3), (wand_, pos, zo - 0.3)]
+            g.poly(pts, (0.0, 1.0, 0.0), "Metall"); g.poly(pts[::-1], (0.0, -1.0, 0.0), "Metall")
+    for xx in (t0 + 0.8, (t0 + t1) / 2, t1 - 0.4):
+        blech("y", xx, y0t, pya, ZW - 2.3, ZW)
+        blech("y", xx, y1t, pyb, ZW - 2.3, ZW)
+    for yy in (y0t + 0.8, (y0t + y1t) / 2, y1t - 0.8):
+        blech("x", yy, t1, pxb, ZW - 2.3, ZW)
+    # Gelaender: Fussleiste, Mittel- und Handlauf, Pfosten
+    def gl_x(x0_, x1_, yy):
+        for (zr0, zr1) in ((0.0, 0.45), (0.78, 0.84), (1.05, 1.11)):
+            g.box(x0_, yy - 0.03, ZW + zr0, x1_, yy + 0.03, ZW + zr1, "Metall")
+        n_ = max(1, int(round((x1_ - x0_) / 1.5)))
+        for i in range(n_ + 1):
+            xp = x0_ + (x1_ - x0_) * i / n_
+            g.box(xp - 0.04, yy - 0.04, ZW, xp + 0.04, yy + 0.04, ZW + 1.11, "Metall")
+
+    def gl_y(y0_, y1_, xx):
+        for (zr0, zr1) in ((0.0, 0.45), (0.78, 0.84), (1.05, 1.11)):
+            g.box(xx - 0.03, y0_, ZW + zr0, xx + 0.03, y1_, ZW + zr1, "Metall")
+        n_ = max(1, int(round((y1_ - y0_) / 1.5)))
+        for i in range(n_ + 1):
+            yp = y0_ + (y1_ - y0_) * i / n_
+            g.box(xx - 0.04, yp - 0.04, ZW, xx + 0.04, yp + 0.04, ZW + 1.11, "Metall")
+    gl_x(pxa, pxb, pya + 0.04)
+    gl_x(pxa, pxb, pyb - 0.04)
+    gl_y(pya + 0.04, pyb - 0.04, pxb - 0.04)
+    gl_y(pya + 0.04, y0t, pxa + 0.04)                 # Westenden der Suedspange (zum Hallendach)
+    gl_y(y1t, pyb - 0.04, pxa + 0.04)
     # Dach des Turms (Zeltdach) + Sirene
     gt = Lok(b, *g.P((tx, ty, 0.0))[:2], zb, theta, 1)
     gt.zb = zb

@@ -92,7 +92,7 @@ Ergebnis: `~/blender_out/polytown_neu.blend` (nur das Tal ohne Burg: weiter `tal
 
 ### Oeffentliche Gebaeude (polytown_neu/oeffentlich.py)
 Sie ersetzen einzelne Wohnhaeuser (`stadt.setze_spezial`), gleiche Tuerseite und Strassenanbindung, alle im verwitterten 40er-Stil und betretbar:
-- **Feuerwehr** (40 x 8,4 m, ersetzt die drei roten Klinkerhaeuser westlich des Rathauses): Halle mit drei Fluegeltoren (aufgeschwenkt), Aufschrift FEUERWEHR, Spinde, Werkbank, Schlauchregal, Leiter; Wachturm mit gegenlaeufiger Treppe bis zum Wachraum (Rundumfenster, Walmdach, Sirene); gepflasterter Vorplatz bis zur Strasse.
+- **Feuerwehr** (40 x 8,4 m, ersetzt die drei roten Klinkerhaeuser westlich des Rathauses): Halle mit drei Fluegeltoren (aufgeschwenkt), Aufschrift FEUERWEHR, Spinde, Werkbank, Schlauchregal, Leiter; Wachturm mit offener Feuerwehrtreppe (rechteckige Spirale um den Schacht, Blechbruestung wie im Flughafen-Tower) bis zum Wachraum, von dort Tuer auf die umlaufende Plattform (Gelaender, Stuetzbleche; Westseite grenzt ans Hallendach), Walmdach, Sirene; gepflasterter Vorplatz bis zur Strasse.
 - **Supermarkt** (Konsum, 12 x 9 m): Schaufenster, gestreifte Markise, Schriftzug, Regale, Kasse, Kuehltruhe, Lieferanten- und Seitentuer, Flachdach mit Attika.
 - **Post** (11 x 9 m, zwei Geschosse): Portal mit Schild POST, Posthorn, gelber Briefkasten, Schalterhalle mit drei Schaltern, Dienstraum mit Paketregal, Walmdach.
 - **Kirche** (10,6 x 26 m): Turm mit Uhr, Schallluken und Spitzhelm samt Kreuz, Portal mit Vorhalle, Schiff mit Spitzbogen-Buntglasfenstern und Strebepfeilern, Chor mit Dreifachlanzette; innen Kirchenbaenke, Mittelgang, Chorstufen, Altar, Kanzel, Taufstein (Turm oben geschlossen).
