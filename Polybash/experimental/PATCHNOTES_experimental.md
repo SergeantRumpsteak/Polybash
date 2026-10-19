@@ -2,6 +2,20 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10g: Mehr Monster, Hasen im Wald, zwei Titanen mit Revier, Treffer-Ping, dichterer Ort und Südwestwald (2026-10-19)
+- Monsterdichte ×1,5 (`MOB_LEVELS`): Wenig 0,6 / Mäßig 1,5 / Viel 3,0 / Gottlos 5,0 (vorher 0,4 / 1,0 / 2,0 / 3,5). Drohnen bleiben fest bei `DRONE_COUNT`, Titanen bei `N_TITAN`, Kolosse bei `MAX_COLOSSUS`.
+- Gebirge: Spieler und Monster kommen höher hinauf – die unsichtbare Wand steht jetzt 1,0 m statt 4,0 m vor dem Kamm (`MTN_WALL`); die Grenze bleibt am Kamm.
+- Hasen bleiben im Flachland: kein Schritt ins Gebirge (`CRITTER_MTN_MAX` = 0,4 m Gebirgshöhe) – sie sammeln sich nicht mehr in Ecken und an Hängen.
+- Hasen wohnen in den Wäldern: spawnen in einem Wald, hoppeln dort umher, ziehen nach `CRITTER_STAY` (35–80 s) zu einem der nächsten Wälder und queren Ort/Felder dabei zügig (`CRITTER_TRAVEL_K` ×2,6). Auf der Flucht schlagen sie weiter Haken, aber grob Richtung nächster Wald, der nicht hinter dem Auslöser liegt (`CRITTER_FOREST_PULL`).
+- Hase erlegt: zusätzlich zum Buff 1 Gegenstand der Stufe Gold (`MOB_LOOT["critter"]`; ersetzt "Fluchttier: keine Beute").
+- Zwei Titanen (`N_TITAN` = 2) mit eigenem Revier (`TITAN_HOMES`): Titan A im Nordwest-Viertel, Titan B im Südost-Viertel bei der Landebahn (Bunker/Container). Ohne Aggro bleiben sie in ihrem Revier; ein nachspawnender Titan nimmt das freie Revier. Kolosse haben ein Revier um ihren Startpunkt (`COLOSSUS_HOME_R` 40 m).
+- Lärm wie bisher. Angeschossen (Schütze bekannt): Titan/Koloss bekommen einen fast genauen Ping auf den Schützen (±`TITAN_PING_ERR` 5 m) – egal wie weit weg – und laufen ohne Pause hin, bis sie ihn sehen; finden sie niemanden, kehren sie in ihr Revier zurück. Andere Monster laufen zur Stelle des Schützen beim Schuss (±`MOB_HIT_POS_ERR` 7 m, ohne die alte 80-m-Grenze) und laufen danach friedlich frei umher.
+- Wegzeit zum Geräusch/Ping begrenzt (`MOB_TRAVEL_K` 1,8 × Idealzeit + `MOB_TRAVEL_EXTRA` 10 s): hängt ein Monster an Häusern/Burgmauern fest, sucht es dort und gibt auf (vorher konnte ein Titan am Rathaus ewig hängen).
+- Karte: Polytown wächst vom Marktplatz nach Nordosten (`town_northeast`) – neue Gasse mit zwei Häuserreihen (6 Häuser im Stil des Marktplatzes, innen Treppen/Möbel, einer mit Laden "KRAMLADEN", zwei mit Balkon); der Unterstand am Acker liegt jetzt im Hinterhof.
+- Karte: Südwestwald grösser und viel dichter (420 statt 170 Bäume, engerer Abstand `BIG_FOREST_GAP_DENSE` 2,4 m) plus nördlicher Ausläufer (230 Bäume) und Unterholz (`BIG_UNDERGROWTH`, rund 500 Büsche) – Sichtdeckung überall; Felsformation, Hütte und Lichtungen bleiben frei.
+- Geprüft: Spawnpunkte (34, keiner in Wänden), Tomahawk-Orte (20 wie vorher; "Acker beim Hof" lag in der neuen Gasse → jetzt "Wiese hinter dem Hof"), Monster-Spawns, Tunneleingänge. Aufbau der Welt mit Raster für die Waldbäume genauso schnell wie vorher.
+- NET_VERSION 39 → 40 (Karte geändert: neue Häuser/Bäume) – Sinan muss `EXP_NET_VERSION` in spiel.py auf 40 setzen.
+
 ## Experimental 10f: Detaillierte Granaten, Fahrzeuge und Heli; keine Durchstecher; Ausrüstung ersetzt Kosmetik (2026-10-19)
 - Granaten detailliert (`gren_mesh`): Splittergranate mit geriffeltem Gusskörper ("Ananas"), Zünder, Sicherungsbügel, Ring und Splint; Decoy (Messingdose mit Lautsprechergitter, LED, Antenne); Blend (Alu-Zylinder mit Lochreihen); Rauch (Kanister mit Farbband, Aufschrift, Abströmlöchern); Drohnen-Granate (Kugel mit angelegten Rotorarmen, Kamera, Leuchtring); Molotow (Flasche mit Schulter, Benzin, Etikett, eingestopftem und abgebundenem Lappen); Airdrop-Fackel (Stab mit Griffrillen, Ringen, Zündkappe). Gilt in der Hand (Ego + Wurfanimation), im Flug/am Boden, an Mitspielern und bei Drops.
 - HUD-Symbole der Granaten detaillierter (`gren_icon_mesh`: Riffelung, Zünder, Bügel, Ring, Lochreihen, Etikett/Lappen, Rotorarme).

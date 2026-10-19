@@ -104,6 +104,11 @@ Verglasung, Rotorkopf), Trefferzonen als Quader passend zum Modell (VEH_HIT_BOXE
 deckt das Kinn, Koteletten anliegend. Getragene Ausrüstung blendet das passende Kosmetik-Teil aus (Kopfbedeckung inkl.
 Headset/Nachtsicht, Weste + Rucksack, Stiefel; build_soldier -> PythonTag "cos"). Effekte/Partikel/Leuchtspuren als
 Instanzen mit eigenem Knoten (lagen vorher alle übereinander).
+10g: Monsterdichte x1,5 (MOB_LEVELS). Gebirgswand näher am Kamm (MTN_WALL). Hasen: wohnen in Wäldern (forest_areas),
+ziehen von Wald zu Wald, fliehen Richtung Wald, nie ins Gebirge (CRITTER_*), Beute 1 Teil gold. Zwei Titanen mit Revier
+(TITAN_HOMES), Kolosse mit Revier um den Startpunkt; angeschossen: Ping auf den Schützen (TITAN_PING_ERR bzw.
+MOB_HIT_POS_ERR, ohne Entfernungsgrenze), Wegzeit begrenzt (MOB_TRAVEL_*), danach zurück ins Revier / frei umherlaufen.
+Karte: neue Gasse nordöstlich des Marktplatzes (town_northeast), Südwestwald grösser und dichter mit Unterholz.
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -405,7 +410,8 @@ BIG_FORESTS = (
     (92.0, 140.0, 26.0, 120),     # Nordostwald mit Jagdhütte
     (-148.0, 62.0, 22.0, 90),     # Westwald mit Hütte
     (-150.0, -30.0, 18.0, 60),
-    (-98.0, -138.0, 32.0, 170),   # Südwestwald (Felsformation auf einer Lichtung)
+    (-98.0, -138.0, 36.0, 420),   # Südwestwald (Felsformation auf einer Lichtung; 10g: grösser, viel dichter)
+    (-138.0, -92.0, 26.0, 230),   # 10g: Südwestwald, nördlicher Ausläufer (vorher freie Wiese)
     (-30.0, -148.0, 24.0, 95),
     (150.0, -22.0, 20.0, 75),     # Ostrand mit Hütte
     (-40.0, 150.0, 22.0, 85),
@@ -414,6 +420,10 @@ BIG_FORESTS = (
     (-60.0, -90.0, 14.0, 40),     # Wäldchen zwischen Ort und Südwestwald
 )
 BIG_FOREST_GAP = 3.2     # m Mindestabstand der Waldbäume (Stamm zu Stamm) - dicht, aber begehbar
+BIG_FOREST_GAP_DENSE = 2.4   # 10g: ... im dichten Südwestwald (BIG_DENSE)
+BIG_DENSE = ((-98.0, -138.0, 36.0), (-138.0, -92.0, 26.0))   # 10g: dichte Wälder (Mitte, Radius)
+BIG_UNDERGROWTH = ((-98.0, -138.0, 36.0, 300), (-138.0, -92.0, 26.0, 170), (-60.0, -90.0, 14.0, 35))
+                         # 10g: Unterholz (Mitte, Radius, Büsche) - Deckung überall im Südwestwald
 WORLD = STD_WORLD        # Spielfeld: 0..WORLD in x und y (wird pro Karte gesetzt, siehe set_world_size)
 CENTER = WORLD / 2       # Mitte der Karte = Burg
 MARGIN = 30.0            # Gelände wird über den Rand hinaus gezeichnet
@@ -441,7 +451,14 @@ SWITCH_T = 0.38          # Dauer des Waffenwechsels
 N_GRUNT, N_BRUTE, N_HUNT = 8, 3, 5
 N_COLOSSUS = 1           # Koloss: selten (höchstens MAX_COLOSSUS gleichzeitig)
 MAX_COLOSSUS = 2
-N_TITAN = 1              # Titan (Boss): höchstens so viele gleichzeitig
+N_TITAN = 2              # Titan (Boss): höchstens so viele gleichzeitig (10g: 2 - jeder mit eigenem Revier)
+# 10g: Reviere der Titanen auf der grossen Karte (Mitte relativ zur Kartenmitte, Radius m). Norden = +y, Westen = -x:
+# Titan A im Nordwest-Viertel, Titan B im Südost-Viertel bei der Landebahn. Ohne Aggro bleiben sie in ihrem Revier.
+TITAN_HOMES = ((-95.0, 95.0, 55.0), (95.0, -105.0, 50.0))
+COLOSSUS_HOME_R = 40.0   # 10g: Koloss - Revier um seinen Startpunkt (dorthin kehrt er nach einem Treffer-Ping zurück)
+TITAN_PING_ERR = 5.0     # 10g: Titan/Koloss angeschossen: Ping auf den Schützen, so ungenau (m) - egal wie weit weg
+MOB_HIT_POS_ERR = 7.0    # 10g: andere Monster angeschossen: laufen zur Stelle des Schützen beim Schuss (so ungenau, m)
+HOME_RETURN_K = 1.0      # 10g: Tempo-Faktor (auf "speed") beim Rückweg ins Revier
 TITAN_RESPAWN = 300.0    # s nach dem Tod, bis ein neuer Titan auftaucht
 # Steinbrocken des Titans
 ROCK_SPEED = 26.0        # m/s waagerecht (gut ausweichbar: ab 20 m gut 1 s Flug, dazu das lange Ausholen)
@@ -454,7 +471,9 @@ N_DRONE = 4              # Elektro-Drohnen (9b: nicht mehr verwendet - siehe DRO
 DRONE_COUNT = 4          # 9b: feste Zahl Drohnen gleichzeitig auf der Karte (jede Monsterdichte ausser "Aus")
 DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; sinnvoll 1,25-1,5)
 N_CRITTER = 5            # Fluchttiere (spawnen wie alle Monster nach RESPAWN_T wieder nach)
-MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.4), ("Mäßig", 1.0), ("Viel", 2.0), ("Gottlos", 3.5))   # Monsterdichte
+MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.6), ("Mäßig", 1.5), ("Viel", 3.0), ("Gottlos", 5.0))   # Monsterdichte
+# (10g: alle Stufen x1,5 - "Mäßig" ist jetzt 1,5 statt 1,0; vorher Wenig 0,4 / Viel 2,0 / Gottlos 3,5.
+#  Drohnen bleiben fest bei DRONE_COUNT, Titanen bei N_TITAN, Kolosse bei MAX_COLOSSUS)
 MOB_DEFAULT = 2
 
 
@@ -472,7 +491,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 39         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 40         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte geändert)
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -659,7 +678,7 @@ TOMA_SPOTS_BIG = (       # 7c: grosse Karte (relativ zur Mitte; z = feste Höhe,
     (-88.0, 82.0, None),    # Parkwiese
     (-118.0, 118.0, None),  # Park, Nordwestecke
     (98.0, -52.0, None),    # Militärecke, Exerzierplatz
-    (60.0, 105.0, None),    # Acker beim Hof
+    (118.0, 104.0, None),   # Wiese hinter dem Hof (10g: vorher Acker beim Hof - dort steht jetzt die neue Gasse)
     (-118.0, 20.0, None),   # Westwiese
     (130.0, -10.0, None),   # Ostwiese
     (-20.0, -112.0, None),  # Südwiese
@@ -713,7 +732,12 @@ MTN_H = 46.0             # Höhe am Kartenrand (dahinter steigt es weiter; 7a: v
 MTN_CLIMB = True         # True: Spieler UND Monster können das Gebirge hochlaufen (Sniper-Posten oben);
                          # False: alter Zustand - Felswände steiler als MTN_SLOPE sperren, jetzt auch für Monster
 MTN_SLOPE = 0.95         # (nur bei MTN_CLIMB = False) steiler als das (ca. 43 Grad) kommt man nicht hoch
-MTN_WALL = 4.0           # unsichtbare Wand: so weit vor dem Kartenrand (Gebirgskamm) ist Schluss - für alle
+MTN_WALL = 1.0           # unsichtbare Wand: so weit vor dem Kartenrand (Gebirgskamm) ist Schluss - für alle
+                         # (10g: 4,0 -> 1,0 m - Spieler und Monster kommen höher ins Gebirge, Grenze bleibt am Kamm)
+CRITTER_MTN_MAX = 0.4    # 10g: Hasen bleiben im flachen Gelände: höchstens so viel m Gebirge unter sich
+CRITTER_STAY = (35.0, 80.0)   # 10g: so lange (s) bleibt ein Hase in einem Wald, dann hoppelt er zum nächsten
+CRITTER_TRAVEL_K = 2.6   # 10g: zwischen zwei Wäldern (auch quer durch den Ort) so viel schneller als beim Umherhoppeln
+CRITTER_FOREST_PULL = 0.7     # 10g: auf der Flucht zieht es ihn so stark Richtung nächster Wald (0 = nur weg)
 # 9a: Alpen-Look (Form + Farben)
 MTN_PEAK_MIN, MTN_PEAK_MAX = 0.55, 1.30   # Gipfelhöhe relativ zu MTN_H: niedrige Sättel bis hohe Spitzen
 MTN_RIDGE = 0.24         # Stärke der Grate (scharfe Kämme, die zum Rand hin hochlaufen)
@@ -1119,7 +1143,8 @@ LOOT_ATT_TABLES = {
 # --- 10b: Kisten pausiert, Beute kommt von Monstern
 CRATES_ON_MAP = False          # verteilte Kisten auf der Karte (Code bleibt, später für Airdrops)
 MOB_LOOT = {"grunt": ("common", 2), "huntress": ("common", 2), "brute": ("rare", 2), "drone": ("rare", 2),
-            "colossus": ("gold", 2), "titan": ("gold", 6)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl)
+            "colossus": ("gold", 2), "titan": ("gold", 6),
+            "critter": ("gold", 1)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl); 10g: Hase 1 Teil gold + Buff
 MOB_LOOT_LIFE = 45.0           # s liegt Monster-Beute (dann verschwindet sie)
 MOB_LOOT_R = 1.1               # m: so weit verteilt um die Stelle des Monsters (Titan: x2)
 LOOT_CATS = ("weapon", "melee", "grenade", "gear", "att")         # Kategorien (je Drop verschieden)
@@ -1777,8 +1802,11 @@ BULLET_IMPACT_R = 4.0     # m: so nah muss sie neben ihm einschlagen
 BULLET_ALERT_MIN, BULLET_ALERT_MAX = 10.0, 20.0   # m: so weit läuft es in Richtung Herkunft
 BULLET_SEARCH_T = 5.0     # s: so lange sieht es sich dort um, dann zurück zu idle/wandern
 BULLET_DIR_ERR = 25.0     # Grad: so ungenau schätzt es die Herkunftsrichtung
-MOB_HIT_RUN = 80.0        # m: angeschossen läuft es bis zu so weit in Richtung Schütze (auch ohne Sicht)
+MOB_HIT_RUN = 80.0        # m: angeschossen (Schütze unbekannt) läuft es bis zu so weit Richtung Herkunft
+                          # (10g: Schütze bekannt: läuft zu dessen Stelle - ohne Grenze, siehe MOB_HIT_POS_ERR)
 MOB_HIT_SEARCH_T = 6.0    # s: Suchzeit dort
+MOB_TRAVEL_K = 1.8        # 10g: Weg zum Geräusch/Ping darf so viel länger dauern als im Idealfall (dann: aufgeben)
+MOB_TRAVEL_EXTRA = 10.0   # 10g: ... plus so viele Sekunden
 MOB_HIT_ERR = 8.0         # Grad: Richtungsfehler nach einem Treffer (spürt genauer, woher es kam)
 MOB_HIT_SPEED = 1.0       # Faktor aufs Lauftempo beim Hinlaufen nach einem Treffer
 NOISE_MINIMAP = True      # eigenen Lärm auf der Minimap zeigen (Kreis beim Laufen, Welle bei Schuss/Explosion)
@@ -2578,6 +2606,10 @@ class Mob:
         self.atk_kind = 0         # 0 = normaler/leichter Angriff, 1 = Bodenschlag (Koloss)
         self.zap_pid, self.zap_hold = -1, 0.0   # Drohne: wen sie gerade beschiesst (für DRONE_MAX_PER_TARGET)
         self.next_slam = rng.random() < k.get("slam_chance", 0.0)
+        self.home = None          # 10g: Revier (x, y, r) - Titan/Koloss kehren ohne Aggro dorthin zurück
+        self.home_i = -1          # 10g: Titan: Index in TITAN_HOMES
+        self.forest = None        # 10g: Hase: Wald (x, y, r), in dem er gerade wohnt bzw. zu dem er hoppelt
+        self.stay_t = rng.uniform(*CRITTER_STAY)
 
     def aggressive(self):
         return not MOB_KINDS[self.kind].get("calm", False)
@@ -2596,6 +2628,7 @@ class Mob:
         self.search_t = NOISE_SEARCH_T
         self.searching = False
         self.inv_speed = NOISE_INVESTIGATE
+        self.set_travel_budget(x, y)
 
     def on_shot(self, world, d, hit=False, shooter=None):
         """Eine Kugel flog nah vorbei / schlug daneben ein (hit=False) oder hat getroffen (hit=True). d = Flug-
@@ -2616,22 +2649,32 @@ class Mob:
             a = rng.uniform(0, 2 * math.pi)
         else:
             a = math.atan2(by, bx)
-        if hit and shooter is not None:
-            dist = min(MOB_HIT_RUN, math.hypot(shooter[0] - self.x, shooter[1] - self.y))
-            a = math.atan2(shooter[1] - self.y, shooter[0] - self.x)
+        lo = edge_margin(world)
+        if hit and shooter is not None:                    # 10g: Ping auf die Stelle des Schützen (egal wie weit)
+            err = TITAN_PING_ERR if self.kind in ("titan", "colossus") else MOB_HIT_POS_ERR
+            a, r = rng.uniform(0, 2 * math.pi), err * math.sqrt(rng.random())
+            tx = clampf(shooter[0] + math.cos(a) * r, lo + 2, WORLD - lo - 2)
+            ty = clampf(shooter[1] + math.sin(a) * r, lo + 2, WORLD - lo - 2)
         else:
             dist = MOB_HIT_RUN if hit else rng.uniform(BULLET_ALERT_MIN, BULLET_ALERT_MAX)
-        a += math.radians(rng.uniform(-1, 1) * (MOB_HIT_ERR if hit else BULLET_DIR_ERR))
-        lo = edge_margin(world)
-        tx = clampf(self.x + math.cos(a) * dist, lo + 2, WORLD - lo - 2)
-        ty = clampf(self.y + math.sin(a) * dist, lo + 2, WORLD - lo - 2)
+            a += math.radians(rng.uniform(-1, 1) * (MOB_HIT_ERR if hit else BULLET_DIR_ERR))
+            tx = clampf(self.x + math.cos(a) * dist, lo + 2, WORLD - lo - 2)
+            ty = clampf(self.y + math.sin(a) * dist, lo + 2, WORLD - lo - 2)
         self.noise_at = (tx, ty)
         self.search_t = MOB_HIT_SEARCH_T if hit else BULLET_SEARCH_T
         self.searching = False
         self.inv_speed = MOB_HIT_SPEED if hit else NOISE_INVESTIGATE
+        self.set_travel_budget(tx, ty)
         self.heading = math.degrees(math.atan2(-(tx - self.x), ty - self.y))   # sofort in die Richtung drehen
         if self.state == "idle":
             self.state = "chase"
+
+    def set_travel_budget(self, tx, ty):
+        """10g: so lange darf der Weg zum Geräusch/Ping dauern (Häuser, Burgmauern ...) - danach sucht es dort,
+        wo es gerade ist, und gibt auf (Titan/Koloss: zurück ins Revier, andere: frei umherlaufen)."""
+        k = MOB_KINDS[self.kind]
+        v = max(0.3, k["speed"] * self.inv_speed)
+        self.travel_t = math.hypot(tx - self.x, ty - self.y) / v * MOB_TRAVEL_K + MOB_TRAVEL_EXTRA
 
     def windup(self):
         k = MOB_KINDS[self.kind]
@@ -2793,7 +2836,12 @@ class Mob:
             nx, ny = self.noise_at
             tdx, tdy = nx - self.x, ny - self.y
             td = math.hypot(tdx, tdy)
-            if td <= 2.0:
+            if not self.searching:
+                self.travel_t = getattr(self, "travel_t", 60.0) - dt
+            if td <= 2.0 or self.travel_t <= 0:            # 10g: oder der Weg dauert zu lange (hängt fest)
+                if not self.searching and td > 2.0:
+                    self.noise_at = nx, ny = self.x, self.y
+                    td = 0.0
                 self.searching = True                      # angekommen: ab jetzt läuft die Suchzeit
             if self.searching:
                 self.search_t -= dt
@@ -2815,10 +2863,24 @@ class Mob:
             self.wander_t -= dt
             if dazed:                                      # 10e: taumelt ziellos hin und her
                 self.wander_t = min(self.wander_t, rng.uniform(0.3, 0.8))
+            hx = hy = hr = None
+            going_home = False
+            if self.home is not None:                      # 10g: Revier (Titan/Koloss)
+                hx, hy, hr = self.home
+                if math.hypot(self.x - hx, self.y - hy) > hr:
+                    going_home = True                      # ausserhalb: zurück ins Revier (nach Suche/Ping)
+                    if math.hypot(self.tx - hx, self.ty - hy) > hr * 0.7:
+                        a, r = rng.uniform(0, 2 * math.pi), hr * 0.5 * math.sqrt(rng.random())
+                        self.tx, self.ty = hx + math.cos(a) * r, hy + math.sin(a) * r
+                    self.wander_t = max(self.wander_t, 1.0)
             if self.wander_t <= 0:
                 a, r = rng.uniform(0, 2 * math.pi), rng.uniform(3, 10)
                 self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
                 self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
+                if hr is not None and math.hypot(self.tx - hx, self.ty - hy) > hr * 0.9:
+                    a = math.atan2(hy - self.y, hx - self.x) + rng.uniform(-0.8, 0.8)   # am Rand: wieder hinein
+                    self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
+                    self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
                 if rng.random() < 0.4:                 # manchmal einfach stehen bleiben
                     self.tx, self.ty = self.x, self.y
                 self.wander_t = rng.uniform(3, 7)
@@ -2826,7 +2888,7 @@ class Mob:
             td = math.hypot(tdx, tdy)
             if td > 0.5:
                 self.turn_toward(tdx, tdy, dt, 200.0)
-                speed = k["wander"]
+                speed = k["speed"] * HOME_RETURN_K if going_home else k["wander"]
                 ux, uy = tdx / td, tdy / td
         stuck_kind = self.kind in MOB_STUCK_KINDS
         if stuck_kind and self.detour_t > 0 and speed > 0:   # 7a: Umweg nach dem Festfahren
@@ -2847,6 +2909,11 @@ class Mob:
         self.y = clampf(self.y, lo, WORLD - lo)
         if world.in_void(self.x, self.y, 0.3) and (self.hover > 0 or not MOB_TUNNELS):   # Treppenschacht
             self.x, self.y = ox, oy
+        if (self.kind == "critter" and getattr(world, "mtn", False)
+                and mountain(self.x, self.y) > CRITTER_MTN_MAX and mountain(self.x, self.y) > mountain(ox, oy)):
+            self.x, self.y = ox, oy                        # 10g: Hasen bleiben im Flachland (nicht ins Gebirge)
+            self.leg_left = 0.0                            # neuer Haken
+            self.wander_t = 0.0
         if (not MTN_CLIMB and getattr(world, "mtn", False) and self.hover <= 0
                 and steep_uphill(world, ox, oy, self.x, self.y, self.gz)):   # gleiche Regel wie für Spieler
             if not steep_uphill(world, ox, oy, self.x, oy, self.gz):
@@ -2904,6 +2971,16 @@ class Mob:
             if self.leg_left <= 0:
                 fx, fy = self.flee_from
                 away = math.atan2(self.y - fy, self.x - fx)
+                fo = self.flee_forest(world, away)         # 10g: Haken grob Richtung nächster Wald
+                if fo is not None:
+                    ax, ay = math.cos(away), math.sin(away)
+                    fdx, fdy = fo[0] - self.x, fo[1] - self.y
+                    fd = math.hypot(fdx, fdy)
+                    if fd > fo[2] * 0.4:
+                        ax += CRITTER_FOREST_PULL * fdx / fd
+                        ay += CRITTER_FOREST_PULL * fdy / fd
+                        away = math.atan2(ay, ax)
+                    self.forest, self.stay_t = fo, rng.uniform(*CRITTER_STAY)
                 self.leg_dir = away + math.radians(rng.uniform(-CRITTER_TURN, CRITTER_TURN))
                 self.leg_left = rng.uniform(CRITTER_LEG_MIN, CRITTER_LEG_MAX)
             ux, uy = math.cos(self.leg_dir), math.sin(self.leg_dir)
@@ -2912,7 +2989,42 @@ class Mob:
             return ux, uy, k["speed"]
         self.state = "idle"
         self.wander_t -= dt
-        if self.wander_t <= 0:
+        forests = getattr(world, "forest_areas", None)
+        if forests:                                        # 10g: von Wald zu Wald, dazwischen zügig hoppeln
+            if self.forest is None:
+                self.forest = min(forests, key=lambda f: math.hypot(f[0] - self.x, f[1] - self.y))
+            fx, fy, fr = self.forest
+            inside = math.hypot(self.x - fx, self.y - fy) < fr * 0.85
+            if inside:
+                self.stay_t -= dt
+                if self.stay_t <= 0:                       # weiterziehen: einer der nächsten anderen Wälder
+                    near = sorted((f for f in forests if f is not self.forest),
+                                  key=lambda f: math.hypot(f[0] - self.x, f[1] - self.y))[:3]
+                    if near:
+                        self.forest = rng.choice(near)
+                        self.wander_t = 0.0
+                    self.stay_t = rng.uniform(*CRITTER_STAY)
+                    fx, fy, fr = self.forest
+                    inside = False
+            if not inside:                                 # unterwegs (oder nach der Flucht ausserhalb)
+                if self.wander_t <= 0 or math.hypot(self.tx - fx, self.ty - fy) > fr * 0.7:
+                    a, r = rng.uniform(0, 2 * math.pi), fr * 0.5 * math.sqrt(rng.random())
+                    self.tx, self.ty = fx + math.cos(a) * r, fy + math.sin(a) * r
+                    self.wander_t = rng.uniform(4, 8)
+                tdx, tdy = self.tx - self.x, self.ty - self.y
+                td = math.hypot(tdx, tdy)
+                if td > 0.5:
+                    self.turn_toward(tdx, tdy, dt, 300.0)
+                    return tdx / td, tdy / td, k["wander"] * CRITTER_TRAVEL_K
+                return 0.0, 0.0, 0.0
+            if self.wander_t <= 0:                         # im Wald umherhoppeln (bleibt drin)
+                a, r = rng.uniform(0, 2 * math.pi), rng.uniform(2, 6)
+                self.tx, self.ty = self.x + math.cos(a) * r, self.y + math.sin(a) * r
+                if math.hypot(self.tx - fx, self.ty - fy) > fr * 0.8:
+                    a = math.atan2(fy - self.y, fx - self.x) + rng.uniform(-0.7, 0.7)
+                    self.tx, self.ty = self.x + math.cos(a) * r, self.y + math.sin(a) * r
+                self.wander_t = rng.uniform(2, 5)
+        elif self.wander_t <= 0:
             a, r = rng.uniform(0, 2 * math.pi), rng.uniform(2, 6)
             self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
             self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
@@ -2923,6 +3035,22 @@ class Mob:
             self.turn_toward(tdx, tdy, dt, 300.0)
             return tdx / td, tdy / td, k["wander"]
         return 0.0, 0.0, 0.0
+
+    def flee_forest(self, world, away):
+        """10g: Nächster Wald, in den ein flüchtender Hase rennt - nicht einer, der direkt hinter dem Auslöser liegt."""
+        forests = getattr(world, "forest_areas", None)
+        if not forests:
+            return None
+        ax, ay = math.cos(away), math.sin(away)
+        best, bd = None, 1e18
+        for f in forests:
+            dx, dy = f[0] - self.x, f[1] - self.y
+            d = math.hypot(dx, dy)
+            if d > f[2] and (dx * ax + dy * ay) / d < -0.3:
+                continue                                   # liegt hinter dem Auslöser
+            if d < bd:
+                best, bd = f, d
+        return best
 
 
 def seg_box(p0, p1, b):
@@ -4925,6 +5053,7 @@ class World:
         Militärecke im Südosten (Landebahn, Hangar, Containerlager, Helipads, Bunker), Park im Nordwesten, Hof mit
         Scheune im Nordosten, Ruinendorf im Westen, Felsformation im Südwestwald, Hütten in den Wäldern."""
         c = CENTER
+        self.town_northeast()                            # 10g: Ort am Marktplatz dichter (vor allem anderen dort)
         self.old_quarter()
         self.military_zone()
         self.park(c - 100.0, c + 95.0)
@@ -4940,6 +5069,27 @@ class World:
             self.lean_to(x, y, side)
         self.add_road([(c, c + 92.0), (c + 12.0, c + 112.0), (c + 22.0, c + 124.0)], 1.4, "dirt")   # Pfad zum Nordwald
         self.add_road([(c + 70.0, c), (c + 104.0, c + 18.0), (c + 128.0, c + 46.0)], 1.4, "dirt")   # Pfad zum Ostwald
+
+    def town_northeast(self):
+        """10g: Polytown wächst vom Marktplatz nach Nordosten: eine neue Gasse mit zwei Häuserreihen (gleicher Stil
+        wie am Marktplatz - Backstein/Putz, Ziegel/Schiefer, innen Treppen und Möbel). Der Unterstand am Acker
+        steht jetzt im Hinterhof der Nordreihe."""
+        c = CENTER
+        self.add_road([(c + 33.0, c + 97.0), (c + 60.0, c + 97.5), (c + 88.0, c + 97.0)], 2.2, "dirt")
+        self.connect_road(c + 33.0, c + 97.0, 1.8, "dirt")
+        self.connect_road(c + 88.0, c + 97.0, 1.6, "dirt")   # Richtung Hof/Scheune
+        houses = (  # (x, y, Breite, Tiefe, Stockwerke, Tür, Farbe, Dach, Extras)
+            (c + 46.0, c + 89.5, 10.0, 9.0, 2, "N", HOUSE_COLS[1], ROOFS[0], {}),
+            (c + 60.0, c + 89.0, 11.0, 10.0, 2, "N", HOUSE_COLS[2], ROOFS[1], {"balcony": True}),
+            (c + 74.0, c + 89.5, 10.0, 9.0, 2, "N", HOUSE_COLS[0], ROOFS[3], {"shop": True, "sign": "KRAMLADEN"}),
+            (c + 26.0, c + 106.0, 10.0, 9.0, 2, "E", HOUSE_COLS[3], ROOFS[2], {}),
+            (c + 44.0, c + 105.5, 10.0, 9.0, 2, "S", HOUSE_COLS[4], ROOFS[1], {}),
+            (c + 80.0, c + 105.5, 11.0, 9.0, 2, "S", HOUSE_COLS[1], ROOFS[2], {"balcony": True}),
+        )
+        for i, (hx, hy, w, d, fl, dr, col, roof, ex) in enumerate(houses):
+            self.town_house(hx, hy, w, d, floors=fl, door=dr, col=col, roof=roof, seed=40 + i, **ex)
+            dx, dy = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[dr]
+            self.connect_road(hx + dx * (w / 2 + 1.4), hy + dy * (d / 2 + 1.4), 1.2, "dirt")
 
     def old_quarter(self):
         """Alter Ortsteil (Häuser, Lagerhalle, Ruine der ersten Polytown) dort, wo früher die Helipads lagen."""
@@ -5044,8 +5194,29 @@ class World:
         """7c: Wälder (BIG_FORESTS): dicht stehende Bäume, aber begehbar; Lichtungen um Bauwerke, Wege, Tunneleingänge."""
         c = CENTER
         kinds = ("fir", "fir", "fir", "oak", "birch")
+        self.forest_areas = []                             # 10g: Wälder (x, y, r) - Zuhause der Hasen
+        hcell = {}                                         # 10g: Raster der Props (schneller bei vielen Bäumen)
+
+        hbig = []                                          # grosse Props (r > 5 m) prüft jeder Kandidat
+
+        def h_add(p_):
+            if p_.r > 5.0:
+                hbig.append(p_)
+            else:
+                hcell.setdefault((int(p_.x // 8.0), int(p_.y // 8.0)), []).append(p_)
+
+        def h_near(x_, y_):
+            i_, j_ = int(x_ // 8.0), int(y_ // 8.0)
+            return hbig + [q for a_ in (i_ - 1, i_, i_ + 1) for b_ in (j_ - 1, j_, j_ + 1) for q in hcell.get((a_, b_), ())]
+
+        for p_ in self.props:
+            h_add(p_)
         for fx, fy, R, n in BIG_FORESTS:
             gx, gy = c + fx, c + fy
+            if mountain(gx, gy) <= CRITTER_MTN_MAX:
+                self.forest_areas.append((gx, gy, R))
+            dense = any(math.hypot(fx - dx_, fy - dy_) < 1.0 for dx_, dy_, _dr in BIG_DENSE)
+            gap = BIG_FOREST_GAP_DENSE if dense else BIG_FOREST_GAP
             placed = 0
             for _ in range(n * 14):
                 if placed >= n:
@@ -5065,13 +5236,14 @@ class World:
                         continue
                 if any(math.hypot(x - px, y - py) < pr * 1.6 for px, py, pr in self.ponds):
                     continue
-                if any(math.hypot(x - p.x, y - p.y) < (BIG_FOREST_GAP if p.kind == "tree" else p.r + 1.5)
-                       for p in self.props_near_xy(x, y, 6.0)):
+                if any(math.hypot(x - p.x, y - p.y) < (gap if p.kind == "tree" else p.r + 1.5)
+                       for p in h_near(x, y)):
                     continue
                 if not self.box_free(x - 1.2, y - 1.2, x + 1.2, y + 1.2):
                     continue
                 self._add_tree(x, y, br, rng.choice(kinds))
                 self.props[-1].lod = True                       # Waldbaum: Low-Poly
+                h_add(self.props[-1])
                 placed += 1
 
     def props_near_xy(self, x, y, r):
@@ -5628,8 +5800,23 @@ class World:
     def spawn_mob(self, kind, avoid, min_dist):
         """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll."""
         rng = self.mrng
-        for _ in range(80):
-            x, y = rng.uniform(6, WORLD - 6), rng.uniform(6, WORLD - 6)
+        home, home_i, area = None, -1, None
+        if kind == "titan" and self.big:                 # 10g: Titan spawnt in einem freien Revier
+            used = {m.home_i for m in self.mobs if m.kind == "titan" and m.state != "dead"}
+            free = [i for i in range(len(TITAN_HOMES)) if i not in used] or list(range(len(TITAN_HOMES)))
+            home_i = rng.choice(free)
+            hx, hy, hr = TITAN_HOMES[home_i]
+            home = area = (CENTER + hx, CENTER + hy, hr)
+        elif kind == "critter" and getattr(self, "forest_areas", None):
+            area = rng.choice(self.forest_areas)         # 10g: Hasen wohnen in den Wäldern
+        for i in range(80):
+            if area is not None and i < 60:
+                a, r = rng.uniform(0, 2 * math.pi), area[2] * 0.85 * math.sqrt(rng.random())
+                x, y = area[0] + math.cos(a) * r, area[1] + math.sin(a) * r
+                if not (6 < x < WORLD - 6 and 6 < y < WORLD - 6):
+                    continue
+            else:
+                x, y = rng.uniform(6, WORLD - 6), rng.uniform(6, WORLD - 6)
             if math.hypot(x - CENTER, y - CENTER) < 40.0:          # nicht in/an der Burg
                 continue
             if self.mtn and mountain(x, y) > 1.0:                # nicht oben im Gebirge
@@ -5652,6 +5839,12 @@ class World:
             m = Mob(kind, x, y, self)
             m.id = self.next_mid
             self.next_mid += 1
+            if kind == "titan":
+                m.home, m.home_i = home, home_i
+            elif kind == "colossus" and self.big:
+                m.home = (x, y, COLOSSUS_HOME_R)
+            elif kind == "critter" and area is not None:
+                m.forest = area
             self.mobs.append(m)
             return True
         return False
@@ -12032,6 +12225,25 @@ def build_scene(world, progress=None):
         fm_, zo_ = winds.get(x, y, z, "bush")
         bush(fm_, x, y, z, zo_, r, rng)
         decal_disc(shadows, world, x - SUN[0] * r * 0.3, y - SUN[1] * r * 0.3, r * 1.6, 0.35)
+
+    if getattr(world, "big", False):                   # 10g: Unterholz im Südwestwald - Sichtdeckung überall
+        urng = random.Random(7310)                     # eigener Zufall: der Rest der Deko bleibt wie gehabt
+        for ux_, uy_, ur_, un_ in BIG_UNDERGROWTH:
+            gx_, gy_ = CENTER + ux_, CENTER + uy_
+            placed_ = 0
+            for _ in range(un_ * 6):
+                if placed_ >= un_:
+                    break
+                a, rr_ = urng.uniform(0, 2 * math.pi), ur_ * math.sqrt(urng.random())
+                x, y = gx_ + math.cos(a) * rr_, gy_ + math.sin(a) * rr_
+                z = free_spot(x, y, 1.2)
+                if z is None or any(math.hypot(x - q.x, y - q.y) < (0.9 if q.kind == "tree" else q.base_r + 1.0)
+                                    for q in world.props_near(x - 4.0, y - 4.0, x + 4.0, y + 4.0)):
+                    continue
+                placed_ += 1
+                r = urng.uniform(0.8, 1.45)
+                fm_, zo_ = winds.get(x, y, z, "bush")
+                bush(fm_, x, y, z, zo_, r, urng, (urng.uniform(0.10, 0.18), urng.uniform(0.30, 0.42), urng.uniform(0.09, 0.15)))
 
     ntuft = 0
     for _ in range(9000):
