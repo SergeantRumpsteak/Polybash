@@ -114,6 +114,13 @@ Geschütz, Fahrzeug/Heli) erscheint als grober Kreis (Lärmradius, Mitte zufäll
 ihn hören kann; echter Sichtkontakt (Sichtlinie, Blickfeld, Sichtweite - ENEMY_SIGHT_*) als roter Punkt mit Nachleuchten.
 Sichtungen werden pro Spieler gesammelt und mit Verbündeten (World.allied) geteilt (Game.sightings, intel_*). Set komplett:
 Rahmen in der Spielerfarbe um die Ausrüstungs-Kacheln. Neue Granate Abwehrdrohne ("guard", Mob "gdrone", GDRONE_*).
+11: Capture the Flag (Modus "ctf", CTF_*): zwei Teams (ctf_assign/ctf_balance, Armbinde in der Teamfarbe, Sichtungen und
+Lärm-Pings fürs ganze Team), Eigenbeschuss-Schalter. Blood Gulch (nur im CTF): Teamflagge je Basis, gegnerische holen,
+eigene muss daheim sein. Polytown: zwei feste Stützpunkte NW/SO (build_ctf_bases, in allen Modi), neutrale Flagge an
+einem zufälligen Ort in der Burg (CTF_MID_SPOTS). Flagge mit "GB" (build_ctf_flag), darüberlaufen nimmt sie, am Rücken
+getragen, Kreis um den Träger auf der Minimap (CTF_PING_*), Pfeil zur Basis, fällt beim Tod (CTF_DROP_T), keine Fahrzeuge.
+Standard: Monster/Tomahawk aus, Hauptspiel-Loadout (Waffenwahl vor dem Spawn, World.loot_mode). Host-Menü: Modus in der
+Setup-Seite, im Rundenende und per Knopf in der Lobby; CTF-Regeln auf eigener Seite (CtfPage).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -172,6 +179,7 @@ Ausrüstung (aus allen Kistenarten, Tabelle GEAR + LOOT_GEAR_TABLES; LOOT_CATEGO
   Tasten stehen zentral in KEYS (Vorbereitung für frei belegbare Steuerung).
 
 Spielmodi (vom Host im Start-Menü gewählt, mit einstellbarem Zeitlimit):
+  Capture the Flag  (11) Zwei Teams. Flagge holen und in die eigene Basis bringen = 1 Punkt (siehe oben, CTF_*).
   King of the Hill  Die Burg in der Mitte ist die Zone. Jeder Spieler in der Zone
                     bekommt 1 Punkt pro Sekunde (auch mehrere gleichzeitig).
                     Ein Kill gibt 10 Punkte, steht der Killer dabei in der Zone: 20.
@@ -496,7 +504,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 41         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
+NET_VERSION = 42         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 11: 42 - CTF)
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -511,8 +519,42 @@ PROTECT_T = 3.0          # Spawnschutz in s (endet beim Schiessen)
 SB_EVERY = 15            # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot (2x pro Sekunde)
 OVER_T = 15.0            # so lange bleibt die Rangliste nach Rundenende stehen
 
-MODES = ("koth", "dm")
-MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch"}
+MODES = ("koth", "dm", "ctf")
+MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch", "ctf": "Capture the Flag"}
+# --- 11: Capture the Flag (zwei Teams). Blood Gulch: je Basis eine Teamflagge, gegnerische holen und zur eigenen Basis
+# bringen = 1 Punkt. Polytown: neutrale Flagge in der Burg, beide Teams bringen sie in ihren Stützpunkt.
+CTF_TEAM_NAMES = ("Blau", "Rot")
+CTF_TEAM_COLS = ((0.18, 0.40, 0.95), (0.92, 0.20, 0.18))     # Teamfarben (Armbinde, Fahne, HUD, Minimap)
+CTF_NEUTRAL_COL = (1.0, 0.80, 0.12)                          # neutrale Flagge (Polytown)
+CTF_PICK_R = 1.4         # m: wer so nah (waagerecht) an der Flagge ist, nimmt sie (einfach darüberlaufen)
+CTF_PICK_DZ = 1.9        # m: ... bei höchstens diesem Höhenunterschied
+CTF_CAP_R = 4.0          # m um den eigenen Flaggenständer: Flagge abgeben = 1 Punkt
+CTF_NEED_HOME = True     # Blood Gulch: Punkt nur, wenn die eigene Flagge gerade in der Basis steht
+CTF_DROP_T = 20.0        # s: so lange bleibt eine gefallene Flagge liegen, dann kehrt sie zurück (Vorschlag)
+CTF_NEUTRAL_DELAY = 3.0  # s: Polytown - nach einem Punkt erscheint so viel später eine neue Flagge in der Mitte
+CTF_PING_T = 1.5         # s: so oft sehen alle einen Kreis um den Flaggenträger (Startwert, sinnvoll 1-2 s)
+CTF_PING_R = 10.0        # m: Radius dieses Kreises (Mitte zufällig versetzt, der Träger ist irgendwo darin)
+CTF_PING_LIFE = 2.2      # s: so lange bleibt ein Träger-Kreis sichtbar
+CTF_NO_VEHICLES = True   # mit Flagge: keine Fahrzeuge, kein Heli, kein Schützensitz (Vorschlag)
+CTF_PTS_MAX = 10         # Punktelimit im Host-Menü: 0 (aus) .. so viele Punkte
+CTF_FF_DEFAULT = False   # Eigenbeschuss (Standard aus)
+CTF_LOOT_DEFAULT = "loadout"   # "loadout" = Hauptspiel-Loadout (Waffenwahl vor dem Spawn) | "exp" = Experimental-Loot
+CTF_MOBS_DEFAULT = 0     # Monster im CTF: aus
+CTF_TOMA_DEFAULT = False # Tomahawk im CTF: aus
+CTF_BASE_A = 12.0        # Polytown-Stützpunkt: halbe Kantenlänge (m)
+CTF_BASE_WALL_H = 2.3    # Mauerhöhe (stehend auf dem Auftritt schiesst man darüber, geduckt volle Deckung)
+CTF_BASE_STEP_H = 0.9    # Auftritt an der Mauerinnenseite
+# Polytown-Stützpunkte (Mitte relativ zur Kartenmitte, Ausrichtung): Team 0 (Blau) im Nordwest-Wäldchen, Team 1 (Rot)
+# im Südosten am Ende der Landebahn. s = +1: Tore nach Süden und Osten (zur Burg), s = -1: Tore nach Norden und Westen.
+CTF_BASES = ((-140.0, 147.0, 1), (169.0, -113.0, -1))
+CTF_FLAG_LOCAL = (-6.0, 6.0)   # Flaggenständer im Stützpunkt (lokal, hinten im Unterstand)
+# Blood Gulch: Flaggenstand in der Mitte des Untergeschosses jeder Basis (West = Blau, Ost = Rot)
+CTF_BG_FLAGS = ((135.5, 309.7), (279.6, 100.9))
+# Polytown, neutrale Flagge: mögliche Orte in der Burg (relativ zur Mitte, Boden-z) - Hof, Kasematten, Wehrgänge,
+# Stege und der Raum im Kontrollturm; ungültige (Wand, Decke zu tief) werden beim Aufbau aussortiert
+CTF_MID_SPOTS = ((-7.0, 7.0, 0.0), (7.0, -7.0, 0.0), (-10.0, -16.6, 0.0), (10.0, -16.6, 0.0), (-10.0, 16.6, 0.0),
+                 (0.0, 11.0, 5.0), (0.0, -11.0, 5.0), (20.5, 6.0, 5.0), (-20.5, -6.0, 5.0),
+                 (-2.6, 2.8, 12.2), (2.8, -2.6, 12.2))     # 5.0 = Stege (KT_MID), 12.2 = Turmraum (KT_MID + Treppe)
 LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Minuten
 STD_MAP_NAME = "Polytown"                # Name der eingebauten Standardkarte
 MAP_ALIASES = {"9d7c83d12b8832f1": "Minecraft Insel"}    # Anzeigename einer .mcmap-Karte nach ihrer Kennung
@@ -1422,6 +1464,20 @@ SCOPE_INFO = ("offene Visierung", "Leuchtpunkt, 1x", "4-fach Zielfernrohr", "8-f
 SIGHT_NAMES = ("iron", "red", "acog", "sniper")
 DEFAULT_SCOPE = {3: SC_SNIPER}              # Scharfschützengewehr ab Werk mit Sniper-Visier
 DEFAULT_LOADOUT = (1, 0, GAD_C4, SC_IRON)   # Sturmgewehr + Pistole + C4 + Kimme und Korn
+
+
+def loadout_valid(v):
+    """11: Loadout eines Mitspielers prüfen ([Hauptwaffe, Kleinwaffe, Gadget, Visier, Aufsätze Haupt, Aufsätze Klein])
+    -> bereinigte Liste oder None. Der Host gibt nur Waffen aus PRIMARIES/SECONDARIES heraus."""
+    if not isinstance(v, (list, tuple)) or len(v) < 4:
+        return None
+    pri, sec, gad, sc = v[:4]
+    if pri not in PRIMARIES or sec not in SECONDARIES or gad not in range(len(GADGETS)):
+        return None
+    sc = sc if isinstance(sc, int) and not isinstance(sc, bool) and 0 <= sc < len(SCOPES) else SC_IRON
+    a1 = att_valid(v[4]) if len(v) > 4 else None
+    a2 = att_valid(v[5]) if len(v) > 5 else None
+    return [pri, sec, gad, sc, a1 or ATT_NONE, a2 or ATT_NONE]
 ROCKET_WI = next(i for i, w in enumerate(WEAPONS) if w.blast_r > 0)   # Raketenwerfer
 PISTOL_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Pistole")   # richtet am Helikopter keinen Schaden an
 MINIGUN_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Minigun")
@@ -1572,14 +1628,17 @@ MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "coloss
              "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne"}
 
 
-def end_tabs(koth):
+def end_tabs(koth, ctf=False):
     """Reiter des Endbildschirms: (Titel, [(Spaltenkopf, Wert(e) -> Zahl/Text, hervorheben?)],
-    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier."""
+    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier. 11: ctf = Team-Spalte
+    in der Übersicht und Reiter "Flaggen"."""
     kd = lambda e: e["kills"] / max(1, e["deaths"])                                       # noqa: E731
     st = lambda e, k: e["stats"].get(k, 0)                                                  # noqa: E731
     mob = lambda e, k: e["stats"].get("mob", {}).get(k, 0)                                  # noqa: E731
     crate = lambda e, k: e["stats"].get("crate", {}).get(k, 0)                              # noqa: E731
-    tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
+    team = lambda e: CTF_TEAM_NAMES[e["team"]] if e.get("team") in (0, 1) else "-"         # noqa: E731
+    tabs = [("Übersicht", ([("Team", team, False), ("Flaggen", lambda e: st(e, "flag_caps"), True)] if ctf else [])
+             + ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
              + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
                 ("K/D", lambda e: round(kd(e), 2), True)]
              + ([("Zeit in der Radarstation", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
@@ -1609,6 +1668,13 @@ def end_tabs(koth):
                           ("Im Heli", lambda e: f"{st(e, 'fly'):.0f} m", False),
                           ("Flüge", lambda e: st(e, "flights"), True)],
              "Weltenbummler", lambda e: st(e, "walk") + st(e, "drive") + st(e, "fly"))]
+    if ctf:                                          # 11: CTF-Werte als eigener Reiter direkt nach der Übersicht
+        tabs.insert(1, ("Flaggen", [("Team", team, False),
+                                    ("Flaggen geholt", lambda e: st(e, "flag_caps"), True),
+                                    ("Zurückgebracht", lambda e: st(e, "flag_returns"), True),
+                                    ("Träger getötet", lambda e: st(e, "carrier_kills"), True)],
+                        "Flaggen-Held", lambda e: st(e, "flag_caps") * 100 + st(e, "flag_returns") * 10
+                        + st(e, "carrier_kills")))
     return tabs
 
 
@@ -3191,7 +3257,17 @@ def new_stats():
     und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus STAT_TABS."""
     return {"mob": {k: 0 for k in KINDS}, "crate": {k: 0 for k in CRATE_KINDS}, "buffs": 0, "melee_kills": 0,
             "toma_fired": 0, "toma_kills": 0, "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0,
-            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0}
+            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0,
+            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # 11: CTF - geholt, zurückgebracht, Träger getötet
+
+
+def ctf_summary(p):
+    """11: (Flaggen geholt, zurückgebracht, Träger getötet) für das Tab-Scoreboard - Host aus pl.stats, Mitspieler
+    aus dem Snapshot (pl.sb_ctf)."""
+    st = getattr(p, "stats", None)
+    if st is not None and getattr(p, "sb", None) is None:
+        return st.get("flag_caps", 0), st.get("flag_returns", 0), st.get("carrier_kills", 0)
+    return getattr(p, "sb_ctf", None) or (0, 0, 0)
 
 
 def stat_summary(p):
@@ -3212,6 +3288,28 @@ class Crate:
         self.kind = kind if kind in CRATE_KINDS else "common"
         self.bonus = False        # Belohnung (Titan): wird nach dem Öffnen nicht ersetzt, Lichtsäule
         self.air = False          # 10e: Airdrop-Kiste - sieht neutral aus (Seltenheit unsichtbar), wird nicht ersetzt
+
+
+FLAG_STATES = ("home", "carried", "dropped", "wait")   # 11: Index = Zustand im Netz (neue nur hinten anhängen)
+
+
+class Flag:
+    """11: Flagge im Capture the Flag. team = 0/1 (Blood Gulch: Teamflagge mit Basis) oder -1 (Polytown: neutral,
+    erscheint an einem zufälligen Ort in der Burg). state: home (am Ständer) | carried (carrier trägt sie) |
+    dropped (liegt, drop_t s bis zur Rückkehr) | wait (Polytown: nach einem Punkt kurz weg)."""
+
+    def __init__(self, fid, team, x, y, z):
+        self.fid, self.team = fid, team
+        self.home = (x, y, z)
+        self.x, self.y, self.z = x, y, z
+        self.state = "home"
+        self.carrier = -1
+        self.drop_t = 0.0
+        self.hint_t = 0.0         # Host: Sperrzeit für den Hinweis "eigene Flagge muss in der Basis sein"
+
+    def place(self, x, y, z, state="home"):
+        self.x, self.y, self.z = x, y, z
+        self.state, self.carrier, self.drop_t = state, -1, 0.0
 
 
 class Rock:
@@ -3752,7 +3850,11 @@ class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True):
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None):
+        ctf = ctf if isinstance(ctf, dict) else {}
+        self.ctf_ff = bool(ctf.get("ff", CTF_FF_DEFAULT))                  # 11: Eigenbeschuss im CTF
+        self.ctf_loot = "exp" if ctf.get("loot", CTF_LOOT_DEFAULT) == "exp" else "loadout"
+        self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # 11: Punktelimit (0 = aus)
         if mob_level is None:
             mob_level = MOB_DEFAULT if spawn_mobs else 0
         spawn_mobs = bool(spawn_mobs) and mob_level > 0
@@ -3896,9 +3998,13 @@ class World:
         elif self.mtn:
             self.add_groves(rng)
         if not self.mc:
+            nb0 = len(self.boxes)
             if mp.get("blocks") is None:
                 self.add_cover(rng)
+            cover = set(self.boxes[nb0:])
             self.add_map_objects()
+            if self.big:
+                self.build_ctf_bases(cover)          # 11: zwei Stützpunkte (in allen Modi da, Teambasen im CTF)
             self.ground_boxes()                      # 9a: nichts schwebt über Senken und Hängen
         if self.mtn and WATERFALL_COUNT > 0 and self.cm is None and self.hgrid is None:
             self.props = [q for q in self.props if q.kind not in ("tree", "rock") or not near_waterfall(q.x, q.y, 2.0)]
@@ -3938,6 +4044,20 @@ class World:
         self.place_toma()        # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
         if spawn_mobs:           # der Client bekommt die Monster vom Host
             self.populate_mobs()
+        # --- 11: Capture the Flag
+        self.team_of = {}        # Spieler-ID -> Team (0/1) - nur im CTF belegt (sonst gilt jeder für sich, allied())
+        self.team_score = [0, 0]
+        self.flags = []          # Flaggen (beim Mitspieler aus den Snapshots)
+        self.next_fid = 1
+        self.ctf_setup_map()     # Flaggenstände, Team-Startpunkte, Orte der neutralen Flagge (aus Seed + Karte)
+        if self.mode == "ctf":
+            self.ctf_reset()
+
+    @property
+    def loot_mode(self):
+        """11: "loadout" = Hauptspiel-Loadout (Waffenwahl vor dem Spawn, keine Monster-Beute), "exp" = Experimental-
+        Loot. Nur der CTF kennt die Einstellung - KotH und DM bleiben beim Experimental-Loot."""
+        return self.ctf_loot if self.mode == "ctf" else "exp"
 
     def prop_count(self):
         """Prüfsumme für den Beitritt: stimmt nur bei gleicher Version und Seed."""
@@ -5561,6 +5681,111 @@ class World:
             self.sandbags(x, cy - 1.8, x + 0.8, cy + 1.8)
         self.flats.append((cx, cy, 5.0, 12.0))
 
+    # ------------------------------------------------------------ 11: CTF-Stützpunkte (Polytown)
+    def build_ctf_bases(self, cover=()):
+        """11: Zwei Stützpunkte in gegenüberliegenden Ecken (CTF_BASES) - gehören fest zur Karte (stören KotH/DM nicht),
+        im Capture the Flag sind sie die Teambasen. Läuft vor ground_boxes (Fundamente) und vor den Startpunkten."""
+        c = CENTER
+        for team, (dx, dy, s) in enumerate(CTF_BASES):
+            self.ctf_base(c + dx, c + dy, s, CTF_TEAM_COLS[team], cover)
+
+    def ctf_base(self, cx, cy, s, col, cover=()):
+        """11: Basislager, gut zu verteidigen. Lokale Koordinaten (u, v) mit x = cx + s*u, y = cy + s*v: Tore liegen
+        bei -v (Süd) und +u (Ost), also zur Burg; vorne (+u, -v) ein Wachturm mit Teamfahne, hinten (-u, +v) der
+        Flaggenständer unter einem Unterstand. Mauern (HESCO-Wälle) mit Schiessscharten und einem zweistufigen Auftritt
+        innen (stehend schiesst man darüber, geduckt volle Deckung), Sandsack-Stellungen innen und vor den Toren."""
+        A, H, T = CTF_BASE_A, CTF_BASE_WALL_H, 1.0
+        hesco, hesco_d, frame = (0.60, 0.54, 0.40), (0.50, 0.45, 0.33), (0.36, 0.38, 0.33)
+
+        def B(u0, v0, u1, v1, z0, z1, colr, mm=True, vis=True):
+            xa, xb, ya, yb = cx + s * u0, cx + s * u1, cy + s * v0, cy + s * v1
+            return self.add_box(min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb), z0, z1, colr, mm, vis)
+
+        def W(u0, v0, u1, v1):
+            xa, xb, ya, yb = cx + s * u0, cx + s * u1, cy + s * v0, cy + s * v1
+            return min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb)
+
+        # Platz räumen: Bäume/Felsen und Deckungsblöcke im Lager, Gelände eben (Höhe 0)
+        m = A + 3.0
+        self.props = [p for p in self.props if not (abs(p.x - cx) < m + p.r and abs(p.y - cy) < m + p.r)]
+        rout = A + 20.0                                                  # weicher Übergang ins Gelände (keine Gräben)
+        drop = {b for b in cover if math.hypot((b.x0 + b.x1) / 2 - cx, (b.y0 + b.y1) / 2 - cy) < rout + 3.0}
+        if drop:
+            self.boxes = [b for b in self.boxes if b not in drop]
+        self.flats.append((cx, cy, A + 4.0, rout))
+        self.floors.append((cx - A, cy - A, cx + A, cy + A, (0.47, 0.44, 0.37)))
+
+        def wall(along_u, a0, a1, b0, b1, ops):
+            """Mauer entlang u (bzw. v) von a0 bis a1, Dicke b0..b1; ops = (Mitte, halbe Breite, z unten, z oben)."""
+            def seg(p, q, z0, z1):
+                if along_u:
+                    B(p, b0, q, b1, z0, z1, hesco)
+                else:
+                    B(b0, p, b1, q, z0, z1, hesco)
+            cur = a0
+            for c0, hw, zl, zh in sorted(ops):
+                p0, p1 = c0 - hw, c0 + hw
+                if p0 > cur:
+                    seg(cur, p0, -2.0, H)
+                if zl > 0:
+                    seg(p0, p1, -2.0, zl)
+                if zh < H:
+                    seg(p0, p1, zh, H)
+                cur = p1
+            if cur < a1:
+                seg(cur, a1, -2.0, H)
+
+        slit = lambda c0: (c0, 0.32, 1.35, 1.85)                              # noqa: E731
+        gs, ge, gw = -1.5, 1.5, 2.4                                          # Tor Süd (Mitte u), Tor Ost (Mitte v), halbe Breite
+        wall(True, -A, A, A - T, A, [slit(-7.0), slit(-1.0), slit(5.0)])     # Nord (hinten)
+        wall(False, -A, A, -A, -A + T, [slit(-5.0), slit(1.0), slit(7.0)])   # West (hinten)
+        wall(True, -A, A, -A, -A + T, [(gs, gw, 0.0, 99.0), slit(-8.5)])     # Süd mit Tor
+        wall(False, -A, A, A - T, A, [(ge, gw, 0.0, 99.0), slit(8.5)])       # Ost mit Tor
+        for pu, pv in ((gs - gw - 0.6, -A + 0.5), (gs + gw + 0.6, -A + 0.5), (A - 0.5, ge - gw - 0.6), (A - 0.5, ge + gw + 0.6)):
+            B(pu - 0.55, pv - 0.55, pu + 0.55, pv + 0.55, -2.0, H + 0.55, hesco_d)    # Torpfeiler
+        # Auftritt innen (unten 0,45, oben CTF_BASE_STEP_H): Nord, West, Süd westlich des Tors, Ost nördlich/südlich des Tors
+        hs = CTF_BASE_STEP_H
+        B(-A + T, A - T - 0.8, A - T, A - T, -1.0, hs, hesco_d)
+        B(-A + T, A - T - 1.4, A - T, A - T - 0.8, -1.0, hs / 2, hesco_d)
+        B(-A + T, -A + T, -A + T + 0.8, A - T - 0.8, -1.0, hs, hesco_d)
+        B(-A + T + 0.8, -A + T, -A + T + 1.4, A - T - 1.4, -1.0, hs / 2, hesco_d)
+        B(-A + T + 1.4, -A + T, gs - gw - 1.3, -A + T + 0.8, -1.0, hs, hesco_d)
+        B(-A + T + 1.4, -A + T + 0.8, gs - gw - 1.3, -A + T + 1.4, -1.0, hs / 2, hesco_d)
+        for v0, v1 in ((ge + gw + 1.3, A - T - 1.4), (-A + T + 3.8, ge - gw - 1.3)):
+            B(A - T - 0.8, v0, A - T, v1, -1.0, hs, hesco_d)
+            B(A - T - 1.4, v0, A - T - 0.8, v1, -1.0, hs / 2, hesco_d)
+        # Wachturm vorne (+u, -v): Betonblock mit Treppe an der Südmauer, Brüstung über den Mauern, Teamfahne
+        tz = 3.2
+        tu0, tv1 = A - T - 3.6, -A + T + 3.6
+        B(tu0, -A + T, A - T, tv1, -2.0, tz, CONCRETE)
+        B(tu0, -A, A, -A + T, H, tz + 1.1, CONCRETE)                         # Brüstung Süd (auf der Mauer)
+        B(A - T, -A, A, tv1, H, tz + 1.1, CONCRETE)                          # Brüstung Ost
+        B(tu0, tv1 - 0.3, tu0 + 1.0, tv1, tz, tz + 1.1, CONCRETE)            # Ecke zur Lagerseite
+        n, sd = 7, 0.8
+        for i in range(n):                                                   # Treppe (steigt nach +u zum Turm)
+            u1 = tu0 - (n - 1 - i) * sd
+            B(u1 - sd, -A + T + 0.1, u1, -A + T + 1.4, -1.0, tz * (i + 1) / n, CONCRETE)
+        fx, fy, _x1, _y1 = W(A - T - 0.45, tv1 - 0.45, A - T - 0.45, tv1 - 0.45)
+        self.flagpole(fx, fy, tz, 4.2, col, 2.2, 1.3, 0.0 if s > 0 else 180.0)
+        # Unterstand über dem Flaggenständer (Deckung von oben), Sandsäcke zur Lagerseite, Ständer
+        x0, y0, x1, y1 = W(-9.5, 2.5, -2.5, 9.5)
+        self.shed_roof(x0, y0, x1, y1, 2.9, (0.33, 0.38, 0.28))
+        for u0, v0, u1, v1 in ((-9.5, 2.2, -7.2, 3.0), (-4.8, 2.2, -2.5, 3.0), (-2.5, 3.0, -1.7, 5.4), (-2.5, 7.6, -1.7, 9.5)):
+            x0, y0, x1, y1 = W(u0, v0, u1, v1)
+            self.sandbags(x0, y0, x1, y1)
+        fu, fv = CTF_FLAG_LOCAL
+        B(fu - 0.6, fv - 0.6, fu + 0.6, fv + 0.6, -0.5, 0.25, frame)          # Flaggenständer (Sockel)
+        # Sandsack-Stellungen innen vor den Toren und aussen neben den Toren
+        for u0, v0, u1, v1 in ((-4.8, -A + 4.0, 1.8, -A + 4.8), (A - 4.8, -1.8, A - 4.0, 4.8),
+                               (-8.5, -A - 3.8, -5.0, -A - 3.0), (2.0, -A - 3.8, 5.5, -A - 3.0),
+                               (A + 3.0, -5.5, A + 3.8, -2.0), (A + 3.0, 5.0, A + 3.8, 8.5)):
+            x0, y0, x1, y1 = W(u0, v0, u1, v1)
+            self.sandbags(x0, y0, x1, y1)
+        # Munitionskisten (Deko, Deckung)
+        B(6.8, 7.6, 8.2, 8.6, -0.5, 0.8, (0.36, 0.40, 0.26))
+        B(8.4, 7.6, 9.6, 8.6, -0.5, 0.8, (0.36, 0.40, 0.26))
+        B(7.4, 7.7, 8.8, 8.5, 0.8, 1.5, (0.33, 0.37, 0.24))
+
     def add_groves(self, rng):
         """Wäldchen (dichte Baumgruppen): Sichtschutz gegen Helikopter am Rand des Tals."""
         c = CENTER
@@ -5846,6 +6071,10 @@ class World:
 
     # ------------------------------------------------------------ Spawns
     def first_spawn(self, pid):
+        if self.mode == "ctf" and self.team_of.get(pid) in (0, 1):        # 11: in der eigenen Basis
+            pts = self.ctf_spawns[self.team_of[pid]]
+            if pts:
+                return pts[pid % len(pts)]
         return self.spawns[pid % len(self.spawns)]
 
     SPAWN_MIN_DEATH = 70.0       # so weit soll der neue Startpunkt vom Todesort entfernt sein
@@ -5854,6 +6083,16 @@ class World:
         """Startpunkt: weit weg vom Todesort, von lebenden Gegnern und Monstern, und nicht zweimal derselbe.
         Zufall nur unter den guten Kandidaten."""
         me = self.players.get(pid)
+        if self.mode == "ctf" and self.team_of.get(pid) in (0, 1) and self.ctf_spawns[self.team_of[pid]]:
+            pts = self.ctf_spawns[self.team_of[pid]]                       # 11: Spawn in bzw. bei der eigenen Basis
+            busy = [(p.x, p.y) for p in self.players.values() if p.pid != pid and p.hp > 0]
+            free = [q for q in pts if all(math.hypot(q[0] - bx, q[1] - by) > 2.0 for bx, by in busy)] or pts
+            last = self.last_spawn.get(pid)
+            if last is not None and len(free) > 1:
+                free = [q for q in free if q != last] or free
+            best = self.mrng.choice(free)
+            self.last_spawn[pid] = best
+            return best
         death = getattr(me, "death_pos", None)
         foes = [(p.x, p.y) for p in self.players.values() if p.pid != pid and p.hp > 0]
         foes += [(m.x, m.y) for m in self.mobs if m.state != "dead"]
@@ -5882,8 +6121,219 @@ class World:
         """Host/Einzelspiel: Figur neu aufstellen (nur mit der Pistole). Die Darstellung läuft über das
         Ereignis 'respawn'."""
         x, y = self.pick_spawn(pl.pid)
-        pl.respawn(self, x, y, DEFAULT_LOADOUT)
+        lo = getattr(pl, "loadout", None) if self.loot_mode == "loadout" else None   # 11: gewählte Waffen (Hauptspiel-Loadout)
+        pl.respawn(self, x, y, lo or DEFAULT_LOADOUT)
         self.events.append(("respawn", pl.pid, round(x, 2), round(y, 2)))
+
+    # ------------------------------------------------------------ 11: Capture the Flag
+    def ctf_cfg(self):
+        """Einstellungen des CTF fürs Netz (welcome, cfg, reload)."""
+        return {"ff": 1 if self.ctf_ff else 0, "loot": self.ctf_loot, "pl": int(self.score_limit)}
+
+    def ctf_apply_cfg(self, d):
+        if isinstance(d, dict):
+            self.ctf_ff = bool(d.get("ff", self.ctf_ff))
+            self.ctf_loot = "exp" if d.get("loot", self.ctf_loot) == "exp" else "loadout"
+            try:
+                self.score_limit = max(0, min(CTF_PTS_MAX, int(d.get("pl", self.score_limit))))
+            except (TypeError, ValueError):
+                pass
+
+    def ctf_setup_map(self):
+        """Flaggenstände der beiden Teams (ctf_bases: (x, y, z)), Startpunkte je Team (ctf_spawns) und - Polytown - die
+        möglichen Orte der neutralen Flagge in der Burg (ctf_mid). Alles aus Seed + Karte: Host und Mitspieler gleich."""
+        self.ctf_bases, self.ctf_spawns, self.ctf_mid = [], [[], []], []
+        self.ctf_neutral = bool(self.big)
+        if self.mc:
+            return
+        if self.big:
+            c = CENTER
+            fu, fv = CTF_FLAG_LOCAL
+            for team, (dx, dy, s) in enumerate(CTF_BASES):
+                bx, by = c + dx, c + dy
+                fx, fy = bx + s * fu, by + s * fv
+                self.ctf_bases.append((fx, fy, self.floor_at(fx, fy, 1.0)))
+                pts = []
+                for gu in range(-8, 9, 2):                   # Raster im Lager: frei, nicht direkt am Ständer
+                    for gv in range(-8, 9, 2):
+                        x, y = bx + s * gu, by + s * gv
+                        if math.hypot(x - fx, y - fy) < 3.0 or self.in_solid(x, y, 0.8, 0.0):
+                            continue
+                        if abs(self.floor_at(x, y, 0.3)) > 0.3 or self.ceiling_at(x, y, 0.0) < 2.2:
+                            continue
+                        pts.append((x, y))
+                self.ctf_spawns[team] = pts
+            for dx, dy, z in CTF_MID_SPOTS:                  # neutrale Flagge: nur Orte mit Boden und Kopffreiheit
+                x, y = c + dx, c + dy
+                fz = self.floor_at(x, y, z + 0.3)
+                if abs(fz - z) > 0.6 or self.ceiling_at(x, y, fz) - fz < 2.0 or self.in_solid(x, y, 0.5, fz):
+                    continue
+                self.ctf_mid.append((x, y, fz))
+            if not self.ctf_mid:
+                self.ctf_mid.append((c - 7.0, c + 7.0, self.floor_at(c - 7.0, c + 7.0, 0.5)))
+            return
+        homes = None
+        if (self.map or {}).get("name") == "Blood Gulch":
+            homes = list(CTF_BG_FLAGS)
+        elif len(self.spawns) >= 2:                          # andere Karte: die beiden weitesten Startpunkte
+            homes = list(max(((a, b) for a in self.spawns for b in self.spawns),
+                             key=lambda ab: math.hypot(ab[0][0] - ab[1][0], ab[0][1] - ab[1][1])))
+        if not homes:
+            homes = [(CENTER - 60.0, CENTER), (CENTER + 60.0, CENTER)]
+        for team, (hx, hy) in enumerate(homes[:2]):
+            self.ctf_bases.append((hx, hy, self.floor_at(hx, hy, self.spawn_z(hx, hy) + 1.2)))
+        for sx, sy in self.spawns:                           # Startpunkte: die der näheren Basis (bis 70 m)
+            d = [math.hypot(sx - hx, sy - hy) for hx, hy, _z in self.ctf_bases]
+            t = 0 if d[0] <= d[1] else 1
+            if d[t] < 70.0:
+                self.ctf_spawns[t].append((sx, sy))
+
+    def ctf_reset(self):
+        """Neue CTF-Runde: Punkte auf 0, Flaggen an ihren Platz (Polytown: neutrale Flagge an einem zufälligen Ort)."""
+        self.team_score = [0, 0]
+        self.flags = []
+        if not self.ctf_bases:
+            return
+        if self.ctf_neutral:
+            x, y, z = self.mrng.choice(self.ctf_mid)
+            self.flags.append(Flag(self.next_fid, -1, x, y, z))
+            self.next_fid += 1
+        else:
+            for team, (x, y, z) in enumerate(self.ctf_bases[:2]):
+                self.flags.append(Flag(self.next_fid, team, x, y, z))
+                self.next_fid += 1
+
+    def ctf_assign(self, pl):
+        """Automatische, ausgeglichene Teamzuteilung: ins kleinere Team (bei Gleichstand ins Team mit weniger Punkten)."""
+        if self.mode != "ctf" or pl is None:
+            return
+        n = [sum(1 for pid, t in self.team_of.items() if t == k and pid != pl.pid and pid in self.players) for k in (0, 1)]
+        t = 0 if n[0] < n[1] else 1 if n[1] < n[0] else (0 if self.team_score[0] <= self.team_score[1] else 1)
+        self.team_of[pl.pid] = t
+        pl.team = t
+
+    def ctf_balance(self):
+        """Rundenstart: alle bekommen ein Team, Unterschied höchstens 1 (die zuletzt Beigetretenen wechseln)."""
+        if self.mode != "ctf":
+            self.team_of = {}
+            for p in self.players.values():
+                p.team = None
+            return
+        self.team_of = {pid: t for pid, t in self.team_of.items() if pid in self.players and t in (0, 1)}
+        for p in sorted(self.players.values(), key=lambda q: q.pid):
+            if p.pid not in self.team_of:
+                self.ctf_assign(p)
+        while True:
+            n = [[pid for pid, t in self.team_of.items() if t == k] for k in (0, 1)]
+            if abs(len(n[0]) - len(n[1])) <= 1:
+                break
+            big = 0 if len(n[0]) > len(n[1]) else 1
+            mv = max(n[big])
+            self.team_of[mv] = 1 - big
+        for p in self.players.values():
+            p.team = self.team_of.get(p.pid)
+
+    def ctf_carried(self, pid):
+        """Flagge, die dieser Spieler trägt (oder None)."""
+        return next((f for f in self.flags if f.state == "carried" and f.carrier == pid), None)
+
+    def ctf_drop(self, f, pl=None):
+        """Träger stirbt / geht: Flagge fällt an seiner Stelle (Boden darunter) und liegt CTF_DROP_T s."""
+        x, y, z = (pl.x, pl.y, pl.z) if pl is not None else (f.x, f.y, f.z)
+        gz = self.floor_at(x, y, z + 0.3)
+        if gz < z - 40.0 or (gz < WATER_LEVEL - 0.6 and self.cm is None and not (z < -1.0 and self.tunnels and self.in_tunnel(x, y))):
+            self.ctf_return(f, -1, auto=True)                # ins Leere / ins Wasser gefallen: gleich zurück
+            return
+        f.place(x, y, gz, "dropped")
+        f.drop_t = CTF_DROP_T
+        self.events.append(("ctf", "drop", pl.pid if pl is not None else -1, f.fid, f.team))
+
+    def ctf_return(self, f, pid=-1, auto=False):
+        """Flagge kehrt zurück: Teamflagge in ihre Basis, neutrale an einen (neuen) Ort in der Burg."""
+        kind = "new" if f.state == "wait" else ("auto" if auto else "ret")
+        if f.team in (0, 1) and f.team < len(self.ctf_bases):
+            f.place(*self.ctf_bases[f.team])
+        else:
+            f.place(*self.mrng.choice(self.ctf_mid or [f.home]))
+        p = self.players.get(pid)
+        if p is not None and not auto:
+            p.stats["flag_returns"] += 1
+        self.events.append(("ctf", kind, pid, f.fid, f.team))
+
+    def ctf_on_death(self, pl, killer=None):
+        """Aus player_died: trägt der Tote eine Flagge, fällt sie; ein gegnerischer Killer bekommt 'Träger getötet'."""
+        f = self.ctf_carried(pl.pid)
+        if f is None:
+            return
+        if killer is not None and killer is not pl and not self.allied(killer.pid, pl.pid):
+            killer.stats["carrier_kills"] += 1
+        self.ctf_drop(f, pl)
+
+    def ctf_score(self, pl, f):
+        t = self.team_of.get(pl.pid)
+        self.team_score[t] += 1
+        pl.stats["flag_caps"] += 1
+        pl.score += 1.0
+        self.events.append(("ctf", "cap", pl.pid, f.fid, t))
+        if f.team in (0, 1):
+            f.place(*self.ctf_bases[f.team])                 # gegnerische Flagge zurück in ihre Basis
+        else:
+            f.place(f.x, f.y, f.z, "wait")                   # neutrale: gleich eine neue in der Mitte
+            f.drop_t = CTF_NEUTRAL_DELAY
+        if 0 < self.score_limit <= self.team_score[t]:
+            self.end_match()
+
+    def ctf_update(self, dt):
+        """Host: Flaggen aufnehmen (darüberlaufen), tragen, abgeben, zurückbringen; Rückkehr nach CTF_DROP_T."""
+        if self.mode != "ctf" or not self.flags or self.phase != "play" or self.lobby:
+            return
+        alive = [p for p in self.players.values()
+                 if p.hp > 0 and not getattr(p, "prespawn", False) and self.team_of.get(p.pid) in (0, 1)]
+        for f in self.flags:
+            if f.state == "carried":
+                c = self.players.get(f.carrier)
+                if c is None or c.hp <= 0 or self.team_of.get(c.pid) not in (0, 1):
+                    self.ctf_drop(f, c)
+                    continue
+                f.x, f.y, f.z = c.x, c.y, c.z
+                t = self.team_of[c.pid]
+                if t >= len(self.ctf_bases) or f.team == t:
+                    continue
+                hx, hy, hz = self.ctf_bases[t]
+                if math.hypot(c.x - hx, c.y - hy) <= CTF_CAP_R and abs(c.z - hz) < 3.0:
+                    own = next((q for q in self.flags if q.team == t), None)
+                    if CTF_NEED_HOME and own is not None and own.state != "home":
+                        f.hint_t -= dt
+                        if f.hint_t <= 0:
+                            f.hint_t = 3.0
+                            self.events.append(("ctf", "needhome", c.pid, own.fid, t))
+                        continue
+                    self.ctf_score(c, f)
+                continue
+            if f.state in ("dropped", "wait"):
+                f.drop_t -= dt
+                if f.drop_t <= 0:
+                    self.ctf_return(f, -1, auto=True)
+                    continue
+                if f.state == "wait":
+                    continue
+            for p in alive:                                  # darüberlaufen
+                if p.vehicle >= 0 or p.heli >= 0 or p.mount >= 0:
+                    continue
+                if math.hypot(p.x - f.x, p.y - f.y) > CTF_PICK_R or abs(p.z - f.z) > CTF_PICK_DZ:
+                    continue
+                t = self.team_of[p.pid]
+                if f.team == t:                              # eigene Flagge: liegt sie, kehrt sie sofort zurück
+                    if f.state == "dropped":
+                        self.ctf_return(f, p.pid)
+                    break
+                if self.ctf_carried(p.pid) is not None:
+                    continue
+                f.state, f.carrier, f.drop_t = "carried", p.pid, 0.0
+                f.x, f.y, f.z = p.x, p.y, p.z
+                p.protect = 0.0                              # kein Spawnschutz mit Flagge
+                self.events.append(("ctf", "take", p.pid, f.fid, f.team))
+                break
 
     # ------------------------------------------------------------ Mobs
     def populate_mobs(self):
@@ -6039,7 +6489,7 @@ class World:
 
     def ranking(self):
         ps = list(self.players.values())
-        if self.mode == "koth":
+        if self.mode in ("koth", "ctf"):                 # 11: CTF - Punkte = geholte Flaggen
             ps.sort(key=lambda p: (-p.score, -p.kills, p.deaths))
         else:
             ps.sort(key=lambda p: (-(p.kills / max(1, p.deaths)), -p.kills, p.deaths))
@@ -6051,6 +6501,9 @@ class World:
             return
         if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
             return
+        if (self.mode == "ctf" and not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
+                and attacker != pl.pid and self.allied(attacker, pl.pid)):
+            return                                       # 11: Eigenbeschuss aus - Teamkameraden nehmen keinen Schaden
         instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
         if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
             absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
@@ -6119,6 +6572,8 @@ class World:
             if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
                 pool.append(("gren", rng.choice(gks)))
             pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
+            if self.loot_mode == "loadout":              # 11: Hauptspiel-Loadout - nur die Waffe in der Hand fällt
+                pool = []
             if pool:
                 kind, v = rng.choice(pool)
                 a = rng.uniform(0, 2 * math.pi)
@@ -6149,8 +6604,10 @@ class World:
         self.leave_heli(pl)
         self.clear_gadgets(pl.pid)                       # seine platzierten Gadgets verschwinden mit ihm
         k = self.players.get(attacker)
-        if k is not None and k is not pl:
-            k.kills += 1
+        if self.mode == "ctf":
+            self.ctf_on_death(pl, k)                     # 11: Flagge fällt, "Träger getötet"
+        if k is not None and k is not pl and not (self.mode == "ctf" and self.allied(k.pid, pl.pid)):
+            k.kills += 1                                 # (11: Teamkills zählen nicht)
             if wi == WI_TOMAHAWK:
                 k.stats["toma_kills"] += 1
             elif wi >= MELEE_WI0:
@@ -6162,7 +6619,7 @@ class World:
             if self.mode == "koth":                      # in der Zone zählt ein Kill doppelt
                 k.score += KILL_PTS * (2.0 if k.hp > 0 and self.in_zone(k) else 1.0)
             self.events.append(("reward", k.pid))        # Munition für den Schützen
-        else:
+        elif not (k is not None and k is not pl):        # 11: Teamkill - im Killfeed trotzdem mit Namen
             k = None
         self.events.append(("player_dead", pl.pid))
         self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi))
@@ -6544,7 +7001,9 @@ class World:
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(self.players.get(owner))
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
+            if self.loot_mode != "exp":
+                pass                                     # 11: Hauptspiel-Loadout (CTF) - Monster lassen nichts fallen
+            elif (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
                 self.mob_loot(m, killer, extra)                         # 10d: Diebesdolch +1 (andere Kategorie)
             elif m.kind == "titan":                      # Boss erlegt: goldene Kiste an seiner Stelle
                 self.titan_loot(m)
@@ -6884,6 +7343,11 @@ class World:
         """F gedrückt (alt = V): Kiste, Waffe, Fahrzeug (Fahrer/Schütze), Geschütz, Helikopter, Knöpfe."""
         if pl.hp <= 0 or self.phase != "play":
             return
+        if CTF_NO_VEHICLES and self.mode == "ctf" and self.ctf_carried(pl.pid) is not None:
+            r_ = None if alt else self.nearest_use(pl)       # 11: mit Flagge kein Fahrzeug, Heli, Schützensitz
+            if (alt and self.alt_seat(pl) is not None) or (r_ is not None and r_[0] in ("vehicle", "heli")):
+                self.events.append(("ctf", "noveh", pl.pid, -1, -1))
+                return
         if alt:                                          # V: Schützensitz auf dem Wagen
             if pl.mount >= 0 or pl.heli >= 0 or pl.vehicle >= 0:
                 return
@@ -8595,6 +9059,9 @@ class World:
 
     # ------------------------------------------------------------ Runde
     def end_match(self):
+        for f in self.flags:                             # 11: getragene Flaggen bleiben nicht am Träger hängen
+            if f.state == "carried":
+                f.state, f.carrier = "dropped", -1
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
         self.bullets, self.grenades, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
@@ -8609,6 +9076,8 @@ class World:
             st = p.stats
             out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
                         "score": round(p.score, 1), "mode": self.mode,
+                        "team": self.team_of.get(p.pid, -1) if self.mode == "ctf" else -1,     # 11: CTF
+                        "ts": list(self.team_score) if self.mode == "ctf" else None,
                         "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
         return out
 
@@ -8655,6 +9124,8 @@ class World:
             pl.death_pos = None
             pl.stats = new_stats()
             pl.ready = False
+        self.ctf_balance()                               # 11: Teams (nur im CTF), Flaggen auf Anfang
+        self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):
             if getattr(pl, "prespawn", False):
                 continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
@@ -8668,6 +9139,8 @@ class World:
             return
         self.lobby = False
         self.time_left = self.limit
+        self.ctf_balance()                               # 11: Teams vor dem ersten Spawn (Basis-Startpunkte)
+        self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):
             pl.kills = pl.deaths = 0
             pl.score = 0.0
@@ -8713,6 +9186,7 @@ class World:
         self.update_helis(dt)
         self.update_strike(dt)
         self.update_crates(dt)
+        self.ctf_update(dt)                              # 11: Flaggen
         for d in [d for d in self.drops if d.life <= dt]:
             self.drops.remove(d)
         for d in self.drops:
@@ -8867,6 +9341,15 @@ class Player:
         self.melee, self.melee_out = START_MELEE, False   # Nahkampfwaffe (Index in MELEE), gerade in der Hand?
         self.melee_cd = self.swing_t = 0.0                 # Abklingzeit, laufender Schlag (Animation)
         self.cur = self.switch_to = START_WEAPON   # Spezialwaffe hält und beide normalen Slots voll sind)
+        if getattr(world, "loot_mode", "exp") == "loadout" and len(loadout) >= 2:
+            pri, sec = loadout[0], loadout[1]             # 11: Hauptspiel-Loadout - Haupt- und Kleinwaffe, 3 Gadgets
+            if pri in PRIMARIES and sec in SECONDARIES:
+                self.slots[0], self.slots[1] = pri, sec
+                self.cur = self.switch_to = pri
+                if len(loadout) > 3 and isinstance(loadout[3], int):
+                    self.scopes[pri] = loadout[3]
+            self.gad_n = GAD_START
+        self.team = getattr(world, "team_of", {}).get(self.pid)   # 11: Team (CTF) oder None
         self.switch_t = 0.0
         self.reload_t = 0.0
         self.reload_tot = 0.0             # Gesamtdauer des laufenden Nachladens (Schrotflinte: je nach Patronenzahl)
@@ -11853,6 +12336,84 @@ def flag_mesh(m, w, h, col, rng):
             quadf(m, p0, p3, p2, p1, cc_, (w * 0.5, 3.0, -h * 0.5), "cloth")
 
 
+# ------------------------------------------------------------ 11: CTF-Flagge mit "GB"
+CTF_GLYPHS = {"G": (".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+              "B": ("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####.")}
+CTF_FLAG_W, CTF_FLAG_H, CTF_POLE_H = 1.55, 1.0, 2.7    # Fahnentuch (m) und Mast
+
+
+def ctf_flag_cloth(m, w, h, col, ink, seg=8, rim=None):
+    """11: Fahnentuch vom Mast (x = 0) nach +x, leicht gewellt, mit dunklem Rand und grossem "GB" (Pixelschrift) auf
+    beiden Seiten - von hinten gespiegelt gesetzt, damit es auch von dort richtig herum zu lesen ist."""
+    edge = tuple(min(1.0, c * 0.55) for c in col)
+    hi = tuple(min(1.0, c * 1.18 + 0.05) for c in col)
+
+    def P(u, v, off=0.0):                       # u = 0..1 (Breite), v = 0..1 (von oben nach unten)
+        return (w * u, math.sin(u * 5.2 + 0.5) * 0.10 * u * w * 0.5 + off, -h * v)
+
+    def quad2(u0, v0, u1, v1, c, off, front):
+        a, b, cc, d = P(u0, v0, off), P(u1, v0, off), P(u1, v1, off), P(u0, v1, off)
+        ref = (w * 0.5, -3.0 if front else 3.0, -h * 0.5)
+        if front:
+            quadf(m, a, b, cc, d, c, ref, "cloth")
+        else:
+            quadf(m, a, d, cc, b, c, ref, "cloth")
+
+    bw = 0.07                                  # Randbreite (Anteil)
+    for i in range(seg):                       # Tuch: Streifen über die Breite (für die Welle), Rand oben/unten/aussen
+        u0, u1 = i / seg, (i + 1) / seg
+        for front in (True, False):
+            quad2(u0, 0.0, u1, bw, edge, 0.0, front)
+            quad2(u0, bw, u1, 1.0 - bw, hi if (i % 2 == 0) else col, 0.0, front)
+            quad2(u0, 1.0 - bw, u1, 1.0, edge, 0.0, front)
+    for front in (True, False):
+        quad2(1.0 - bw * 0.7, bw, 1.0, 1.0 - bw, edge, 0.004 if front else -0.004, front)
+    # Schrift "GB": 2 Zeichen à 5x7 Pixel, mittig, mit einem Pixel Abstand
+    cols_n, rows_n = 11, 7
+    px_u, px_v = 0.70 / cols_n, 0.66 / rows_n
+    u_start, v_start = 0.17, 0.17
+    rim = rim or edge
+    for front, off, o2 in ((True, 0.016, 0.009), (False, -0.016, -0.009)):   # front: Fläche zeigt nach +y
+        for k, ch in enumerate("GB"):
+            for r, line in enumerate(CTF_GLYPHS[ch]):
+                for c_, bit in enumerate(line):
+                    if bit != "#":
+                        continue
+                    cc = k * 6 + c_              # Spalte, wie man sie liest
+                    if front:                    # von +y aus läuft x nach links: gespiegelt setzen, damit "GB" lesbar ist
+                        cc = cols_n - 1 - cc
+                    u0 = u_start + cc * px_u
+                    v0 = v_start + r * px_v
+                    eu, ev = px_u * 0.32, px_v * 0.30          # Kontur (deutlich lesbar, auch von weitem)
+                    quad2(u0 - eu, v0 - ev, u0 + px_u + eu, v0 + px_v + ev, rim, o2, front)
+                    quad2(u0, v0, u0 + px_u * 1.01, v0 + px_v * 1.01, ink, off, front)
+
+
+def build_ctf_flag(col, scale=1.0, base=True):
+    """11: Flagge mit Mast (Kugel oben), auf Wunsch mit Standfuss. -> (Wurzel, Tuch-Knoten zum Wehen)."""
+    root = NodePath("ctf_flagge")
+    m = Mesh()
+    rng = random.Random(11)
+    metal, gold = (0.30, 0.31, 0.34), (0.95, 0.78, 0.25)
+    prism(m, 0, 0, 0.0, 0.035, CTF_POLE_H, 8, metal, rng)
+    blob(m, 0, 0, CTF_POLE_H + 0.05, 0.075, 0.075, 0.075, gold, rng, jitter=0.0, subdiv=1)
+    if base:
+        prism(m, 0, 0, 0.0, 0.26, 0.08, 10, (0.20, 0.21, 0.23), rng)
+        prism(m, 0, 0, 0.08, 0.12, 0.10, 10, metal, rng)
+    pole = root.attachNewNode(m.node("mast"))
+    pole.setScale(scale)
+    cm = Mesh()
+    dark = sum(col) > 1.8                                # helle (neutrale) Flagge: dunkle Schrift
+    ink = (0.08, 0.10, 0.20) if dark else (1.0, 1.0, 1.0)
+    rim = (1.0, 0.97, 0.80) if dark else tuple(c * 0.35 for c in col)
+    ctf_flag_cloth(cm, CTF_FLAG_W, CTF_FLAG_H, col, ink, rim=rim)
+    cloth = root.attachNewNode(cm.node("tuch"))
+    cloth.setTwoSided(True)
+    cloth.setPos(0.03 * scale, 0, (CTF_POLE_H - 0.05) * scale)
+    cloth.setScale(scale)
+    return root, cloth
+
+
 # ------------------------------------------------------------ Terrain-Hilfen für die Stadt
 def fine_cells(world, cs, n0, n1):
     """(fein zu unterteilende Zellen, davon Zellen mit Wegen): Wege, Graben, Plätze und Kanten von Fussböden."""
@@ -13235,13 +13796,16 @@ def look_random(rng):
     return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
 
 
-def soldier_look(code, pid=0):
-    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer)."""
+def soldier_look(code, pid=0, team=None):
+    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer).
+    11: team (CTF) färbt die Armbinde/Akzentfarbe in der Teamfarbe."""
     if not look_valid(code):
         code = look_default(pid)
     v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
     ak = v["akzent"]
     acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
+    if team in (0, 1):
+        acc = CTF_TEAM_COLS[team]
     skin = SOLDIER_SKINS[v["haut"]]
     glove = SOLDIER_GLOVES[v["handschuh"]] or skin
     return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
@@ -16939,7 +17503,7 @@ class SetupPage:
         return next((i for i, e in enumerate(self.ents) if e[1] == p), 0)
 
     def mode_off(self, k):
-        return self.g.cfg_is_mc() and MODES[k] != "dm"
+        return self.g.cfg_is_mc() and MODES[k] == "koth"      # (11: CTF wechselt auf Polytown)
 
     def vx(self, v):
         return self.SL0 + (v - LIMIT_MIN) / float(LIMIT_MAX - LIMIT_MIN) * (self.SL1 - self.SL0)
@@ -17017,11 +17581,14 @@ class SetupPage:
                          lambda a=act: g.setup_turn(a))
         # --- Modus
         self.text(None, "MODUS", X0, -0.205, 0.034, self.GREY, "l")
+        nm_ = len(MODES)                                                # 11: drei Modi nebeneinander
+        bw_ = (X1 - X0 - 0.04 * (nm_ - 1)) / nm_
         for k, mode in enumerate(MODES):
-            x0, x1 = (X0, -0.02) if k == 0 else (0.02, X1)
+            x0 = X0 + k * (bw_ + 0.04)
+            x1 = x0 + bw_
             self.rect(f"mf{k}", x0 - 0.008, x1 + 0.008, -0.343, -0.237)
             self.rect(f"mb{k}", x0, x1, -0.335, -0.245)
-            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.055)
+            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.045 if nm_ > 2 else 0.055)
             self.hit(f"mode{k}", x0, x1, -0.335, -0.245, lambda m=mode: g.setup_mode(m))
         # --- Zeitlimit-Slider
         v = int(g.cfg["limit"])
@@ -17040,15 +17607,25 @@ class SetupPage:
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         else:
-            self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    Enter = Start",
+            self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    "
+                      + ("C = CTF-Regeln    " if g.cfg.get("mode") == "ctf" else "") + "Enter = Start",
                       0, -0.885, 0.028, self.GREY)
 
     def title_label(self):
         return "Einzelspieler" if self.g.setup_for == "single" else "Spiel hosten"
 
+    def more_buttons(self, X0, X1, more):
+        """'Weitere Einstellungen' - im CTF geteilt mit 'CTF-Regeln' (11)."""
+        g = self.g
+        if g.cfg.get("mode") == "ctf":
+            self.button("more", X0, -0.02, -0.69, -0.605, "Weitere   (W)", 0.048, more)
+            self.button("ctf", 0.02, X1, -0.69, -0.605, "CTF-Regeln   (C)", 0.048, g.setup_ctf)
+        else:
+            self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, more)
+
     def bottom_buttons(self, X0, X1):
         g = self.g
-        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
+        self.more_buttons(X0, X1, g.setup_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
         self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.start_game(g.setup_for))
 
@@ -17070,7 +17647,7 @@ class SetupPage:
         nd = self.g.aspect2d.attachNewNode(cm.generate())
         nd.setColor(*col)
         nd.setTransparency(TransparencyAttrib.MAlpha)
-        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb")):
+        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb", "fb", "ob")):
             btn3d(nd)
         if (i or "").endswith("fill"):
             nd.setPos(x0, 0, 0)
@@ -17160,7 +17737,7 @@ class EndSetupPage(SetupPage):
 
     def bottom_buttons(self, X0, X1):
         g = self.g
-        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.end_cfg_more)
+        self.more_buttons(X0, X1, g.end_cfg_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Abbrechen   (Esc)", 0.052, g.end_cfg_cancel)
         self.button("go", 0.02, X1, -0.805, -0.72, "Übernehmen", 0.052, g.end_cfg_apply)
 
@@ -17493,6 +18070,122 @@ class MorePage(SetupPage):
         self.g.set_cfg(key, int(v) if key != "regen" else float(v))
 
 
+def plim_label(v):
+    v = int(v)
+    return "aus (nur Zeitlimit)" if v <= 0 else (f"{v} Punkt" if v == 1 else f"{v} Punkte")
+
+
+class CtfPage(SetupPage):
+    """11: CTF-Regeln einer Runde (Host-Menü): Eigenbeschuss an/aus, Ausrüstung (Hauptspiel-Loadout oder
+    Experimental-Loot) und Punktelimit (0 = aus, dann zählt nur das Zeitlimit)."""
+    PL_Z = -0.20
+
+    def ff_on(self):
+        return bool(self.g.cfg.get("ff", CTF_FF_DEFAULT))
+
+    def loot(self):
+        return "exp" if self.g.cfg.get("loot", CTF_LOOT_DEFAULT) == "exp" else "loadout"
+
+    def plim(self):
+        return max(0, min(CTF_PTS_MAX, int(self.g.cfg.get("plim", 0) or 0)))
+
+    def px(self, v):
+        return self.SL0 + v / float(CTF_PTS_MAX) * (self.SL1 - self.SL0)
+
+    def style(self, i):
+        hov = self.hover
+        tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
+        for pre, cur in (("f", 1 if self.ff_on() else 0), ("o", 0 if self.loot() == "loadout" else 1)):
+            if tag in (pre + "f", pre + "b", pre + "t"):
+                k = int(num)
+                on, h = k == cur, hov == pre + "h" + num
+                if tag == pre + "f":
+                    return self.SEL if on else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
+                if tag == pre + "b":
+                    return self.MODE_ON if on else (self.BTN_H if h else self.BTN)
+                return self.YELLOW if on else (Hot.ON if h else Hot.BASE)
+        if i == "pl_fill":
+            return (1.0, 0.62, 0.14, 1.0) if self.plim() > 0 else (0.35, 0.37, 0.40, 1.0)
+        if i == "pl_knob":
+            return (1.0, 1.0, 0.78, 1.0) if (hov == "sl_pl" or self.g.slider_drag == "plim") else (1.0, 0.85, 0.4, 1.0)
+        if i == "pl_val":
+            return self.YELLOW if self.plim() > 0 else self.DIM
+        if i.startswith(("b_", "t_")):
+            h = hov == "btn_" + i[2:]
+            return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
+        return self.WHITE
+
+    def layout(self):
+        g, X0, X1 = self.g, self.X0, self.X1
+        self.text("title", "CTF-Regeln", 0, 0.80, 0.075, (1.0, 0.78, 0.3, 1.0))
+        rows = (("f", "EIGENBESCHUSS  (Teamkameraden verletzen)", ("Aus", "An"), 0.64,
+                 lambda k: g.set_cfg("ff", k == 1)),
+                ("o", "AUSRÜSTUNG", ("Hauptspiel-Loadout", "Experimental-Loot"), 0.33,
+                 lambda k: g.set_cfg("loot", "loadout" if k == 0 else "exp")))
+        for pre, label, opts, z, act in rows:
+            self.text(None, label, X0, z, 0.034, self.GREY, "l")
+            for k, name in enumerate(opts):
+                x0, x1 = (X0, -0.01) if k == 0 else (0.01, X1)
+                self.rect(f"{pre}f{k}", x0 - 0.008, x1 + 0.008, z - 0.155, z - 0.045)
+                self.rect(f"{pre}b{k}", x0, x1, z - 0.147, z - 0.053)
+                self.text(f"{pre}t{k}", name, (x0 + x1) / 2, z - 0.125, 0.046)
+                self.hit(f"{pre}h{k}", x0, x1, z - 0.147, z - 0.053, lambda k=k, act=act: act(k))
+        self.text(None, "Hauptspiel-Loadout: Haupt- und Kleinwaffe, Visier und Gadget vor jedem Spawn wählen (wie bei Sinan),",
+                  0, 0.115, 0.027, self.GREY)
+        self.text(None, "keine Monster-Beute.   Experimental-Loot: Start mit der Pistole, Beute von Monstern.",
+                  0, 0.08, 0.027, self.GREY)
+        z = self.PL_Z
+        self.text(None, "PUNKTELIMIT  (Runde endet sofort, wenn ein Team es erreicht)", X0, z, 0.034, self.GREY, "l")
+        v = self.plim()
+        self.text("pl_val", plim_label(v), X1, z, 0.045, self.style("pl_val"), "r")
+        zl = z - 0.07
+        self.rect(None, self.SL0, self.SL1, zl - 0.007, zl + 0.007, (0.16, 0.22, 0.30, 1.0))
+        for tv in range(0, CTF_PTS_MAX + 1, 2):
+            tx = self.px(tv)
+            self.rect(None, tx - 0.002, tx + 0.002, zl - 0.032, zl - 0.014, (0.45, 0.52, 0.60, 1.0))
+            self.text(None, "aus" if tv == 0 else str(tv), tx, zl - 0.07, 0.027, self.GREY)
+        self.rect("pl_fill", self.SL0, self.px(v), zl - 0.007, zl + 0.007)
+        self.rect("pl_knob", self.px(v) - 0.026, self.px(v) + 0.026, zl - 0.026, zl + 0.026, rot=45.0)
+        self.hit("sl_pl", self.SL0 - 0.05, self.SL1 + 0.05, zl - 0.06, zl + 0.06, lambda: g.slider_begin("plim"))
+        self.text(None, "Teams werden automatisch ausgeglichen.  Mit Flagge: keine Fahrzeuge.  Gefallene Flagge: "
+                  f"{int(CTF_DROP_T)} s liegen, dann zurück.", 0, -0.47, 0.027, self.GREY)
+        self.rect("b_done", X0, X1, -0.745, -0.66)
+        self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
+        self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
+        self.text(None, "Tasten:  F = Eigenbeschuss    L = Ausrüstung    Pfeile = Punktelimit    Esc = zurück",
+                  0, -0.84, 0.028, self.GREY)
+
+    def update(self, force=False):
+        key = (self.ff_on(), self.loot(), self.plim(), self.hover, self.g.slider_drag)
+        if force or key != self.key:
+            self.key = key
+            self.sync()
+
+    def sync(self):
+        for i, nd in self.nodes.items():
+            if i in ("title",) or i.endswith(("_fill", "_knob")):
+                continue
+            col = self.style(i)
+            if i in self.txts:
+                nd.setFg(col)
+            else:
+                nd.setColor(*col)
+        v = self.plim()
+        zl = self.PL_Z - 0.07
+        if "pl_fill" in self.nodes:
+            self.nodes["pl_fill"].setSx(max(0.001, self.px(v) - self.SL0))
+            self.nodes["pl_fill"].setColor(*self.style("pl_fill"))
+        if "pl_knob" in self.nodes:
+            self.nodes["pl_knob"].setPos(self.px(v), 0, zl)
+            self.nodes["pl_knob"].setColor(*self.style("pl_knob"))
+        if "pl_val" in self.nodes:
+            self.nodes["pl_val"].setText(plim_label(v))
+
+    def follow(self, key, mx):
+        t = max(0.0, min(1.0, (mx - self.SL0) / (self.SL1 - self.SL0)))
+        self.g.set_cfg("plim", int(round(t * CTF_PTS_MAX)))
+
+
 
 # ------------------------------------------------------------------ Netzwerk
 # Alles nur mit der Standardbibliothek (socket, json, threading), nicht blockierend,
@@ -17706,6 +18399,7 @@ class JoinAttempt:
         self.limit = 600.0
         self.mobs_on = True
         self.tomahawk = True
+        self.ctf = {}                  # 11: CTF-Einstellungen des Hosts (Eigenbeschuss, Loot, Punktelimit)
         self.map_raw = None            # Kartendatei des Hosts (None = Standardkarte)
         self.extra = []                # Nachrichten, die schon nach dem welcome eintrafen
 
@@ -17732,6 +18426,7 @@ class JoinAttempt:
                         self.limit = clampf(float(m.get("limit", 600)), 30.0, 7200.0)
                         self.mobs_on = bool(m.get("mobs", 1))
                         self.tomahawk = bool(m.get("tomahawk", 1))
+                        self.ctf = m.get("ctf") if isinstance(m.get("ctf"), dict) else {}
                         self.map_raw = m.get("map") if isinstance(m.get("map"), dict) else None
                         self.state = "ready"
                         netlog(f"Client: welcome von {self.host} nach {time.time() - self.t0:.2f}s (Id {self.my_id}, "
@@ -17903,7 +18598,8 @@ class HostSession:
     def cfg_msg(self):
         w = self.world
         return {"t": "cfg", "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
-                "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate}
+                "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate,
+                "ctf": w.ctf_cfg()}
 
     def send_cfg(self):
         """Neue Rundeneinstellungen an alle Mitspieler (gleiche Karte, keine Neuverbindung)."""
@@ -17934,7 +18630,8 @@ class HostSession:
             c.last_rx = time.time()
             c.send({"t": "reload", "id": c.pid, "seed": world.seed, "props": world.prop_count(),
                     "mode": world.mode, "limit": world.limit, "mobs": 1 if world.mobs_on else 0,
-                    "tomahawk": 1 if world.tomahawk_on else 0, "map": getattr(world, "map_raw", None)})
+                    "tomahawk": 1 if world.tomahawk_on else 0, "ctf": world.ctf_cfg(),
+                    "map": getattr(world, "map_raw", None)})
             c.flush()
         netlog(f"Host: Welt gewechselt (Karte {'eigene' if getattr(world, 'map_raw', None) else 'Standard'}, "
                f"Modus {world.mode}), {len(world.players)} Spieler")
@@ -18007,11 +18704,12 @@ class HostSession:
             npl = w.players[pid]
             npl.hp, npl.dead_age, npl.prespawn = 0.0, 1e9, True      # noch nicht gespawnt: wartet im Ausrüstungsbildschirm
             npl.ready = bool(w.phase == "over" and not w.lobby)       # im Rundenende beigetreten: kein Bereit nötig
+            w.ctf_assign(npl)                                         # 11: CTF - ins kleinere Team
             c.pid = pid
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
-                    "tomahawk": 1 if w.tomahawk_on else 0,
+                    "tomahawk": 1 if w.tomahawk_on else 0, "ctf": w.ctf_cfg(),
                     "map": getattr(w, "map_raw", None)})
             return
         pl = w.players.get(c.pid)
@@ -18156,8 +18854,15 @@ class HostSession:
             if finite(d) and pl.hp > 0 and pl.vehicle < 0 and pl.heli < 0:
                 w.damage_player(pl, clampf(float(d), 0.0, PLAYER_HP * 2), -1, WI_FALL)
         elif t == "respawn":
+            lo = loadout_valid(m.get("lo"))       # 11: gewähltes Loadout (Hauptspiel-Loadout im CTF)
+            if lo is not None:
+                pl.loadout = lo
             if w.can_respawn(pl):
                 w.respawn_player(pl)              # Ereignis 'respawn' sagt dem Client, wohin
+        elif t == "lo":                           # 11: Loadout geändert (gilt beim nächsten Spawn, auch Rundenstart)
+            lo = loadout_valid(m.get("v"))
+            if lo is not None:
+                pl.loadout = lo
         elif t == "ready":                        # 'Bereit' in der Lobby / im Rundenendmenü
             if w.lobby or w.phase == "over":
                 pl.ready = bool(m.get("v"))
@@ -18229,7 +18934,12 @@ class HostSession:
                        r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
-            snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
+            snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
+        if w.mode == "ctf":                              # 11: Teampunkte, Flaggen, Teams
+            snap["ctf"] = [list(w.team_score),
+                           [[f.fid, f.team, FLAG_STATES.index(f.state), f.carrier, r2(f.x), r2(f.y), r2(f.z),
+                             r1(f.drop_t)] for f in w.flags],
+                           [[pid, t] for pid, t in w.team_of.items() if pid in w.players]]
         line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
         self.events = []
         ev_now = snap["ev"]
@@ -18420,6 +19130,9 @@ class ClientSession:
                 w.tomahawk_on = bool(m.get("tomahawk", w.tomahawk_on))
                 w.strike_cd = float(m.get("cd", w.strike_cd))
                 w.regen_rate = float(m.get("regen", w.regen_rate))
+                w.ctf_apply_cfg(m.get("ctf"))           # 11
+                if w.mode != "ctf":
+                    w.team_of, w.flags = {}, []
                 self.cfg_changed = True
             elif m.get("t") == "reload":
                 self.reload = m
@@ -18495,6 +19208,9 @@ class ClientSession:
             q = w.players.get(row[0])
             if q is not None and len(row) >= 4:
                 q.sb = tuple(int(v) for v in row[1:4])
+                if len(row) >= 7:
+                    q.sb_ctf = tuple(int(v) for v in row[4:7])      # 11: Flaggen geholt / zurück / Träger getötet
+        self.apply_ctf(m.get("ctf"))                     # 11: Teampunkte, Flaggen, Teams
 
         seen = set()
         for row in m["mb"]:
@@ -18811,8 +19527,37 @@ class ClientSession:
         self.conn.send({"t": "fall", "d": round(float(dmg), 1)})
         self.conn.flush()
 
-    def request_respawn(self):
-        self.conn.send({"t": "respawn"})
+    def request_respawn(self, lo=None):
+        self.conn.send({"t": "respawn", "lo": list(lo)} if lo else {"t": "respawn"})
+
+    def send_loadout(self, lo):
+        """11: gewähltes Loadout an den Host (gilt beim nächsten Spawn, auch beim Rundenstart)."""
+        self.conn.send({"t": "lo", "v": [list(v) if isinstance(v, tuple) else v for v in lo]})
+        self.conn.flush()
+
+    def apply_ctf(self, c):
+        """11: CTF-Block des Snapshots: [Teampunkte, Flaggen, Teams]."""
+        w = self.world
+        if not isinstance(c, list) or len(c) < 3:
+            if w.mode != "ctf" and (w.flags or w.team_of):
+                w.flags, w.team_of = [], {}
+                for p in w.players.values():
+                    p.team = None
+            return
+        w.team_score = [int(c[0][0]), int(c[0][1])]
+        old = {f.fid: f for f in w.flags}
+        flags = []
+        for row in c[1]:
+            fid, team, st, car, x, y, z, dt_ = row[:8]
+            f = old.get(fid) or Flag(fid, team, x, y, z)
+            f.team, f.carrier, f.drop_t = team, car, dt_
+            f.state = FLAG_STATES[st] if isinstance(st, int) and 0 <= st < len(FLAG_STATES) else "home"
+            f.x, f.y, f.z = x, y, z
+            flags.append(f)
+        w.flags = flags
+        w.team_of = {int(pid): int(t) for pid, t in c[2] if t in (0, 1)}
+        for pid, p in w.players.items():
+            p.team = w.team_of.get(pid)
 
     def send_ready(self, v):
         self.conn.send({"t": "ready", "v": 1 if v else 0})
@@ -18930,7 +19675,9 @@ class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
     def __init__(self, p):
-        look = soldier_look(getattr(p, "look", ""), p.pid)
+        self.team = getattr(p, "team", None)                             # 11: Teamfarbe der Armbinde (CTF)
+        self.look_code = getattr(p, "look", "")
+        look = soldier_look(self.look_code, p.pid, self.team)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
          self.armL, self.armR) = build_soldier(look)
         gc = (0.13, 0.13, 0.15)
@@ -19635,6 +20382,19 @@ def synth_sounds():
                                                            for i in range(n)]), 1.2)), 0.85)
     n = int(0.12 * SR)                                              # Granate: Sicherungsstift (kleines Klicken)
     out["pin"] = norm(mix((mul(sweep(n, 2400, 1500, 40), env(n, 60)), 1.0), (mul(noise(n), env(n, 120)), 0.4)), 0.5)
+    # 11: CTF - Fanfare (Punkt) und Zwei-Ton-Signal (Flagge genommen / zurück)
+    fan = []
+    for f, d in ((523.0, 0.12), (659.0, 0.12), (784.0, 0.12), (1047.0, 0.42)):
+        k = int(d * SR)
+        e_ = [min(1.0, i / (0.01 * SR)) * math.exp(-2.5 * i / k) for i in range(k)]
+        fan += mul(mix((tone(k, f), 1.0), (tone(k, f * 2.0), 0.3), (tone(k, f * 3.0), 0.12)), e_)
+    out["ctf_cap"] = norm(delay(fan, int(0.09 * SR), 0.25), 0.8)
+    al = []
+    for f in (880.0, 660.0):
+        k = int(0.16 * SR)
+        al += mul(mix((tone(k, f), 1.0), (tone(k, f * 2.01), 0.25)), [min(1.0, i / (0.006 * SR)) * math.exp(-6 * i / k)
+                                                                     for i in range(k)])
+    out["ctf_alert"] = norm(al, 0.7)
     return out
 
 
@@ -115313,7 +116073,8 @@ class Game(ShowBase):
         self.ip_edited = False
         self.lost_text = None
         self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
-                        resp=RESPAWN_DEFAULT, map=None)   # Host-Einstellungen
+                        resp=RESPAWN_DEFAULT, map=None, ff=CTF_FF_DEFAULT, loot=CTF_LOOT_DEFAULT,
+                        plim=0)   # Host-Einstellungen (11: ff/loot/plim = CTF: Eigenbeschuss, Loot-System, Punktelimit)
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
         self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
         self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
@@ -115607,10 +116368,10 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "char"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "char"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
-        if state not in ("loadout", "loadconf", "setup2"):
+        if state not in ("loadout", "loadconf", "setup2", "setup3"):
             self.menu_items.append(OnscreenText(text="Polybash Alpha v0.8", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
@@ -115687,10 +116448,10 @@ class Game(ShowBase):
             else:
                 self.setup_page.update()
             return
-        if self.menu_state == "setup2":                   # Weitere Einstellungen: eigene Seite mit Schiebereglern
+        if self.menu_state in ("setup2", "setup3"):       # Weitere Einstellungen / 11: CTF-Regeln
             if self.setup_page is None or self.menu_last is None:
-                self.menu_last = ("setup2", self.menu_msg)
-                self.setup_page = MorePage(self)
+                self.menu_last = (self.menu_state, self.menu_msg)
+                self.setup_page = MorePage(self) if self.menu_state == "setup2" else CtfPage(self)
             else:
                 self.setup_page.update()
             return
@@ -115826,6 +116587,12 @@ class Game(ShowBase):
         if self.quit_box is None and self.loadscreen is not None:
             self.loadscreen.click(self.mouse_2d())
             return
+        if (self.mode == "play" and self.quit_box is None and getattr(self, "end_cfg", None) is not None
+                and getattr(self, "end", None) is None):
+            hit, _card = self.update_hover()        # 11: Rundeneinstellungen in der Lobby
+            if hit is not None:
+                hit.action()
+            return
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
             return
@@ -115937,10 +116704,25 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         return bool(p) and str(p).lower().endswith(".mcmap")
 
+    def ctf_cfg_dict(self):
+        """11: CTF-Regeln aus den Host-Einstellungen (für World und Netz)."""
+        c = self.cfg
+        return {"ff": 1 if c.get("ff") else 0, "loot": "exp" if c.get("loot") == "exp" else "loadout",
+                "pl": max(0, min(CTF_PTS_MAX, int(c.get("plim", 0) or 0)))}
+
+    @staticmethod
+    def is_bg_map(name, path):
+        """11: Blood Gulch (nur im CTF wählbar)."""
+        return name == "Blood Gulch" or (bool(path) and os.path.basename(str(path)).lower().startswith("blood_gulch"))
+
     def setup_entries(self):
-        """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown."""
-        ents = [(STD_MAP_NAME, None, "Standardkarte", "polytown")]
+        """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown.
+        11: Im Capture the Flag nur Polytown und Blood Gulch; Blood Gulch gibt es nur dort."""
+        ctf = self.cfg.get("mode") == "ctf"
+        ents = [(STD_MAP_NAME, None, "Standardkarte" + (" - zwei Stützpunkte" if ctf else ""), "polytown")]
         for name, path in self.map_list:
+            if ctf != self.is_bg_map(name, path):
+                continue
             if path.lower().endswith(".mcmap"):
                 try:
                     key = MAP_PREVIEW_IDS.get(mc_read_header(path).get("id")) or ("mm", path)
@@ -115948,8 +116730,8 @@ class Game(ShowBase):
                     key = ("mm", path)
                 ents.append((name, path, "Aus GarrysMod" if name == "Minecraft Insel" else "Minecraft 1:1 · Deathmatch", key))
             else:
-                ents.append((name, path, "Aus Halo: CE" if name == "Blood Gulch" else "Eigene Karte",
-                             "blood_gulch" if name == "Blood Gulch" else ("jm", path)))
+                ents.append((name, path, ("Aus Halo: CE - nur CTF" if ctf else "Aus Halo: CE") if name == "Blood Gulch"
+                             else "Eigene Karte", "blood_gulch" if name == "Blood Gulch" else ("jm", path)))
         return ents
 
     def setup_pick(self, gi):
@@ -115968,9 +116750,27 @@ class Game(ShowBase):
         self.menu_refresh()
 
     def setup_mode(self, mode):
-        if self.cfg_is_mc() or mode not in MODES:
-            return                                    # Minecraft-Karten kennen nur Deathmatch
-        self.cfg["mode"] = mode
+        if mode not in MODES or (self.cfg_is_mc() and mode == "koth"):
+            return                                    # Minecraft-Karten kennen nur Deathmatch (11: CTF wechselt die Karte)
+        c, old = self.cfg, self.cfg.get("mode")
+        if mode == old:
+            return
+        if mode == "ctf":                             # 11: CTF-Standard - Monster und Tomahawk aus (im Menü änderbar)
+            self.ctf_prev = (c.get("mobs"), c.get("tomahawk"))
+            c["mobs"], c["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
+        elif old == "ctf" and getattr(self, "ctf_prev", None) is not None:
+            c["mobs"], c["tomahawk"] = self.ctf_prev
+            self.ctf_prev = None
+        c["mode"] = mode
+        if c.get("map") is not None and c.get("map") not in [e[1] for e in self.setup_entries()]:
+            c["map"] = None                           # 11: Karte gibt es im neuen Modus nicht -> Polytown
+            self.map_page = 0
+        if self.setup_page is not None and self.mode == "menu" and self.menu_state == "setup":
+            self.show_menu("setup")                   # Kartenliste hat sich geändert: Seite neu aufbauen
+            return
+        if getattr(self, "end_cfg", None) == "setup":
+            self.end_cfg_show()
+            return
         self.menu_refresh()
 
     def set_limit(self, v):
@@ -116027,6 +116827,13 @@ class Game(ShowBase):
     def setup_more(self):
         self.show_menu("setup2")
 
+    def setup_ctf(self):
+        """11: Seite mit den CTF-Regeln."""
+        if getattr(self, "end_cfg", None) is not None:
+            self.end_cfg_ctf()
+        else:
+            self.show_menu("setup3")
+
     def on_w(self):
         if self.mode == "menu" and self.menu_state == "setup" and self.quit_box is None:
             self.setup_more()
@@ -116035,11 +116842,16 @@ class Game(ShowBase):
 
     def on_arrow(self, dx, dy):
         if getattr(self, "end_cfg", None) is not None:      # Rundeneinstellungen im Endbildschirm
+            if self.end_cfg == "ctf" and self.quit_box is None and dx:          # 11: Punktelimit
+                self.set_cfg("plim", max(0, min(CTF_PTS_MAX, int(self.cfg.get("plim", 0) or 0) + dx)))
             if self.end_cfg == "setup" and self.quit_box is None:
                 if dx:
                     self.set_limit(self.cfg["limit"] + dx)
                 elif dy and not self.cfg_is_mc():
                     self.setup_mode(MODES[(MODES.index(self.cfg["mode"]) + 1) % len(MODES)])
+            return
+        if self.mode == "menu" and self.menu_state == "setup3" and self.quit_box is None and dx:
+            self.set_cfg("plim", max(0, min(CTF_PTS_MAX, int(self.cfg.get("plim", 0) or 0) + dx)))   # 11
             return
         if self.mode != "menu" or self.menu_state != "setup" or self.quit_box is not None:
             return
@@ -116126,7 +116938,9 @@ class Game(ShowBase):
                     self.set_cfg("mobs", d - 1)
         elif self.mode == "play":
             if self.player.hp <= 0:
-                pass                               # tot: keine Ausrüstungswahl (Robins Regel: Start mit Pistole)
+                if self.LOBBY_EQUIP and self.loadscreen is None:   # 11: Hauptspiel-Loadout - Ziffern wie im Hauptspiel
+                    self.pick_loadout(d)
+                # (sonst keine Ausrüstungswahl: Robins Regel - Start mit Pistole)
             elif 1 <= d <= N_SLOTS:
                 self.request_weapon(d - 1)
             elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
@@ -116139,6 +116953,15 @@ class Game(ShowBase):
         if self.menu_state == "setup2":
             if ch in "tT":
                 self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
+            return
+        if self.menu_state == "setup3":                   # 11: CTF-Regeln
+            if ch in "fF":
+                self.set_cfg("ff", not self.cfg.get("ff", CTF_FF_DEFAULT))
+            elif ch in "lL":
+                self.set_cfg("loot", "exp" if self.cfg.get("loot", CTF_LOOT_DEFAULT) != "exp" else "loadout")
+            return
+        if self.menu_state == "setup" and ch in "cC" and self.cfg.get("mode") == "ctf":
+            self.setup_ctf()
             return
         if self.menu_state == "name" and len(self.my_name) < 16:
             self.my_name += ch
@@ -116179,7 +117002,7 @@ class Game(ShowBase):
                 self.menu_msg = "Bitte einen Namen eingeben."
         elif st == "setup":
             self.start_game(self.setup_for)
-        elif st == "setup2":
+        elif st in ("setup2", "setup3"):
             self.show_menu("setup")
         elif st == "join":
             ip = self.current_ip().strip()
@@ -116204,6 +117027,15 @@ class Game(ShowBase):
             self.lobby_click(m)
             return
         rb = self.right_btn_rect()
+        if self.LOBBY_EQUIP:                        # 11: Hauptspiel-Loadout - Waffenkarten und 'Loadout konfigurieren'
+            card = self.death_picker.hit(m[0], m[1])
+            b = self.DEAD_BTN
+            if card is not None:
+                self.set_loadout_card(card[0], card[1])
+                return
+            if b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
+                self.open_loadscreen()
+                return
         if rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             self.do_respawn()
 
@@ -116225,6 +117057,8 @@ class Game(ShowBase):
     def can_edit_round(self):
         """Nur der Host (bzw. im Einzelspiel der Spieler) ändert im Rundenende die Einstellungen."""
         w = self.world
+        if self.net_mode == "host" and w is not None and getattr(w, "lobby", False) and w.phase == "play":
+            return True                                   # 11: auch in der Lobby (Host aus dem Hauptspiel: CTF wählen)
         return self.net_mode in ("host", "single") and w is not None and w.phase == "over" and getattr(self, "end", None) is not None
 
     def end_note(self, text, secs=6.0):
@@ -116236,12 +117070,14 @@ class Game(ShowBase):
     def end_cfg_open(self):
         """Host: 'Rundeneinstellungen ändern' - dieselbe Seite wie beim Hosten, mit den Werten der laufenden Runde."""
         w, e = self.world, self.end
-        if e is None or not self.can_edit_round():
+        if not self.can_edit_round():
             return
         c = self.cfg
         self.cfg_backup = dict(c)
         c["map"] = getattr(w, "map_path", c.get("map"))
         c["mode"] = w.mode if w.mode in MODES else c["mode"]
+        c["ff"], c["loot"], c["plim"] = bool(w.ctf_ff), w.ctf_loot, int(w.score_limit)     # 11
+        c["mobs"] = int(w.mob_level)
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
@@ -116250,7 +117086,8 @@ class Game(ShowBase):
             c["map"] = None
         self.setup_for = self.net_mode
         self.map_page, self.prev_mode, self.menu_msg = 0, None, ""
-        e["root"].hide()
+        if e is not None:
+            e["root"].hide()
         self.end_cfg = "setup"
         self.end_cfg_show()
 
@@ -116262,14 +117099,20 @@ class Game(ShowBase):
         bg.setColor(0.05, 0.07, 0.11, 1.0)
         self.menu_items.append(Deco(bg))
         self.menu_last = (self.end_cfg, "")
-        self.setup_page = EndSetupPage(self) if self.end_cfg == "setup" else MorePage(self)
+        self.setup_page = (EndSetupPage(self) if self.end_cfg == "setup" else
+                           CtfPage(self) if self.end_cfg == "ctf" else MorePage(self))
 
     def end_cfg_more(self):
         self.end_cfg = "more"
         self.end_cfg_show()
 
+    def end_cfg_ctf(self):
+        """11: CTF-Regeln (Eigenbeschuss, Loot-System, Punktelimit) der nächsten Runde."""
+        self.end_cfg = "ctf"
+        self.end_cfg_show()
+
     def end_cfg_back(self):
-        if self.end_cfg == "more":
+        if self.end_cfg in ("more", "ctf"):
             self.end_cfg = "setup"
             self.end_cfg_show()
         else:
@@ -116307,16 +117150,33 @@ class Game(ShowBase):
             self.reload_world()
             return
         lvl = mob_level_of(c["mobs"])
-        mode = c["mode"] if c["mode"] in ("koth", "dm") else w.mode
+        mode = c["mode"] if c["mode"] in MODES else w.mode
+        old_mode = w.mode
         w.mode = "dm" if w.mc else mode
+        w.ctf_apply_cfg(self.ctf_cfg_dict())            # 11: CTF-Regeln
+        if w.mode != old_mode:                          # 11: Teams/Flaggen passen zum neuen Modus (gilt ab der nächsten Runde)
+            w.ctf_balance()
+            if w.mode == "ctf":
+                w.ctf_reset()
+            else:
+                w.flags.clear()
         w.limit = float(c["limit"]) * 60.0
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
+        if (w.mob_level, w.mobs_on) != (lvl, lvl > 0 and not w.mc) and getattr(w, "lobby", False):
+            w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
+            w.mobs.clear()                              # 11: Lobby - die Monster passen sofort zur Einstellung
+            w.pending.clear()
+            if w.mobs_on:
+                w.populate_mobs()
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
         if self.host is not None:
             self.host.send_cfg()
         netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
-        self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
+        if getattr(w, "lobby", False):
+            self.toast("Rundeneinstellungen übernommen", (0.6, 1.0, 0.6), 2.5)
+        else:
+            self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
 
     def reload_world(self):
         w = self.world
@@ -116332,6 +117192,7 @@ class Game(ShowBase):
                                   mode=m.get("mode") if m.get("mode") in MODES else "koth",
                                   limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
                                   mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
+                                  ctf=m.get("ctf") if isinstance(m.get("ctf"), dict) else {},
                                   map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
                                   close=lambda: cs.conn.close("abgebrochen"))
         except (KeyError, TypeError, ValueError):
@@ -116385,7 +117246,13 @@ class Game(ShowBase):
         return (a - 0.08 - self.big_btn_w(), a - 0.08, -0.94, -0.76)
 
     LOBBY_EQ_BTN = (-0.60, 0.60, -0.90, -0.76)
-    LOBBY_EQUIP = False          # Ausrüstungsmenü in der Lobby benutzbar (im Experimental nicht: immer Pistole)
+    LOBBY_CFG_BTN = (-0.60, 0.60, -0.70, -0.56)   # 11: Host - "Rundeneinstellungen" in der Lobby (Modus, Karte, CTF)
+
+    @property
+    def LOBBY_EQUIP(self):
+        """Ausrüstungsmenü in der Lobby benutzbar: nur mit Hauptspiel-Loadout (11: CTF), sonst Start mit der Pistole."""
+        w = getattr(self, "world", None)
+        return w is not None and getattr(w, "loot_mode", "exp") == "loadout"
     LOBBY_EQ_LOCKED = True       # Knopf trotzdem zeigen, aber ausgegraut; beim Darüberfahren erscheint der Hinweis
     LOBBY_EQ_TIP = "In diesem Spielmodus nicht verfügbar."
 
@@ -116398,6 +117265,10 @@ class Game(ShowBase):
         e = self.LOBBY_EQ_BTN
         bb = self.back_btn_rect()
         equip = self.LOBBY_EQUIP and getattr(self, "lobby_equip", False)
+        cb = self.LOBBY_CFG_BTN
+        if (not equip and self.net_mode == "host" and cb[0] <= m[0] <= cb[1] and cb[2] <= m[1] <= cb[3]):
+            self.end_cfg_open()                     # 11: Rundeneinstellungen (Modus Capture the Flag, Karte ...)
+            return
         if bb[0] <= m[0] <= bb[1] and bb[2] <= m[1] <= bb[3]:
             if equip:
                 self.lobby_equip = False            # zurück zur Lobby
@@ -116457,6 +117328,14 @@ class Game(ShowBase):
         btn3d(eq)
         eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                             shadow=(0, 0, 0, 0.8), mayChange=True)
+        cm.setFrame(*self.LOBBY_CFG_BTN)                    # 11: Host - Rundeneinstellungen
+        cfgb = root.attachNewNode(cm.generate())
+        cfgb.setColor(*BTN_C)
+        cfgb.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(cfgb)
+        cfg_t = OnscreenText(text="RUNDENEINSTELLUNGEN  (Modus, Karte, CTF)", parent=root,
+                             pos=(0, (self.LOBBY_CFG_BTN[2] + self.LOBBY_CFG_BTN[3]) / 2 - 0.018), scale=0.045,
+                             font=BOLD_FONT, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), mayChange=True)
         tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
                            bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
         tip.setColorScale(1, 1, 1, 1)
@@ -116466,7 +117345,7 @@ class Game(ShowBase):
         tip.hide()
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
-                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip}
+                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip, "cfg": cfgb, "cfg_t": cfg_t}
 
     def update_lobby_ui(self, show, mpos):
         ui = getattr(self, "lobby_ui", None)
@@ -116525,6 +117404,12 @@ class Game(ShowBase):
             else:
                 ui["start"].setColor(*START_BTN_HOT) if hov_c else ui["start"].setColor(*START_BTN)
                 self.set_text(ui["start_t"], "BEREIT")
+        cb = self.LOBBY_CFG_BTN                             # 11: Rundeneinstellungen (nur der Host)
+        for nd in (ui["cfg"], ui["cfg_t"]):
+            (nd.show if host else nd.hide)()
+        if host:
+            hov_c = mpos is not None and cb[0] <= mpos[0] <= cb[1] and cb[2] <= mpos[1] <= cb[3]
+            ui["cfg"].setColor(*(BTN_HC if hov_c else BTN_C))
         e = self.LOBBY_EQ_BTN
         over_e = mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
         hov_e = self.LOBBY_EQUIP and over_e
@@ -116583,7 +117468,7 @@ class Game(ShowBase):
             self.end_cfg_back()                    # Rundeneinstellungen: Weitere -> Seite 1 -> Abbrechen
         elif self.mode == "menu" and self.menu_state == "quit":
             self.show_menu(getattr(self, "quit_back", None) or "main")
-        elif self.mode == "menu" and self.menu_state == "setup2":
+        elif self.mode == "menu" and self.menu_state in ("setup2", "setup3"):
             self.show_menu("setup")
         elif self.mode == "menu" and self.menu_state == "setup":
             self.show_menu("main")
@@ -117077,7 +117962,9 @@ class Game(ShowBase):
 
     def refresh_fp_arms(self):
         """Hände und Ärmel in der Ego-Ansicht im gewählten Aussehen (Tarnmuster, Handschuhe) neu aufbauen."""
-        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0)
+        w_ = getattr(self, "world", None)
+        tm_ = w_.team_of.get(getattr(self, "my_id", 0) or 0) if w_ is not None and getattr(w_, "mode", "") == "ctf" else None
+        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0, tm_)
         if getattr(self, "fp_key", None) == L["key"]:
             return
         self.fp_key = L["key"]
@@ -117279,6 +118166,7 @@ class Game(ShowBase):
         self.lost_text = None
         self.feed, self.pings = [], {}
         self.intel_reset()
+        self.ctf_ui = None                   # 11: CTF-Anzeige (Knoten sind mit HUD und Szene schon weg)
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
         self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
@@ -117461,7 +118349,7 @@ class Game(ShowBase):
                 return
             self.loading_step(0.08, "Welt wird erzeugt ...")
             world = World(attempt.seed, spawn_mobs=False, mode=attempt.mode, limit=attempt.limit, mapdata=mapdata,
-                          tomahawk=getattr(attempt, "tomahawk", True))
+                          tomahawk=getattr(attempt, "tomahawk", True), ctf=getattr(attempt, "ctf", None))
             if attempt.props != world.prop_count():
                 attempt.close()
                 netlog(f"Client: Weltprüfung fehlgeschlagen: Host {attempt.props} Props, lokal {world.prop_count()}")
@@ -117486,7 +118374,7 @@ class Game(ShowBase):
             world = World(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)))
+                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict())
         world.map_raw = raw
         world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
@@ -117518,6 +118406,7 @@ class Game(ShowBase):
         self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
+            self.lo_sent = None                    # 11: Loadout beim ersten Frame an den (neuen) Host
             world.shot_sink = self.client.send_shot
             world.gren_sink = self.client.send_grenade
             world.melee_sink = self.client.send_melee
@@ -117631,6 +118520,10 @@ class Game(ShowBase):
         if cs.cfg_changed:
             cs.cfg_changed = False
             self.end_note("Der Host hat die Rundeneinstellungen geändert")
+        lo = tuple(tuple(v) if isinstance(v, (list, tuple)) else v for v in self.loadout)
+        if lo != getattr(self, "lo_sent", None):          # 11: gewähltes Loadout dem Host melden (Rundenstart, Respawn)
+            self.lo_sent = lo
+            cs.send_loadout(self.loadout)
         pl = self.player
         if cs.hp is not None:
             pl.hp = cs.hp                      # Lebenspunkte entscheidet der Host
@@ -118641,7 +119534,7 @@ class Game(ShowBase):
         if self.net_mode == "client":
             waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
             if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
-                self.client.request_respawn()       # der Host sucht den Startpunkt aus
+                self.client.request_respawn(self.loadout if self.LOBBY_EQUIP else None)   # der Host sucht den Startpunkt aus
         elif self.world.can_respawn(pl):
             self.world.respawn_player(pl)           # Einzelspiel/Host: Ereignis 'respawn' folgt
 
@@ -118939,6 +119832,7 @@ class Game(ShowBase):
         root = a2.attachNewNode("endscreen")
         root.setBin("gui-popup", 0)                       # über allem, was das HUD noch einblendet
         koth = bool(data) and data[0].get("mode") == "koth"
+        ctf = bool(data) and data[0].get("mode") == "ctf"        # 11
         cm = CardMaker("endbg")
         cm.setFrame(-3, 3, -1, 1)
         bg = root.attachNewNode(cm.generate())
@@ -118948,9 +119842,27 @@ class Game(ShowBase):
                      shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
         cm.setFrame(-0.62, 0.62, 0.83, 0.838)
         root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        if ctf:                                           # 11: Teamergebnis statt Siegerpodest
+            ts = data[0].get("ts") or [0, 0]
+            for t, x in ((0, -0.42), (1, 0.42)):
+                col = CTF_TEAM_COLS[t]
+                win = ts[t] > ts[1 - t]
+                h = 0.26 if win else 0.17
+                cm.setFrame(x - 0.3, x + 0.3, 0.3, 0.3 + h)
+                blk = root.attachNewNode(cm.generate())
+                blk.setColor(col[0] * 0.6, col[1] * 0.6, col[2] * 0.6, 1)
+                OnscreenText(text=str(ts[t]), parent=root, pos=(x, 0.3 + h * 0.3), scale=0.1, font=BOLD_FONT,
+                             fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
+                OnscreenText(text=f"TEAM {CTF_TEAM_NAMES[t].upper()}", parent=root, pos=(x, 0.3 + h + 0.035),
+                             scale=0.06 if win else 0.05, fg=tuple(min(1.0, c * 1.2 + 0.2) for c in col) + (1,),
+                             shadow=(0, 0, 0, 0.9), mayChange=False)
+            res = ("UNENTSCHIEDEN" if ts[0] == ts[1] else
+                   f"TEAM {CTF_TEAM_NAMES[0 if ts[0] > ts[1] else 1].upper()} GEWINNT")
+            OnscreenText(text=res, parent=root, pos=(0, 0.70), scale=0.065, font=BOLD_FONT, fg=(1.0, 0.85, 0.3, 1),
+                         shadow=(0, 0, 0, 0.9), mayChange=False)
         # Siegerpodest: 2. links, 1. Mitte, 3. rechts
-        for place, x, h, col in ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
-                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25))):
+        for place, x, h, col in (() if ctf else ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
+                                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25)))):
             if place > len(data):
                 continue
             e = data[place - 1]
@@ -118964,9 +119876,9 @@ class Game(ShowBase):
                          fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
             OnscreenText(text=val, parent=root, pos=(x, 0.3 + h + 0.025), scale=0.035, fg=col + (1,),
                          mayChange=False)
-        tabs = end_tabs(koth)
+        tabs = end_tabs(koth, ctf)
         self.end = {"root": root, "data": data, "tabs": tabs, "tab": 0, "cells": [], "hidden": hidden,
-                    "koth": koth, "rects": []}
+                    "koth": koth, "ctf": ctf, "rects": []}
         labels = [f"{i + 1} {t[0]}" for i, t in enumerate(tabs)]
         widths = [len(lb) * 0.042 * 0.52 + 0.09 for lb in labels]   # Reiter nebeneinander, nach Textlänge
         x = -sum(widths) / 2
@@ -119038,7 +119950,11 @@ class Game(ShowBase):
                 e["cells"].append(OnscreenText(text=str(v), parent=root, pos=(xs[j + 1], z), scale=0.042,
                                                fg=(1.0, 0.78, 0.2, 1) if gold else (0.92, 0.94, 1, 1),
                                                mayChange=False))
-        if best_f is None:                                # Übersicht: Sieger
+        if best_f is None and e.get("ctf"):               # 11: CTF - Siegerteam
+            ts = (data[0].get("ts") if data else None) or [0, 0]
+            txt = ("Unentschieden" if ts[0] == ts[1] else
+                   f"Sieger: Team {CTF_TEAM_NAMES[0 if ts[0] > ts[1] else 1]}   ({ts[0]} : {ts[1]})")
+        elif best_f is None:                              # Übersicht: Sieger
             txt = f"Sieger: {data[0]['name']}" if data else ""
         else:
             top = max(data, key=best_f) if data else None
@@ -119566,9 +120482,23 @@ class Game(ShowBase):
         t = max(0.0, world.time_left)
         self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}")
         koth = world.mode == "koth"
-        heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
-        cols = [[] for _ in heads]
-        for i, p in enumerate(world.ranking()[:8]):
+        if world.mode == "ctf":                      # 11: Team, Flaggen geholt / zurück / Träger getötet
+            s0, s1 = world.team_score[0], world.team_score[1]
+            self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}"
+                                          f"      BLAU {s0} : {s1} ROT")
+            heads = ["#", "Spieler", "Team", "Kills", "Tode", "Flaggen", "Zurück", "Träger"]
+            rows = sorted(world.ranking()[:8], key=lambda p: (world.team_of.get(p.pid, 9),))
+            cols = [[] for _ in heads]
+            for i, p in enumerate(rows):
+                fc, fr, ck = ctf_summary(p)
+                tm = world.team_of.get(p.pid)
+                for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")),
+                                       CTF_TEAM_NAMES[tm] if tm in (0, 1) else "-", p.kills, p.deaths, fc, fr, ck)):
+                    cols[c].append(str(v))
+        else:
+            heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
+            cols = [[] for _ in heads]
+        for i, p in enumerate(world.ranking()[:8] if world.mode != "ctf" else ()):
             mk, cr, bf = stat_summary(p)
             val = f"{int(p.score)}" if koth else f"{p.kills / max(1, p.deaths):.2f}"
             for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")), val,
@@ -120723,6 +121653,43 @@ class Game(ShowBase):
     def feed_add(self, text):
         self.feed.append((text, time.time()))
 
+    def ctf_event(self, e):
+        """11: CTF-Ereignis ("ctf", Art, Spieler-ID, Flaggen-ID, Team) -> Killfeed, Hinweis, Ton."""
+        if len(e) < 5:
+            return
+        kind, pid, _fid, team = e[1], e[2], e[3], e[4]
+        w = self.world
+        me = pid == self.my_id
+        my_t = w.team_of.get(self.my_id)
+        who = self.pname(pid) if pid is not None and pid >= 0 else ""
+        fl = self.ctf_flag_name(team)
+        col = tuple(min(1.0, c * 1.2 + 0.2) for c in self.ctf_flag_col(team))
+        if kind == "take":
+            self.feed_add(f"{who} hat {fl} genommen")
+            if me:
+                self.toast("DU HAST DIE FLAGGE!  Bring sie in deine Basis", col, 3.0)
+            self.sfx.play("ctf_alert", None, 0.8, 1.0 if me or w.team_of.get(pid) == my_t else 0.85)
+        elif kind == "drop":
+            self.feed_add(f"{who} hat {fl} verloren" if who else f"{fl[0].upper()}{fl[1:]} ist gefallen")
+        elif kind == "ret":
+            self.feed_add(f"{who} hat {fl} zurückgebracht")
+            self.sfx.play("ctf_alert", None, 0.6, 1.25)
+        elif kind == "auto":
+            self.feed_add(f"{fl[0].upper()}{fl[1:]} ist zurück" + (" in der Basis" if team in (0, 1) else " in der Burg"))
+        elif kind == "new":
+            self.feed_add("Neue Flagge in der Burg")
+        elif kind == "cap":
+            t = team if team in (0, 1) else w.team_of.get(pid)
+            tn = CTF_TEAM_NAMES[t] if t in (0, 1) else "?"
+            self.feed_add(f"{who} punktet für Team {tn}!")
+            tc = tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[t]) if t in (0, 1) else (1, 1, 1)
+            self.toast(f"TEAM {tn.upper()} PUNKTET!   BLAU {w.team_score[0]} : {w.team_score[1]} ROT", tc, 3.0)
+            self.sfx.play("ctf_cap", None, 0.9 if t == my_t else 0.6, 1.0 if t == my_t else 0.8)
+        elif kind == "needhome" and me:
+            self.toast("Eure eigene Flagge muss in der Basis sein!", (1.0, 0.6, 0.4), 2.5)
+        elif kind == "noveh" and me:
+            self.toast("Mit der Flagge kein Fahrzeug", (1.0, 0.6, 0.4), 1.6)
+
     def handle_events(self):
         for e in self.world.events:
             kind = e[0]
@@ -121190,6 +122157,8 @@ class Game(ShowBase):
             elif kind == "buffend":
                 if e[1] == self.my_id:
                     self.toast("Buff abgelaufen", (0.85, 0.85, 0.9), 1.5)
+            elif kind == "ctf":                # 11: Capture the Flag - (Art, Spieler, Flagge, Team)
+                self.ctf_event(e)
             elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
                 self.open_end_screen(e[1])
             elif kind == "newmatch":
@@ -121597,12 +122566,16 @@ class Game(ShowBase):
         for pid in others:
             p = world.players[pid]
             v = self.player_views.get(pid)
+            if v is not None and (v.team != getattr(p, "team", None) or v.look_code != getattr(p, "look", "")):
+                self.player_views.pop(pid).root.removeNode()     # 11: Team (Armbinde) oder Aussehen gewechselt
+                v = None
             if v is None:
                 v = self.player_views[pid] = PlayerView(p)
                 v.root.reparentTo(self.render)
             v.update(p, dt)
         for pid in [pid for pid in self.player_views if pid not in others]:
             self.player_views.pop(pid).root.removeNode()
+        self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
 
         # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände
         keep = []
@@ -122471,11 +123444,40 @@ class Game(ShowBase):
         equip_view = lobby and self.LOBBY_EQUIP and getattr(self, "lobby_equip", False) and self.loadscreen is None
         if not lobby:
             self.lobby_equip = False
-        show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
+        cfg_open = getattr(self, "end_cfg", None) is not None and getattr(self, "end", None) is None   # 11: Lobby-Einstellungen
+        if cfg_open and dead_screen and self.quit_box is None:
+            if self.slider_drag:
+                self.slider_follow()
+            self.update_hover()
+        show_dead = (dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
+                     and not cfg_open)
+        loadout = self.LOBBY_EQUIP                        # 11: Hauptspiel-Loadout (CTF) - Waffenwahl vor dem Spawn
         self.set_text(self.dead_hint, hint if show_dead else "")
-        self.set_text(self.dead_text, ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if show_dead else "")
+        if loadout:
+            txt = ("AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:"
+                   if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:")
+        else:
+            txt = ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False)
+                   else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.")
+        if show_dead and self.world.mode == "ctf" and self.world.team_of.get(self.my_id) in (0, 1):
+            txt = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt
+        self.set_text(self.dead_text, txt if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        self.tip_hide()
+        if show_dead and loadout:
+            card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
+            self.death_picker.update(self.loadout, card)
+            self.death_picker.show()
+            self.tip_show(card, mpos)
+            b = self.DEAD_BTN
+            hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
+            self.dead_btn.setColor(*(BTN_HC if hov else BTN_C))
+            self.dead_btn.show()
+            self.dead_btn_text.show()
+        else:
+            self.tip_hide()
+            self.death_picker.hide()
+            self.dead_btn.hide()
+            self.dead_btn_text.hide()
         rb = self.right_btn_rect()
         if show_dead and not lobby:                       # grüner Respawn-Knopf unten rechts (kein R mehr)
             ready = wait <= 0
@@ -122490,8 +123492,9 @@ class Game(ShowBase):
         else:
             self.resp_btn.hide()
             self.resp_btn_text.hide()
-        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None, mpos)
-        if lobby and self.loadscreen is None and self.quit_box is None:       # Knopf unten links
+        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None
+                             and not cfg_open, mpos)
+        if lobby and self.loadscreen is None and self.quit_box is None and not cfg_open:   # Knopf unten links
             bb = self.back_btn_rect()
             hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
             self.back_btn.setPos(bb[0], 0, bb[2])
@@ -122880,6 +123883,7 @@ class Game(ShowBase):
         self.bm_me.setPos(p[0], 0, p[1])
         self.bm_me.setR(-pl.heading)
         self.draw_intel_big()                       # 10h: Lärm-Pings und Sichtkontakte wie auf der Minimap
+        self.update_ctf_map(True)                   # 11: CTF
         for v in self.world.vehicles:
             n = self.bm_vehs.get(v.id)
             if n is not None:
@@ -122965,7 +123969,7 @@ class Game(ShowBase):
 
     PING_SEG = 40
 
-    def ping_geom(self, parent, sort):
+    def ping_geom(self, parent, sort, col=None):
         """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
         wird er am Rand abgeschnitten)."""
         n = self.PING_SEG
@@ -122974,7 +123978,7 @@ class Game(ShowBase):
         vd.setNumRows(1 + 2 * n)
         cw = GeomVertexWriter(vd, "color")
         vw = GeomVertexWriter(vd, "vertex")
-        r_, g_, b_ = ENEMY_PING_COL
+        r_, g_, b_ = col or ENEMY_PING_COL                 # 11: eigene Farbe (Kreis um den Flaggenträger)
         cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
         vw.addData3(0, 0, 0)
         for i in range(n):
@@ -123086,14 +124090,15 @@ class Game(ShowBase):
         keep = []
         for pg in self.enemy_pings:
             age = now - pg["t0"]
-            if age > ENEMY_PING_T:
+            life = pg.get("life", ENEMY_PING_T)
+            if age > life:
                 for key in ("mm", "bm"):
                     if pg[key] is not None:
                         pg[key][0].removeNode()
                 continue
             keep.append(pg)
             if pg["mm"] is None:
-                pg["mm"] = self.ping_geom(self.mm_root, 22)
+                pg["mm"] = self.ping_geom(self.mm_root, 22, pg.get("col"))
             np_, vd = pg["mm"]
             c = self.mm_xy(pg["x"], pg["y"], False)
             if c is None:                                         # Mitte ausserhalb: Lage trotzdem rechnen
@@ -123117,7 +124122,7 @@ class Game(ShowBase):
             cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
             self.ping_fill(vd, pts, cc)
             np_.show()
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, age))
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(life * 0.4, life, age))
         self.enemy_pings = keep
 
     def draw_intel_big(self):
@@ -123128,7 +124133,7 @@ class Game(ShowBase):
         k = 2 * H / WORLD
         for pg in self.enemy_pings:
             if pg["bm"] is None:
-                pg["bm"] = self.ping_geom(self.bm_root, 62)
+                pg["bm"] = self.ping_geom(self.bm_root, 62, pg.get("col"))
             np_, vd = pg["bm"]
             c = self.bm_xy(pg["x"], pg["y"])
             rr = pg["r"] * k
@@ -123137,7 +124142,8 @@ class Game(ShowBase):
                 a = 2 * math.pi * i / self.PING_SEG
                 pts.append((max(-H, min(H, c[0] + math.cos(a) * rr)), max(-H, min(H, c[1] + math.sin(a) * rr))))
             self.ping_fill(vd, pts, c)
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, now - pg["t0"]))
+            life = pg.get("life", ENEMY_PING_T)
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(life * 0.4, life, now - pg["t0"]))
         shown = set()
         for tid, (t, x, y) in getattr(self, "intel_seen", {}).items():
             tg = w.players.get(tid)
@@ -123155,6 +124161,265 @@ class Game(ShowBase):
             shown.add(tid)
         for tid, n in self.bm_dots.items():
             if tid not in shown:
+                n.hide()
+
+    # ------------------------------------------------------------ 11: Capture the Flag (Anzeige)
+    @staticmethod
+    def ctf_flag_col(team):
+        return CTF_TEAM_COLS[team] if team in (0, 1) else CTF_NEUTRAL_COL
+
+    @staticmethod
+    def ctf_flag_name(team):
+        """'die blaue Flagge' / 'die rote Flagge' / 'die Flagge' (neutral)."""
+        return {0: "die blaue Flagge", 1: "die rote Flagge"}.get(team, "die Flagge")
+
+    def ctf_ui_build(self):
+        """HUD und Minimap-Marker des CTF (einmal je Spiel; cleanup_scene räumt die Knoten mit dem HUD ab)."""
+        ui = {}
+        tc = self.a2dTopCenter
+        for key, x, al in (("s0", -0.035, TextNode.ARight), ("sep", 0.0, TextNode.ACenter), ("s1", 0.035, TextNode.ALeft)):
+            ui[key] = OnscreenText(text="", parent=tc, pos=(x, -0.165), scale=0.056, font=BOLD_FONT, fg=(1, 1, 1, 1),
+                                   shadow=(0, 0, 0, 0.9), align=al, mayChange=True)
+        ui["s0"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[0]) + (1,))
+        ui["s1"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[1]) + (1,))
+        ui["status"] = OnscreenText(text="", parent=tc, pos=(0, -0.222), scale=0.036, fg=(0.9, 0.92, 0.95, 1),
+                                    shadow=(0, 0, 0, 0.9), mayChange=True)
+        ui["team"] = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.08), scale=0.05, font=BOLD_FONT,
+                                  fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
+        am = Mesh(lit=False)                               # Pfeil zur eigenen Basis (nur für den Flaggenträger)
+        for sz, c in ((0.062, (0, 0, 0)), (0.048, (1, 1, 1))):
+            tip, lft, nt, rgt = (0, 0, sz), (-0.62 * sz, 0, -0.72 * sz), (0, 0, -0.30 * sz), (0.62 * sz, 0, -0.72 * sz)
+            am.tri(tip, lft, nt, c)
+            am.tri(tip, nt, rgt, c)
+        arrow = tc.attachNewNode(am.node("ctf_pfeil"))
+        arrow.setTwoSided(True)
+        arrow.setPos(0, 0, -0.33)
+        arrow.hide()
+        ui["arrow"] = arrow
+        ui["carry"] = OnscreenText(text="", parent=tc, pos=(0, -0.43), scale=0.044, font=BOLD_FONT, fg=(1, 0.88, 0.35, 1),
+                                   shadow=(0, 0, 0, 0.9), mayChange=True)
+        ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"] = {}, {}, {}, {}, {}
+        ui["ping_t"], ui["myteam"] = 0.0, -2
+        self.ctf_ui = ui
+        return ui
+
+    def ctf_ring(self, r, col, alpha=0.45):
+        """Leuchtender Ring am Boden (Flaggenstand, Abgabezone)."""
+        m = Mesh(lit=False)
+        n = 40
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            p = lambda rr, a: (math.cos(a) * rr, math.sin(a) * rr, 0.0)     # noqa: E731
+            m.tri(p(r * 0.86, a0), p(r, a0), p(r, a1), col + (alpha,), ref=(0, 0, -1))
+            m.tri(p(r * 0.86, a0), p(r, a1), p(r * 0.86, a1), col + (alpha,), ref=(0, 0, -1))
+            m.tri((0, 0, 0), p(r * 0.86, a0), p(r * 0.86, a1), col + (alpha * 0.22,), ref=(0, 0, -1))
+        nd = self.render.attachNewNode(m.node("ctf_ring"))
+        nd.setTransparency(TransparencyAttrib.MAlpha)
+        nd.setDepthWrite(False)
+        nd.setLightOff()
+        nd.setTwoSided(True)
+        nd.setBin("transparent", 3)
+        return nd
+
+    def ctf_clear(self):
+        """CTF-Anzeige abbauen (anderer Modus / neue Runde ohne CTF)."""
+        ui = getattr(self, "ctf_ui", None)
+        if ui is None:
+            return
+        for d in (ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"]):
+            for v in d.values():
+                for nd in (v if isinstance(v, (list, tuple)) else (v,)):
+                    if hasattr(nd, "removeNode"):
+                        nd.removeNode()
+            d.clear()
+        for key in ("s0", "sep", "s1", "status", "carry", "team"):
+            self.set_text(ui[key], "")
+        ui["arrow"].hide()
+
+    def update_ctf(self, dt):
+        """11: Flaggen in der Welt (am Ständer, am Boden, am Rücken des Trägers), Ringe, HUD (Teampunkte, Status,
+        Pfeil zur Basis für den Träger) und alle CTF_PING_T s ein grober Kreis um jeden Flaggenträger auf der Minimap."""
+        w, pl = self.world, self.player
+        ui = getattr(self, "ctf_ui", None)
+        if w is None or pl is None or w.mode != "ctf" or not w.ctf_bases:
+            if ui is not None and (ui["views"] or ui["rings"] or ui["mm"]):
+                self.ctf_clear()
+            return
+        if ui is None:
+            ui = self.ctf_ui_build()
+        now = time.time()
+        my_t = w.team_of.get(self.my_id)
+        if my_t != ui["myteam"]:
+            ui["myteam"] = my_t
+            self.refresh_fp_arms()                         # Armbinde in der Ego-Ansicht in der Teamfarbe
+        # --- Abgabezonen / Flaggenstände (Ringe am Boden)
+        for t, (bx, by, bz) in enumerate(w.ctf_bases[:2]):
+            if t not in ui["rings"]:
+                rg = self.ctf_ring(CTF_CAP_R if w.ctf_neutral else CTF_PICK_R * 1.25, CTF_TEAM_COLS[t])
+                rg.setPos(bx, by, bz + 0.04)
+                ui["rings"][t] = rg
+            ui["rings"][t].setColorScale(1, 1, 1, 0.75 + 0.25 * math.sin(now * 2.4 + t))
+        # --- Flaggen
+        seen = set()
+        for f in w.flags:
+            seen.add(f.fid)
+            col = self.ctf_flag_col(f.team)
+            v = ui["views"].get(f.fid)
+            if v is None:
+                root, cloth = build_ctf_flag(col, 1.0, base=True)
+                root.reparentTo(self.render)
+                glow = self.ctf_ring(CTF_PICK_R, col, 0.55)
+                v = ui["views"][f.fid] = (root, cloth, glow)
+            root, cloth, glow = v
+            if f.state in ("carried", "wait"):
+                root.hide()
+                glow.hide()
+            else:
+                root.show()
+                glow.show()
+                root.setPos(f.x, f.y, f.z)
+                glow.setPos(f.x, f.y, f.z + 0.03)
+                if f.state == "dropped":                   # liegt: schräg, blinkt leicht
+                    root.setHpr((f.fid * 47) % 360, 0, 28.0)
+                    glow.setColorScale(1, 1, 1, 0.5 + 0.5 * math.sin(now * 6.0))
+                else:
+                    root.setHpr(0, 0, 0)
+                    glow.setColorScale(1, 1, 1, 0.8)
+                cloth.setH(12.0 * math.sin(now * 2.2 + f.fid) + 6.0 * math.sin(now * 4.7 + f.fid * 1.3))
+        for fid in [k for k in ui["views"] if k not in seen]:
+            for nd in ui["views"].pop(fid):
+                nd.removeNode()
+        # --- Flagge am Rücken des Trägers (andere Spieler; die eigene sieht man in der Ego-Ansicht nicht)
+        carried = {f.carrier: f for f in w.flags if f.state == "carried" and f.carrier != self.my_id}
+        for pid in list(ui["back"]):
+            pv = self.player_views.get(pid)
+            nd, key = ui["back"][pid]
+            if pid not in carried or pv is None or key != (id(pv), carried[pid].team):
+                nd.removeNode()
+                del ui["back"][pid]
+        for pid, f in carried.items():
+            pv = self.player_views.get(pid)
+            if pv is None or pid in ui["back"]:
+                if pid in ui["back"]:
+                    cl = ui["back"][pid][0].find("**/tuch")
+                    if not cl.isEmpty():
+                        cl.setH(15.0 * math.sin(now * 3.1 + pid))
+                continue
+            holder = pv.torso.attachNewNode("ctf_ruecken")
+            holder.setPos(0.12, -0.24, -0.28)
+            holder.setP(14.0)                              # leicht nach hinten geneigt
+            root, cloth = build_ctf_flag(self.ctf_flag_col(f.team), 0.62, base=False)
+            root.reparentTo(holder)
+            root.setH(-90.0)                               # Tuch weht nach hinten
+            ui["back"][pid] = (holder, (id(pv), f.team))
+        # --- Grober Kreis um jeden Träger (alle sehen ihn, alle CTF_PING_T s; Mitte zufällig versetzt)
+        if now - ui["ping_t"] >= CTF_PING_T:
+            ui["ping_t"] = now
+            if not hasattr(self, "enemy_pings"):
+                self.intel_reset()
+            for f in w.flags:
+                if f.state != "carried" or f.carrier == self.my_id:
+                    continue
+                c = w.players.get(f.carrier)
+                if c is None or c.hp <= 0:
+                    continue
+                a, d = self.prng.uniform(0, 2 * math.pi), CTF_PING_R * 0.85 * math.sqrt(self.prng.random())
+                self.enemy_pings.append(dict(pid=-100 - f.fid, x=c.x + math.cos(a) * d, y=c.y + math.sin(a) * d,
+                                             r=CTF_PING_R, t0=now, mm=None, bm=None, col=self.ctf_flag_col(f.team),
+                                             life=CTF_PING_LIFE))
+        # --- HUD: Teampunkte, Flaggenstatus, eigene Rolle
+        s0, s1 = w.team_score[0], w.team_score[1]
+        lim = f"   (bis {w.score_limit})" if w.score_limit > 0 else ""
+        self.set_text(ui["s0"], f"BLAU {s0}")
+        self.set_text(ui["sep"], ":")
+        self.set_text(ui["s1"], f"{s1} ROT" + lim)
+        parts = []
+        for f in w.flags:
+            nm = ("Blaue Flagge" if f.team == 0 else "Rote Flagge") if f.team in (0, 1) else "Flagge"
+            if f.state == "home":
+                st = "in der Basis" if f.team in (0, 1) else "in der Burg"
+            elif f.state == "carried":
+                c = w.players.get(f.carrier)
+                ct = w.team_of.get(f.carrier)
+                st = ("getragen von " + (c.name[:12] if c is not None else "?")
+                      + (f" ({CTF_TEAM_NAMES[ct]})" if ct in (0, 1) and f.team not in (0, 1) else ""))
+            elif f.state == "dropped":
+                st = f"liegt  ({int(math.ceil(max(0.0, f.drop_t)))} s)"
+            else:
+                st = f"neue in {int(math.ceil(max(0.0, f.drop_t)))} s"
+            parts.append(f"{nm}: {st}")
+        self.set_text(ui["status"], "     ".join(parts))
+        if my_t in (0, 1):
+            self.set_text(ui["team"], f"TEAM {CTF_TEAM_NAMES[my_t].upper()}")
+            ui["team"].setFg(tuple(min(1.0, c * 1.15 + 0.15) for c in CTF_TEAM_COLS[my_t]) + (1,))
+        else:
+            self.set_text(ui["team"], "")
+        mine = w.ctf_carried(self.my_id) if pl.hp > 0 else None
+        if mine is not None and my_t in (0, 1) and my_t < len(w.ctf_bases):
+            bx, by, _bz = w.ctf_bases[my_t]
+            h = math.radians(pl.heading)
+            dx, dy = bx - pl.x, by - pl.y
+            fwd = dx * -math.sin(h) + dy * math.cos(h)
+            rgt = dx * math.cos(h) + dy * math.sin(h)
+            ui["arrow"].setR(math.degrees(math.atan2(rgt, fwd)))
+            ui["arrow"].setColorScale(*(tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1.0,)))
+            ui["arrow"].setScale(1.0 + 0.08 * math.sin(now * 6.0))
+            ui["arrow"].show()
+            own = next((q for q in w.flags if q.team == my_t), None)
+            extra = ("   -   EIGENE FLAGGE ZURÜCKHOLEN!" if CTF_NEED_HOME and own is not None and own.state != "home" else "")
+            self.set_text(ui["carry"], f"DU HAST DIE FLAGGE  -  ZUR BASIS  {int(math.hypot(dx, dy))} m{extra}")
+        else:
+            ui["arrow"].hide()
+            self.set_text(ui["carry"], "")
+
+    def update_ctf_map(self, big=False):
+        """11: Minimap (bzw. grosse Karte): Basen (eigene deutlich, als Träger pulsierend), sichtbare Flaggen (am Ständer,
+        am Boden) und die Mitspieler des eigenen Teams als Pfeile in der Teamfarbe."""
+        w, pl, ui = self.world, self.player, getattr(self, "ctf_ui", None)
+        if ui is None or w is None or w.mode != "ctf":
+            return
+        store = ui["bm"] if big else ui["mm"]
+        dotf = self.bm_dot_factory if big else self.mm_dot_factory
+        arrf = self.bm_arrow if big else self.mm_arrow_factory
+        xy = (lambda x, y: self.bm_xy(x, y)) if big else (lambda x, y: self.mm_xy(x, y))
+        now = time.time()
+        my_t = w.team_of.get(self.my_id)
+        carrying = w.ctf_carried(self.my_id) is not None and pl.hp > 0
+        shown = set()
+
+        def put(key, x, y, size, col, pulse=False):
+            n = store.get(key)
+            if n is None:
+                n = store[key] = dotf(size, col + (1,))
+                n.setR(45.0)                               # Raute
+            p = xy(x, y)
+            n.setPos(p[0], 0, p[1])
+            n.setScale(1.0 + (0.35 + 0.35 * math.sin(now * 7.0) if pulse else 0.0))
+            n.show()
+            shown.add(key)
+
+        for t, (bx, by, _bz) in enumerate(w.ctf_bases[:2]):
+            own = t == my_t
+            put(("base", t), bx, by, (0.016 if own else 0.011) * (1.4 if big else 1.0), CTF_TEAM_COLS[t],
+                pulse=own and carrying)
+        for f in w.flags:
+            if f.state in ("home", "dropped"):
+                put(("flag", f.fid), f.x, f.y, 0.009 * (1.4 if big else 1.0),
+                    tuple(min(1.0, c * 1.2 + 0.25) for c in self.ctf_flag_col(f.team)), pulse=f.state == "dropped")
+        for pid, p in w.players.items():                   # Teamkameraden
+            if pid == self.my_id or p.hp <= 0 or my_t not in (0, 1) or w.team_of.get(pid) != my_t:
+                continue
+            key = ("ally", pid)
+            n = store.get(key)
+            if n is None:
+                n = store[key] = arrf(0.016 if not big else 0.022, tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1,))
+            q = xy(p.x, p.y)
+            n.setPos(q[0], 0, q[1])
+            n.setR(-(p.heading - (0.0 if big else pl.heading)))
+            n.show()
+            shown.add(key)
+        for key, n in store.items():
+            if key not in shown:
                 n.hide()
 
     def mm_xy(self, x, y, clamp=True):
@@ -123282,6 +124547,7 @@ class Game(ShowBase):
             self.mm_strike_edge.hide()
         self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
         self.update_bigmap()
+        self.update_ctf_map()                       # 11: Basen, Flaggen, Teamkameraden
         # Funkbaken: eigene Baken als Punkte, alle Spieler in ihrem Radius als Pfeile
         mine = [g for g in self.world.gadgets if g.kind == GAD_BEACON and g.owner == self.my_id]
         ids = {g.gid for g in mine}
@@ -123535,7 +124801,8 @@ class Game(ShowBase):
         fr = getattr(self, "gear_set_frame", None)
         if fr is not None:                                      # 10h: Rahmen in der Spielerfarbe
             if full is not None:
-                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0)["acc"]
+                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0,
+                                   getattr(pl, "team", None))["acc"]
                 fr.setColor(acc[0], acc[1], acc[2], 1.0)
                 fr.setColorScale(1, 1, 1, 0.8 + 0.2 * math.sin(time.time() * 3.0))
                 fr.show()
@@ -124109,11 +125376,19 @@ def _exp_autostart(g):
     do = spec.get("do")
     if do == "host":
         cfg = spec.get("cfg") if isinstance(spec.get("cfg"), dict) else {}
-        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map"):
+        if cfg.get("mode") == "ctf":                  # 11: Capture the Flag aus dem Hauptmenü - CTF-Standards
+            g.cfg["mobs"], g.cfg["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
+        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map", "ff", "loot", "plim"):
             if k in cfg:
                 g.cfg[k] = cfg[k]
-        if g.cfg.get("mode") not in ("koth", "dm"):
+        if g.cfg.get("mode") not in MODES:
             g.cfg["mode"] = "koth"
+        p_ = g.cfg.get("map")
+        if g.cfg["mode"] == "ctf" and p_ and not Game.is_bg_map("", p_):
+            g.cfg["map"] = None                       # 11: CTF nur auf Polytown und Blood Gulch
+        elif g.cfg["mode"] != "ctf" and p_ and Game.is_bg_map("", p_):
+            g.cfg["mode"] = "ctf"                     # 11: Blood Gulch gibt es nur im CTF
+            g.cfg["mobs"], g.cfg["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
         g.start_game("host")
     elif do == "join":
         g.show_menu("join")
