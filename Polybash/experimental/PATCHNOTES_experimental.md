@@ -2,6 +2,19 @@
 
 Neueste Änderungen oben.
 
+## Experimental 10h: Gegner-Lärm auf der Minimap, Sichtkontakt, Set-Rahmen, Abwehrdrohne (2026-10-19)
+- Minimap/Karte (M): die roten Gegner-Marker bei jedem Schuss entfallen. Stattdessen Lärm-Pings: lauter Lärm anderer Spieler – Schüsse (Radius je Waffe, `NOISE_SHOT` × Lautstärke), Granaten/Explosionen/Raketen, Blendgranate, Decoy, Geschütze, fahrende Wagen und fliegende Helis – erscheint als grober roter Kreis in der Grösse des Lärmradius. Die Mitte liegt zufällig versetzt (bis `ENEMY_PING_OFFSET` 0,85 × Radius), der Gegner ist immer irgendwo im Kreis. Gehen, Rennen, Ducken erscheinen nicht.
+- Ping bleibt `ENEMY_PING_T` 3 s und blendet aus; höchstens ein Ping je Gegner alle `ENEMY_PING_CD` 3 s (Dauerfeuer füllt die Karte nicht). Kreise werden am Rand der Minimap abgeschnitten.
+- Pings nur, wenn man im Lärmradius ist – also es hören könnte (`ENEMY_PING_HEAR_ONLY` = True, Lärm als Kugel in 3D wie bei den Monstern). Vorschlag aus dem Prompt so umgesetzt.
+- Sichtkontakt: siehst du einen Gegner wirklich (freie Sichtlinie auf Kopf oder Körper, im Blickfeld `ENEMY_SIGHT_FOV` 100°, bis `ENEMY_SIGHT_R` 150 m, kein Rauch dazwischen), erscheint er als roter Punkt mit genauer Position – solange du ihn siehst, danach `ENEMY_SEEN_GLOW` 1,5 s Nachleuchten an der letzten Stelle. Geprüft wird `ENEMY_SIGHT_RATE` 10× pro Sekunde.
+- Team-vorbereitet: Sichtungen werden pro Spieler gesammelt (`Game.sightings`: Beobachter -> Gegner) und mit allen Verbündeten geteilt (`World.allied`, derzeit nur man selbst); gehörte Pings ebenso (es reicht, wenn ein Verbündeter im Lärmradius ist). Team-Modi brauchen nur `team_of`.
+- Neues Ereignis "lnoise" (Decoy, Geschütz); "shotpos" trägt jetzt Lärmradius und Höhe mit.
+- Set komplett: zusätzlich zu den einfärbten Kacheln ein Rahmen in der eigenen Spielerfarbe um den ganzen Block der drei Ausrüstungs-Slots (pulsiert leicht; `SET_FRAME_W`, `SET_FRAME_PAD`).
+- Neue Granate Abwehrdrohne (`guard`, 1 pro Beute; Beute-Gewicht gewöhnlich 0 / selten 8 / gold 14): setzt eine orange Drohne frei (eigenes Modell: oranger Rumpf, Leuchtring um die ganze Drohne, gelbe Kuppel, Mob "gdrone"). Sie umkreist den Besitzer (`GDRONE_ORBIT_R` 2,4 m, `GDRONE_ORBIT_H` 2,7 m hoch; im Heli über dem Heli) und greift keine Spieler und keine normalen Monster an.
+- Kommt eine Monster-Drohne oder eine gegnerische Spieler-/Abwehrdrohne in `GDRONE_R` 15 m an den Besitzer (Drohnen, die ihn bzw. sein Fahrzeug/seinen Heli lahmlegen: 22,5 m), fliegt sie hin (`GDRONE_SPEED` 13 m/s) und zerstört sie per Stromschlag (oranger Blitz, ab `GDRONE_ZAP_R` 3 m, alle `GDRONE_ZAP_CD` 0,9 s). Der Kill zählt für den Besitzer (inkl. Beute der Monster-Drohne).
+- Begrenzt: `GDRONE_LIFE` 60 s und `GDRONE_KILLS` 3 Abschüsse, erlischt auch beim Tod des Besitzers. Eigene/verbündete Kugeln gehen durch die eigene Abwehrdrohne hindurch.
+- NET_VERSION 40 → 41 (neue Granatenart, neuer Mob, neues Ereignis) – Sinan muss `EXP_NET_VERSION` in spiel.py auf 41 setzen.
+
 ## Experimental 10g: Mehr Monster, Hasen im Wald, zwei Titanen mit Revier, Treffer-Ping, dichterer Ort und Südwestwald (2026-10-19)
 - Monsterdichte ×1,5 (`MOB_LEVELS`): Wenig 0,6 / Mäßig 1,5 / Viel 3,0 / Gottlos 5,0 (vorher 0,4 / 1,0 / 2,0 / 3,5). Drohnen bleiben fest bei `DRONE_COUNT`, Titanen bei `N_TITAN`, Kolosse bei `MAX_COLOSSUS`.
 - Gebirge: Spieler und Monster kommen höher hinauf – die unsichtbare Wand steht jetzt 1,0 m statt 4,0 m vor dem Kamm (`MTN_WALL`); die Grenze bleibt am Kamm.

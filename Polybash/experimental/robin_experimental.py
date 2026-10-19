@@ -109,6 +109,11 @@ ziehen von Wald zu Wald, fliehen Richtung Wald, nie ins Gebirge (CRITTER_*), Beu
 (TITAN_HOMES), Kolosse mit Revier um den Startpunkt; angeschossen: Ping auf den Schützen (TITAN_PING_ERR bzw.
 MOB_HIT_POS_ERR, ohne Entfernungsgrenze), Wegzeit begrenzt (MOB_TRAVEL_*), danach zurück ins Revier / frei umherlaufen.
 Karte: neue Gasse nordöstlich des Marktplatzes (town_northeast), Südwestwald grösser und dichter mit Unterholz.
+10h: Minimap ohne rote Marker bei jedem Schuss: lauter Lärm anderer Spieler (Schüsse, Explosionen, Blendgranate, Decoy,
+Geschütz, Fahrzeug/Heli) erscheint als grober Kreis (Lärmradius, Mitte zufällig versetzt, ENEMY_PING_*), nur wenn man
+ihn hören kann; echter Sichtkontakt (Sichtlinie, Blickfeld, Sichtweite - ENEMY_SIGHT_*) als roter Punkt mit Nachleuchten.
+Sichtungen werden pro Spieler gesammelt und mit Verbündeten (World.allied) geteilt (Game.sightings, intel_*). Set komplett:
+Rahmen in der Spielerfarbe um die Ausrüstungs-Kacheln. Neue Granate Abwehrdrohne ("guard", Mob "gdrone", GDRONE_*).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -491,7 +496,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 40         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte geändert)
+NET_VERSION = 41         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -544,27 +549,32 @@ GREN_R, GREN_DMG = 7.0, 120.0
 GREN_COOLDOWN = 0.7
 GREN_ANIM_T = 0.6         # Dauer der Wurfanimation (Arm)
 # --- 10e: Granaten-Arsenal. Arten (Reihenfolge = Index im Netz; neue Arten nur hinten anhängen!)
-GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare")
+GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare", "guard")   # 10h: + Abwehrdrohne
 GREN_NAMES = {"frag": "Splittergranate", "decoy": "Decoy", "flash": "Blendgranate", "smoke": "Rauchgranate",
-              "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel"}
+              "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel", "guard": "Abwehrdrohne"}
 GREN_SHORT = {"frag": "Splitter", "decoy": "Decoy", "flash": "Blend", "smoke": "Rauch", "drone": "Drohne",
-              "molotov": "Molotow", "flare": "Airdrop"}
+              "molotov": "Molotow", "flare": "Airdrop", "guard": "Abwehr"}
 GREN_COL = {"frag": (0.30, 0.40, 0.20), "decoy": (0.80, 0.68, 0.20), "flash": (0.78, 0.80, 0.84),
             "smoke": (0.42, 0.46, 0.50), "drone": (0.58, 0.26, 0.85), "molotov": (0.45, 0.62, 0.30),
-            "flare": (0.85, 0.15, 0.12)}          # Erkennungsfarbe (Modell, HUD-Symbol)
+            "flare": (0.85, 0.15, 0.12), "guard": (0.92, 0.52, 0.10)}   # Erkennungsfarbe (Modell, HUD-Symbol)
 GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
              "decoy": "Landet und macht dort Schusslärm - Monster laufen hin. Kein Schaden",
              "flash": "Blendet bis 10 m (je näher und je mehr man hinschaut, desto stärker)",
              "smoke": "Rauchwolke, blockiert die Sicht (bleibt in Räumen und Tunneln)",
              "drone": "Setzt eine eigene lila Drohne frei, die Gegner betäubt",
              "molotov": "Brennende Fläche beim Aufprall (nicht im Wasser)",
-             "flare": "Rote Fackel: ein Frachtflugzeug wirft dort eine Kiste ab"}
-GREN_LOOT_N = {"decoy": 3, "frag": 2, "flash": 2, "smoke": 2, "drone": 1, "molotov": 2, "flare": 3}   # Stück je Beute
-GREN_LOOT_W = {"common": {"frag": 30, "decoy": 24, "flash": 18, "smoke": 18, "molotov": 10, "drone": 0, "flare": 0},
-               "rare":   {"frag": 22, "decoy": 12, "flash": 18, "smoke": 14, "molotov": 18, "drone": 10, "flare": 6},
-               "gold":   {"frag": 14, "decoy": 6, "flash": 12, "smoke": 10, "molotov": 18, "drone": 20, "flare": 20}}
+             "flare": "Rote Fackel: ein Frachtflugzeug wirft dort eine Kiste ab",
+             "guard": "Orange Abwehrdrohne: umkreist dich und zerstört Drohnen in 15 m (auch die, die dein Fahrzeug lahmlegen)"}
+GREN_LOOT_N = {"decoy": 3, "frag": 2, "flash": 2, "smoke": 2, "drone": 1, "molotov": 2, "flare": 3,
+               "guard": 1}                 # Stück je Beute (10h: Abwehrdrohne 1)
+GREN_LOOT_W = {"common": {"frag": 30, "decoy": 24, "flash": 18, "smoke": 18, "molotov": 10, "drone": 0, "flare": 0,
+                          "guard": 0},
+               "rare":   {"frag": 22, "decoy": 12, "flash": 18, "smoke": 14, "molotov": 18, "drone": 10, "flare": 6,
+                          "guard": 8},
+               "gold":   {"frag": 14, "decoy": 6, "flash": 12, "smoke": 10, "molotov": 18, "drone": 20, "flare": 20,
+                          "guard": 14}}
 GREN_FUSE_K = {"frag": GREN_FUSE, "decoy": 1.0, "flash": 1.6, "smoke": 1.4, "drone": 0.9, "molotov": 6.0,
-               "flare": 1.2}               # s bis zur Wirkung (Molotow: beim Aufprall, spätestens dann)
+               "flare": 1.2, "guard": 0.8}   # s bis zur Wirkung (Molotow: beim Aufprall, spätestens dann)
 GREN_SPEED_MIN = 8.0      # m/s: kurz getippt (ca. 6 m weit)
 GREN_SPEED_MAX = 31.0     # m/s: voll aufgeladen (ca. 65-70 m weit; früher fest 21 m/s = 30 m)
 GREN_CHARGE_T = 1.0       # s G halten bis zur vollen Wurfweite
@@ -589,6 +599,15 @@ SMOKE_FADE_T = 4.0        # ... und löst sich so lange auf
 SMOKE_BLOCK_M = 1.4       # m Rauch auf einer Sichtlinie: Monster (und 10h-Sichtung) sehen nicht hindurch
 PDRONE_LIFE = 35.0        # s Lebensdauer der eigenen (lila) Drohne
 PDRONE_STUN = (0.8, 1.6)  # s Betäubung durch die eigene Drohne (Monster-Drohne: STUN_MIN..MAX)
+GDRONE_R = 15.0           # 10h: Abwehrdrohne - zerstört Drohnen so nah am Besitzer (m; 10-20)
+GDRONE_LIFE = 60.0        # 10h: ... lebt so lange (s) ...
+GDRONE_KILLS = 3          # 10h: ... und zerstört höchstens so viele Drohnen
+GDRONE_ORBIT_R = 2.4      # 10h: Kreisbahn um den Besitzer (Radius m) ...
+GDRONE_ORBIT_H = 2.7      # ... in so viel m über seinen Füssen (im Heli: über dem Heli)
+GDRONE_ORBIT_W = 1.5      # ... Winkelgeschwindigkeit (rad/s)
+GDRONE_SPEED = 13.0       # 10h: so schnell fliegt sie zum Ziel (m/s)
+GDRONE_ZAP_R = 3.0        # 10h: aus so viel m zerstört der Stromschlag die Drohne
+GDRONE_ZAP_CD = 0.9       # 10h: s zwischen zwei Abschüssen
 MOLO_R = 2.5              # m: brennende Fläche (Radius; ca. 5 m Durchmesser)
 MOLO_T = 5.0              # s brennt sie
 MOLO_DPS = 24.0           # Schaden pro Sekunde in den Flammen
@@ -1501,9 +1520,14 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     "pdrone": dict(hp=25.0, speed=3.6, wander=1.4, dmg=0.0, cooldown=11.0, windup=0.9, recover=0.3,
                    aggro=24.0, scale=DRONE_SIZE * 0.85, hear=1.0, fly=3.2, range=15.0, hit_r=0.42 * DRONE_SIZE * 0.85,
                    hit_h=0.5 * DRONE_SIZE * 0.85, stun=PDRONE_STUN, temp=True),
+    # 10h: Abwehrdrohne (orange): umkreist den Besitzer, greift nie Spieler/Monster an, nur Drohnen (GDRONE_*)
+    "gdrone": dict(hp=30.0, speed=GDRONE_SPEED, wander=1.4, dmg=0.0, cooldown=GDRONE_ZAP_CD, windup=0.2, recover=0.2,
+                   aggro=0.0, scale=DRONE_SIZE * 0.7, hear=0.0, fly=GDRONE_ORBIT_H, hit_r=0.42 * DRONE_SIZE * 0.7,
+                   hit_h=0.5 * DRONE_SIZE * 0.7, temp=True),
 }
 TEMP_MOBS = tuple(k for k, v in MOB_KINDS.items() if v.get("temp"))   # 10e: keine Monster (kein Respawn, keine Beute)
 ZAP_KINDS = ("drone", "pdrone")                                       # 10e: Drohnen, die mit Stromstössen betäuben
+DRONE_KINDS = ("drone", "pdrone", "gdrone")                           # 10h: alle Drohnen (Modell, Surren, Abwehr-Ziele)
 STUN_MIN, STUN_MAX = 1.0, 3.0   # s Betäubung durch die Drohne (zufällig dazwischen)
 STUN_IMMUNE = 3.0               # s nach dem Ende einer Betäubung: immun (Drohnen schiessen dann gar nicht)
 DRONE_MAX_PER_TARGET = 1        # höchstens so viele Drohnen beschiessen gleichzeitig denselben Spieler
@@ -1545,7 +1569,7 @@ INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Kar
 QUICK_MELEE_STAY = True  # 7a: nach F (Schnellschlag) bleibt die Nahkampfwaffe in der Hand, bis man mit 1-3/Mausrad wechselt
 
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "colossus": "Koloss", "drone": "Drohne",
-             "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne"}
+             "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne"}
 
 
 def end_tabs(koth):
@@ -1780,6 +1804,7 @@ MOB_SND = {
                      voice="growl_deep", voice_gap=(12.0, 24.0), voice_vol=1.0, voice_rate=(0.35, 0.42)),
     "drone":    dict(range=45),                                         # Surren statt Schritte (s. MOB_VOL)
     "pdrone":   dict(range=40),                                         # 10e: eigene Drohne surrt etwas höher
+    "gdrone":   dict(range=35),                                         # 10h: Abwehrdrohne
     "critter":  dict(range=18, step="tap", stride=0.7, step_vol=0.35, step_rate=(0.9, 1.2)),
 }
 MOB_VOL = {"drone_hum": 0.35, "drone_scan": 0.7, "drone_charge": 0.75, "colossus_rumble": 0.85,
@@ -1815,6 +1840,21 @@ NOISE_MM_ALPHA = 0.10     # Deckkraft der Kreisfläche (Rand etwas deutlicher)
 NOISE_WAVE_T = 0.7        # s: so lange breitet sich eine Schuss-Welle aus (Explosion: etwas länger)
 NOISE_ZOOM_MAX = 200.0    # m: weiter zoomt die Minimap nie heraus
 NOISE_DEBUG = False       # True: Lärmradien als Ringe am Boden anzeigen (Einzelspiel/Host)
+# --- 10h: Gegner auf der Minimap - nur Lärm-Pings und echter Sichtkontakt (keine roten Marker mehr bei jedem Schuss)
+ENEMY_PINGS = True        # Lärm anderer Spieler (Schüsse, Granaten/Explosionen, Raketen, Fahrzeuge/Heli) als grober Kreis
+ENEMY_PING_T = 3.0        # s: so lange bleibt ein Lärm-Ping sichtbar (blendet aus)
+ENEMY_PING_CD = 3.0       # s: höchstens so oft ein neuer Ping je Gegner (Dauerfeuer füllt die Karte nicht)
+ENEMY_PING_HEAR_ONLY = True   # nur wenn man (bzw. ein Verbündeter) im Lärmradius ist - man könnte es hören
+ENEMY_PING_OFFSET = 0.85  # Mitte des Kreises zufällig versetzt, bis zu so viel x Radius (der Gegner liegt immer im Kreis)
+ENEMY_PING_MIN_R = 8.0    # m: kleinster Kreis
+ENEMY_PING_COL = (1.0, 0.33, 0.22)   # Farbe der Lärm-Pings
+ENEMY_PING_ALPHA = 0.16   # Deckkraft der Kreisfläche (Rand deutlicher)
+ENEMY_SIGHT_R = 150.0     # m: Sichtweite - so weit sieht man einen Gegner (freie Sichtlinie, im Blickfeld)
+ENEMY_SIGHT_FOV = 100.0   # Grad: Blickfeld (waagerecht) für den Sichtkontakt
+ENEMY_SEEN_GLOW = 1.5     # s: so lange leuchtet der rote Punkt nach dem letzten Sichtkontakt (an der letzten Stelle) nach
+ENEMY_SIGHT_RATE = 10.0   # Prüfungen pro Sekunde (Sichtlinie)
+SET_FRAME_W = 0.008       # 10h: Set komplett - Rahmenstärke um die drei Ausrüstungs-Kacheln (Bildschirmeinheiten)
+SET_FRAME_PAD = 0.012     # 10h: ... Abstand zu den Kacheln
 
 
 # --------------------------------------------------------------- Spiellogik
@@ -2669,6 +2709,63 @@ class Mob:
         if self.state == "idle":
             self.state = "chase"
 
+    def guard_update(self, dt, world):
+        """10h: Abwehrdrohne - kreist um den Besitzer; kommt eine Monster-Drohne oder gegnerische Spieler-Drohne in
+        GDRONE_R (oder legt eine Drohne das Fahrzeug des Besitzers lahm), fliegt sie hin und zerstört sie per
+        Stromschlag. Greift nie Spieler oder andere Monster an."""
+        own = world.players.get(getattr(self, "owner", -1))
+        self.hurt_t = max(0.0, self.hurt_t - dt)
+        self.atk_cd = max(0.0, self.atk_cd - dt)
+        if own is None or own.hp <= 0:
+            self.life = 0.0                                # Besitzer tot: erlischt (siehe World.update_mobs)
+            return
+        oz = own.z
+        hc = world.heli_by_id(own.heli) if own.heli >= 0 else None
+        if hc is not None:
+            oz = hc.z + 1.5
+        tgt, td = None, 1e9
+        for o in world.mobs:
+            if o is self or o.state == "dead" or o.kind not in DRONE_KINDS:
+                continue
+            ow = getattr(o, "owner", None)
+            if ow is not None and world.allied(ow, own.pid):
+                continue                                   # eigene/verbündete Drohnen bleiben heil
+            d_own = math.dist((o.x, o.y, o.z), (own.x, own.y, oz + 1.0))
+            lim = GDRONE_R * (1.5 if o.zap_pid == own.pid else 1.0)   # greift den Besitzer/sein Fahrzeug an: weiter
+            if d_own <= lim:
+                d = math.dist((o.x, o.y, o.z), (self.x, self.y, self.z))
+                if d < td:
+                    tgt, td = o, d
+        if tgt is not None:
+            self.state = "chase"
+            gx, gy, gz = tgt.x, tgt.y, tgt.z + 0.2
+            if td <= GDRONE_ZAP_R and self.atk_cd <= 0 and world.los((self.x, self.y, self.z), (tgt.x, tgt.y, tgt.z)):
+                world.guard_zap(self, tgt)
+                self.atk_cd = GDRONE_ZAP_CD
+        else:
+            self.state = "idle"
+            self.phase += GDRONE_ORBIT_W * dt
+            a = self.phase + self.id * 1.3
+            gx = own.x + math.cos(a) * GDRONE_ORBIT_R
+            gy = own.y + math.sin(a) * GDRONE_ORBIT_R
+            gz = oz + GDRONE_ORBIT_H + 0.25 * math.sin(self.phase * 1.7)
+        dx, dy, dz = gx - self.x, gy - self.y, gz - self.z
+        d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        step = min(d, GDRONE_SPEED * dt * (1.0 if tgt is not None else min(1.0, 0.25 + d / 4.0)))
+        if d > 1e-4:
+            self.x += dx / d * step
+            self.y += dy / d * step
+            self.z += dz / d * step
+            if dx * dx + dy * dy > 1e-4:
+                self.turn_toward(dx, dy, dt, 500.0)
+        lo = edge_margin(world)
+        self.x = clampf(self.x, lo, WORLD - lo)
+        self.y = clampf(self.y, lo, WORLD - lo)
+        self.gz = world.height(self.x, self.y)
+        self.z = max(self.z, self.gz + 0.6)
+        self.hover = self.z - self.gz
+        self.speed_now = step / dt if dt > 0 else 0.0
+
     def set_travel_budget(self, tx, ty):
         """10g: so lange darf der Weg zum Geräusch/Ping dauern (Häuser, Burgmauern ...) - danach sucht es dort,
         wo es gerade ist, und gibt auf (Titan/Koloss: zurück ins Revier, andere: frei umherlaufen)."""
@@ -2715,6 +2812,9 @@ class Mob:
         return best
 
     def update(self, dt, world, players):
+        if self.kind == "gdrone" and self.state != "dead":
+            self.guard_update(dt, world)                   # 10h: Abwehrdrohne hat ihr eigenes Verhalten
+            return
         k = MOB_KINDS[self.kind]
         decay = math.exp(-7.0 * dt)
         if self.state == "dead":
@@ -7365,6 +7465,8 @@ class World:
             if getattr(t, "noise_t", 0.0) <= 0:            # Geschütz feuert: laut (alle 0,5 s gemeldet)
                 self.make_noise(t.x, t.y, NOISE_SHOT * 1.2, getattr(t, "z", None))
                 t.noise_t = 0.5
+                self.events.append(("lnoise", op.pid, round(t.x, 1), round(t.y, 1),
+                                    round(getattr(t, "z", None) or self.height(t.x, t.y) + 1.0, 1), NOISE_SHOT * 1.2))
             t.cd = FLAK_INTERVAL if flak else TUR_INTERVAL
             t.heat += FLAK_HEAT if flak else TUR_HEAT_SHOT
             if t.heat >= 1.0:
@@ -7982,6 +8084,8 @@ class World:
                         g.shots += 1
                         g.shot_t = self.mrng.uniform(0.25, 1.1) if self.mrng.random() < 0.8 else 0.08
                         self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
+                        self.events.append(("lnoise", g.owner, round(g.x, 1), round(g.y, 1), round(g.z + 0.5, 1),
+                                            DECOY_NOISE))           # 10h: Gegner hören den Decoy wie Schüsse
                         self.events.append(("decoy", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
                                             self.mrng.choice((0, 0, 1, 2, 3))))
                 if g.fuse > 0:
@@ -8029,6 +8133,9 @@ class World:
             return True
         if k == "drone":
             self.spawn_pdrone(g)
+            return False
+        if k == "guard":
+            self.spawn_gdrone(g)
             return False
         if k == "molotov":
             self.molotov(g)
@@ -8100,6 +8207,27 @@ class World:
         m.z = m.gz + m.hover
         self.mobs.append(m)
         self.events.append(("pdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+
+    def spawn_gdrone(self, g):
+        """10h: Abwehrdrohne steigt auf (Mob "gdrone", Besitzer = Werfer) und fliegt zum Besitzer."""
+        m = Mob("gdrone", g.x, g.y, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.owner, m.life, m.kills = g.owner, GDRONE_LIFE, 0
+        m.hover = 0.5
+        m.z = m.gz + m.hover
+        self.mobs.append(m)
+        self.events.append(("gdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+
+    def guard_zap(self, m, tgt):
+        """10h: Stromschlag der Abwehrdrohne: zerstört die Ziel-Drohne (Kill zählt für den Besitzer)."""
+        src = (round(m.x, 2), round(m.y, 2), round(m.z + 0.2, 2))
+        dst = (round(tgt.x, 2), round(tgt.y, 2), round(tgt.z + 0.2, 2))
+        self.events.append(("zap", src, dst, 1, 2))
+        self.hurt_mob(tgt, tgt.hp + 1.0, dst, (0.0, 0.0, -1.0), False, getattr(m, "owner", -1), -1)
+        m.kills = getattr(m, "kills", 0) + 1
+        if m.kills >= GDRONE_KILLS:
+            m.life = 0.0                                 # verbraucht: erlischt
 
     def molotov(self, g):
         """10e: Molotow zerschellt: Fläche auf der Ebene des Aufpralls brennt MOLO_T s (im Wasser: nichts)."""
@@ -8253,7 +8381,8 @@ class World:
         if self.shot_sink is not None:
             self.shot_sink(pl, eye, dirs, w)
             return
-        self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1)))
+        self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1),           # 10h: + Lärmradius, Höhe
+                            round(NOISE_SHOT * getattr(w, "loud", 1.0), 1), round(world_noise_z(self, pl), 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
         self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0), world_noise_z(self, pl))
         for d in dirs:
@@ -8285,6 +8414,8 @@ class World:
         for m in self.mobs:
             if m.state == "dead":
                 continue
+            if m.kind == "gdrone" and self.allied(getattr(m, "owner", -1), b.owner):
+                continue                                 # 10h: eigene/verbündete Abwehrdrohne fängt keine Kugeln
             if (max(x0, x1) < m.x - m.radius or min(x0, x1) > m.x + m.radius
                     or max(y0, y1) < m.y - m.radius or min(y0, y1) > m.y + m.radius):
                 continue
@@ -12564,7 +12695,7 @@ def mob_bar(bar):
 def _build_mob_lo(kind, look=None):
     """9d: einfaches Modell (Fernansicht). Gibt (root, torso, legL, legR, bar, bar_fg) zurück. Hüfte liegt bei z=0.75,
     Füsse bei z=0, Blick Richtung +y. look: eigenes Aussehen (für Mitspieler)."""
-    if kind in ("drone", "pdrone"):
+    if kind in DRONE_KINDS:
         root, torso, legs, bar = build_drone(kind)
         bar, fg = mob_bar(bar)
         return root, torso, legs[0], legs[1], bar, fg, legs
@@ -12899,7 +13030,9 @@ def _mob_hi_titan(rng):
 
 
 DRONE_PALS = {"drone": {}, "pdrone": {"hull": (0.46, 0.20, 0.66), "dk": (0.20, 0.08, 0.30), "lens": (0.95, 0.55, 1.0),
-                                      "coil": (0.85, 0.45, 1.0), "stripe": (0.95, 0.85, 1.0)}}   # 10e: Farben je Drohnenart
+                                      "coil": (0.85, 0.45, 1.0), "stripe": (0.95, 0.85, 1.0)},   # 10e: Farben je Drohnenart
+              "gdrone": {"hull": (0.86, 0.46, 0.08), "dk": (0.22, 0.20, 0.18), "lens": (1.0, 0.9, 0.35),
+                         "coil": (1.0, 0.72, 0.2), "stripe": (1.0, 0.95, 0.75), "shield": True}}   # 10h: Abwehr (orange)
 
 
 def build_drone(kind="drone"):
@@ -12914,6 +13047,17 @@ def build_drone(kind="drone"):
     lens_c, coil_c = pal.get("lens", (0.35, 0.85, 1.0)), pal.get("coil", (0.4, 0.85, 1.0))
     if "stripe" in pal:                                                  # Spieler-Drohne: leuchtender Ring um den Rumpf
         _ring_z(glow, 0, 0, 0.36, 0.385, 0.285, 0.285, pal["stripe"], None, 18)
+    if pal.get("shield"):                                                # 10h: Abwehrdrohne - Schutzring um alles + Kuppel
+        nseg = 24
+        for k in range(nseg):                                            # dünner Leuchtring aus Segmenten
+            a0, a1 = 2 * math.pi * k / nseg, 2 * math.pi * (k + 1) / nseg
+            _tube(glow, [(math.cos(a0) * 0.74, math.sin(a0) * 0.74, 0.365), (math.cos(a1) * 0.74, math.sin(a1) * 0.74, 0.365)],
+                  [0.018, 0.018], pal["stripe"], None, 5)
+        for k in range(4):
+            a = math.pi / 4 + k * math.pi / 2
+            _tube(body, [(math.cos(a) * 0.62, math.sin(a) * 0.62, 0.365), (math.cos(a) * 0.73, math.sin(a) * 0.73, 0.365)],
+                  [0.012, 0.012], alu, None, 4)
+        ell(glow, (0, 0, 0.47), 0.085, 0.085, 0.07, pal["lens"], None, rings=4)
     ell(body, (0, 0, 0.33), 0.27, 0.27, 0.1, hull, rng, mat="metal", rings=5)
     _ring_z(body, 0, 0, 0.3, 0.33, 0.275, 0.275, dk, rng)
     ell(body, (0, -0.02, 0.42), 0.14, 0.14, 0.06, dk, rng, rings=4)
@@ -13009,7 +13153,7 @@ _MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_h
 def build_mob(kind, look=None):
     """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
     Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
-    if kind in ("drone", "pdrone"):
+    if kind in DRONE_KINDS:
         root, torso, legs, bar = build_drone(kind)
         bar, fg = mob_bar(bar)
         return root, torso, legs[0], legs[1], bar, fg, legs
@@ -17353,7 +17497,8 @@ class MorePage(SetupPage):
 # ------------------------------------------------------------------ Netzwerk
 # Alles nur mit der Standardbibliothek (socket, json, threading), nicht blockierend,
 # damit das Spiel nie auf das Netz warten muss.
-KINDS = ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan", "pdrone")   # Index in den Snapshots (neue hinten!)
+KINDS = ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan", "pdrone",
+         "gdrone")   # Index in den Snapshots (neue hinten!)
 STATES = ("idle", "chase", "attack", "dead")
 PLAYER_COLORS = [(0.20, 0.35, 0.80), (0.80, 0.25, 0.25), (0.25, 0.70, 0.35), (0.85, 0.70, 0.15),
                  (0.60, 0.30, 0.75), (0.15, 0.70, 0.75), (0.90, 0.50, 0.15), (0.85, 0.85, 0.85)]
@@ -114070,9 +114215,11 @@ def gren_mesh(kind, m=None, rng=None):
             a = 2 * math.pi * k / 4 + 0.4
             box(m, math.cos(a) * 0.12, math.sin(a) * 0.12, -0.485, 0.04, 0.04, 0.012, black)
         _gren_fuse(m, rng, 0.30, lever_r=0.25, lever_z=-0.32)
-    elif kind == "drone":
+    elif kind in ("drone", "guard"):                                                       # 10h: Abwehr = orange
         ell(m, (0, 0, -0.02), 0.30, 0.30, 0.30, c, rng, rings=10)
-        _ring_z(m, 0, 0, -0.04, 0.02, 0.31, 0.31, (0.92, 0.85, 1.0), rng, 20)               # Leuchtring
+        _ring_z(m, 0, 0, -0.04, 0.02, 0.31, 0.31, (1.0, 0.92, 0.7) if kind == "guard" else (0.92, 0.85, 1.0), rng, 20)
+        if kind == "guard":
+            _ring_z(m, 0, 0, 0.12, 0.15, 0.27, 0.27, (0.18, 0.18, 0.2), rng, 20)              # zweiter, dunkler Ring
         for k in range(4):                                                                  # angelegte Rotorarme
             a = math.pi / 4 + k * math.pi / 2
             ca, sa = math.cos(a), math.sin(a)
@@ -114081,7 +114228,8 @@ def gren_mesh(kind, m=None, rng=None):
             loft(m, [(ca * 0.31, sa * 0.31, -0.17), (ca * 0.31 + sa * 0.16, sa * 0.31 - ca * 0.16, -0.165)],
                  [0.03, 0.02], [0.006, 0.006], alu, None, sides=4)                          # Rotorblatt (gefaltet)
         _tube(m, [(0, 0.24, 0.0), (0, 0.31, 0.0)], [0.08, 0.075], black, rng, 10)          # Kamera
-        _tube(m, [(0, 0.31, 0.0), (0, 0.32, 0.0)], [0.055, 0.055], (0.9, 0.55, 1.0), None, 10)
+        _tube(m, [(0, 0.31, 0.0), (0, 0.32, 0.0)], [0.055, 0.055], (1.0, 0.9, 0.35) if kind == "guard" else (0.9, 0.55, 1.0),
+              None, 10)
         _tube(m, [(0, 0, 0.27), (0, 0, 0.36)], [0.10, 0.08], alu, rng, 10)                  # Auslöser oben
         _tube(m, [(0.06, 0, 0.36), (0.22, 0, 0.30), (0.30, 0, 0.1)], [(0.02, 0.06), (0.02, 0.06), (0.018, 0.05)], alu, rng, 4)
     elif kind == "molotov":
@@ -114203,14 +114351,14 @@ def gren_icon_mesh(kind, s=0.05):
                 if (x / 0.78) ** 2 + ((z + 0.15) / 0.92) ** 2 < 0.8:
                     rect((x - 0.12) * s, (z + 0.04) * s, (x + 0.12) * s, (z + 0.3) * s, c)
         fuse(0.7 * s, 0.7, -0.5)
-    elif kind == "drone":
+    elif kind in ("drone", "guard"):
         disc(0, 0, 0.85 * s, 0.85 * s, c)
         rect(-0.85 * s, -0.05 * s, 0.85 * s, 0.08 * s, hi)                      # Leuchtring
         for sx in (-1, 1):
             rect(sx * 0.85 * s, -0.55 * s, sx * 1.05 * s, 0.35 * s, lo)         # Rotorarme
             rect(sx * 0.7 * s, -0.75 * s, sx * 1.2 * s, -0.6 * s, dk)
         disc(0, 0.0, 0.28 * s, 0.28 * s, dk)
-        disc(0, 0.0, 0.18 * s, 0.18 * s, (0.95, 0.65, 1.0))
+        disc(0, 0.0, 0.18 * s, 0.18 * s, (1.0, 0.9, 0.35) if kind == "guard" else (0.95, 0.65, 1.0))
         rect(-0.18 * s, 0.82 * s, 0.18 * s, 1.05 * s, alu)
     elif kind == "molotov":
         rect(-0.42 * s, -1.0 * s, 0.42 * s, 0.1 * s, c)
@@ -114845,7 +114993,7 @@ class Sfx:
             st = self.mob_st.get(m.id)
             if st is None:
                 st = self.mob_st[m.id] = {"x": m.x, "y": m.y, "walk": 0.0, "voice": rng.uniform(*cfg.get("voice_gap", (5.0, 10.0))),
-                                          "state": "idle" if m.kind in ZAP_KINDS else m.state,   # Drohne, die schon
+                                          "state": "idle" if m.kind in DRONE_KINDS else m.state,   # Drohne, die schon
                                           "atk": False, "fast": False, "fear_t": 0.0}          # jagt: piept einmal
             moved = math.hypot(m.x - st["x"], m.y - st["y"])
             st["x"], st["y"] = m.x, m.y
@@ -114862,7 +115010,7 @@ class Sfx:
                 if m.state != "attack":
                     self.voice(cfg["voice"], pos, cfg["voice_vol"], rng.uniform(*cfg["voice_rate"]))
             # Zustandswechsel
-            if m.kind in ZAP_KINDS:
+            if m.kind in DRONE_KINDS:
                 if hums < MOB_SND_HUMS:                    # Surren der nächsten Drohnen
                     hums += 1
                     loops_on.add(("hum", m.id))
@@ -117130,6 +117278,7 @@ class Game(ShowBase):
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
+        self.intel_reset()
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
         self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
@@ -117366,6 +117515,7 @@ class Game(ShowBase):
             world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
+        self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
             world.shot_sink = self.client.send_shot
@@ -117838,6 +117988,20 @@ class Game(ShowBase):
             ico.setZ(0.014)
             self.gear_tiles[sl] = {"tile": tile, "bg": bg, "sym": sym, "item": item, "label": label, "ico": ico,
                                    "gi": None}
+        # 10h: Set komplett - Rahmen in der eigenen Spielerfarbe um den ganzen Block der drei Kacheln
+        fr = self.a2dRightCenter.attachNewNode("gear_set_frame")
+        pad, th = SET_FRAME_PAD, SET_FRAME_W
+        gx0, gx1 = -GEAR_HUD_W - 0.03 - pad, -0.03 + pad
+        gy1 = GEAR_HUD_Y0 + GEAR_HUD_H / 2 + pad
+        gy0 = GEAR_HUD_Y0 - (len(GEAR_SLOTS) - 1) * (GEAR_HUD_H + 0.02) - GEAR_HUD_H / 2 - pad
+        for a0, b0, a1, b1 in ((gx0 - th, gy1, gx1 + th, gy1 + th), (gx0 - th, gy0 - th, gx1 + th, gy0),
+                               (gx0 - th, gy0, gx0, gy1), (gx1, gy0, gx1 + th, gy1)):
+            cm = CardMaker("edge")
+            cm.setFrame(a0, a1, b0, b1)
+            fr.attachNewNode(cm.generate())
+        fr.setTransparency(TransparencyAttrib.MAlpha)
+        fr.hide()
+        self.gear_set_frame = fr
         # Munition und Waffenwahl (Slot 1 = Hauptwaffe, 2 = Kleinwaffe, 3 = Kistenwaffe)
         self.ammo_text = OnscreenText(text="", parent=self.a2dBottomRight, pos=(-0.08, 0.08),
                                       scale=0.1, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
@@ -120613,6 +120777,8 @@ class Game(ShowBase):
                               (1.0, 0.6, 0.2), p=0.5, fog=False)
             elif kind == "flash":              # 10e: Blendgranate
                 self.flash_hit(e[1], e[2] if len(e) > 2 else -1)
+                if len(e) > 2:
+                    self.heard_noise(e[2], e[1][0], e[1][1], e[1][2], NOISE_EXPLOSION * 0.7)
             elif kind == "smoke":              # 10e: Rauchgranate zündet (die Wolke baut die Ansicht selbst)
                 self.sfx.play("gas", (e[2], e[3], e[4]), 0.9, 1.2)
                 for _ in range(8):
@@ -120646,6 +120812,8 @@ class Game(ShowBase):
             elif kind == "explosion":
                 if len(e) > 3 and e[3] == self.my_id:
                     self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION, e[1][2])
+                if len(e) > 3 and isinstance(e[3], int) and e[3] >= 0:
+                    self.heard_noise(e[3], e[1][0], e[1][1], e[1][2], NOISE_EXPLOSION)   # 10h
                 self.explosion_fx(e[1], e[2])
                 self.sfx.explosion(e[1], e[2], e[3] if len(e) > 3 else None)
                 pl = self.player
@@ -120730,7 +120898,10 @@ class Game(ShowBase):
                         v_ = self.player_views.get(e[1])
                         if v_ is not None:          # Mündungsfeuer und Rückstoss an der fremden Figur
                             v_.fire(op.cur)
-                    self.pings[e[1]] = (time.time(), e[2], e[3])
+                    self.heard_noise(e[1], e[2], e[3], e[5] if len(e) > 5 else None,
+                                     e[4] if len(e) > 4 else NOISE_SHOT)     # 10h: Lärm-Ping statt rotem Marker
+            elif kind == "lnoise":             # 10h: anderer lauter Lärm eines Spielers (Decoy, Geschütz)
+                self.heard_noise(e[1], e[2], e[3], e[4], e[5])
             elif kind == "lootdbg":            # LOOT_DEBUG: Chancen nach dem Öffnen (nur für den Spieler selbst)
                 if e[1] == self.my_id:
                     for ln in str(e[2]).split("\n"):
@@ -120847,7 +121018,13 @@ class Game(ShowBase):
                     self.player.shock_cd = SHOCK_CD
                     self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
             elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
-                self.zap_fx(e[1], e[2], bool(e[3]), col=(0.85, 0.5, 1.0) if len(e) > 4 and e[4] else (0.6, 0.9, 1.0))
+                fl = e[4] if len(e) > 4 else 0
+                self.zap_fx(e[1], e[2], bool(e[3]), col=((1.0, 0.72, 0.25) if fl == 2 else (0.85, 0.5, 1.0) if fl
+                                                          else (0.6, 0.9, 1.0)))
+            elif kind == "gdrone":             # 10h: Abwehrdrohne steigt auf
+                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.6, 1.6)
+                if e[1] == self.my_id:
+                    self.toast("Abwehrdrohne aktiv", (1.0, 0.65, 0.25), 1.5)
             elif kind == "stun":
                 if e[1] == self.my_id:
                     pl = self.player
@@ -121019,6 +121196,7 @@ class Game(ShowBase):
                 self.feed.clear()
                 self.close_end_screen()
                 self.pings.clear()
+                self.intel_reset()
         self.world.events.clear()
 
     def reload_pose(self, u, magp, mag, ej):
@@ -121831,7 +122009,7 @@ class Game(ShowBase):
             if moving:
                 np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
             else:                                              # liegt: auf die Seite gekippt
-                np.setHpr(g.gid * 47.0, 90.0 if g.kind not in ("drone", "frag") else 0.0, 0)
+                np.setHpr(g.gid * 47.0, 90.0 if g.kind not in ("drone", "frag", "guard") else 0.0, 0)
             fl = np.getPythonTag("flame")
             if fl is not None:
                 flame_flicker(fl)
@@ -122671,7 +122849,9 @@ class Game(ShowBase):
 
         self.bm_arrow = arrow
         self.bm_me = arrow(0.034, (0.3, 1.0, 0.3, 1))
-        self.bm_dots = {}                                   # Spieler-ID -> Pfeil (kurz nach einem Schuss)
+        self.bm_dots = {}                                   # Spieler-ID -> Punkt (10h: gesichteter Gegner)
+        self.bm_dot_factory = dot
+        self.bm_layer = lay
         self.bm_vehs = {v.id: dot(0.012, (1.0, 0.85, 0.2, 1)) for v in self.world.vehicles}
         self.bm_helis = {q.id: dot(0.016, (0.45, 0.85, 1.0, 1)) for q in self.world.helis}
         hint = OnscreenText(text="M   Karte schliessen", parent=root, pos=(0, -H - 0.085), scale=0.04,
@@ -122699,21 +122879,7 @@ class Game(ShowBase):
         p = self.bm_xy(pl.x, pl.y)
         self.bm_me.setPos(p[0], 0, p[1])
         self.bm_me.setR(-pl.heading)
-        now = time.time()
-        for pid, (t0, _x, _y) in list(self.pings.items()):          # schiessende Spieler: wie auf der Minimap, kurz sichtbar
-            age = now - t0
-            n = self.bm_dots.get(pid)
-            if n is None:
-                n = self.bm_dots[pid] = self.bm_arrow(0.028, (1.0, 0.25, 0.2, 1))
-            other = self.world.players.get(pid)
-            if age > self.PING_T or other is None or other.hp <= 0:
-                n.hide()
-                continue
-            q = self.bm_xy(other.x, other.y)
-            n.show()
-            n.setPos(q[0], 0, q[1])
-            n.setR(-other.heading)
-            n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
+        self.draw_intel_big()                       # 10h: Lärm-Pings und Sichtkontakte wie auf der Minimap
         for v in self.world.vehicles:
             n = self.bm_vehs.get(v.id)
             if n is not None:
@@ -122739,7 +122905,257 @@ class Game(ShowBase):
         else:
             self.on_mm_zoom(-1)
 
-    PING_T = 3.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
+    PING_T = 3.0          # (alt, 10h: ersetzt durch ENEMY_PING_T)
+
+    # ------------------------------------------------------------ 10h: Gegner-Lärm und Sichtkontakt
+    def intel_reset(self):
+        """10h: Lärm-Pings und Sichtungen vergessen (neue Runde / neues Spiel)."""
+        for pg in getattr(self, "enemy_pings", ()):
+            for key in ("mm", "bm"):
+                if pg.get(key) is not None:
+                    pg[key][0].removeNode()
+        self.enemy_pings = []                      # je Ping: dict(pid, x, y, r, t0, mm=(Knoten, Daten), bm=...)
+        self.enemy_ping_last = {}                  # Gegner-ID -> Zeit des letzten Pings (ENEMY_PING_CD)
+        self.sightings = {}                        # Beobachter-ID -> {Gegner-ID: (Zeit, x, y)} - pro Spieler (Team-fähig)
+        self.intel_clock = self.intel_veh_clock = 0.0
+        for d in (getattr(self, "mm_dots", {}), getattr(self, "bm_dots", {})):
+            for n in d.values():
+                n.hide()
+
+    def intel_allies(self):
+        """10h: Spieler, deren Sichtungen und gehörte Pings man teilt: man selbst und (Team-Modi) die Verbündeten."""
+        w = self.world
+        return [p for pid, p in w.players.items() if w.allied(self.my_id, pid)]
+
+    def heard_noise(self, src, x, y, z, r):
+        """10h: Ein anderer Spieler (src) macht lauten Lärm bei (x, y, z) mit Radius r. Hört man es (oder ein Verbündeter
+        - ENEMY_PING_HEAR_ONLY), erscheint ein grober Kreis auf der Minimap; Mitte zufällig versetzt (der Gegner liegt
+        darin), höchstens alle ENEMY_PING_CD s je Gegner."""
+        w = self.world
+        if not ENEMY_PINGS or src is None or src < 0 or w.allied(self.my_id, src) or r <= 0:
+            return
+        if not hasattr(self, "enemy_pings"):
+            self.intel_reset()
+        now = time.time()
+        if now - self.enemy_ping_last.get(src, -1e9) < ENEMY_PING_CD:
+            return
+        if z is None:
+            z = w.height(x, y) + 1.0
+        if ENEMY_PING_HEAR_ONLY:
+            heard = False
+            for p in self.intel_allies():
+                if p.hp <= 0:
+                    continue
+                dz = (p.z + 1.0 - z) if NOISE_SPHERE else 0.0
+                if (p.x - x) ** 2 + (p.y - y) ** 2 + dz * dz <= r * r:
+                    heard = True
+                    break
+            if not heard:
+                return
+        self.enemy_ping_last[src] = now
+        rr = max(ENEMY_PING_MIN_R, r)
+        a, d = self.prng.uniform(0, 2 * math.pi), rr * ENEMY_PING_OFFSET * math.sqrt(self.prng.random())
+        self.enemy_pings.append(dict(pid=src, x=x + math.cos(a) * d, y=y + math.sin(a) * d, r=rr, t0=now,
+                                     mm=None, bm=None))
+        if len(self.enemy_pings) > 12:
+            old = self.enemy_pings.pop(0)
+            for key in ("mm", "bm"):
+                if old[key] is not None:
+                    old[key][0].removeNode()
+
+    PING_SEG = 40
+
+    def ping_geom(self, parent, sort):
+        """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
+        wird er am Rand abgeschnitten)."""
+        n = self.PING_SEG
+        fmt = GeomVertexFormat.getV3c4()
+        vd = GeomVertexData("ping", fmt, Geom.UHDynamic)
+        vd.setNumRows(1 + 2 * n)
+        cw = GeomVertexWriter(vd, "color")
+        vw = GeomVertexWriter(vd, "vertex")
+        r_, g_, b_ = ENEMY_PING_COL
+        cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
+        vw.addData3(0, 0, 0)
+        for i in range(n):
+            cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)          # innerer Ring (Ende der Fläche)
+            vw.addData3(0, 0, 0)
+        for i in range(n):
+            cw.addData4(r_, g_, b_, 0.75)                      # äusserer Ring (Rand)
+            vw.addData3(0, 0, 0)
+        prim = GeomTriangles(Geom.UHStatic)
+        for i in range(n):
+            j = (i + 1) % n
+            prim.addVertices(0, 1 + i, 1 + j)
+            prim.addVertices(1 + i, 1 + n + i, 1 + n + j)
+            prim.addVertices(1 + i, 1 + n + j, 1 + j)
+        geom = Geom(vd)
+        geom.addPrimitive(prim)
+        gn = GeomNode("ping")
+        gn.addGeom(geom)
+        np_ = parent.attachNewNode(gn)
+        np_.setTwoSided(True)
+        np_.setLightOff()
+        np_.setTransparency(TransparencyAttrib.MAlpha)
+        np_.setBin("fixed", sort)
+        np_.setDepthTest(False)
+        np_.setDepthWrite(False)
+        return np_, vd
+
+    def ping_fill(self, vd, pts, ctr):
+        """10h: Kreis-Punkte (pts = äusserer Rand) und Mitte ctr ins Mesh schreiben."""
+        vw = GeomVertexWriter(vd, "vertex")
+        vw.addData3(ctr[0], 0, ctr[1])
+        for px, py in pts:
+            vw.addData3(ctr[0] + (px - ctr[0]) * 0.94, 0, ctr[1] + (py - ctr[1]) * 0.94)
+        for px, py in pts:
+            vw.addData3(px, 0, py)
+
+    def update_intel(self):
+        """10h: Sichtkontakte prüfen (pro verbündetem Beobachter), Fahrzeug-/Heli-Lärm hören und alles auf der
+        Minimap zeichnen: Lärm-Pings als Kreise, gesichtete Gegner als roter Punkt (+ ENEMY_SEEN_GLOW Nachleuchten)."""
+        if not hasattr(self, "enemy_pings"):
+            self.intel_reset()
+        w, pl, now = self.world, self.player, time.time()
+        allies = self.intel_allies()
+        enemies = [p for pid, p in w.players.items() if not w.allied(self.my_id, pid) and p.hp > 0]
+        if now - self.intel_clock >= 1.0 / ENEMY_SIGHT_RATE:
+            self.intel_clock = now
+            half = math.radians(ENEMY_SIGHT_FOV / 2.0)
+            for ob in allies:
+                seen = self.sightings.setdefault(ob.pid, {})
+                if ob.hp <= 0 or getattr(ob, "prespawn", False):
+                    continue
+                h = math.radians(ob.heading)
+                lx, ly = -math.sin(h), math.cos(h)
+                eye = (ob.x, ob.y, ob.z + body_h(ob) - 0.15)
+                for tg in enemies:
+                    dx, dy, dz = tg.x - ob.x, tg.y - ob.y, tg.z + 1.0 - eye[2]
+                    d = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    if d > ENEMY_SIGHT_R:
+                        continue
+                    dh = math.hypot(dx, dy)
+                    if dh > 1.5 and (dx * lx + dy * ly) / dh < math.cos(half):
+                        continue                               # ausserhalb des Blickfelds
+                    vis = False
+                    for zz in (body_h(tg) * 0.85, body_h(tg) * 0.45):    # Kopf oder Körper frei
+                        tp = (tg.x, tg.y, tg.z + zz)
+                        if w.los(eye, tp) and not (w.smokes and w.smoke_blocks(eye, tp)):
+                            vis = True
+                            break
+                    if vis:
+                        seen[tg.pid] = (now, tg.x, tg.y)
+        if now - self.intel_veh_clock >= NOISE_TICK:            # Fahrzeuge/Heli der Gegner: Lärm wie Monster ihn hören
+            self.intel_veh_clock = now
+            for tg in enemies:
+                if tg.vehicle >= 0 or tg.heli >= 0 or tg.mount >= 0:
+                    r = w.player_noise(tg)
+                    if r > 0:
+                        self.heard_noise(tg.pid, tg.x, tg.y, w.noise_z(tg), r)
+        # gesichtete Gegner: neueste Sichtung aller Verbündeten
+        best = {}
+        for ob in allies:
+            for tid, (t, x, y) in self.sightings.get(ob.pid, {}).items():
+                if tid not in best or t > best[tid][0]:
+                    best[tid] = (t, x, y)
+        self.intel_seen = best
+        shown = set()
+        for tid, (t, x, y) in best.items():
+            tg = w.players.get(tid)
+            age = now - t
+            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
+                continue
+            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
+            px, py = (tg.x, tg.y) if live else (x, y)
+            p = self.mm_xy(px, py, False)
+            if p is None:
+                continue
+            n = self.mm_dots.get(tid)
+            if n is None:
+                n = self.mm_dots[tid] = self.mm_dot_factory(0.012, (1.0, 0.2, 0.15, 1))
+            n.show()
+            n.setPos(p[0], 0, p[1])
+            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
+            shown.add(tid)
+        for tid, n in self.mm_dots.items():
+            if tid not in shown:
+                n.hide()
+        # Lärm-Pings
+        R = self.mm_R
+        k = R / self.mm_vis
+        keep = []
+        for pg in self.enemy_pings:
+            age = now - pg["t0"]
+            if age > ENEMY_PING_T:
+                for key in ("mm", "bm"):
+                    if pg[key] is not None:
+                        pg[key][0].removeNode()
+                continue
+            keep.append(pg)
+            if pg["mm"] is None:
+                pg["mm"] = self.ping_geom(self.mm_root, 22)
+            np_, vd = pg["mm"]
+            c = self.mm_xy(pg["x"], pg["y"], False)
+            if c is None:                                         # Mitte ausserhalb: Lage trotzdem rechnen
+                h = math.radians(pl.heading)
+                dx, dy = pg["x"] - pl.x, pg["y"] - pl.y
+                c = ((dx * math.cos(h) + dy * math.sin(h)) * k, (-dx * math.sin(h) + dy * math.cos(h)) * k)
+            rr = pg["r"] * k
+            if math.hypot(*c) - rr > R:
+                np_.hide()
+                continue
+            lim = R * 0.985
+            pts = []
+            for i in range(self.PING_SEG):
+                a = 2 * math.pi * i / self.PING_SEG
+                qx, qy = c[0] + math.cos(a) * rr, c[1] + math.sin(a) * rr
+                dq = math.hypot(qx, qy)
+                if dq > lim:                                      # am Rand der Minimap abschneiden
+                    qx, qy = qx / dq * lim, qy / dq * lim
+                pts.append((qx, qy))
+            dc = math.hypot(*c)
+            cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
+            self.ping_fill(vd, pts, cc)
+            np_.show()
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, age))
+        self.enemy_pings = keep
+
+    def draw_intel_big(self):
+        """10h: dieselben Pings und Sichtungen auf der grossen Karte (M)."""
+        if not hasattr(self, "enemy_pings"):
+            return
+        w, now, H = self.world, time.time(), self.BIGMAP_H
+        k = 2 * H / WORLD
+        for pg in self.enemy_pings:
+            if pg["bm"] is None:
+                pg["bm"] = self.ping_geom(self.bm_root, 62)
+            np_, vd = pg["bm"]
+            c = self.bm_xy(pg["x"], pg["y"])
+            rr = pg["r"] * k
+            pts = []
+            for i in range(self.PING_SEG):
+                a = 2 * math.pi * i / self.PING_SEG
+                pts.append((max(-H, min(H, c[0] + math.cos(a) * rr)), max(-H, min(H, c[1] + math.sin(a) * rr))))
+            self.ping_fill(vd, pts, c)
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, now - pg["t0"]))
+        shown = set()
+        for tid, (t, x, y) in getattr(self, "intel_seen", {}).items():
+            tg = w.players.get(tid)
+            age = now - t
+            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
+                continue
+            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
+            q = self.bm_xy(*((tg.x, tg.y) if live else (x, y)))
+            n = self.bm_dots.get(tid)
+            if n is None:
+                n = self.bm_dots[tid] = self.bm_dot_factory(0.016, (1.0, 0.2, 0.15, 1))
+            n.show()
+            n.setPos(q[0], 0, q[1])
+            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
+            shown.add(tid)
+        for tid, n in self.bm_dots.items():
+            if tid not in shown:
+                n.hide()
 
     def mm_xy(self, x, y, clamp=True):
         """Weltpunkt -> Position auf der runden Karte (relativ zu dir und deiner Blickrichtung).
@@ -122848,21 +123264,7 @@ class Game(ShowBase):
         self.mm_me.setPos(0, 0, 0)
         self.mm_me.setR(0)                          # eigener Pfeil zeigt immer nach oben
         self.mm_north.setPos(sh * R * 0.84, ch * R * 0.84 - 0.014)
-        now = time.time()
-        for pid, (t0, _x, _y) in list(self.pings.items()):
-            age = now - t0
-            n = self.mm_dots.get(pid)
-            if n is None:
-                n = self.mm_dots[pid] = self.mm_arrow_factory(0.019, (1.0, 0.25, 0.2, 1))
-            other = self.world.players.get(pid)
-            p = self.mm_xy(other.x, other.y, False) if other is not None else None
-            if age > self.PING_T or other is None or other.hp <= 0 or p is None:
-                n.hide()
-                continue
-            n.show()                               # folgt dem Spieler, solange er sichtbar ist
-            n.setPos(p[0], 0, p[1])
-            n.setR(-(other.heading - pl.heading))
-            n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
+        self.update_intel()                         # 10h: Lärm-Pings und Sichtkontakte (statt roter Marker bei jedem Schuss)
         w = self.world
         if w.strike == 1 and w.strike_by == self.my_id and w.phase == "play":
             p = self.mm_xy(w.strike_x, w.strike_y, False)
@@ -123126,8 +123528,19 @@ class Game(ShowBase):
                 self.ability_icons["shock"].hide()
             for tl in self.gear_tiles.values():
                 tl["tile"].hide()
+            if getattr(self, "gear_set_frame", None) is not None:
+                self.gear_set_frame.hide()
             return
         full = next((s for s in SETS if alive and set_full(pl, s)), None)   # 7c: komplettes Set: Kacheln leuchten
+        fr = getattr(self, "gear_set_frame", None)
+        if fr is not None:                                      # 10h: Rahmen in der Spielerfarbe
+            if full is not None:
+                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0)["acc"]
+                fr.setColor(acc[0], acc[1], acc[2], 1.0)
+                fr.setColorScale(1, 1, 1, 0.8 + 0.2 * math.sin(time.time() * 3.0))
+                fr.show()
+            else:
+                fr.hide()
         shock = self.ability_icons.get("shock")
         if shock is not None:
             if full == "shield":
