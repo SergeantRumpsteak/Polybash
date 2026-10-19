@@ -10,7 +10,8 @@ Steuerung:
   Linke Maus     schiessen       Rechte Maus          zielen (Zoom)
   R              nachladen       1-3 / Mausrad        Waffe wechseln, 4 = Nahkampfwaffe
   Q / E          nach links / rechts um die Ecke lehnen
-  G              Granate werfen (2 zum Start, 2,5 s Zündzeit)
+  G              Granate werfen (2 Splittergranaten zum Start). 10e: G halten = weiter werfen (Ladebalken + Bogen-
+                 Vorschau), kurz tippen = kurzer Wurf. H oder Mausrad bei gehaltenem G: Granatenart wechseln
   F              benutzen: Lootkiste öffnen, am Boden liegende Waffe aufheben,
                  Fahrzeug ein-/aussteigen; ist nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
   4              Nahkampfwaffe (zurück zu den Schusswaffen mit 1-3 / Mausrad); Linke Maus = zuschlagen
@@ -92,6 +93,11 @@ festkrallen; CLING_*). Hermes-Set stärker (HERMES_SET_*).
 10d: Katana-Rundumschlag mit Drehung (auch in der Ego-Ansicht) und Slash-Ring, Schwert-Sprungangriff mit Windstoss-Schnitt
 und Staubwelle (spawn_slash_fx). Machete -> Erschöpfungsklinge (Wirkung des alten Erschöpfungsdolchs), Dolch ->
 Diebesdolch (Monster-Kill: THIEF_EXTRA Gegenstand mehr).
+10e: Granaten-Arsenal (GREN_KINDS, Inventar pl.gren je Art): Splitter, Decoy (Schusslärm DECOY_*), Blendgranate (FLASH_*:
+Abstand + Blickrichtung, weiss -> verschwommenes Nachbild, Pfeifton), Rauch (SMOKE_*: Zellen-Ausbreitung smoke_cells, bleibt
+in Räumen/Tunneln, blockiert Monster-Sicht), Drohnen-Granate (Mob "pdrone", lila, PDRONE_*), Molotow (MOLO_*: brennt nur
+auf der Ebene des Aufpralls, fire_cells), Airdrop-Fackel (AIR_*: Frachtflugzeug, Kiste am Fallschirm, je Satz braun/blau/gold).
+Wurfweite nach Haltedauer (GREN_SPEED_MIN..MAX, GREN_CHARGE_T). Beute: GREN_LOOT_W (Art je Stufe), GREN_LOOT_N (Stück).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -460,7 +466,7 @@ RESPAWN_T = 12.0
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 38         # Protokollversion: nur gleiche Versionen spielen zusammen
+NET_VERSION = 39         # Protokollversion: nur gleiche Versionen spielen zusammen
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -512,6 +518,65 @@ GREN_G = 14.0            # Schwerkraft der Granate
 GREN_R, GREN_DMG = 7.0, 120.0
 GREN_COOLDOWN = 0.7
 GREN_ANIM_T = 0.6         # Dauer der Wurfanimation (Arm)
+# --- 10e: Granaten-Arsenal. Arten (Reihenfolge = Index im Netz; neue Arten nur hinten anhängen!)
+GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare")
+GREN_NAMES = {"frag": "Splittergranate", "decoy": "Decoy", "flash": "Blendgranate", "smoke": "Rauchgranate",
+              "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel"}
+GREN_SHORT = {"frag": "Splitter", "decoy": "Decoy", "flash": "Blend", "smoke": "Rauch", "drone": "Drohne",
+              "molotov": "Molotow", "flare": "Airdrop"}
+GREN_COL = {"frag": (0.30, 0.40, 0.20), "decoy": (0.80, 0.68, 0.20), "flash": (0.78, 0.80, 0.84),
+            "smoke": (0.42, 0.46, 0.50), "drone": (0.58, 0.26, 0.85), "molotov": (0.45, 0.62, 0.30),
+            "flare": (0.85, 0.15, 0.12)}          # Erkennungsfarbe (Modell, HUD-Symbol)
+GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
+             "decoy": "Landet und macht dort Schusslärm - Monster laufen hin. Kein Schaden",
+             "flash": "Blendet bis 10 m (je näher und je mehr man hinschaut, desto stärker)",
+             "smoke": "Rauchwolke, blockiert die Sicht (bleibt in Räumen und Tunneln)",
+             "drone": "Setzt eine eigene lila Drohne frei, die Gegner betäubt",
+             "molotov": "Brennende Fläche beim Aufprall (nicht im Wasser)",
+             "flare": "Rote Fackel: ein Frachtflugzeug wirft dort eine Kiste ab"}
+GREN_LOOT_N = {"decoy": 3, "frag": 2, "flash": 2, "smoke": 2, "drone": 1, "molotov": 2, "flare": 3}   # Stück je Beute
+GREN_LOOT_W = {"common": {"frag": 30, "decoy": 24, "flash": 18, "smoke": 18, "molotov": 10, "drone": 0, "flare": 0},
+               "rare":   {"frag": 22, "decoy": 12, "flash": 18, "smoke": 14, "molotov": 18, "drone": 10, "flare": 6},
+               "gold":   {"frag": 14, "decoy": 6, "flash": 12, "smoke": 10, "molotov": 18, "drone": 20, "flare": 20}}
+GREN_FUSE_K = {"frag": GREN_FUSE, "decoy": 1.0, "flash": 1.6, "smoke": 1.4, "drone": 0.9, "molotov": 6.0,
+               "flare": 1.2}               # s bis zur Wirkung (Molotow: beim Aufprall, spätestens dann)
+GREN_SPEED_MIN = 8.0      # m/s: kurz getippt (ca. 6 m weit)
+GREN_SPEED_MAX = 31.0     # m/s: voll aufgeladen (ca. 65-70 m weit; früher fest 21 m/s = 30 m)
+GREN_CHARGE_T = 1.0       # s G halten bis zur vollen Wurfweite
+GREN_TAP_T = 0.15         # s: kürzer gehalten zählt als "kurz getippt" (kleinster Wurf)
+GREN_ARC_T = 3.0          # s Flugbahn in der Bogen-Vorschau
+GREN_ARC_DT = 0.04        # s Schrittweite der Vorschau
+GREN_KEY_NEXT = "h"       # Taste: Granatenart wechseln (dazu Mausrad bei gehaltenem G)
+DECOY_T = 6.0             # s macht der Decoy Lärm ...
+DECOY_SHOTS = 9           # ... so viele "Schüsse" ...
+DECOY_NOISE = 80.0        # ... je mit so viel Lärmradius (m; Schuss 60, Explosion 90)
+FLASH_R = 10.0            # m Wirkung der Blendgranate
+FLASH_FULL_T = 5.0        # s volle Wirkung (ganz nah / voll hingeschaut) ...
+FLASH_WHITE_T = 2.0       # ... davon so lange reines Weiss, danach blendet es langsam aus (verschwommene Konturen)
+FLASH_MUFFLE = 0.85       # so viel leiser klingt alles bei voller Wirkung (dazu Pfeifton)
+FLASH_MOB_T = 4.0         # s orientierungslos (Monster in Reichweite, freie Sicht; anteilig nach Abstand)
+SMOKE_R = 6.0             # m Radius der Rauchwolke (5-7)
+SMOKE_CELL = 1.5          # m Rasterweite des Rauchs (Ausbreitung um Ecken, durch Türen)
+SMOKE_PATH_K = 1.7        # Rauch kommt höchstens Radius x so viel weit (Weglänge um Ecken herum)
+SMOKE_T = 20.0            # s steht die Wolke ...
+SMOKE_GROW_T = 2.0        # ... baut sich so lange auf ...
+SMOKE_FADE_T = 4.0        # ... und löst sich so lange auf
+SMOKE_BLOCK_M = 1.4       # m Rauch auf einer Sichtlinie: Monster (und 10h-Sichtung) sehen nicht hindurch
+PDRONE_LIFE = 35.0        # s Lebensdauer der eigenen (lila) Drohne
+PDRONE_STUN = (0.8, 1.6)  # s Betäubung durch die eigene Drohne (Monster-Drohne: STUN_MIN..MAX)
+MOLO_R = 2.5              # m: brennende Fläche (Radius; ca. 5 m Durchmesser)
+MOLO_T = 5.0              # s brennt sie
+MOLO_DPS = 24.0           # Schaden pro Sekunde in den Flammen
+MOLO_CELL = 0.8           # m Raster der Flammen
+MOLO_LEVEL_TOL = 0.45     # m: nur Boden auf derselben Ebene wie der Aufprall brennt (Dach bleibt Dach)
+WI_MOLOTOV = -20          # "Waffe" in der Kill-Anzeige
+FLARE_BURN_T = 45.0       # s brennt die Fackel höchstens
+AIR_PLANE_DELAY = 4.0     # s nach dem Zünden der Fackel startet das Flugzeug ...
+AIR_PLANE_LEAD = 520.0    # ... so weit (m) vor dem Abwurfpunkt ...
+AIR_PLANE_SPEED = 62.0    # ... mit so viel m/s ...
+AIR_PLANE_ALT = 105.0     # ... in dieser Höhe (über dem Gebirge)
+AIR_FALL_V = 5.5          # m/s sinkt die Kiste am Fallschirm
+AIR_KINDS = ("common", "rare", "gold")   # ein Satz Fackeln = je eine braune, blaue, goldene Kiste (zufällige Reihenfolge)
 
 # --- Fahrzeug (Geländewagen)
 VEH_HP = 220.0
@@ -1321,7 +1386,8 @@ def weapon_name(wi):
         return MELEE[wi - MELEE_WI0].name
     return {WI_GRENADE: "Granate", WI_VEHICLE: "Fahrzeug", WI_TURRET: "Geschütz",
             WI_TOMAHAWK: "Tomahawk", WI_HELI: "Helikopter",
-            WI_FLAK: "Flak", WI_FALL: "Sturz", WI_C4: "C4", WI_CLAY: "Claymore", WI_MELEE: "Nahkampf"}.get(wi, "?")
+            WI_FLAK: "Flak", WI_FALL: "Sturz", WI_C4: "C4", WI_CLAY: "Claymore", WI_MELEE: "Nahkampf",
+            WI_MOLOTOV: "Molotow"}.get(wi, "?")
 
 def strike_cd_label(cd):
     cd = int(cd)
@@ -1399,7 +1465,14 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     # (Strecken CRITTER_LEG_MIN..MAX m, Richtung zufällig, aber grob weg vom Auslöser).
     "critter": dict(hp=20.0, speed=11.5, wander=1.6, dmg=0.0, cooldown=1.0, windup=0.3, aggro=16.0,
                     scale=0.55, hear=1.2, calm=True),
+    # 10e: eigene Drohne aus der Drohnen-Granate (lila): wie die Monster-Drohne, aber langsamer, seltener Stromstösse,
+    # kürzer betäubt, weniger Reichweite und Leben; greift nur Gegner-Spieler an (nie den Besitzer), lebt PDRONE_LIFE s.
+    "pdrone": dict(hp=25.0, speed=3.6, wander=1.4, dmg=0.0, cooldown=11.0, windup=0.9, recover=0.3,
+                   aggro=24.0, scale=DRONE_SIZE * 0.85, hear=1.0, fly=3.2, range=15.0, hit_r=0.42 * DRONE_SIZE * 0.85,
+                   hit_h=0.5 * DRONE_SIZE * 0.85, stun=PDRONE_STUN, temp=True),
 }
+TEMP_MOBS = tuple(k for k, v in MOB_KINDS.items() if v.get("temp"))   # 10e: keine Monster (kein Respawn, keine Beute)
+ZAP_KINDS = ("drone", "pdrone")                                       # 10e: Drohnen, die mit Stromstössen betäuben
 STUN_MIN, STUN_MAX = 1.0, 3.0   # s Betäubung durch die Drohne (zufällig dazwischen)
 STUN_IMMUNE = 3.0               # s nach dem Ende einer Betäubung: immun (Drohnen schiessen dann gar nicht)
 DRONE_MAX_PER_TARGET = 1        # höchstens so viele Drohnen beschiessen gleichzeitig denselben Spieler
@@ -1428,7 +1501,8 @@ TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schad
 
 KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
-              ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate"), ("F", "benutzen / Schlag"),
+              ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate (halten = weiter)"),
+              ("H / G+Mausrad", "Granatenart"), ("F", "benutzen / Schlag"),
               ("4", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
               ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
@@ -1440,7 +1514,7 @@ INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Kar
 QUICK_MELEE_STAY = True  # 7a: nach F (Schnellschlag) bleibt die Nahkampfwaffe in der Hand, bis man mit 1-3/Mausrad wechselt
 
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "colossus": "Koloss", "drone": "Drohne",
-             "critter": "Hase", "titan": "Titan"}
+             "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne"}
 
 
 def end_tabs(koth):
@@ -1521,7 +1595,8 @@ def weapon_info(wi, gun=None, att=None, scope=None):
 def drop_info(d):
     """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
     if getattr(d, "gren", 0) > 0:
-        return f"Splittergranate x{d.gren}\nG: werfen"
+        gk = getattr(d, "gk", "frag")
+        return f"{GREN_NAMES.get(gk, 'Granate')} x{d.gren}\n{GREN_INFO.get(gk, '')}\nG halten: weiter werfen, H: Art wechseln"
     if d.att >= 0:
         si, v = divmod(d.att, ATT_CODE)
         if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
@@ -1673,6 +1748,7 @@ MOB_SND = {
     "titan":    dict(range=160, step="mstep_giant", stride=0.9, step_vol=1.0, step_rate=(0.6, 0.72),
                      voice="growl_deep", voice_gap=(12.0, 24.0), voice_vol=1.0, voice_rate=(0.35, 0.42)),
     "drone":    dict(range=45),                                         # Surren statt Schritte (s. MOB_VOL)
+    "pdrone":   dict(range=40),                                         # 10e: eigene Drohne surrt etwas höher
     "critter":  dict(range=18, step="tap", stride=0.7, step_vol=0.35, step_rate=(0.9, 1.2)),
 }
 MOB_VOL = {"drone_hum": 0.35, "drone_scan": 0.7, "drone_charge": 0.75, "colossus_rumble": 0.85,
@@ -2167,11 +2243,197 @@ class Bullet:
 class Grenade:
     """Wurfgranate (Host simuliert, Mitspieler bekommen Position und Geschwindigkeit)."""
 
-    def __init__(self, gid, x, y, z, vx, vy, vz, owner, fuse=GREN_FUSE):
+    def __init__(self, gid, x, y, z, vx, vy, vz, owner, fuse=GREN_FUSE, kind="frag"):
         self.gid, self.owner = gid, owner
         self.x, self.y, self.z = x, y, z
         self.vx, self.vy, self.vz = vx, vy, vz
         self.fuse = fuse
+        self.kind = kind if kind in GREN_KINDS else "frag"   # 10e: Granatenart
+        self.active = False       # 10e: Decoy/Rauch: liegt und wirkt (fuse = Restzeit der Wirkung)
+        self.hit = False          # 10e: hat schon etwas getroffen (Molotow zerschellt)
+        self.shot_t = 0.0         # 10e: Decoy - Zeit bis zum nächsten "Schuss"
+        self.shots = 0
+        self.tier = "common"      # 10e: Airdrop-Fackel - welche Kiste sie bringt (nur Host)
+
+
+class Smoke:
+    """10e: Rauchwolke - Zellen (SMOKE_CELL-Raster), die sich vom Zündpunkt um Ecken und durch Öffnungen ausbreiten
+    (smoke_cells). Jeder Rechner errechnet sie selbst aus dem Zündpunkt (gleiche Welt -> gleiche Wolke)."""
+
+    def __init__(self, sid, pos, cells):
+        self.sid, self.pos, self.cells = sid, pos, cells
+        self.keys = {smoke_key(pos, c) for c in cells}
+        self.age = 0.0
+        if cells:
+            self.box = (min(c[0] for c in cells) - SMOKE_CELL, min(c[1] for c in cells) - SMOKE_CELL,
+                        min(c[2] for c in cells) - SMOKE_CELL, max(c[0] for c in cells) + SMOKE_CELL,
+                        max(c[1] for c in cells) + SMOKE_CELL, max(c[2] for c in cells) + SMOKE_CELL)
+        else:
+            self.box = (pos[0], pos[1], pos[2], pos[0], pos[1], pos[2])
+
+    def density(self):
+        """0..1: wie dicht die Wolke gerade ist (Aufbau, Stehen, Auflösen)."""
+        a = self.age
+        if a < SMOKE_GROW_T:
+            return a / SMOKE_GROW_T
+        return clampf((SMOKE_T - a) / SMOKE_FADE_T, 0.0, 1.0)
+
+
+class FireArea:
+    """10e: Brennende Fläche des Molotows - Zellen nur auf der Ebene des Aufpralls (fire_cells)."""
+
+    def __init__(self, fid, pos, cells, owner):
+        self.fid, self.pos, self.cells, self.owner = fid, pos, cells, owner
+        self.age = 0.0
+
+
+class AirDrop:
+    """10e: Airdrop - rote Fackel am Boden, dann Frachtflugzeug, Kiste am Fallschirm, zuletzt eine Kiste (Crate).
+    state: 0 Fackel brennt / 1 Flugzeug im Anflug / 2 Kiste fällt / 3 Kiste gelandet (Flugzeug fliegt weg)."""
+
+    def __init__(self, aid, x, y, z, tier, owner, ang=0.0):
+        self.aid, self.tier, self.owner = aid, tier, owner
+        self.fx, self.fy, self.fz = x, y, z
+        self.state, self.t, self.age = 0, 0.0, 0.0
+        self.ang = ang                                   # Flugrichtung (rad)
+        self.px = self.py = self.pz = 0.0                # Flugzeug
+        self.cx, self.cy, self.cz = x, y, AIR_PLANE_ALT  # Kiste
+        self.dist = 0.0                                  # zurückgelegter Weg des Flugzeugs
+
+
+def smoke_key(origin, p):
+    return (int(round((p[0] - origin[0]) / SMOKE_CELL)), int(round((p[1] - origin[1]) / SMOKE_CELL)),
+            int(round((p[2] - origin[2]) / SMOKE_CELL)))
+
+
+def smoke_cells(world, pos):
+    """10e: Ausbreitung des Rauchs (Dijkstra über ein 3D-Raster): von Zelle zu Zelle nur bei freier Sicht (keine Wand,
+    Decke, Dach dazwischen) und nie zwischen Untergrund (Tunnel) und Oberfläche. Die Weglänge zählt (um Ecken und
+    durch Türen wird es weniger), das Volumen ist begrenzt (so viel wie eine Kugel mit SMOKE_R) - ein (fast)
+    geschlossener Raum füllt sich, nur an Öffnungen tritt ein Teil aus. -> [(x, y, z), ...]"""
+    import heapq
+    c = SMOKE_CELL
+    ox, oy, oz = pos[0], pos[1], pos[2] + 0.7
+    budget = int(4.0 / 3.0 * math.pi * SMOKE_R ** 3 / c ** 3 * 0.9)
+    maxd = SMOKE_R * SMOKE_PATH_K
+
+    def under(x, y, z):
+        return z < world.surface_height(x, y) - 1.0
+
+    u0 = under(ox, oy, oz)
+
+    def ok(x, y, z):
+        if not (-20.0 < x < WORLD + 20.0 and -20.0 < y < WORLD + 20.0):
+            return False
+        g = world.ground_for(x, y, z)
+        if z < g + 0.15 or z > g + 4.8 or under(x, y, z) != u0:
+            return False
+        for b in world.boxes_near(x - 0.1, y - 0.1, x + 0.1, y + 0.1):
+            if b.x0 < x < b.x1 and b.y0 < y < b.y1 and b.z0 < z < b.z1:
+                return False
+        return True
+
+    start = (0, 0, 0)
+    bad = set()
+    if not ok(ox, oy, oz):                                      # Zündpunkt knapp an einer Wand/Decke: etwas tiefer
+        oz = pos[2] + 0.3
+    best = {start: 0.0}
+    heap = [(0.0, start)]
+    out = []
+    nb = [(1, 0, 0, 1.0), (-1, 0, 0, 1.0), (0, 1, 0, 1.0), (0, -1, 0, 1.0), (0, 0, 1, 1.0), (0, 0, -1, 1.0),
+          (1, 1, 0, 1.414), (1, -1, 0, 1.414), (-1, 1, 0, 1.414), (-1, -1, 0, 1.414)]
+    while heap and len(out) < budget:
+        d, k = heapq.heappop(heap)
+        if d > best.get(k, 1e9) + 1e-6:
+            continue
+        p = (ox + k[0] * c, oy + k[1] * c, oz + k[2] * c)
+        out.append(p)
+        for dx, dy, dz, w in nb:
+            k2 = (k[0] + dx, k[1] + dy, k[2] + dz)
+            nd = d + w * c * (1.35 if dz > 0 else 1.0)          # nach oben etwas zäher (der Rauch bleibt eher unten)
+            if nd > maxd or nd >= best.get(k2, 1e9):
+                continue
+            if k2 in bad:
+                continue
+            p2 = (ox + k2[0] * c, oy + k2[1] * c, oz + k2[2] * c)
+            if not ok(*p2):
+                bad.add(k2)                                     # Wand, Boden, Decke: nie wieder prüfen
+                continue
+            if not world.los(p, p2):
+                continue                                        # von hier aus versperrt (von anderswo vielleicht frei)
+            best[k2] = nd
+            heapq.heappush(heap, (nd, k2))
+    return out
+
+
+def fire_cells(world, pos):
+    """10e: Brennende Zellen des Molotows: im Umkreis MOLO_R, aber nur Boden auf derselben Ebene wie der Aufprall
+    (Dach bleibt Dach, Tunnel bleibt Tunnel), mit freier Sicht vom Aufprall aus, nicht im Wasser. -> [(x, y, z)]"""
+    x0, y0, z0 = pos
+    out = []
+    n = int(MOLO_R / MOLO_CELL)
+    for i in range(-n, n + 1):
+        for j in range(-n, n + 1):
+            x, y = x0 + i * MOLO_CELL, y0 + j * MOLO_CELL
+            if math.hypot(x - x0, y - y0) > MOLO_R:
+                continue
+            fz = world.floor_at(x, y, z0 + 0.3)
+            if abs(fz - z0) > MOLO_LEVEL_TOL:
+                continue
+            if fz <= WATER_LEVEL + 0.15 and world.surface_height(x, y) < WATER_LEVEL and fz > -1.0:
+                continue                                    # Wasser
+            if world.in_solid(x, y, 0.15, fz):
+                continue
+            if (i or j) and not world.los((x0, y0, z0 + 0.35), (x, y, fz + 0.35)):
+                continue
+            out.append((x, y, fz))
+    return out
+
+
+def in_water(world, x, y, z):
+    """10e: Liegt (x, y, z) im Wasser (Teich, Graben; nicht im Tunnel, nicht auf einer Brücke)?"""
+    return z > -1.0 and z <= WATER_LEVEL + 0.25 and world.surface_height(x, y) < WATER_LEVEL
+
+
+def grenade_landed(world, g):
+    """10e: Liegt die Granate (fast) still am Boden? (Decoy, Rauch, Drohne, Fackel wirken erst dann)"""
+    return g.vx * g.vx + g.vy * g.vy + g.vz * g.vz < 4.0 and g.z - world.floor_at(g.x, g.y, g.z) < 0.35
+
+
+def gren_new_inv():
+    """10e: Granaten zum Start/Respawn."""
+    return {"frag": GRENADES_START}
+
+
+def gren_total(pl):
+    return sum(getattr(pl, "gren", {}).values())
+
+
+def gren_list(pl):
+    """Anzahl je Art in der Reihenfolge GREN_KINDS (fürs Netz)."""
+    g = getattr(pl, "gren", {})
+    return [int(g.get(k, 0)) for k in GREN_KINDS]
+
+
+def gren_fix_sel(pl, step=0):
+    """Gewählte Art prüfen bzw. weiterschalten (step +-1): leere Arten werden übersprungen. -> gewählte Art"""
+    g = getattr(pl, "gren", {})
+    have = [k for k in GREN_KINDS if g.get(k, 0) > 0]
+    cur = getattr(pl, "gren_sel", "frag")
+    if not have:
+        return cur
+    if step == 0:
+        if g.get(cur, 0) > 0:
+            return cur
+        step = 1
+    order = list(GREN_KINDS)
+    i = order.index(cur) if cur in order else 0
+    for k in range(1, len(order) + 1):
+        nk = order[(i + step * k) % len(order)]
+        if g.get(nk, 0) > 0:
+            pl.gren_sel = nk
+            return nk
+    return cur
 
 
 class Gadget:
@@ -2193,9 +2455,12 @@ class Drop:
     atts = Aufsätze, die an einer Waffe stecken (fallen mit ihr). owner/lock: Kistenbeute gehört LOOT_OWNER_T s
     lang nur dem, der die Kiste geöffnet hat."""
 
-    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0):
+    def __init__(self, did, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
+                 gk="frag"):
         self.did, self.x, self.y, self.z, self.wi = did, x, y, z, wi
         self.gren = gren if isinstance(gren, int) else 0          # 10b: Granaten (Anzahl), sonst 0
+        self.gk = gk if gk in GREN_KINDS else "frag"              # 10e: Granatenart
+        self.gq = None                                            # 10e: Airdrop-Fackeln - ihre Kistenarten (nur Host)
         self.scope = scope if isinstance(scope, int) else -1   # Visier einer Waffe (-1 = ab Werk)
         self.gear = gear
         self.melee = melee
@@ -2383,8 +2648,11 @@ class Mob:
         best, bd = None, 1e18
         on_terrain = (world is not None and MTN_CLIMB and self.hover <= 0
                       and abs(self.gz - world.height(self.x, self.y)) < 0.6)
+        own = getattr(self, "owner", None)                # 10e: eigene Drohne - nie Besitzer oder Verbündete
         for p in players:
             if p.hp <= 0:
+                continue
+            if own is not None and world is not None and world.allied(own, p.pid):
                 continue
             if self.hover > 0:                             # 7a: Drohne steigt bis DRONE_FLY_TOP - erreicht fast alle
                 if p.z - self.gz > DRONE_FLY_TOP + DRONE_TARGET_DZ:
@@ -2417,6 +2685,12 @@ class Mob:
             self.speed_now = 0.0
             self.hurt_t = max(0.0, self.hurt_t - dt)
             return
+        dazed = getattr(self, "daze_t", 0.0) > 0        # 10e: Blendgranate - orientierungslos (taumelt, sieht nichts)
+        if dazed:
+            self.daze_t -= dt
+            if self.state == "attack":
+                self.state = "chase"
+            self.noise_at, self.searching = None, False
         self.hurt_t = max(0.0, self.hurt_t - dt)
         self.alert_t = max(0.0, self.alert_t - dt)
         self.atk_cd = max(0.0, self.atk_cd - dt)
@@ -2430,6 +2704,9 @@ class Mob:
             d = math.hypot(dx, dy)
         d3 = math.hypot(d, pl.z - self.z) if pl is not None else d          # 10a: Sichtweite in 3D (Heli hoch oben)
         sees = pl is not None and (d3 < k["aggro"] or (self.alert_t > 0 and d3 < 90))
+        if sees and (dazed or (world.smokes and d3 > 2.5 and world.smoke_blocks(
+                (self.x, self.y, self.z + self.height * 0.85), (pl.x, pl.y, pl.z + 1.4)))):
+            sees = False                                   # 10e: geblendet / Rauch dazwischen
         reach = self.reach                                 # sitzt das Ziel im Fahrzeug: dessen Hülle angreifen
         if pl is not None and (pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0):
             occ = world.occupied_vehicle(pl)
@@ -2473,7 +2750,8 @@ class Mob:
                     ux, uy, speed = -dy / d * side, dx / d * side, k["speed"] * 0.5
                 if (d <= k["range"] and self.atk_cd <= 0 and pl.stun_lock <= 0
                         and world.drone_may_target(self, pl)
-                        and world.los((self.x, self.y, self.z + 0.3), (pl.x, pl.y, pl.z + 1.3))):
+                        and world.los((self.x, self.y, self.z + 0.3), (pl.x, pl.y, pl.z + 1.3))
+                        and not world.smoke_blocks((self.x, self.y, self.z + 0.3), (pl.x, pl.y, pl.z + 1.3))):
                     self.state, self.atk_t, self.did_hit, self.atk_kind = "attack", 0.0, False, 0
                     self.zap_pid, self.zap_hold = pl.pid, k["windup"] + k["cooldown"]
             elif "rock_min" in k:                          # Titan: Steinwurf auf Distanz, nah Schlag/Stampfer
@@ -2529,6 +2807,8 @@ class Mob:
         else:
             self.state = "idle"
             self.wander_t -= dt
+            if dazed:                                      # 10e: taumelt ziellos hin und her
+                self.wander_t = min(self.wander_t, rng.uniform(0.3, 0.8))
             if self.wander_t <= 0:
                 a, r = rng.uniform(0, 2 * math.pi), rng.uniform(3, 10)
                 self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
@@ -2697,6 +2977,7 @@ class Crate:
         self.cid, self.x, self.y, self.z = cid, x, y, z
         self.kind = kind if kind in CRATE_KINDS else "common"
         self.bonus = False        # Belohnung (Titan): wird nach dem Öffnen nicht ersetzt, Lichtsäule
+        self.air = False          # 10e: Airdrop-Kiste - sieht neutral aus (Seltenheit unsichtbar), wird nicht ersetzt
 
 
 class Rock:
@@ -3286,6 +3567,10 @@ class World:
         self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
         self.vehicles = []
         self.grenades = []
+        self.smokes = []         # 10e: Rauchwolken (jeder Rechner selbst, aus dem Ereignis "smoke")
+        self.fires = []          # 10e: brennende Flächen (Molotow)
+        self.airdrops = []       # 10e: Airdrops (Fackel, Flugzeug, Kiste am Fallschirm)
+        self.next_fxid = 1
         self.gadgets = []        # platzierte Gadgets (C4, Claymore, Funkbake)
         self.next_gadid = 1
         self.drops = []
@@ -5427,6 +5712,13 @@ class World:
             self.noise_log = [(x, y, r, t - NOISE_TICK) for x, y, r, t in self.noise_log if t > NOISE_TICK]
 
     # ------------------------------------------------------------ Spielregeln
+    def allied(self, a, b):
+        """10e: Gehören die Spieler a und b zusammen (derselbe Spieler oder - Team-Modi - dasselbe Team)?"""
+        if a == b:
+            return True
+        tm = getattr(self, "team_of", None)
+        return bool(tm) and tm.get(a) is not None and tm.get(a) == tm.get(b)
+
     def underground(self, pl):
         """Unter der Erde (Tunnel, Keller unter dem Gelände)?"""
         if pl.z < -1.0 and self.tunnels and self.in_tunnel(pl.x, pl.y):
@@ -5524,8 +5816,9 @@ class World:
             else:
                 self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
                 pool = [("melee", pl.melee)] if pl.melee != START_MELEE else []
-            if pl.grenades > 0:                          # ... und EIN zufälliges weiteres Teil
-                pool.append(("gren", pl.grenades))
+            gks = [k for k in GREN_KINDS if pl.gren.get(k, 0) > 0]
+            if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
+                pool.append(("gren", rng.choice(gks)))
             pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
             if pool:
                 kind, v = rng.choice(pool)
@@ -5538,10 +5831,14 @@ class World:
                 elif kind == "melee":
                     self.add_drop(x2, y2, pl.z, -1, -1, v)
                 elif kind == "gren":
-                    self.add_drop(x2, y2, pl.z, -1, gren=v)
+                    gd = self.add_drop(x2, y2, pl.z, -1, gren=pl.gren[v], gk=v)
+                    if v == "flare":
+                        gd.gq = list(getattr(pl, "flare_q", None) or [])
                 else:
                     self.add_drop(x2, y2, pl.z, -1, v)
         pl.gear = {sl: None for sl in GEAR_SLOTS}        # (10b: getragene Teile sind oben schon im Zufalls-Topf)
+        pl.gren, pl.flare_q = {}, []                     # 10e: Granaten sind weg (eine Art fällt evtl. oben)
+        self.gren_event(pl)
         pl.slots = [None] * N_SLOTS
         pl.loot_history, pl.last_loot = {}, None         # Kisten-Gedächtnis gilt nur für ein Leben
         pl.last_by = {}
@@ -5637,7 +5934,7 @@ class World:
 
     def drone_may_target(self, m, pl):
         """DRONE_MAX_PER_TARGET: beschiessen schon genug andere Drohnen diesen Spieler?"""
-        n = sum(1 for o in self.mobs if o is not m and o.kind == "drone" and o.state != "dead"
+        n = sum(1 for o in self.mobs if o is not m and o.kind in ZAP_KINDS and o.state != "dead"
                 and o.zap_pid == pl.pid and o.zap_hold > 0)
         return n < DRONE_MAX_PER_TARGET
 
@@ -5649,9 +5946,10 @@ class World:
             return
         dst = (pl.x, pl.y, pl.z + 1.2)
         hit = (math.dist(src, dst) <= k["range"] * 1.15 and self.los(src, dst))
-        self.events.append(("zap", src, tuple(round(c, 2) for c in dst), 1 if hit else 0))
+        self.events.append(("zap", src, tuple(round(c, 2) for c in dst), 1 if hit else 0,
+                            1 if m.kind == "pdrone" else 0))
         if hit:
-            dur = self.mrng.uniform(STUN_MIN, STUN_MAX)
+            dur = self.mrng.uniform(*k.get("stun", (STUN_MIN, STUN_MAX)))   # 10e: eigene Drohne kürzer
             occ = self.occupied_vehicle(pl)
             if occ is None:
                 self.stun_player(pl, dur)
@@ -5786,9 +6084,10 @@ class World:
                 kw["att"] = si * ATT_CODE + v
             else:
                 kw["gren"] = cnt
+                kw["gk"] = name[3:] if name.startswith("gk:") else "frag"      # 10e: Granatenart
             d = self.add_drop(x, y, z, kw.get("wi", -1), kw.get("gear", -1), kw.get("melee", -1), kw.get("att", -1),
                               None, pl.pid if pl is not None else -1, LOOT_OWNER_T if pl is not None else 0.0,
-                              gren=kw.get("gren", 0))
+                              gren=kw.get("gren", 0), gk=kw.get("gk", "frag"))
             d.life = MOB_LOOT_LIFE
             out.append(d)
             ki = CRATE_KINDS.index(tier) if tier in CRATE_KINDS else 0
@@ -5799,8 +6098,14 @@ class World:
     def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude):
         """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None."""
         rng = self.mrng
-        if cat == "grenade":
-            return ("grenade", "", LOOT_GREN_COUNT.get(tier, 1))
+        if cat == "grenade":                             # 10e: eine Granatenart nach Stufe (GREN_LOOT_W), Anzahl je Art
+            ws = {k: w for k, w in GREN_LOOT_W.get(tier, GREN_LOOT_W["common"]).items()
+                  if w > 0 and "gk:" + k not in exclude}
+            if not ws:
+                return None
+            ks = list(ws)
+            k = rng.choices(ks, weights=[ws[q] for q in ks])[0]
+            return ("grenade", "gk:" + k, GREN_LOOT_N.get(k, 1))
         ch = loot_chances(tier, slots, hist, last.get(cat), cat, worn)
         if cat == "weapon":
             ch = {nm: v for nm, v in ch.items() if WEAPON_IDX.get(nm) != START_WEAPON}
@@ -5918,6 +6223,10 @@ class World:
         m.kx = clampf(m.kx + d[0] * imp, -6, 6)
         m.ky = clampf(m.ky + d[1] * imp, -6, 6)
         self.events.append(("mob_hit", pos, d, dmg, head, owner, pct))
+        if m.hp <= 0 and m.state != "dead" and m.kind in TEMP_MOBS:   # 10e: eigene Drohne abgeschossen (kein Monster)
+            m.state, m.dead_t = "dead", 0.0
+            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
+            return
         if m.hp <= 0 and m.state != "dead":
             m.state, m.dead_t = "dead", 0.0
             self.kills += 1
@@ -6149,7 +6458,7 @@ class World:
         remember_loot(pl, name)
         pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
         self.crates.remove(c)
-        if not c.bonus:                                  # Titan-Kiste wird nicht ersetzt
+        if not c.bonus and not c.air:                    # Titan-/Airdrop-Kiste wird nicht ersetzt
             self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
         if art == "gear":                                # 7b: nicht sofort ausrüsten - fällt vor den Spieler
             self.loot_drop(pl, c, gear=GEAR_IDX[name])
@@ -6508,11 +6817,12 @@ class World:
         self.events.append(("melee", pl.pid, mi, crate))
         return True
 
-    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0):
+    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
+                 gk="frag"):
         while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
-                 scope, gren)
+                 scope, gren, gk)
         self.next_did += 1
         self.drops.append(d)
         return d
@@ -6574,7 +6884,7 @@ class World:
                 pl.last_loot = name
         pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
         self.crates.remove(c)
-        if not c.bonus:
+        if not c.bonus and not c.air:                    # 10e: Airdrop-Kiste wird nicht ersetzt
             self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
         n = len(items)
         for i, (art, name) in enumerate(items):
@@ -6670,10 +6980,9 @@ class World:
                 self.drops.remove(d)
                 self.give_attachment(pl, si, v)
             return
-        if d.gren > 0:                                   # 10b: Granaten
+        if d.gren > 0:                                   # 10b: Granaten (10e: je Art)
             self.drops.remove(d)
-            pl.grenades += d.gren
-            self.events.append(("gren_n", pl.pid, pl.grenades, d.gren))
+            self.add_grenades(pl, d.gk, d.gren, d.gq)
             return
         if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
             if self.give_gear(pl, d.gear):
@@ -7403,40 +7712,290 @@ class World:
                 self.explode((g.x, g.y, g.z + 0.15), g.owner, CLAY_R, CLAY_DMG, WI_CLAY)
 
     # ------------------------------------------------------------ Granaten
-    def throw_grenade(self, pl, eye, d):
-        """Granate werfen. Beim Client geht der Wurf an den Host (er simuliert sie)."""
-        if (pl.hp <= 0 or pl.grenades <= 0 or self.phase != "play" or pl.vehicle >= 0
+    def throw_grenade(self, pl, eye, d, kind=None, speed=None):
+        """Granate werfen (10e: Art und Wurfgeschwindigkeit nach Haltedauer). Beim Client geht der Wurf an den Host
+        (er simuliert sie). -> True, wenn geworfen."""
+        kind = kind if kind in GREN_KINDS else getattr(pl, "gren_sel", "frag")
+        if (pl.hp <= 0 or pl.gren.get(kind, 0) <= 0 or self.phase != "play" or pl.vehicle >= 0
                 or pl.mount >= 0 or pl.heli >= 0):
             return False
-        pl.grenades -= 1
+        speed = clampf(speed if speed is not None else GREN_SPEED, GREN_SPEED_MIN, GREN_SPEED_MAX)
         pl.protect = 0.0
         if self.gren_sink is not None:
-            self.gren_sink(pl, eye, d)
+            pl.gren[kind] -= 1                           # Mitspieler: sofort abziehen, der Host bestätigt (gren_inv)
+            if kind == "flare" and getattr(pl, "flare_q", None):
+                pl.flare_q.pop(0)
+            self.gren_sink(pl, eye, d, kind, speed)
         else:
-            self.spawn_grenade(pl.pid, eye, d)
+            tier = self.take_grenade(pl, kind)
+            self.spawn_grenade(pl.pid, eye, d, kind, speed, tier)
         return True
 
-    def spawn_grenade(self, owner, eye, d):
+    def take_grenade(self, pl, kind):
+        """10e (Host): eine Granate dieser Art aus dem Inventar nehmen -> Kistenart (Airdrop-Fackel) oder None."""
+        pl.gren[kind] = max(0, pl.gren.get(kind, 0) - 1)
+        tier = None
+        if kind == "flare":
+            q = getattr(pl, "flare_q", None) or []
+            tier = q.pop(0) if q else self.mrng.choice(AIR_KINDS)
+            pl.flare_q = q
+        self.gren_event(pl)
+        return tier
+
+    def gren_event(self, pl, added=None, n=0):
+        """10e: Granaten-Inventar an alle (der Spieler übernimmt es; added = aufgehobene Art)."""
+        gren_fix_sel(pl)
+        self.events.append(("gren_inv", pl.pid, gren_list(pl), GREN_KINDS.index(added) if added in GREN_KINDS else -1, n))
+
+    def add_grenades(self, pl, kind, n, tiers=None):
+        """10e: Granaten aufnehmen. Airdrop-Fackeln: je Satz von drei eine braune, eine blaue, eine goldene Kiste in
+        zufälliger Reihenfolge (tiers: schon festgelegte Kistenarten, z. B. aus einem Drop beim Tod)."""
+        kind = kind if kind in GREN_KINDS else "frag"
+        pl.gren[kind] = pl.gren.get(kind, 0) + n
+        if kind == "flare":
+            q = list(getattr(pl, "flare_q", None) or [])
+            if tiers:
+                q += list(tiers)[:n]
+            while len(q) < pl.gren["flare"]:
+                trip = list(AIR_KINDS)
+                self.mrng.shuffle(trip)
+                q += trip[:pl.gren["flare"] - len(q)]
+            pl.flare_q = q[:pl.gren["flare"]]
+        if gren_total(pl) == n:                          # vorher leer: gleich die neue Art in die Hand
+            pl.gren_sel = kind
+        self.gren_event(pl, kind, n)
+
+    def spawn_grenade(self, owner, eye, d, kind="frag", speed=None, tier=None):
+        sp = speed if speed is not None else GREN_SPEED
         g = Grenade(self.next_gid, eye[0], eye[1], eye[2],
-                    d[0] * GREN_SPEED, d[1] * GREN_SPEED, d[2] * GREN_SPEED + 2.0, owner)
+                    d[0] * sp, d[1] * sp, d[2] * sp + 2.0, owner, GREN_FUSE_K.get(kind, GREN_FUSE), kind)
+        if tier:
+            g.tier = tier
         self.next_gid += 1
         self.grenades.append(g)
-        self.events.append(("throw", owner))
+        self.events.append(("throw", owner, GREN_KINDS.index(g.kind)))
 
     def update_grenades(self, dt):
         alive = []
         for g in self.grenades:
             g.fuse -= dt
-            if g.fuse <= 0:
-                self.explode((g.x, g.y, g.z + 0.1), g.owner, GREN_R, GREN_DMG, WI_GRENADE)
+            if g.active:                                 # 10e: liegt und wirkt (Decoy-Lärm, Rauch qualmt)
+                if g.kind == "decoy":
+                    g.shot_t -= dt
+                    if g.shot_t <= 0 and g.shots < DECOY_SHOTS:
+                        g.shots += 1
+                        g.shot_t = self.mrng.uniform(0.25, 1.1) if self.mrng.random() < 0.8 else 0.08
+                        self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
+                        self.events.append(("decoy", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
+                                            self.mrng.choice((0, 0, 1, 2, 3))))
+                if g.fuse > 0:
+                    self.grenade_settle(g, dt)
+                    alive.append(g)
+                continue
+            if (g.kind == "molotov" and g.hit) or (g.fuse <= 0 and (g.kind in ("frag", "flash", "molotov")
+                                                                     or grenade_landed(self, g) or g.fuse < -4.0)):
+                if self.grenade_effect(g):
+                    alive.append(g)
                 continue
             n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
             h = dt / n
             for _ in range(n):
                 self.grenade_step(g, h)
+                if g.kind == "molotov" and g.hit:
+                    break
             if -40 < g.x < WORLD + 40 and -40 < g.y < WORLD + 40 and g.z > -30:
                 alive.append(g)
         self.grenades = alive
+
+    def grenade_settle(self, g, dt):
+        """Liegende Granate (Decoy, Rauch): weiter ausrollen lassen."""
+        n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
+        for _ in range(n):
+            self.grenade_step(g, dt / n)
+
+    def grenade_effect(self, g):
+        """10e: Die Granate wirkt (Zündzeit um oder Molotow schlägt auf). -> True: bleibt liegen und wirkt weiter."""
+        pos = (g.x, g.y, g.z + 0.1)
+        k = g.kind
+        if k == "frag":
+            self.explode(pos, g.owner, GREN_R, GREN_DMG, WI_GRENADE)
+            return False
+        if k == "decoy":
+            g.active, g.fuse, g.shot_t, g.shots = True, DECOY_T, 0.05, 0
+            return True
+        if k == "flash":
+            self.flashbang(pos, g.owner)
+            return False
+        if k == "smoke":
+            g.active, g.fuse = True, SMOKE_T - SMOKE_FADE_T
+            self.add_smoke(pos, g.gid)
+            self.events.append(("smoke", g.gid, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+            return True
+        if k == "drone":
+            self.spawn_pdrone(g)
+            return False
+        if k == "molotov":
+            self.molotov(g)
+            return False
+        if k == "flare":
+            self.start_airdrop(g)
+            return False
+        return False
+
+    def flashbang(self, pos, owner):
+        """10e: Blendgranate. Die Spieler errechnen ihre Blendung selbst aus Abstand, Blickrichtung und freier Sicht
+        (Ereignis "flash"); Monster in Reichweite mit freier Sicht sind orientierungslos (daze_t)."""
+        self.events.append(("flash", tuple(round(c, 2) for c in pos), owner))
+        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION * 0.7, pos[2])
+        for m in self.mobs:
+            if m.state == "dead" or m.kind in TEMP_MOBS and getattr(m, "owner", -1) == owner:
+                continue
+            mp = (m.x, m.y, m.z + m.height * 0.8)
+            d = math.dist(pos, mp)
+            if d < FLASH_R + m.radius and self.blast_los(pos, mp):
+                m.daze_t = max(getattr(m, "daze_t", 0.0), FLASH_MOB_T * (1.0 - 0.6 * d / (FLASH_R + m.radius)))
+                if m.state == "attack":
+                    m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+
+    def add_smoke(self, pos, sid):
+        """10e: Rauchwolke anlegen (Host aus der Granate, Mitspieler aus dem Ereignis)."""
+        if any(s.sid == sid for s in self.smokes):
+            return None
+        sm = Smoke(sid, pos, smoke_cells(self, pos))
+        self.smokes.append(sm)
+        return sm
+
+    def update_smokes(self, dt):
+        for sm in self.smokes:
+            sm.age += dt
+        self.smokes = [sm for sm in self.smokes if sm.age < SMOKE_T]
+
+    def smoke_blocks(self, p0, p1):
+        """10e: Liegt auf der Sichtlinie p0-p1 dichter Rauch (mehr als SMOKE_BLOCK_M m)?"""
+        if not self.smokes:
+            return False
+        lo = [min(p0[i], p1[i]) for i in range(3)]
+        hi = [max(p0[i], p1[i]) for i in range(3)]
+        L = math.dist(p0, p1)
+        n = max(1, int(L / 0.7))
+        for sm in self.smokes:
+            if sm.density() < 0.5:
+                continue
+            b = sm.box
+            if hi[0] < b[0] or lo[0] > b[3] or hi[1] < b[1] or lo[1] > b[4] or hi[2] < b[2] or lo[2] > b[5]:
+                continue
+            inside = 0.0
+            for i in range(n + 1):
+                t = i / n
+                q = (p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t, p0[2] + (p1[2] - p0[2]) * t)
+                if smoke_key(sm.pos, q) in sm.keys or smoke_key(sm.pos, (q[0], q[1], q[2] - 0.7)) in sm.keys:
+                    inside += L / n
+                    if inside >= SMOKE_BLOCK_M:
+                        return True
+        return False
+
+    def spawn_pdrone(self, g):
+        """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer)."""
+        m = Mob("pdrone", g.x, g.y, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.owner, m.life = g.owner, PDRONE_LIFE
+        m.hover = 0.5
+        m.z = m.gz + m.hover
+        self.mobs.append(m)
+        self.events.append(("pdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+
+    def molotov(self, g):
+        """10e: Molotow zerschellt: Fläche auf der Ebene des Aufpralls brennt MOLO_T s (im Wasser: nichts)."""
+        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
+        pos = (round(g.x, 2), round(g.y, 2), round(z, 2))
+        if in_water(self, g.x, g.y, z):
+            self.events.append(("molo", g.gid, pos, 0))
+            return
+        self.make_noise(g.x, g.y, NOISE_MELEE * 4.0, z + 0.5)
+        fa = FireArea(g.gid, pos, fire_cells(self, pos), g.owner)
+        self.fires.append(fa)
+        self.events.append(("molo", g.gid, pos, 1))
+
+    def add_fire(self, fid, pos, owner=-1):
+        """Mitspieler: brennende Fläche aus dem Ereignis nachbauen (gleiche Zellen wie beim Host)."""
+        if any(f.fid == fid for f in self.fires):
+            return None
+        fa = FireArea(fid, pos, fire_cells(self, pos), owner)
+        self.fires.append(fa)
+        return fa
+
+    def update_fires(self, dt, damage=True):
+        """10e: Flammen brennen MOLO_T s; wer darin steht (Füsse in einer Zelle), nimmt MOLO_DPS Schaden je s."""
+        for fa in self.fires:
+            fa.age += dt
+            if not damage or not fa.cells:
+                continue
+            xs = [c[0] for c in fa.cells]
+            ys = [c[1] for c in fa.cells]
+            x0, x1, y0, y1 = min(xs) - 0.8, max(xs) + 0.8, min(ys) - 0.8, max(ys) + 0.8
+            h = MOLO_CELL * 0.5 + 0.3
+            for pl in list(self.players.values()):
+                if pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or not (x0 < pl.x < x1 and y0 < pl.y < y1):
+                    continue
+                if any(abs(pl.x - c[0]) <= h and abs(pl.y - c[1]) <= h and c[2] - 0.4 <= pl.z <= c[2] + 1.0
+                       for c in fa.cells):
+                    self.damage_player(pl, MOLO_DPS * dt * self.dmg_mult(fa.owner), fa.owner, WI_MOLOTOV)
+            for m in self.mobs:
+                if m.state == "dead" or m.hover > 0 or not (x0 < m.x < x1 and y0 < m.y < y1):
+                    continue
+                hm = h + m.radius * 0.6
+                if any(abs(m.x - c[0]) <= hm and abs(m.y - c[1]) <= hm and c[2] - 0.6 <= m.z <= c[2] + 1.2
+                       for c in fa.cells):
+                    m.hp -= MOLO_DPS * dt * self.dmg_mult(fa.owner)
+                    m.hurt_t = 0.1
+                    if m.hp <= 0:
+                        m.hp = 0.01
+                        self.hurt_mob(m, 1.0, (m.x, m.y, m.z + 0.5), (0.0, 0.0, 1.0), False, fa.owner, WI_MOLOTOV)
+                    elif m.aggressive() and m.state == "idle":
+                        m.on_noise(fa.pos[0], fa.pos[1], self)
+        self.fires = [fa for fa in self.fires if fa.age < MOLO_T]
+
+    def start_airdrop(self, g):
+        """10e: Airdrop-Fackel gezündet: rote Fackel, nach AIR_PLANE_DELAY s fliegt ein Frachtflugzeug über die Fackel
+        und wirft die Kiste (Art aus dem Fackel-Satz) am Fallschirm ab."""
+        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
+        ad = AirDrop(self.next_fxid, g.x, g.y, z, g.tier, g.owner, self.mrng.uniform(0, 2 * math.pi))
+        self.next_fxid += 1
+        self.airdrops.append(ad)
+        self.events.append(("flare", ad.aid, round(g.x, 2), round(g.y, 2), round(z, 2)))
+
+    def update_airdrops(self, dt):
+        keep = []
+        for ad in self.airdrops:
+            ad.age += dt
+            ad.t += dt
+            if ad.state == 0 and ad.t >= AIR_PLANE_DELAY:
+                ad.state, ad.t, ad.dist = 1, 0.0, 0.0
+            if ad.state >= 1:
+                ad.dist += AIR_PLANE_SPEED * dt
+                k = ad.dist - AIR_PLANE_LEAD                 # 0 = über der Fackel
+                ad.px, ad.py = ad.fx + math.cos(ad.ang) * k, ad.fy + math.sin(ad.ang) * k
+                ad.pz = max(AIR_PLANE_ALT, ad.fz + 60.0)
+                if ad.state == 1 and k >= 0:                 # Abwurf
+                    ad.state, ad.t = 2, 0.0
+                    ad.cx, ad.cy, ad.cz = ad.fx, ad.fy, ad.pz - 3.0
+                    self.events.append(("airdrop", ad.aid))
+            if ad.state == 2:
+                ad.cz -= (AIR_FALL_V if ad.t > 1.2 else 14.0) * dt   # erst frei, dann öffnet sich der Schirm
+                fl = self.floor_at(ad.cx, ad.cy, ad.cz)
+                if ad.cz <= fl:
+                    ad.cz, ad.state = fl, 3
+                    c = Crate(self.next_cid, ad.cx, ad.cy, fl, ad.tier if ad.tier in CRATE_KINDS else "common")
+                    c.air = True
+                    self.next_cid += 1
+                    self.crates.append(c)
+                    self.events.append(("airland", ad.aid, c.cid, round(ad.cx, 2), round(ad.cy, 2), round(fl, 2)))
+            if ad.dist < AIR_PLANE_LEAD * 2.0 + 50.0 and ad.age < FLARE_BURN_T + AIR_PLANE_DELAY:
+                keep.append(ad)
+            elif ad.state == 2:                              # (Sicherheit: noch in der Luft - weiter fallen lassen)
+                keep.append(ad)
+        self.airdrops = keep
 
     def grenade_step(self, g, h):
         """Ein Teilschritt: Schwerkraft, Abprallen an Quadern, Bäumen, Felsen und am Boden."""
@@ -7444,6 +8003,7 @@ class World:
         nx, ny, nz = g.x + g.vx * h, g.y + g.vy * h, g.z + g.vz * h
         for b in self.boxes_near(nx - 0.15, ny - 0.15, nx + 0.15, ny + 0.15):
             if b.x0 - 0.1 < nx < b.x1 + 0.1 and b.y0 - 0.1 < ny < b.y1 + 0.1 and b.z0 - 0.1 < nz < b.z1 + 0.1:
+                g.hit = True                                     # 10e: Aufprall (Molotow zerschellt)
                 if not (b.x0 - 0.1 < g.x < b.x1 + 0.1):          # von der Seite aufgetroffen
                     g.vx, nx = -g.vx * 0.45, g.x
                 elif not (b.y0 - 0.1 < g.y < b.y1 + 0.1):
@@ -7460,6 +8020,7 @@ class World:
             dx, dy = nx - p.x, ny - p.y
             d = math.hypot(dx, dy)
             if d < p.hit_r + 0.1 and p.z - 0.3 < nz < p.z + p.hit_h:
+                g.hit = True
                 d = d or 0.01
                 nx, ny = p.x + dx / d * (p.hit_r + 0.1), p.y + dy / d * (p.hit_r + 0.1)
                 dv = (g.vx * dx + g.vy * dy) / d             # Geschwindigkeit nach aussen
@@ -7480,6 +8041,7 @@ class World:
         gz = self.ground_for(nx, ny, nz) + 0.1
         if nz < gz:
             nz = gz
+            g.hit = True
             if g.vz < 0:
                 g.vz = -g.vz * 0.4 if g.vz < -1.5 else 0.0
             fr = math.exp(-5.0 * h)                              # Rollreibung
@@ -7708,6 +8270,7 @@ class World:
     def end_match(self):
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
         self.bullets, self.grenades, self.rocks = [], [], []
+        self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         self.events.append(("matchend",))
         self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
@@ -7741,6 +8304,7 @@ class World:
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
         self.bullets, self.mobs, self.pending = [], [], []
         self.grenades, self.drops, self.rocks = [], [], []
+        self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         for v in self.vehicles:
             v.reset()
@@ -7813,6 +8377,9 @@ class World:
                 pl.stats["walk"] += d
         self.update_bullets(dt)
         self.update_grenades(dt)
+        self.update_smokes(dt)                           # 10e: Rauch, Feuer, Airdrops
+        self.update_fires(dt)
+        self.update_airdrops(dt)
         self.update_vehicles(dt)
         self.update_gadgets(dt)
         self.update_turrets(dt)
@@ -7833,8 +8400,16 @@ class World:
         self.separate_mobs()
         for pl in players:
             self.push_player(pl)
+        for m in self.mobs:                              # 10e: eigene Drohnen leben nur PDRONE_LIFE s
+            if m.kind in TEMP_MOBS and m.state != "dead":
+                m.life = getattr(m, "life", PDRONE_LIFE) - dt
+                if m.life <= 0 or getattr(m, "owner", -1) not in self.players:
+                    m.hp, m.state, m.dead_t = 0.0, "dead", 0.0
+                    self.events.append(("tempdown", m.id, round(m.x, 2), round(m.y, 2), round(m.z, 2)))
         for m in [m for m in self.mobs if m.state == "dead" and m.dead_t > 4.0]:
             self.mobs.remove(m)
+            if m.kind in TEMP_MOBS:                      # 10e: keine Monster - kommen nicht wieder
+                continue
             self.pending.append([TITAN_RESPAWN if m.kind == "titan" else RESPAWN_T, m.kind])
         avoid = [(p.x, p.y) for p in players if p.hp > 0] or [(CENTER, CENTER)]
         for e in self.pending[:]:
@@ -7972,7 +8547,9 @@ class Player:
         self.bloom = 0.0
         self.trigger_buf = 0.0
         self.protect = PROTECT_T          # Spawnschutz in Sekunden
-        self.grenades = GRENADES_START
+        self.gren = gren_new_inv()        # 10e: Granaten je Art (GREN_KINDS)
+        self.gren_sel = "frag"            # 10e: gewählte Art (H / Mausrad bei gehaltenem G)
+        self.flare_q = []                 # 10e: Airdrop-Fackeln: Kistenart jeder Fackel (nur Host)
         self.gren_cd = 0.0
         self.vehicle = -1                 # ID des Fahrzeugs, in dem er sitzt (-1 = zu Fuss)
         self.mount = -1                   # ID des Geschützes, das er bedient
@@ -11772,8 +12349,8 @@ def mob_bar(bar):
 def _build_mob_lo(kind, look=None):
     """9d: einfaches Modell (Fernansicht). Gibt (root, torso, legL, legR, bar, bar_fg) zurück. Hüfte liegt bei z=0.75,
     Füsse bei z=0, Blick Richtung +y. look: eigenes Aussehen (für Mitspieler)."""
-    if kind == "drone":
-        root, torso, legs, bar = build_drone()
+    if kind in ("drone", "pdrone"):
+        root, torso, legs, bar = build_drone(kind)
         bar, fg = mob_bar(bar)
         return root, torso, legs[0], legs[1], bar, fg, legs
     if kind == "critter":
@@ -12106,14 +12683,22 @@ def _mob_hi_titan(rng):
     return t, legs, 0.14
 
 
-def build_drone():
+DRONE_PALS = {"drone": {}, "pdrone": {"hull": (0.46, 0.20, 0.66), "dk": (0.20, 0.08, 0.30), "lens": (0.95, 0.55, 1.0),
+                                      "coil": (0.85, 0.45, 1.0), "stripe": (0.95, 0.85, 1.0)}}   # 10e: Farben je Drohnenart
+
+
+def build_drone(kind="drone"):
     """9d: Elektro-Drohne, technisch: gerundeter Rumpf mit Panelfugen, vier Ausleger mit Rotorschutz-Ringen,
     Kamera-Auge (Linse, Ring, rote LED), Elektro-Spulen mit zwei Polen unten, Antenne. Rückgabe wie build_mob;
-    'Beine' sind die Rotoren (drehen sich)."""
+    'Beine' sind die Rotoren (drehen sich). 10e: kind "pdrone" = eigene Spieler-Drohne in Lila mit hellem Ring."""
     rng = random.Random(77)
-    root = NodePath("drone")
+    root = NodePath(kind)
     body, glow = Mesh(), Mesh(lit=False)
-    hull, dk, alu = (0.24, 0.26, 0.31), (0.12, 0.13, 0.16), (0.62, 0.64, 0.68)
+    pal = DRONE_PALS.get(kind, {})
+    hull, dk, alu = pal.get("hull", (0.24, 0.26, 0.31)), pal.get("dk", (0.12, 0.13, 0.16)), (0.62, 0.64, 0.68)
+    lens_c, coil_c = pal.get("lens", (0.35, 0.85, 1.0)), pal.get("coil", (0.4, 0.85, 1.0))
+    if "stripe" in pal:                                                  # Spieler-Drohne: leuchtender Ring um den Rumpf
+        _ring_z(glow, 0, 0, 0.36, 0.385, 0.285, 0.285, pal["stripe"], None, 18)
     ell(body, (0, 0, 0.33), 0.27, 0.27, 0.1, hull, rng, mat="metal", rings=5)
     _ring_z(body, 0, 0, 0.3, 0.33, 0.275, 0.275, dk, rng)
     ell(body, (0, -0.02, 0.42), 0.14, 0.14, 0.06, dk, rng, rings=4)
@@ -12123,12 +12708,12 @@ def build_drone():
         prism(body, sx * 0.45, sy * 0.45, 0.36, 0.03, 0.06, 8, alu, rng)                       # Motor
         box(glow, sx * 0.45 + sx * 0.19, sy * 0.45, 0.375, 0.02, 0.02, 0.015, (1.0, 0.2, 0.15) if sy > 0 else (0.2, 1.0, 0.3))
     _tube(body, [(0, 0.22, 0.33), (0, 0.3, 0.33)], [0.075, 0.07], dk, rng, 12)                 # Kamera-Gehäuse
-    _tube(glow, [(0, 0.3, 0.33), (0, 0.31, 0.33)], [0.055, 0.055], (0.35, 0.85, 1.0), None, 12)  # Linse
+    _tube(glow, [(0, 0.3, 0.33), (0, 0.31, 0.33)], [0.055, 0.055], lens_c, None, 12)  # Linse
     ell(glow, (0, 0.312, 0.33), 0.02, 0.006, 0.02, (0.9, 1.0, 1.0), None, rings=3)
     box(glow, 0.06, 0.26, 0.4, 0.02, 0.02, 0.02, (1.0, 0.15, 0.1))                             # rote LED
     _tube(body, [(0, 0, 0.27), (0, 0, 0.12)], [0.05, 0.04], dk, rng, 10)                        # Spulenträger
     for k in range(5):
-        _ring_z(glow, 0, 0, 0.14 + 0.025 * k, 0.15 + 0.025 * k, 0.06, 0.06, (0.4, 0.85, 1.0), None, 10)
+        _ring_z(glow, 0, 0, 0.14 + 0.025 * k, 0.15 + 0.025 * k, 0.06, 0.06, coil_c, None, 10)
     for sx in (-1, 1):
         _tube(body, [(sx * 0.03, 0, 0.12), (sx * 0.06, 0.03, 0.04)], [0.012, 0.008], alu, rng, 5)  # Pole
         ell(glow, (sx * 0.06, 0.03, 0.035), 0.015, 0.015, 0.015, (0.6, 0.95, 1.0), None, rings=3)
@@ -12209,8 +12794,8 @@ _MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_h
 def build_mob(kind, look=None):
     """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
     Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
-    if kind == "drone":
-        root, torso, legs, bar = build_drone()
+    if kind in ("drone", "pdrone"):
+        root, torso, legs, bar = build_drone(kind)
         bar, fg = mob_bar(bar)
         return root, torso, legs[0], legs[1], bar, fg, legs
     if kind == "critter":
@@ -16320,7 +16905,7 @@ class MorePage(SetupPage):
 # ------------------------------------------------------------------ Netzwerk
 # Alles nur mit der Standardbibliothek (socket, json, threading), nicht blockierend,
 # damit das Spiel nie auf das Netz warten muss.
-KINDS = ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan")   # Index in den Snapshots (neue hinten!)
+KINDS = ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan", "pdrone")   # Index in den Snapshots (neue hinten!)
 STATES = ("idle", "chase", "attack", "dead")
 PLAYER_COLORS = [(0.20, 0.35, 0.80), (0.80, 0.25, 0.25), (0.25, 0.70, 0.35), (0.85, 0.70, 0.15),
                  (0.60, 0.30, 0.75), (0.15, 0.70, 0.75), (0.90, 0.50, 0.15), (0.85, 0.85, 0.85)]
@@ -16862,6 +17447,8 @@ class HostSession:
             pl.jet_on = m.get("jt") == 1 and wears(pl, "jetpack")    # grobe Prüfung: nur mit Jetpack
             pl.cling = m.get("jt") == 2 and wears(pl, "cling")       # 10c: hängt an der Wand
             pl.melee_out = bool(m.get("mo"))
+            gc_ = m.get("gc", -1)                     # 10e: hält G (Granate in der Hand, Molotow brennt)
+            pl.gren_hold = gc_ if (isinstance(gc_, int) and -1 <= gc_ < len(GREN_KINDS)) else -1
             gd_ = m.get("gd", -1)
             pl.hold_gad = gd_ if (isinstance(gd_, int) and -1 <= gd_ < len(GADGETS)) else -1
             pl.trig = bool(m.get("tg")) and (pl.mount >= 0 or pl.heli >= 0)
@@ -16936,14 +17523,17 @@ class HostSession:
                 w.equip_att(pl, wi_, si_, v_)
         elif t == "gren":                         # Granate geworfen: der Host simuliert sie
             d, o = m.get("d"), m.get("o")
-            if (pl.hp > 0 and pl.grenades > 0 and w.phase == "play" and pl.vehicle < 0
+            ki, sp = m.get("k", 0), m.get("s", GREN_SPEED)
+            kind = GREN_KINDS[ki] if isinstance(ki, int) and 0 <= ki < len(GREN_KINDS) else "frag"
+            if (pl.hp > 0 and pl.gren.get(kind, 0) > 0 and w.phase == "play" and pl.vehicle < 0
                     and isinstance(d, list) and len(d) == 3 and finite(*d)):
                 eye = (pl.x, pl.y, pl.z + eye_h(pl))
                 if isinstance(o, list) and len(o) == 3 and finite(*o) and math.dist(o, eye) < 3.0:
                     eye = (float(o[0]), float(o[1]), float(o[2]))
-                pl.grenades -= 1
                 pl.protect = 0.0
-                w.spawn_grenade(pl.pid, eye, norm((float(d[0]), float(d[1]), float(d[2]))))
+                tier = w.take_grenade(pl, kind)
+                sp = clampf(float(sp), GREN_SPEED_MIN, GREN_SPEED_MAX) if finite(sp) else GREN_SPEED
+                w.spawn_grenade(pl.pid, eye, norm((float(d[0]), float(d[1]), float(d[2]))), kind, sp, tier)
         elif t == "gad":                          # Gadget platzieren
             k, ps, nv = m.get("k"), m.get("p"), m.get("n")
             if (isinstance(k, int) and isinstance(ps, list) and len(ps) == 3 and finite(*ps)
@@ -17011,20 +17601,27 @@ class HostSession:
                         BUFF_KINDS.index(p.buff) if p.buff in BUFF_KINDS else -1, r1(p.buff_t),
                         int(p.max_hp), gear_list(p), r1(p.shield_hp), 1 if p.jet_on else (2 if getattr(p, "cling", False) else 0),
                         p.melee, 1 if p.melee_out else 0, p.look, 1 if p.ready else 0,
-                        ((p.gadget if p.gad_out and p.hp > 0 else -1) if p.pid == 0 else p.hold_gad)]
+                        ((p.gadget if p.gad_out and p.hp > 0 else -1) if p.pid == 0 else p.hold_gad),
+                        getattr(p, "gren_hold", -1)]
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
                         r2(m.hurt_t), r2(m.dead_t), m.atk_kind] for m in w.mobs],
                 "bl": [[b.bid, r2(b.x), r2(b.y), r2(b.z), r1(b.vx), r1(b.vy), r1(b.vz),
                         r1(b.travel), b.wi, b.owner] for b in w.bullets],
-                "cr": [[c.cid, CRATE_KINDS.index(c.kind), r2(c.x), r2(c.y), r2(c.z), 1 if c.bonus else 0]
-                       for c in w.crates],
+                "cr": [[c.cid, CRATE_KINDS.index(c.kind) if not c.air else 0, r2(c.x), r2(c.y), r2(c.z),
+                        1 if c.bonus else 0, 1 if c.air else 0]
+                       for c in w.crates],                                   # 10e: Airdrop-Kiste verrät ihre Art nicht
                 "ro": [[r.rid, r2(r.x), r2(r.y), r2(r.z), r1(r.vx), r1(r.vy), r1(r.vz)] for r in w.rocks],
-                "gr": [[g.gid, r2(g.x), r2(g.y), r2(g.z), r1(g.vx), r1(g.vy), r1(g.vz), r1(g.fuse)]
-                       for g in w.grenades],
+                "gr": [[g.gid, r2(g.x), r2(g.y), r2(g.z), r1(g.vx), r1(g.vy), r1(g.vz), r1(g.fuse),
+                        GREN_KINDS.index(g.kind), 1 if g.active else 0] for g in w.grenades],
+                "sm": [[q.sid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age)] for q in w.smokes],   # 10e
+                "fi": [[q.fid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age), q.owner] for q in w.fires],
+                "ad": [[a.aid, a.state, r2(a.fx), r2(a.fy), r2(a.fz), round(a.ang, 3), r1(a.dist), r2(a.cz), r1(a.age)]
+                       for a in w.airdrops],
                 "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee, d.att,
-                        list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope, d.gren] for d in w.drops],
+                        list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope, d.gren,
+                        GREN_KINDS.index(d.gk)] for d in w.drops],
                 "gd": [[g.gid, g.kind, g.owner, r2(g.x), r2(g.y), r2(g.z), r2(g.nx), r2(g.ny), r2(g.nz), r1(g.yaw),
                         1 if g.arm > 0 else 0] for g in w.gadgets],
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
@@ -17269,6 +17866,7 @@ class ClientSession:
             lk = row[25] if len(row) > 25 else ""
             rdy = bool(row[26]) if len(row) > 26 else False
             hg = row[27] if len(row) > 27 else -1
+            gh = row[28] if len(row) > 28 and isinstance(row[28], int) else -1
             buff = BUFF_KINDS[bi] if isinstance(bi, int) and 0 <= bi < len(BUFF_KINDS) else None
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
@@ -17296,6 +17894,7 @@ class ClientSession:
             pl.cling = jet == 2
             pl.melee, pl.melee_out = mel, mout
             pl.ready, pl.hold_gad = rdy, (hg if isinstance(hg, int) else -1)
+            pl.gren_hold = gh
             seen.add(pid)
         for pid in [pid for pid in w.players if pid != self.my_id and pid not in seen]:
             del w.players[pid]
@@ -17339,6 +17938,7 @@ class ClientSession:
             if c is None:
                 c = Crate(cid, x, y, z, CRATE_KINDS[ki] if 0 <= ki < len(CRATE_KINDS) else "common")
                 c.bonus = bool(row[5]) if len(row) > 5 else False
+                c.air = bool(row[6]) if len(row) > 6 else False
             crates.append(c)
         w.crates = crates
         oldr = {r.rid: r for r in w.rocks}
@@ -17350,15 +17950,19 @@ class ClientSession:
         w.rocks = rocks
 
         seen = set()
-        for gid, x, y, z, vx, vy, vz, fuse in m.get("gr", ()):
+        for row in m.get("gr", ()):
+            gid, x, y, z, vx, vy, vz, fuse = row[:8]
+            gk = GREN_KINDS[row[8]] if len(row) > 8 and isinstance(row[8], int) and 0 <= row[8] < len(GREN_KINDS) else "frag"
             g = self.grenades.get(gid)
             if g is None:
-                g = self.grenades[gid] = Grenade(gid, x, y, z, vx, vy, vz, -1, fuse)
+                g = self.grenades[gid] = Grenade(gid, x, y, z, vx, vy, vz, -1, fuse, gk)
             g.x, g.y, g.z, g.vx, g.vy, g.vz, g.fuse = x, y, z, vx, vy, vz, fuse
+            g.active = bool(row[9]) if len(row) > 9 else False
             seen.add(gid)
         for gid in [i for i in self.grenades if i not in seen]:
             del self.grenades[gid]
         w.grenades = list(self.grenades.values())
+        self.apply_effects(m)                       # 10e: Rauch, Feuer, Airdrops
 
         seen = set()
         for gid, kd, ow, x, y, z, nx, ny, nz, yw, ar in m.get("gd", ()):
@@ -17386,6 +17990,8 @@ class ClientSession:
                 d.scope = row[11]
             if len(row) > 12 and isinstance(row[12], int):
                 d.gren = row[12]
+            if len(row) > 13 and isinstance(row[13], int) and 0 <= row[13] < len(GREN_KINDS):
+                d.gk = GREN_KINDS[row[13]]
             seen.add(did)
         for did in [i for i in self.drops if i not in seen]:
             del self.drops[did]
@@ -17445,6 +18051,43 @@ class ClientSession:
         for e in m.get("ev", ()):
             self.events.append(tuple(e))
 
+    def apply_effects(self, m):
+        """10e: Rauchwolken und Flammen baut der Mitspieler selbst (gleiche Welt -> gleiche Zellen); der Snapshot
+        sagt nur, welche es gibt und wie alt sie sind. Airdrops: Fackel, Flugzeug, Kiste am Fallschirm."""
+        w = self.world
+        live = set()
+        for sid, x, y, z, age in m.get("sm", ()):
+            sm = next((q for q in w.smokes if q.sid == sid), None) or w.add_smoke((x, y, z), sid)
+            if sm is not None:
+                if abs(sm.age - age) > 0.5:
+                    sm.age = age
+                live.add(sid)
+        w.smokes = [q for q in w.smokes if q.sid in live]
+        live = set()
+        for row in m.get("fi", ()):
+            fid, x, y, z, age = row[:5]
+            fa = next((q for q in w.fires if q.fid == fid), None) or w.add_fire(fid, (x, y, z), row[5] if len(row) > 5 else -1)
+            if fa is not None:
+                if abs(fa.age - age) > 0.5:
+                    fa.age = age
+                live.add(fid)
+        w.fires = [q for q in w.fires if q.fid in live]
+        old = {a.aid: a for a in w.airdrops}
+        ads = []
+        for aid, st, fx, fy, fz, ang, dist, cz, age in m.get("ad", ()):
+            a = old.get(aid)
+            if a is None:
+                a = AirDrop(aid, fx, fy, fz, "common", -1, ang)
+            a.state, a.ang = st, ang
+            if abs(a.dist - dist) > 6.0 or st != getattr(a, "_st", st):
+                a.dist = dist
+            if abs(a.cz - cz) > 1.5 or st != 2:
+                a.cz = cz
+            a._st = st
+            a.age = age
+            ads.append(a)
+        w.airdrops = ads
+
     def advance(self, dt):
         """Zwischen zwei Snapshots weiterrechnen: Kugeln fliegen (nur zur Anzeige),
         Monster gleiten weich."""
@@ -17463,6 +18106,16 @@ class ClientSession:
             g.y += g.vy * dt
             g.z = max(g.z + g.vz * dt, w.ground_for(g.x, g.y, g.z) + 0.1)
             g.fuse -= dt
+        for sm in w.smokes:                        # 10e: Rauch/Feuer altern, Flugzeug und Kiste bewegen sich weiter
+            sm.age += dt
+        for fa in w.fires:
+            fa.age += dt
+        for a in w.airdrops:
+            a.age += dt
+            if a.state >= 1:
+                a.dist += AIR_PLANE_SPEED * dt
+            if a.state == 2:
+                a.cz -= AIR_FALL_V * dt
         if w.strike == 1:
             w.strike_t = max(0.0, w.strike_t - dt)
         elif w.strike == 2 and w.strike_wait > 0:
@@ -17486,7 +18139,8 @@ class ClientSession:
                "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0,
                "jt": 1 if getattr(pl, "jet_on", False) else (2 if getattr(pl, "cling", False) else 0),
                "mo": 1 if getattr(pl, "melee_out", False) else 0,
-               "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1}
+               "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1,
+               "gc": getattr(pl, "gren_hold", -1)}
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
             msg["vh"] = [v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed)]
@@ -17499,9 +18153,10 @@ class ClientSession:
             q.impact = 0.0
         self.conn.send(msg)
 
-    def send_grenade(self, pl, eye, d):
-        """World.gren_sink: den Wurf dem Host melden (er simuliert die Granate)."""
-        self.conn.send({"t": "gren", "o": [r2(c) for c in eye], "d": [round(c, 4) for c in d]})
+    def send_grenade(self, pl, eye, d, kind="frag", speed=GREN_SPEED):
+        """World.gren_sink: den Wurf dem Host melden (er simuliert die Granate). 10e: Art und Tempo."""
+        self.conn.send({"t": "gren", "o": [r2(c) for c in eye], "d": [round(c, 4) for c in d],
+                        "k": GREN_KINDS.index(kind) if kind in GREN_KINDS else 0, "s": round(float(speed), 2)})
         self.conn.flush()
 
     def send_gadget(self, what, pl, kind, pos, nrm, yaw, att):
@@ -17699,13 +18354,12 @@ class PlayerView:
         self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
         self.mag_nd.setPos(*sub(SOLDIER_HAND[0], SOLDIER_SH[0]))
         self.mag_nd.hide()
-        gr = Mesh()
-        blob(gr, 0, 0, 0.0, 0.040, 0.040, 0.052, (0.22, 0.30, 0.16), random.Random(4), jitter=0.04)   # Handgranate
-        box(gr, 0, 0, 0.055, 0.022, 0.022, 0.02, (0.6, 0.6, 0.55))
-        self.gren_nd = self.armR.attachNewNode(gr.node("hand_gren"))
+        self.gren_nd = self.armR.attachNewNode("hand_gren")         # 10e: Granate in der Hand (Modell je Art)
         self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
         self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
         self.gren_nd.hide()
+        self.gren_kind, self.gren_flame = None, None
+        self.th_kind = "frag"
         self.slung = False
         self.melee_out = False
         self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
@@ -17790,9 +18444,22 @@ class PlayerView:
         self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
         self.rl_t = self.rl_tot
 
-    def start_throw(self):
+    def start_throw(self, kind="frag"):
         self.th_t = GREN_ANIM_T
         self.rl_t = 0.0
+        self.th_kind = kind if kind in GREN_KINDS else "frag"
+
+    def show_gren(self, kind):
+        """10e: Modell der Granate in der Hand wechseln (Molotow mit brennendem Lappen)."""
+        if kind == self.gren_kind:
+            return
+        self.gren_kind = kind
+        self.gren_nd.getChildren().detach()
+        nd = self.gren_nd.attachNewNode(gren_geom(kind))
+        nd.setScale(0.11)
+        self.gren_flame = None
+        if kind == "molotov":
+            self.gren_flame = gren_flame_node(self.gren_nd, (0.008, 0.003, 0.068), 0.045)
 
     def pose_arms(self, dt):
         """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
@@ -17804,12 +18471,18 @@ class PlayerView:
         tilt = 0.0
         mag = gren = slung = False
         py = 0.0
+        hold = getattr(self, "hold_kind", None)                       # 10e: hält G - Arm ausgeholt, Granate in der Hand
         if self.th_t > 0:
             self.th_t = max(0.0, self.th_t - dt)
             u = 1.0 - self.th_t / GREN_ANIM_T
             tl, tr = kf_pos(SOLDIER_THROW_L, u), kf_pos(SOLDIER_THROW_R, u)
             slung = True
             gren = u < 0.33                                           # loslassen beim Vorschwung
+            self.show_gren(self.th_kind)
+        elif hold is not None:
+            tl, tr = kf_pos(SOLDIER_THROW_L, 0.15), kf_pos(SOLDIER_THROW_R, 0.15)
+            slung = gren = True
+            self.show_gren(hold)
         elif self.rl_t > 0:
             self.rl_t = max(0.0, self.rl_t - dt)
             tt = self.rl_tot - self.rl_t
@@ -17843,6 +18516,8 @@ class PlayerView:
                 self.gun.setP(0)
         (self.mag_nd.show if mag else self.mag_nd.hide)()
         (self.gren_nd.show if gren else self.gren_nd.hide)()
+        if self.gren_flame is not None and gren:
+            flame_flicker(self.gren_flame)
         self.armR.setPos(SR[0], SR[1] + py, SR[2])
         aim_arm(self.armR, v0R, sub(tr, SR))
         aim_arm(self.armL, v0L, sub(tl, SL))
@@ -17878,6 +18553,8 @@ class PlayerView:
             self.gear_nodes.append(n)
 
     def update(self, p, dt):
+        gh = getattr(p, "gren_hold", -1)                                 # 10e: hält G (Granate in der Hand)
+        self.hold_kind = GREN_KINDS[gh] if isinstance(gh, int) and 0 <= gh < len(GREN_KINDS) and p.hp > 0 else None
         if math.hypot(p.x - self.x, p.y - self.y) > 8.0:                 # Sprung (Respawn)
             self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
         out = bool(getattr(p, "melee_out", False))
@@ -18333,6 +19010,34 @@ def synth_sounds():
         a_ = i / xf
         wl[i] = wl[i] * a_ + wl[n - xf + i] * (1.0 - a_)
     out["falls"] = norm(wl[:n - xf], 0.6)
+    # --- 10e: Granaten
+    n = int(3.2 * SR)                                               # Blendgranate: Pfeifen im Ohr (Tinnitus)
+    out["ring"] = norm([math.sin(tp * (3600 + 40 * math.sin(tp * 0.7 * i / SR)) * i / SR) *
+                        min(1.0, i / (0.05 * SR)) * math.exp(-0.9 * i / SR) for i in range(n)], 0.55)
+    n = 2 * SR                                                      # Feuer: Prasseln (Schleife)
+    crk = [(rng.uniform(-1, 1) if rng.random() < 0.012 else 0.0) for _ in range(n)]
+    fl_ = mix((lowpass(noise(n), 0.05), 1.0), (lowpass(crk, 0.5), 2.2))
+    for i in range(int(0.2 * SR)):                                  # Enden überblenden
+        a_ = i / (0.2 * SR)
+        fl_[i] = fl_[i] * a_ + fl_[n - int(0.2 * SR) + i] * (1 - a_)
+    out["fire"] = norm(fl_[:n - int(0.2 * SR)], 0.6)
+    n = int(1.5 * SR)                                               # Rauchgranate / Fackel: Zischen (Schleife)
+    hs = [a - b for a, b in zip(noise(n), lowpass(noise(n), 0.2))]
+    out["gas"] = norm(mul(hs, [0.85 + 0.15 * math.sin(tp * 3 * i / n) for i in range(n)]), 0.45)
+    n = 2 * SR                                                      # Frachtflugzeug: Propeller-Dröhnen (Schleife)
+    pl_ = []
+    for i in range(n):
+        t = i / SR
+        pl_.append(0.6 * math.sin(tp * 62 * t) + 0.35 * math.sin(tp * 124 * t + 0.4) + 0.22 * math.sin(tp * 186 * t)
+                   + 0.18 * math.sin(tp * 31 * t) * (0.6 + 0.4 * math.sin(tp * 8 * t)))
+    out["plane"] = norm(mix((pl_, 1.0), (lowpass(noise(n), 0.04), 0.5)), 0.7)
+    n = int(0.7 * SR)                                               # Molotow: Glas zerspringt + Fauchen
+    gl_ = mix(*[(mul(tone(n, f, 0.3), env(n, k)), a) for f, k, a in ((2900, 22, 0.6), (4100, 30, 0.4), (5300, 38, 0.3))])
+    out["glass"] = norm(mix((gl_, 1.0), (mul(noise(n), env(n, 25)), 0.8),
+                            (mul(lowpass(noise(n), 0.08), [min(1.0, i / (0.08 * SR)) * math.exp(-3 * i / SR)
+                                                           for i in range(n)]), 1.2)), 0.85)
+    n = int(0.12 * SR)                                              # Granate: Sicherungsstift (kleines Klicken)
+    out["pin"] = norm(mix((mul(sweep(n, 2400, 1500, 40), env(n, 60)), 1.0), (mul(noise(n), env(n, 120)), 0.4)), 0.5)
     return out
 
 
@@ -112837,6 +113542,230 @@ WEAPON_CLIPS = {
 }
 
 
+# ======================================================================== 10e: Granaten-Modelle, Airdrop
+def gren_mesh(kind, m=None, rng=None):
+    """10e: Granate als Modell (Höhe ca. 1, Mitte im Ursprung, z nach oben) - jede Art mit eigener Form und Farbe:
+    Splitter (olivgrünes Ei mit Zünder und Bügel), Decoy (Messingdose mit Antenne), Blend (Alu-Zylinder mit
+    Löchern), Rauch (grauer Zylinder mit weissem Band), Drohne (lila Kugel mit Rotorstummeln), Molotow (Flasche
+    mit Lappen), Fackel (roter Stab mit Kappe). Wird für Welt, Hand, Mitspieler und Drops skaliert."""
+    m = m or Mesh()
+    rng = rng or random.Random(sum(map(ord, kind)))
+    c = GREN_COL.get(kind, (0.4, 0.4, 0.4))
+    dark, alu, black = tuple(v * 0.55 for v in c), (0.68, 0.70, 0.72), (0.10, 0.10, 0.11)
+    if kind == "frag":
+        ell(m, (0, 0, -0.08), 0.33, 0.33, 0.40, c, rng, rings=8)
+        _tube(m, [(0, 0, 0.28), (0, 0, 0.42)], [0.13, 0.12], alu, rng, 10)                   # Zünder
+        _tube(m, [(0.12, 0, 0.40), (0.30, 0, 0.18), (0.36, 0, -0.18)], [0.035, 0.035, 0.03], alu, rng, 5)   # Bügel
+        _tube(m, [(-0.14, 0, 0.37), (-0.26, 0, 0.37)], [0.05, 0.05], (0.75, 0.70, 0.40), rng, 8)   # Ring
+    elif kind == "decoy":
+        _tube(m, [(0, 0, -0.45), (0, 0, 0.30)], [0.24, 0.24], c, rng, 14)
+        _tube(m, [(0, 0, -0.05), (0, 0, 0.08)], [0.25, 0.25], black, rng, 14)                 # Band
+        _tube(m, [(0, 0, 0.30), (0, 0, 0.40)], [0.15, 0.13], alu, rng, 10)
+        _tube(m, [(0.08, 0, 0.40), (0.10, 0, 0.62)], [0.02, 0.012], black, rng, 4)          # Antenne
+        ell(m, (0.10, 0, 0.64), 0.035, 0.035, 0.035, (1.0, 0.2, 0.15), rng, rings=3)
+    elif kind == "flash":
+        _tube(m, [(0, 0, -0.45), (0, 0, 0.30)], [0.22, 0.22], c, rng, 14)
+        for k in range(8):                                                                   # Löcher im Mantel
+            a = 2 * math.pi * k / 8
+            for z in (-0.25, 0.05):
+                box(m, math.cos(a) * 0.215, math.sin(a) * 0.215, z, 0.06, 0.06, 0.09, black)
+        _tube(m, [(0, 0, 0.30), (0, 0, 0.42)], [0.12, 0.11], alu, rng, 10)
+        _tube(m, [(0.1, 0, 0.40), (0.26, 0, 0.0), (0.27, 0, -0.30)], [0.03, 0.03, 0.025], alu, rng, 5)
+    elif kind == "smoke":
+        _tube(m, [(0, 0, -0.48), (0, 0, 0.32)], [0.22, 0.22], c, rng, 14)
+        _tube(m, [(0, 0, 0.08), (0, 0, 0.18)], [0.225, 0.225], (0.92, 0.92, 0.9), rng, 14)   # weisses Band
+        _tube(m, [(0, 0, 0.32), (0, 0, 0.44)], [0.12, 0.11], alu, rng, 10)
+        _tube(m, [(0.1, 0, 0.42), (0.26, 0, 0.0), (0.27, 0, -0.32)], [0.03, 0.03, 0.025], alu, rng, 5)
+    elif kind == "drone":
+        ell(m, (0, 0, 0), 0.30, 0.30, 0.30, c, rng, rings=8)
+        _ring_z(m, 0, 0, -0.03, 0.03, 0.31, 0.31, (0.85, 0.85, 0.9), rng, 16)
+        for k in range(4):
+            a = math.pi / 4 + k * math.pi / 2
+            _tube(m, [(math.cos(a) * 0.25, math.sin(a) * 0.25, 0.12), (math.cos(a) * 0.42, math.sin(a) * 0.42, 0.16)],
+                  [0.04, 0.03], dark, rng, 5)
+        ell(m, (0, 0.27, 0.05), 0.07, 0.05, 0.07, (0.9, 0.6, 1.0), rng, rings=3)
+    elif kind == "molotov":
+        glass = (0.32, 0.55, 0.30)
+        _tube(m, [(0, 0, -0.48), (0, 0, 0.05)], [0.20, 0.20], glass, rng, 12)
+        _tube(m, [(0, 0, 0.05), (0, 0, 0.20), (0, 0, 0.40)], [0.20, 0.08, 0.07], glass, rng, 12)
+        _tube(m, [(0, 0, 0.38), (0.02, 0.01, 0.52), (0.07, 0.03, 0.60)], [0.08, 0.06, 0.04], (0.90, 0.88, 0.80), rng, 6)
+        _tube(m, [(0, 0, -0.35), (0, 0, -0.02)], [0.205, 0.205], (0.75, 0.42, 0.12), rng, 12)  # Benzin (sichtbar)
+    else:                                                                                    # flare
+        _tube(m, [(0, 0, -0.50), (0, 0, 0.40)], [0.15, 0.15], c, rng, 12)
+        _tube(m, [(0, 0, 0.40), (0, 0, 0.52)], [0.17, 0.17], (0.95, 0.85, 0.30), rng, 12)       # Kappe
+        for z in (-0.3, -0.1):
+            _tube(m, [(0, 0, z), (0, 0, z + 0.04)], [0.155, 0.155], (0.95, 0.95, 0.9), rng, 12)
+    return m
+
+
+_GREN_GEOM = {}
+_FLAME_GEOM = None
+
+
+def gren_flame_node(parent, pos, size):
+    """10e: kleine, flackernde Flamme (Molotow-Lappen, Fackel) an parent; mit flame_flicker() bewegen."""
+    global _FLAME_GEOM
+    if _FLAME_GEOM is None:
+        m = Mesh(lit=False)
+        for a in (0.0, math.pi / 3, 2 * math.pi / 3):
+            ca, sa = math.cos(a), math.sin(a)
+            m.tri((-ca * 0.5, -sa * 0.5, 0.0), (ca * 0.5, sa * 0.5, 0.0), (0.0, 0.0, 1.6), [(1.0, 0.45, 0.05), (1.0, 0.45, 0.05), (1.0, 0.95, 0.5)])
+            m.tri((-ca * 0.3, -sa * 0.3, 0.0), (ca * 0.3, sa * 0.3, 0.0), (0.0, 0.0, 1.0), [(1.0, 0.9, 0.4), (1.0, 0.9, 0.4), (1.0, 1.0, 0.85)])
+        _FLAME_GEOM = m.node("flamme")
+    n = parent.attachNewNode("flame")
+    n.attachNewNode(_FLAME_GEOM)
+    n.setPos(*pos)
+    n.setScale(size)
+    n.setTwoSided(True)
+    n.setLightOff()
+    n.setFogOff()
+    n.setPythonTag("s", size)
+    return n
+
+
+def flame_flicker(n):
+    s0 = n.getPythonTag("s") or 0.05
+    t = time.time() * 13.0 + id(n) % 7
+    n.setScale(s0 * (0.85 + 0.15 * math.sin(t * 1.7)), s0 * (0.85 + 0.15 * math.cos(t * 1.3)),
+               s0 * (0.8 + 0.35 * abs(math.sin(t))))
+    n.setH((t * 40.0) % 360.0)
+
+
+def gren_geom(kind):
+    """Geteilter GeomNode je Granatenart (Instanzen für Welt, Drops, Hand)."""
+    g = _GREN_GEOM.get(kind)
+    if g is None:
+        g = _GREN_GEOM[kind] = gren_mesh(kind).node("gren_" + kind)
+    return g
+
+
+def gren_icon_mesh(kind, s=0.05):
+    """HUD-Symbol (Umriss in der x-z-Ebene, unbeleuchtet) - je Art eigene Form und Farbe."""
+    m = Mesh(lit=False)
+    c = GREN_COL.get(kind, (0.5, 0.5, 0.5))
+    hi = tuple(min(1.0, v * 1.35 + 0.1) for v in c)
+    alu = (0.82, 0.82, 0.84)
+
+    def disc(cx, cz, rx, rz, col, n=14):
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            m.tri((cx, 0, cz), (cx + math.cos(a0) * rx, 0, cz + math.sin(a0) * rz),
+                  (cx + math.cos(a1) * rx, 0, cz + math.sin(a1) * rz), col)
+
+    def rect(x0, z0, x1, z1, col):
+        m.tri((x0, 0, z0), (x1, 0, z0), (x1, 0, z1), col)
+        m.tri((x0, 0, z0), (x1, 0, z1), (x0, 0, z1), col)
+    if kind == "frag":
+        disc(0, -0.1 * s, 0.8 * s, s, c)
+        rect(-0.25 * s, 0.8 * s, 0.25 * s, 1.15 * s, alu)
+        rect(0.25 * s, 0.9 * s, 0.85 * s, 1.0 * s, alu)
+    elif kind == "drone":
+        disc(0, 0, 0.9 * s, 0.9 * s, c)
+        rect(-1.2 * s, 0.35 * s, 1.2 * s, 0.5 * s, hi)
+        disc(0, 0, 0.3 * s, 0.3 * s, (0.95, 0.75, 1.0))
+    elif kind == "molotov":
+        rect(-0.45 * s, -1.0 * s, 0.45 * s, 0.25 * s, c)
+        rect(-0.18 * s, 0.25 * s, 0.18 * s, 0.85 * s, c)
+        rect(-0.15 * s, 0.85 * s, 0.2 * s, 1.15 * s, (0.95, 0.92, 0.85))
+        disc(0.1 * s, 1.3 * s, 0.2 * s, 0.3 * s, (1.0, 0.55, 0.1))
+    elif kind == "flare":
+        rect(-0.3 * s, -1.0 * s, 0.3 * s, 0.85 * s, c)
+        rect(-0.36 * s, 0.85 * s, 0.36 * s, 1.15 * s, (0.95, 0.85, 0.3))
+        disc(0, 1.35 * s, 0.25 * s, 0.25 * s, (1.0, 0.3, 0.2))
+    else:                                                     # Zylinder: Decoy, Blend, Rauch
+        rect(-0.5 * s, -1.0 * s, 0.5 * s, 0.75 * s, c)
+        rect(-0.3 * s, 0.75 * s, 0.3 * s, 1.0 * s, alu)
+        if kind == "smoke":
+            rect(-0.5 * s, 0.1 * s, 0.5 * s, 0.3 * s, (0.95, 0.95, 0.92))
+        elif kind == "decoy":
+            rect(-0.5 * s, -0.2 * s, 0.5 * s, 0.0, (0.1, 0.1, 0.1))
+            rect(0.15 * s, 1.0 * s, 0.25 * s, 1.5 * s, (0.1, 0.1, 0.1))
+        else:
+            for z in (-0.6, -0.1, 0.4):
+                for x in (-0.25, 0.15):
+                    rect(x * s, z * s, (x + 0.12) * s, (z + 0.15) * s, (0.15, 0.15, 0.17))
+        if kind != "decoy":
+            rect(0.3 * s, 0.8 * s, 0.75 * s, 0.9 * s, alu)
+    return m
+
+
+def build_cargo_plane():
+    """10e: Frachtflugzeug für den Airdrop (Nase +y): dicker Rumpf mit Heckrampe, Schulterflügel, vier Propeller-
+    Triebwerke, T-Leitwerk. Etwa 30 m lang - von weit unten gut zu sehen."""
+    rng = random.Random(31)
+    m = Mesh()
+    body, dk, win = (0.42, 0.46, 0.40), (0.26, 0.28, 0.25), (0.15, 0.18, 0.22)
+    loft(m, [(0, -15.0, 1.4), (0, -11.0, 0.6), (0, -4.0, 0.0), (0, 6.0, 0.0), (0, 11.5, -0.2), (0, 14.0, -0.6),
+             (0, 15.2, -0.9)], [0.6, 1.8, 2.3, 2.3, 2.1, 1.4, 0.4], [0.5, 1.9, 2.5, 2.5, 2.2, 1.4, 0.4], body, rng)
+    for k in range(5):
+        box(m, 2.25, 9.0 - k * 4.0, 0.9, 0.05, 0.9, 0.5, win)
+        box(m, -2.25, 9.0 - k * 4.0, 0.9, 0.05, 0.9, 0.5, win)
+    box(m, 0, 13.6, 0.35, 1.8, 0.8, 0.45, win)                                              # Cockpit
+    for sx in (-1, 1):                                                                       # Flügel
+        loft(m, [(sx * 1.5, 2.0, 2.0), (sx * 20.0, 0.8, 2.4)], [1.6, 0.8], [0.3, 0.15], body, rng, sides=6)
+        for ex in (6.0, 11.5):                                                               # Triebwerke
+            _tube(m, [(sx * ex, 3.4, 1.7), (sx * ex, 6.5, 1.75)], [0.5, 0.55], dk, rng, 10)
+        box(m, sx * 2.6, -1.0, -1.6, 1.0, 5.0, 1.0, dk)                                      # Fahrwerksgondel
+    _tube(m, [(0, -12.5, 2.0), (0, -14.8, 6.8)], [1.6, 0.9], body, rng, 6)                  # Seitenleitwerk
+    loft(m, [(-6.0, -14.6, 6.6), (6.0, -14.6, 6.6)], [1.1, 1.1], [0.15, 0.15], body, rng, sides=6)   # Höhenleitwerk
+    root = NodePath("cargo_plane")
+    root.attachNewNode(m.node("plane"))
+    props = []
+    pm = Mesh()
+    for a in (0.0, math.pi / 2, math.pi, 1.5 * math.pi):
+        loft(pm, [(0, 0, 0), (math.cos(a) * 1.7, 0, math.sin(a) * 1.7)], [0.18, 0.08], [0.03, 0.02], dk, rng, sides=4)
+    pg = pm.node("prop")
+    for sx in (-1, 1):
+        for ex in (6.0, 11.5):
+            n = root.attachNewNode("prop")
+            n.setPos(sx * ex, 6.6, 1.75)
+            n.attachNewNode(pg)
+            props.append(n)
+    return root, props
+
+
+def build_parachute():
+    """10e: Fallschirm (Kuppel mit Bahnen, Leinen zur Kiste darunter); Ursprung = Kiste oben."""
+    rng = random.Random(8)
+    m = Mesh()
+    cols = ((0.85, 0.85, 0.80), (0.75, 0.42, 0.18))
+    n, R, H, z0 = 12, 3.2, 1.6, 5.0
+    for i in range(n):
+        a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+        for j in range(3):
+            t0, t1 = j / 3, (j + 1) / 3
+            r0, r1 = R * math.sin(t0 * math.pi / 2 + 0.05), R * math.sin(t1 * math.pi / 2 + 0.05)
+            h0, h1 = H * math.cos(t0 * math.pi / 2), H * math.cos(t1 * math.pi / 2)
+            col = cols[i % 2]
+            p00 = (math.cos(a0) * r0, math.sin(a0) * r0, z0 + h0)
+            p01 = (math.cos(a1) * r0, math.sin(a1) * r0, z0 + h0)
+            p10 = (math.cos(a0) * r1, math.sin(a0) * r1, z0 + h1)
+            p11 = (math.cos(a1) * r1, math.sin(a1) * r1, z0 + h1)
+            m.tri(p00, p10, p11, col, (0, 0, z0 - 2))
+            m.tri(p00, p11, p01, col, (0, 0, z0 - 2))
+    for i in range(0, n, 2):
+        a = 2 * math.pi * i / n
+        _tube(m, [(math.cos(a) * R, math.sin(a) * R, z0), (0, 0, 0.6)], [0.015, 0.015], (0.2, 0.2, 0.2), None, 3)
+    nd = NodePath(m.node("chute"))
+    nd.setTwoSided(True)
+    return nd
+
+
+def build_supply_crate():
+    """10e: neutrale Versorgungskiste (Airdrop): Holz mit Stahlbändern, Schablonen-Pfeil - verrät ihre Seltenheit nicht."""
+    rng = random.Random(21)
+    m = Mesh()
+    wood, band = (0.55, 0.42, 0.26), (0.30, 0.31, 0.30)
+    box(m, 0, 0, 0.42, 1.1, 0.85, 0.84, wood, rng, mat="wood")
+    for x in (-0.38, 0.38):
+        box(m, x, 0, 0.42, 0.08, 0.87, 0.86, band, rng)
+    box(m, 0, 0, 0.86, 1.12, 0.87, 0.05, band, rng)
+    box(m, 0, -0.43, 0.5, 0.25, 0.01, 0.25, (0.85, 0.82, 0.70))
+    root = NodePath("supply")
+    root.attachNewNode(m.node("crate"))
+    return root
+
+
 class Sfx:
     """Geräusche: Schüsse, Schritte, Explosionen, Helikopter. Positionsabhängig (Lautstärke und Richtung)
     über OpenAL; fehlt eine Audioausgabe, läuft das Spiel ohne Ton weiter."""
@@ -112846,21 +113775,23 @@ class Sfx:
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
-            "chew": 2, "burp": 1}
+            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
              "growl": 34.0, "growl_deep": 45.0, "hiss": 30.0, "mstep": 26.0, "mstep_heavy": 55.0, "mstep_giant": 140.0,
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
-             "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0}
+             "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0,
+             "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
            "growl": 4.0, "growl_deep": 6.0, "hiss": 3.0, "mstep": 3.0, "mstep_heavy": 8.0, "mstep_giant": 25.0,
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
-           "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0}
+           "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0,
+           "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0}
 
     def __init__(self, game):
         self.game = game
@@ -113349,7 +114280,7 @@ class Sfx:
             st = self.mob_st.get(m.id)
             if st is None:
                 st = self.mob_st[m.id] = {"x": m.x, "y": m.y, "walk": 0.0, "voice": rng.uniform(*cfg.get("voice_gap", (5.0, 10.0))),
-                                          "state": "idle" if m.kind == "drone" else m.state,   # Drohne, die schon
+                                          "state": "idle" if m.kind in ZAP_KINDS else m.state,   # Drohne, die schon
                                           "atk": False, "fast": False, "fear_t": 0.0}          # jagt: piept einmal
             moved = math.hypot(m.x - st["x"], m.y - st["y"])
             st["x"], st["y"] = m.x, m.y
@@ -113366,7 +114297,7 @@ class Sfx:
                 if m.state != "attack":
                     self.voice(cfg["voice"], pos, cfg["voice_vol"], rng.uniform(*cfg["voice_rate"]))
             # Zustandswechsel
-            if m.kind == "drone":
+            if m.kind in ZAP_KINDS:
                 if hums < MOB_SND_HUMS:                    # Surren der nächsten Drohnen
                     hums += 1
                     loops_on.add(("hum", m.id))
@@ -113416,6 +114347,7 @@ class Sfx:
                 key = ("falls", i)
                 loops_on.add(key)
                 self.loop_at(key, "falls", pos, WF_VOL)
+        self.gren_loops(loops_on, cam)                             # 10e: Feuer, Rauch, Fackel, Frachtflugzeug
         for key in [k for k in self.loops if k not in loops_on]:
             snd, node, _n = self.loops.pop(key)
             try:
@@ -113425,6 +114357,34 @@ class Sfx:
                 pass
         for mid in [i for i in self.mob_st if i not in live]:
             del self.mob_st[mid]
+
+    def gren_loops(self, loops_on, cam):
+        """10e: Dauertöne der Granaten-Effekte: Prasseln der Flammen, Zischen von Rauchgranate und Fackel,
+        Dröhnen des Frachtflugzeugs (für alle hörbar)."""
+        world = self.game.world
+        for fa in world.fires[:4]:
+            if math.dist(fa.pos, cam) < self.RANGE["fire"]:
+                key = ("fire", fa.fid)
+                loops_on.add(key)
+                self.loop_at(key, "fire", fa.pos, 0.75 * min(1.0, (MOLO_T - fa.age) / 0.6))
+        for g in world.grenades:
+            if g.kind == "smoke" and g.active and math.dist((g.x, g.y, g.z), cam) < self.RANGE["gas"]:
+                key = ("gas", g.gid)
+                loops_on.add(key)
+                self.loop_at(key, "gas", (g.x, g.y, g.z), 0.6)
+        for a in world.airdrops:
+            fp = (a.fx, a.fy, a.fz + 0.4)
+            if a.age < FLARE_BURN_T and math.dist(fp, cam) < self.RANGE["gas"]:
+                key = ("flare", a.aid)
+                loops_on.add(key)
+                self.loop_at(key, "gas", fp, 0.45, 1.5)
+            if a.state >= 1:
+                k = a.dist - AIR_PLANE_LEAD
+                pp = (a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, max(AIR_PLANE_ALT, a.fz + 60.0))
+                if math.dist(pp, cam) < self.RANGE["plane"]:
+                    key = ("plane", a.aid)
+                    loops_on.add(key)
+                    self.loop_at(key, "plane", pp, 1.0)
 
     CHAT_REF = 4.0         # m: bis hierhin volle Lautstärke (Raumgrösse), dahinter 1/r wie bei einer Punktquelle
     CHAT_VOL = 0.8
@@ -113678,6 +114638,7 @@ class Game(ShowBase):
         self.death_picker = None
         self.fx = []                          # Feuerball, Druckwelle, Rauch
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
         self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
         self.tur_views = {}
@@ -113742,6 +114703,9 @@ class Game(ShowBase):
         self.apply_volume()
         self.accept("v", self.on_alt)
         self.accept("g", self.on_grenade)
+        self.accept(GREN_KEY_NEXT, self.on_gren_next, [1])      # 10e: Granatenart wechseln
+        self.g_hold_t = -1.0                                   # 10e: so lange wird G schon gehalten (-1 = nicht)
+        self.g_throw_charge = 0.0
         self.accept(KEYS["ability"], self.on_ability)          # 7c: Set-Fähigkeit (Stromstoss)
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
@@ -115582,6 +116546,7 @@ class Game(ShowBase):
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
         self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
         self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
@@ -115591,6 +116556,8 @@ class Game(ShowBase):
         self.rock_views = None
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
         self.strike_fx = None
+        self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # 10e: Blendung vorbei, Ton normal
+        self.apply_volume()
         self.water_nps = []
         self.falls = []
         self.town_np = None
@@ -116217,11 +117184,17 @@ class Game(ShowBase):
         gm = Mesh()
         fp_arm_mesh(gm, rng, 0.5, -0.06, 0.0, 0.5, 1)
         self.gren_arm = self.gun_root.attachNewNode(gm.node("grenarm"))
-        gg = Mesh()
-        box(gg, 0, 0.0, 0.075, 0.075, 0.105, 0.105, (0.20, 0.30, 0.16), rng)
-        box(gg, 0, 0.0, 0.14, 0.03, 0.03, 0.03, (0.55, 0.55, 0.50), rng)
-        box(gg, 0.04, 0.0, 0.135, 0.02, 0.05, 0.012, (0.65, 0.62, 0.30), rng)
-        self.gren_nd = self.gren_arm.attachNewNode(gg.node("grenade_vm"))
+        self.gren_nd = self.gren_arm.attachNewNode("grenade_vm")       # 10e: je Art ein Modell in der Hand
+        self.gren_vm = {}
+        for k_ in GREN_KINDS:
+            nd = self.gren_nd.attachNewNode(gren_geom(k_))
+            nd.setPos(0, 0.0, 0.07)
+            nd.setScale(0.105)
+            nd.hide()
+            self.gren_vm[k_] = nd
+        self.gren_vm_flame = gren_flame_node(self.gren_vm["molotov"], (0.07, 0.03, 0.62), 0.32)
+        self.gren_vm_kind = None
+        self.thrown_kind = "frag"
         self.gren_arm.hide()
         self.gren_anim_t = 0.0
         self.gad_amp = 0.0
@@ -116385,18 +117358,28 @@ class Game(ShowBase):
         gx_ = mx_ + 0.25
         self.gren_frame = hud_card(gx_, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(gx_, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
-        gi = self.gren_icon.instanceTo(self.bar_root)
-        gi.setPos(gx_ - 0.03, 0, 0.115)
-        gi.setBin("fixed", 21)
-        gi.setDepthTest(False)
-        gi.setDepthWrite(False)
-        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.05, 0.1),
-                                      scale=0.06, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
+        self.gren_icons = {}                           # 10e: Symbol je Granatenart (die gewählte wird gezeigt)
+        for k_ in GREN_KINDS:
+            gi = self.bar_root.attachNewNode(gren_icon_mesh(k_, 0.042).node("gren_icon_" + k_))
+            gi.setPos(gx_ - 0.035, 0, 0.11)
+            gi.setTwoSided(True)
+            gi.setBin("fixed", 21)
+            gi.setDepthTest(False)
+            gi.setDepthWrite(False)
+            gi.hide()
+            self.gren_icons[k_] = gi
+        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.045, 0.095),
+                                      scale=0.055, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                       align=TextNode.ACenter, mayChange=True)
         self.gren_text.setBin("fixed", 25)
-        gk = OnscreenText(text="G", parent=self.bar_root, pos=(gx_ - 0.085, 0.165), scale=0.04,
-                          fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=False)
-        gk.setBin("fixed", 25)
+        self.gren_label = OnscreenText(text="G", parent=self.bar_root, pos=(gx_ - 0.085, 0.165), scale=0.034,
+                                       fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
+        self.gren_label.setBin("fixed", 25)
+        self.gren_more = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.215), scale=0.026,
+                                      fg=(0.85, 0.88, 0.95, 0.85), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
+                                      mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
+        self.gren_more.setBin("fixed", 25)
+        self.build_gren_hud()
         self.build_heli_hud()
         self.speed_text = OnscreenText(text="", pos=(0, -0.7), scale=0.08, fg=(1, 0.9, 0.3, 1),
                                        shadow=(0, 0, 0, 0.9), mayChange=True)
@@ -116660,10 +117643,23 @@ class Game(ShowBase):
     )
 
     def update_gren_arm(self, pl, driving):
-        if self.gren_anim_t <= 0 or pl.hp <= 0 or driving:
+        ch = self.gren_charge()
+        holding = ch >= 0 and self.gren_anim_t <= 0                   # 10e: G gehalten - Arm bleibt ausgeholt
+        if (self.gren_anim_t <= 0 and not holding) or pl.hp <= 0 or driving:
             self.gren_arm.hide()
             return
-        u = 1.0 - self.gren_anim_t / GREN_ANIM_T
+        if holding:
+            u = 0.0
+            kind = gren_fix_sel(pl)
+        else:
+            u = 1.0 - self.gren_anim_t / GREN_ANIM_T
+            kind = self.thrown_kind
+        if kind != self.gren_vm_kind:
+            for k_, nd in self.gren_vm.items():
+                (nd.show if k_ == kind else nd.hide)()
+            self.gren_vm_kind = kind
+        if kind == "molotov":
+            flame_flicker(self.gren_vm_flame)
         kf = self.GREN_KF
         for i in range(len(kf) - 1):
             if u <= kf[i + 1][0]:
@@ -116672,6 +117668,10 @@ class Game(ShowBase):
                 break
         else:
             v = list(kf[-1][1])
+        if holding:                                                   # 10e: gut sichtbar rechts unten halten,
+            e_ = smoothstep(0.0, 0.18, self.g_hold_t)                 # je länger gehalten, desto weiter ausgeholt
+            hold = (0.21 + 0.04 * ch, 0.58 - 0.10 * ch, -0.21 + 0.08 * ch, -14.0, 24.0 + 16.0 * ch, -10.0)
+            v = [a + (b - a) * e_ for a, b in zip(kf[0][1], hold)]
         self.gren_arm.setPos(v[0], v[1], v[2])
         self.gren_arm.setHpr(v[3], v[4], v[5])
         self.gren_arm.show()
@@ -116869,8 +117869,12 @@ class Game(ShowBase):
             self.sel_req = wi
 
     def cycle_weapon(self, d):
-        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern."""
+        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern.
+        10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
+            return
+        if self.g_hold_t >= 0:
+            self.on_gren_next(d)
             return
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
@@ -116922,8 +117926,28 @@ class Game(ShowBase):
             self.alt_req = True
 
     def on_grenade(self):
-        if self.mode == "play" and self.quit_box is None:
-            self.throw_req = True
+        """10e: G gedrückt - der Wurf kommt beim Loslassen (update_task); hier nur der Hinweis bzw. der Stift."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if gren_total(pl) <= 0:
+            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
+        elif pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0:
+            self.sfx.play("pin", None, 0.6, self.prng.uniform(0.95, 1.05))
+
+    def on_gren_next(self, step=1):
+        """10e: H (oder Mausrad bei gehaltenem G): nächste Granatenart, die man hat."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if gren_total(pl) <= 0:
+            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
+            return
+        old = pl.gren_sel
+        k = gren_fix_sel(pl, step)
+        if k:
+            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}", tuple(min(1.0, c * 1.4 + 0.25)
+                                                                          for c in GREN_COL[k]), 1.2)
 
     def on_ability(self):
         """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
@@ -117093,19 +118117,58 @@ class Game(ShowBase):
         pl = self.player
         return self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
 
-    def throw_grenade(self):
-        pl = self.player
-        if pl.gren_cd > 0 or pl.grenades <= 0:
-            return
+    def gren_throw_params(self, pl, charge):
+        """10e: Abwurfpunkt, Richtung und Tempo (nach Haltedauer) - für den Wurf und die Bogen-Vorschau."""
         hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
         d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
         eye = (pl.x + d[0] * 0.4, pl.y + d[1] * 0.4, pl.z + eye_h(pl) - 0.1 + d[2] * 0.4)
-        if self.world.throw_grenade(pl, eye, d):
+        return eye, d, GREN_SPEED_MIN + (GREN_SPEED_MAX - GREN_SPEED_MIN) * clampf(charge, 0.0, 1.0)
+
+    def throw_grenade(self):
+        pl = self.player
+        kind = gren_fix_sel(pl)
+        if pl.gren_cd > 0 or pl.gren.get(kind, 0) <= 0:
+            return
+        eye, d, speed = self.gren_throw_params(pl, self.g_throw_charge)
+        if self.world.throw_grenade(pl, eye, d, kind, speed):
+            self.thrown_kind = kind
             pl.gren_cd = GREN_COOLDOWN
-            self.gren_anim_t = GREN_ANIM_T
+            self.gren_anim_t = GREN_ANIM_T * 0.85          # 10e: der Arm war schon ausgeholt (G gehalten)
+            gren_fix_sel(pl)
             self.sfx.play("gren_throw", None, 0.8, 1.0)         # sofort beim Klick (nicht erst über das Netz-Ereignis)
             self.sp_back.kick(2.5)                 # kleiner Ruck der Waffe beim Wurf
             self.sp_pitch.kick(-90)
+
+    def gren_hold_input(self, dt, held):
+        """10e: G gedrückt halten lädt den Wurf auf (Ladebalken, Bogen-Vorschau), Loslassen wirft. Kurz getippt
+        (< GREN_TAP_T) = kurzer Wurf. -> True im Bild des Loslassens."""
+        pl = self.player
+        ok = (pl is not None and self.mode == "play" and self.quit_box is None and pl.hp > 0
+              and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and gren_total(pl) > 0
+              and getattr(self, "end", None) is None and not getattr(self, "tab_held", False)
+              and not getattr(self, "insp_on", False) and self.world is not None and self.world.phase == "play")
+        if not ok:
+            self.g_hold_t = -1.0
+            if pl is not None:
+                pl.gren_hold = -1
+            return False
+        if held:
+            self.g_hold_t = 0.0 if self.g_hold_t < 0 else self.g_hold_t + dt
+            pl.gren_hold = GREN_KINDS.index(gren_fix_sel(pl))
+            return False
+        if self.g_hold_t < 0:
+            return False
+        t = self.g_hold_t
+        self.g_hold_t = -1.0
+        pl.gren_hold = -1
+        self.g_throw_charge = 0.0 if t < GREN_TAP_T else clampf((t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
+        return True
+
+    def gren_charge(self):
+        """10e: aktueller Ladestand 0..1 (oder -1, wenn G nicht gehalten wird)."""
+        if self.g_hold_t < 0:
+            return -1.0
+        return clampf((self.g_hold_t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
 
     def lock_trigger(self):
         """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
@@ -118513,6 +119576,7 @@ class Game(ShowBase):
             trigger=trig, edge=edge, ads=down(MouseButton.three()) and not getattr(self, "tab_held", False) and self.captured,
             reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
             throw=self.throw_req, mdx=0, mdy=0)
+        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])))   # 10e: G halten = weiter werfen
         if self.quit_box is not None:
             inp = SimpleNamespace(forward=0, strafe=0, run=False, jump=False, turn=0, look=0, lean=0,
                                   duck=False, trigger=False, edge=False, ads=False, reload=False, select=None,
@@ -118963,7 +120027,56 @@ class Game(ShowBase):
                     self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
                     v = self.player_views.get(e[1])
                     if v is not None:
-                        v.start_throw()
+                        gk_ = e[2] if len(e) > 2 and isinstance(e[2], int) and 0 <= e[2] < len(GREN_KINDS) else 0
+                        v.start_throw(GREN_KINDS[gk_])
+            elif kind == "gren_inv":           # 10e: Granaten-Inventar (Host entscheidet)
+                if e[1] == self.my_id and isinstance(e[2], list):
+                    pl = self.player
+                    pl.gren = {k_: int(n_) for k_, n_ in zip(GREN_KINDS, e[2]) if n_}
+                    gren_fix_sel(pl)
+                    if len(e) > 4 and isinstance(e[3], int) and 0 <= e[3] < len(GREN_KINDS) and e[4] > 0:
+                        k_ = GREN_KINDS[e[3]]
+                        self.toast(f"+{e[4]} {GREN_NAMES[k_]}", tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k_]), 1.6)
+            elif kind == "decoy":              # 10e: Decoy "schiesst" (nur Lärm)
+                pos_ = (e[2], e[3], e[4])
+                clip = ("ar_single", "pistol_single", "smg_single", "shotgun_shot")[e[5] % 4] if len(e) > 5 else "rifle"
+                if clip not in self.sfx.pool:
+                    clip = "rifle"
+                self.sfx.play(clip, pos_, 0.9, self.prng.uniform(0.97, 1.03))
+                self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.3), 0.08, 0.05, 0.25, (1.0, 0.9, 0.5),
+                              (1.0, 0.6, 0.2), p=0.5, fog=False)
+            elif kind == "flash":              # 10e: Blendgranate
+                self.flash_hit(e[1], e[2] if len(e) > 2 else -1)
+            elif kind == "smoke":              # 10e: Rauchgranate zündet (die Wolke baut die Ansicht selbst)
+                self.sfx.play("gas", (e[2], e[3], e[4]), 0.9, 1.2)
+                for _ in range(8):
+                    self.smoke_puff((e[2], e[3], e[4] + 0.2), 0.6, 2.0, 0.72)
+            elif kind == "molo":               # 10e: Molotow zerschellt (e[3]: 1 brennt, 0 im Wasser)
+                pos_ = e[2]
+                self.sfx.play("glass", tuple(pos_), 1.0, self.prng.uniform(0.95, 1.05))
+                if e[3]:
+                    self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.4), 0.5, 0.3, MOLO_R * 0.8,
+                                  (1.0, 0.75, 0.25), (0.8, 0.25, 0.05), p=1.0, fog=False)
+                else:
+                    self.burst((pos_[0], pos_[1], pos_[2] + 0.05), "water")
+            elif kind == "flare":              # 10e: Airdrop-Fackel brennt
+                self.sfx.play("pin", (e[2], e[3], e[4]), 0.9, 0.6)
+                ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
+                if ad_ is not None and ad_.owner == self.my_id:
+                    self.toast("Airdrop angefordert - Flugzeug im Anflug", (1.0, 0.45, 0.35), 2.5)
+            elif kind == "airland":            # 10e: Kiste gelandet
+                if "thud" in self.sfx.pool:
+                    self.sfx.play("thud", (e[3], e[4], e[5]), 1.0, 0.8)
+                for _ in range(5):
+                    self.smoke_puff((e[3], e[4], e[5] + 0.1), 0.5, 1.4, 0.6)
+            elif kind == "pdrone":             # 10e: eigene Drohne steigt auf
+                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.7, 1.3)
+                if e[1] == self.my_id:
+                    self.toast("Drohne gestartet", (0.85, 0.55, 1.0), 1.5)
+            elif kind == "tempdown":           # 10e: eigene Drohne erlischt
+                for _ in range(8):
+                    self.add_particle((e[2], e[3], e[4]), (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2),
+                                                           self.prng.uniform(0, 3)), (0.85, 0.5, 1.0), 0.04, 0.5, 0.2)
             elif kind == "explosion":
                 if len(e) > 3 and e[3] == self.my_id:
                     self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION, e[1][2])
@@ -119168,7 +120281,7 @@ class Game(ShowBase):
                     self.player.shock_cd = SHOCK_CD
                     self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
             elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
-                self.zap_fx(e[1], e[2], bool(e[3]))
+                self.zap_fx(e[1], e[2], bool(e[3]), col=(0.85, 0.5, 1.0) if len(e) > 4 and e[4] else (0.6, 0.9, 1.0))
             elif kind == "stun":
                 if e[1] == self.my_id:
                     pl = self.player
@@ -119283,10 +120396,6 @@ class Game(ShowBase):
                 self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
                 if e[1] == self.my_id:
                     self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
-            elif kind == "gren_n":             # 10b: Granaten aufgehoben
-                if e[1] == self.my_id:
-                    self.player.grenades = e[2]
-                    self.toast(f"+{e[3]} Granate" + ("n" if e[3] > 1 else ""), (0.6, 1.0, 0.5), 1.4)
             elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
                 if e[1] == self.my_id:
                     self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
@@ -119600,9 +120709,9 @@ class Game(ShowBase):
             if n_ != getattr(self, "pan_food_n", -1):
                 show_food(self.pan_food_fp, n_)
                 self.pan_food_n = n_
-        if self.gren_anim_t > 0:                  # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
+        if self.gren_anim_t > 0 or self.g_hold_t >= 0:   # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
             self.gren_anim_t = max(0.0, self.gren_anim_t - dt)
-            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T
+            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T if self.gren_anim_t > 0 else 0.15 * smoothstep(0.0, 0.18, self.g_hold_t)
             dipg = smoothstep(0.0, 0.15, ug) * (1.0 - smoothstep(0.7, 1.0, ug))
             pz -= 0.30 * dipg
             pitch -= 25 * dipg
@@ -119790,7 +120899,323 @@ class Game(ShowBase):
             self.update_noise_debug()
         self.update_gfx(dt)
         self.update_hud(dt)
+        self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
+
+    # ------------------------------------------------------------ 10e: Granaten (HUD, Effekte)
+    def build_gren_hud(self):
+        """10e: Ladebalken für die Wurfweite, Bogen-Vorschau und Landepunkt, Blend-Overlay."""
+        self.gch_root = self.aspect2d.attachNewNode("wurfbalken")
+        cm_ = CardMaker("gch")
+        cm_.setFrame(-0.16, 0.16, -0.30, -0.28)
+        bg = self.gch_root.attachNewNode(cm_.generate())
+        bg.setColor(0.05, 0.05, 0.08, 0.75)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm_.setFrame(0.0, 0.32, -0.297, -0.283)
+        self.gch_fg = self.gch_root.attachNewNode(cm_.generate())
+        self.gch_fg.setX(-0.16)
+        self.gch_txt = OnscreenText(text="", parent=self.gch_root, pos=(0, -0.345), scale=0.036, fg=(1, 0.9, 0.5, 1),
+                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
+        self.gch_root.hide()
+        self.gren_arc = None
+        self.gren_land = self.disc_np.instanceTo(self.render)
+        self.gren_land.setTransparency(TransparencyAttrib.MAlpha)
+        self.gren_land.setLightOff()
+        self.gren_land.setDepthWrite(False)
+        self.gren_land.setBin("transparent", 10)
+        self.gren_land.hide()
+        cm_ = CardMaker("blend")                       # Blendgranate: weisses Bild über allem
+        cm_.setFrame(-1, 1, -1, 1)
+        self.flash_white = self.render2d.attachNewNode(cm_.generate())
+        self.flash_white.setTransparency(TransparencyAttrib.MAlpha)
+        self.flash_white.setBin("fixed", 95)
+        self.flash_white.setDepthTest(False)
+        self.flash_white.setDepthWrite(False)
+        self.flash_white.setColor(1, 1, 1, 0)
+        self.flash_white.hide()
+        self.flash_ghost = []                         # eingefrorenes, verschwommenes Bild (Nachbild)
+        self.flash_st = None                          # (Start, Stärke, Dauer, Weiss-Dauer)
+
+    def update_gren_hud(self, pl):
+        """10e: Granaten-Kachel (gewählte Art mit Symbol und Anzahl, weitere Arten darüber), Ladebalken und Bogen."""
+        kind = gren_fix_sel(pl)
+        n = pl.gren.get(kind, 0)
+        for k_, nd in self.gren_icons.items():
+            (nd.show if k_ == kind else nd.hide)()
+        self.set_text(self.gren_text, f"x{n}")
+        self.set_text(self.gren_label, f"G {GREN_SHORT[kind]}")
+        more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
+        self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
+        ch = self.gren_charge() if pl.hp > 0 else -1.0
+        if ch >= 0:
+            self.gren_frame.setColor(1.0, 0.85, 0.2, 1.0)
+        else:
+            self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if gren_total(pl) > 0 else (0.7, 0.15, 0.1, 0.6)))
+        if ch >= 0:
+            self.gch_root.show()
+            self.gch_fg.setSx(max(0.02, ch))
+            c = GREN_COL[kind]
+            self.gch_fg.setColor(min(1, c[0] * 1.4 + 0.3), min(1, c[1] * 1.4 + 0.3), min(1, c[2] * 1.4 + 0.3), 1)
+            self.set_text(self.gch_txt, f"{GREN_NAMES[kind]} - " + ("kurzer Wurf" if self.g_hold_t < GREN_TAP_T
+                                                                    else f"Wurfweite {int(ch * 100)} %"))
+            self.draw_gren_arc(pl, kind, ch)
+        else:
+            self.gch_root.hide()
+            if self.gren_arc is not None:
+                self.gren_arc.removeNode()
+                self.gren_arc = None
+            self.gren_land.hide()
+
+    def draw_gren_arc(self, pl, kind, ch):
+        """10e: Bogen-Vorschau: die Flugbahn wird mit der echten Granaten-Physik vorausberechnet (Wände, Dächer,
+        Abpraller), gestrichelt gezeichnet; am Landepunkt ein Ring."""
+        world = self.world
+        eye, d, sp = self.gren_throw_params(pl, ch)
+        g = Grenade(-1, eye[0], eye[1], eye[2], d[0] * sp, d[1] * sp, d[2] * sp + 2.0, -1, 99.0, kind)
+        pts, t = [eye], 0.0
+        while t < GREN_ARC_T:
+            n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * GREN_ARC_DT / 0.25) + 1
+            for _ in range(n):
+                world.grenade_step(g, GREN_ARC_DT / n)
+                if kind == "molotov" and g.hit:
+                    break
+            pts.append((g.x, g.y, g.z))
+            t += GREN_ARC_DT
+            if (kind == "molotov" and g.hit) or (g.hit and grenade_landed(world, g)):
+                break
+        if self.gren_arc is not None:
+            self.gren_arc.removeNode()
+        ls = LineSegs("wurfbogen")
+        ls.setThickness(2.5)
+        c = GREN_COL[kind]
+        ls.setColor(min(1, c[0] + 0.45), min(1, c[1] + 0.45), min(1, c[2] + 0.45), 0.85)
+        for i in range(1, len(pts) - 1, 2):                    # gestrichelt
+            ls.moveTo(*pts[i])
+            ls.drawTo(*pts[i + 1])
+        self.gren_arc = self.render.attachNewNode(ls.create())
+        self.gren_arc.setLightOff()
+        self.gren_arc.setFogOff()
+        self.gren_arc.setTransparency(TransparencyAttrib.MAlpha)
+        lp = pts[-1]
+        r_ = {"smoke": SMOKE_R * 0.5, "flash": 1.5, "molotov": MOLO_R, "frag": GREN_KILL_R}.get(kind, 0.8)
+        self.gren_land.setPos(lp[0], lp[1], world.floor_at(lp[0], lp[1], lp[2]) + 0.06)
+        self.gren_land.setScale(r_)
+        self.gren_land.setColorScale(min(1, c[0] + 0.5), min(1, c[1] + 0.5), min(1, c[2] + 0.5), 0.6)
+        self.gren_land.show()
+
+    def flash_hit(self, pos, owner):
+        """10e: Blendgranate gezündet. Der Spieler errechnet seine Blendung selbst: bis FLASH_R m, freie Sicht
+        (keine Wand/Decke dazwischen); je näher, desto weniger zählt die Blickrichtung - je mehr man hinschaut,
+        desto stärker. Volle Wirkung FLASH_FULL_T s (davon FLASH_WHITE_T s weiss), dazu Pfeifton und dumpfer Klang."""
+        self.fx_spawn(self.sphere_np, pos, 0.25, 0.3, 3.5, (1.0, 1.0, 1.0), (1.0, 1.0, 0.9), p=0.6, fog=False)
+        self.sfx.play("explosion", tuple(pos), 1.0, 1.65)
+        for _ in range(6):
+            self.smoke_puff(pos, 0.25, 1.5, 0.8)
+        pl = self.player
+        if pl is None or pl.hp <= 0:
+            return
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        dist = math.dist(pos, eye)
+        if dist > FLASH_R or not self.world.blast_los(pos, eye):
+            return
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        fwd = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        to = norm(sub(pos, eye))
+        look = clampf((dot(fwd, to) + 0.3) / 1.3, 0.0, 1.0)
+        prox = (1.0 - dist / FLASH_R) ** 0.5
+        st = prox * (prox + (1.0 - prox) * look)
+        if st < 0.06:
+            return
+        dur = FLASH_FULL_T * st
+        if self.flash_st is not None and time.time() - self.flash_st[0] < self.flash_st[2] and self.flash_st[1] > st:
+            return                                             # schon stärker geblendet
+        self.flash_st = (time.time(), st, dur, FLASH_WHITE_T * st)
+        for c in self.flash_ghost:
+            c.removeNode()
+        self.flash_ghost = []
+        try:                                                   # Nachbild: das Bild im Moment des Blitzes, verschwommen
+            tex = self.win.getScreenshot()
+            if tex is not None:
+                for ox, oy in ((0, 0), (0.008, 0), (-0.008, 0), (0, 0.011), (0, -0.011)):
+                    cm_ = CardMaker("nachbild")
+                    cm_.setFrame(-1 + ox, 1 + ox, -1 + oy, 1 + oy)
+                    gc = self.render2d.attachNewNode(cm_.generate())
+                    gc.setTexture(tex)
+                    gc.setTransparency(TransparencyAttrib.MAlpha)
+                    gc.setBin("fixed", 94)
+                    gc.setDepthTest(False)
+                    gc.setDepthWrite(False)
+                    gc.setColor(1, 1, 1, 0)
+                    self.flash_ghost.append(gc)
+        except Exception:
+            self.flash_ghost = []
+        self.sfx.play("ring", None, 0.35 + 0.5 * st, 1.0)
+        self.toast("GEBLENDET", (1, 1, 1), min(2.0, dur))
+
+    def update_flash(self):
+        """10e: Blendung ausblenden: erst weiss, dann langsam durchsichtig mit verschwommenem Nachbild; der Ton ist
+        so lange gedämpft."""
+        fs = self.flash_st
+        if fs is None:
+            return
+        t0, st, dur, white = fs
+        t = time.time() - t0
+        if t >= dur or (self.player is not None and self.player.hp <= 0 and t > 0.3):
+            self.flash_white.hide()
+            for c in self.flash_ghost:
+                c.removeNode()
+            self.flash_ghost = []
+            self.flash_st = None
+            self.apply_volume()
+            return
+        if t < white:
+            a = min(1.0, 0.55 + st)
+            ga = 0.0
+        else:
+            u = (t - white) / max(0.05, dur - white)
+            a = min(1.0, 0.55 + st) * (1.0 - u) ** 1.6
+            ga = 0.55 * (1.0 - u) ** 0.8 * min(1.0, (t - white) / 0.3)
+        self.flash_white.show()
+        self.flash_white.setColor(1, 1, 1, a)
+        for c in self.flash_ghost:
+            c.setColor(1, 1, 1, ga / 3.0)
+        m = st * (1.0 if t < white else max(0.0, 1.0 - (t - white) / max(0.05, dur - white)))
+        try:
+            self.sfxManagerList[0].setVolume(self.vol_sfx / 100.0 * (1.0 - FLASH_MUFFLE * m))
+        except Exception:
+            pass
+
+    def update_smoke_views(self, dt):
+        """10e: Rauchwolken: je Zelle eine graue Wolke (zu einem Modell zusammengefasst), Deckkraft nach Alter."""
+        world = self.world
+        live = set()
+        for sm in world.smokes:
+            live.add(sm.sid)
+            v = self.smoke_views.get(sm.sid)
+            if v is None:
+                v = self.render.attachNewNode(f"rauch{sm.sid}")
+                rng = random.Random(sm.sid * 7 + 3)
+                grp = v.attachNewNode("puffs")
+                for c in sm.cells:
+                    pf = self.sphere_np.copyTo(grp)
+                    pf.setPos(c[0] + rng.uniform(-0.3, 0.3), c[1] + rng.uniform(-0.3, 0.3), c[2] + rng.uniform(-0.2, 0.3))
+                    pf.setScale(SMOKE_CELL * rng.uniform(0.8, 1.05), SMOKE_CELL * rng.uniform(0.8, 1.05),
+                                SMOKE_CELL * rng.uniform(0.6, 0.85))
+                    g_ = rng.uniform(0.66, 0.78)
+                    pf.setColor(g_, g_, g_ * 1.02, 1)
+                grp.flattenStrong()
+                v.setTransparency(TransparencyAttrib.MAlpha)
+                v.setDepthWrite(False)
+                v.setLightOff()
+                v.setBin("transparent", 5)
+                self.smoke_views[sm.sid] = v
+            dn = sm.density()
+            v.setColorScale(1, 1, 1, 0.82 * dn)
+            v.setZ(0.25 * math.sin(sm.age * 0.6))
+            sc = 0.6 + 0.4 * min(1.0, sm.age / SMOKE_GROW_T)
+            v.setScale(sc, sc, sc)
+            v.setPos(sm.pos[0] * (1 - sc), sm.pos[1] * (1 - sc), sm.pos[2] * (1 - sc) + 0.25 * math.sin(sm.age * 0.6))
+        for sid in [k for k in self.smoke_views if k not in live]:
+            self.smoke_views.pop(sid).removeNode()
+
+    def update_fire_views(self, dt):
+        """10e: Flammen des Molotows: je Zelle eine flackernde Flamme, dazu Glut am Boden und etwas Rauch."""
+        world = self.world
+        live = set()
+        for fa in world.fires:
+            live.add(fa.fid)
+            v = self.fire_views.get(fa.fid)
+            if v is None:
+                v = self.render.attachNewNode(f"feuer{fa.fid}")
+                rng = random.Random(fa.fid * 13 + 1)
+                fl = []
+                for c in fa.cells:
+                    f_ = gren_flame_node(v, (c[0] + rng.uniform(-0.2, 0.2), c[1] + rng.uniform(-0.2, 0.2), c[2] + 0.02),
+                                         rng.uniform(0.35, 0.6))
+                    fl.append(f_)
+                    gl = self.scorch_np.instanceTo(v)
+                    gl.setPos(c[0], c[1], c[2] + 0.04)
+                    gl.setScale(MOLO_CELL * 0.7)
+                    gl.setColorScale(1.0, 0.45, 0.1, 0.7)
+                    gl.setTransparency(TransparencyAttrib.MAlpha)
+                    gl.setLightOff()
+                v.setPythonTag("fl", fl)
+                self.fire_views[fa.fid] = v
+            k = clampf(min(fa.age / 0.3, (MOLO_T - fa.age) / 0.8), 0.0, 1.0)
+            for f_ in v.getPythonTag("fl") or ():
+                flame_flicker(f_)
+            v.setColorScale(1, 1, 1, k)
+            v.setTransparency(TransparencyAttrib.MAlpha)
+            if fa.cells and self.prng.random() < 0.12:
+                c = self.prng.choice(fa.cells)
+                self.smoke_puff((c[0], c[1], c[2] + 0.8), 0.4, 1.6, 0.25)
+        for fid in [k for k in self.fire_views if k not in live]:
+            self.fire_views.pop(fid).removeNode()
+
+    def update_airdrop_views(self, dt):
+        """10e: Airdrop - rote Leuchtfackel mit rotem Rauch, Frachtflugzeug (für alle sichtbar), Kiste am Fallschirm."""
+        world = self.world
+        live = set()
+        now = time.time()
+        for a in world.airdrops:
+            live.add(a.aid)
+            v = self.ad_views.get(a.aid)
+            if v is None:
+                root = self.render.attachNewNode(f"airdrop{a.aid}")
+                fl = root.attachNewNode("fackel")
+                fl.attachNewNode(gren_geom("flare")).setScale(0.3)
+                fl.setPos(a.fx, a.fy, a.fz + 0.05)
+                fl.setP(70)
+                fire = gren_flame_node(fl, (0, 0, 0.18), 0.12)
+                fire.setColorScale(1.0, 0.35, 0.3, 1)
+                glow = self.sphere_np.copyTo(fl)
+                glow.setScale(0.5)
+                glow.setPos(0, 0, 0.2)
+                glow.setTransparency(TransparencyAttrib.MAlpha)
+                glow.setLightOff()
+                glow.setFogOff()
+                glow.setColorScale(1.0, 0.15, 0.1, 0.5)
+                plane, props = build_cargo_plane()
+                plane.reparentTo(root)
+                plane.hide()
+                drop = root.attachNewNode("kiste")
+                build_supply_crate().reparentTo(drop)
+                chute = build_parachute()
+                chute.reparentTo(drop)
+                drop.hide()
+                v = self.ad_views[a.aid] = {"root": root, "flare": fl, "fire": fire, "glow": glow, "plane": plane,
+                                            "props": props, "drop": drop, "chute": chute, "puff": 0.0}
+            burning = a.age < FLARE_BURN_T and a.state < 3 or (a.state == 3 and a.age < FLARE_BURN_T * 0.6)
+            (v["fire"].show if burning else v["fire"].hide)()
+            (v["glow"].show if burning else v["glow"].hide)()
+            if burning:
+                flame_flicker(v["fire"])
+                v["glow"].setScale(0.45 + 0.12 * math.sin(now * 17.0))
+                v["puff"] -= dt
+                if v["puff"] <= 0:                              # roter Rauch steigt hoch auf (weit sichtbar)
+                    v["puff"] = 0.12
+                    self.fx_spawn(self.sphere_np, (a.fx + self.prng.uniform(-0.2, 0.2), a.fy + self.prng.uniform(-0.2, 0.2),
+                                                   a.fz + 0.4), 3.2, 0.25, 1.6, (0.95, 0.2, 0.15), (0.6, 0.25, 0.22),
+                                  p=1.2, rise=2.6)
+            if a.state >= 1:
+                k = a.dist - AIR_PLANE_LEAD
+                pz = max(AIR_PLANE_ALT, a.fz + 60.0)
+                v["plane"].show()
+                v["plane"].setPos(a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, pz)
+                v["plane"].setH(math.degrees(a.ang) - 90.0)
+                for pp in v["props"]:
+                    pp.setR((now * 1400.0) % 360.0)
+            if a.state == 2:
+                v["drop"].show()
+                v["drop"].setPos(a.fx, a.fy, a.cz)
+                v["drop"].setH(a.aid * 31.0 + 20.0 * math.sin(now * 0.8))
+                open_k = clampf((max(AIR_PLANE_ALT, a.fz + 60.0) - 3.0 - a.cz) / 6.0, 0.05, 1.0)   # Schirm öffnet sich
+                v["chute"].setScale(open_k, open_k, 0.4 + 0.6 * open_k)
+                v["drop"].setR(4.0 * math.sin(now * 1.3))
+            else:
+                v["drop"].hide()
+        for aid in [k for k in self.ad_views if k not in live]:
+            self.ad_views.pop(aid)["root"].removeNode()
 
     def update_rocks_view(self, dt):
         """Steinbrocken des Titans: Felsmodell, dreht sich im Flug; zwischen den Snapshots weiter geflogen."""
@@ -119828,16 +121253,33 @@ class Game(ShowBase):
         cur = set(world.grenades)
         for g in world.grenades:
             np = self.gren_views.get(g)
-            if np is None:
-                np = self.gren_views[g] = self.gren_np.instanceTo(self.render)
-            np.setPos(g.x, g.y, g.z)
-            np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
-            if g.fuse < 1.0 and int(now * 10) % 2 == 0:       # kurz vor der Explosion blinkt sie rot
+            if np is None:                                     # 10e: Modell je Granatenart
+                np = self.gren_views[g] = self.render.attachNewNode("gren")
+                np.attachNewNode(gren_geom(g.kind)).setScale(0.24)
+                if g.kind == "molotov":                        # brennender Lappen im Flug
+                    np.setPythonTag("flame", gren_flame_node(np, (0.017, 0.007, 0.15), 0.08))
+            np.setPos(g.x, g.y, g.z + 0.04)
+            moving = g.vx * g.vx + g.vy * g.vy + g.vz * g.vz > 1.0
+            if moving:
+                np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
+            else:                                              # liegt: auf die Seite gekippt
+                np.setHpr(g.gid * 47.0, 90.0 if g.kind not in ("drone", "frag") else 0.0, 0)
+            fl = np.getPythonTag("flame")
+            if fl is not None:
+                flame_flicker(fl)
+            if g.kind == "frag" and g.fuse < 1.0 and int(now * 10) % 2 == 0:   # kurz vor der Explosion blinkt sie rot
                 np.setColorScale(2.2, 0.5, 0.4, 1)
+            elif g.kind == "decoy" and g.active and int(now * 6) % 2 == 0:
+                np.setColorScale(1.6, 1.4, 0.6, 1)
             else:
                 np.clearColorScale()
+            if g.kind == "smoke" and g.active and self.prng.random() < 0.12:  # Rauchgranate qualmt
+                self.smoke_puff((g.x, g.y, g.z + 0.15), 0.35, 1.6, 0.7)
         for g in [g for g in self.gren_views if g not in cur]:
             self.gren_views.pop(g).removeNode()
+        self.update_smoke_views(dt)                            # 10e: Rauchwolken, Flammen, Airdrops
+        self.update_fire_views(dt)
+        self.update_airdrop_views(dt)
 
         cur = set(world.gadgets)
         for g in world.gadgets:
@@ -119870,12 +121312,12 @@ class Game(ShowBase):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.gren > 0:                                 # 10b: Granaten-Päckchen
+                if d.gren > 0:                                 # 10b: Granaten-Päckchen (10e: Modell der Art)
                     mdl = v.attachNewNode("gren")
                     for k_ in range(min(3, d.gren)):
-                        gg = self.gren_np.copyTo(mdl)
-                        gg.setScale(2.2)
-                        gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0)
+                        gg = mdl.attachNewNode(gren_geom(d.gk))
+                        gg.setScale(0.24)
+                        gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0.12)
                 elif d.att >= 0 and d.att in self.att_drop_models:
                     mdl = self.att_drop_models[d.att].copyTo(v)
                 elif d.melee >= 0:
@@ -120097,8 +121539,7 @@ class Game(ShowBase):
             active = wi is not None and wi == want and on_foot and not pl.gad_out
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
             self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
-        self.set_text(self.gren_text, f"x{pl.grenades}")
-        self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if pl.grenades > 0 else (0.7, 0.15, 0.1, 0.6)))
+        self.update_gren_hud(pl)                       # 10e: gewählte Granatenart, Anzahl, Ladebalken, Bogen
         veh = self.my_vehicle() if pl.hp > 0 else None
         txt = ""
         if hc is not None:
@@ -120180,7 +121621,9 @@ class Game(ShowBase):
             use = world.nearest_use(pl)
             if use is not None:
                 kind, o = use
-                if kind == "crate":
+                if kind == "crate" and getattr(o, "air", False):
+                    prompt = "F   Versorgungskiste öffnen"          # 10e: Airdrop verrät seine Art erst beim Öffnen
+                elif kind == "crate":
                     prompt = f"F   {CRATE_NAMES.get(o.kind, 'Kiste')[0].upper()}{CRATE_NAMES.get(o.kind, 'Kiste')[1:]} öffnen"
                 elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
                     si_, v_ = divmod(o.att, ATT_CODE)
@@ -121030,8 +122473,8 @@ class Game(ShowBase):
         rr.hide()
         self.toma_rk = rr
 
-    def zap_fx(self, src, dst, hit, sound=True):
-        """Elektroblitz: gezackte blaue Linie aus kurzen Stücken, Funken am Ziel, Knistern."""
+    def zap_fx(self, src, dst, hit, sound=True, col=(0.6, 0.9, 1.0)):
+        """Elektroblitz: gezackte blaue Linie aus kurzen Stücken, Funken am Ziel, Knistern (10e: eigene Drohne lila)."""
         r = self.prng
         n = 7
         pts = [src]
@@ -121047,14 +122490,14 @@ class Game(ShowBase):
             np_.setPos((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
             np_.lookAt(*b)
             np_.setScale(0.05, ln, 0.05)
-            np_.setColorScale(0.6, 0.9, 1.0, 1)
+            np_.setColorScale(col[0], col[1], col[2], 1)
             np_.setLightOff()
             np_.setFogOff()
             self.parts.append(Particle(np_, np_.getPos(), (0.0, 0.0, 0.0), 0.16, 0.0, 0.0, False))
             self.parts[-1].x, self.parts[-1].y, self.parts[-1].z = np_.getX(), np_.getY(), np_.getZ()
         if hit:
             for _ in range(10):
-                self.add_particle(dst, (r.uniform(-3, 3), r.uniform(-3, 3), r.uniform(1, 4)), (0.6, 0.9, 1.0),
+                self.add_particle(dst, (r.uniform(-3, 3), r.uniform(-3, 3), r.uniform(1, 4)), col,
                                   0.04, 0.4, 0.2)
         if sound:
             self.sfx.play("zap", tuple(src), 1.0, self.prng.uniform(0.95, 1.05))
@@ -121332,7 +122775,12 @@ class Game(ShowBase):
                 root = self.render.attachNewNode(f"crate{c.cid}")
                 root.setPos(c.x, c.y, c.z)
                 root.setH((c.cid * 47) % 360)
-                self.crate_tpl.get(c.kind, self.crate_tpl["common"]).copyTo(root)      # eigene Kopie: der Schwebewürfel bewegt sich je Kiste
+                if getattr(c, "air", False):                     # 10e: Airdrop - neutrale Versorgungskiste
+                    if "air" not in self.crate_tpl:
+                        self.crate_tpl["air"] = build_supply_crate()
+                    self.crate_tpl["air"].copyTo(root)
+                else:
+                    self.crate_tpl.get(c.kind, self.crate_tpl["common"]).copyTo(root)  # eigene Kopie: der Schwebewürfel bewegt sich je Kiste
                 mark = root.find("**/mark")
                 if getattr(c, "bonus", False):         # Titan-Belohnung: goldene Lichtsäule, weithin sichtbar
                     bm = Mesh(lit=False)
