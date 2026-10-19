@@ -98,6 +98,12 @@ Abstand + Blickrichtung, weiss -> verschwommenes Nachbild, Pfeifton), Rauch (SMO
 in Räumen/Tunneln, blockiert Monster-Sicht), Drohnen-Granate (Mob "pdrone", lila, PDRONE_*), Molotow (MOLO_*: brennt nur
 auf der Ebene des Aufpralls, fire_cells), Airdrop-Fackel (AIR_*: Frachtflugzeug, Kiste am Fallschirm, je Satz braun/blau/gold).
 Wurfweite nach Haltedauer (GREN_SPEED_MIN..MAX, GREN_CHARGE_T). Beute: GREN_LOOT_W (Art je Stufe), GREN_LOOT_N (Stück).
+10f: Granaten detailliert (gren_mesh: Riffelung, Zünder, Bügel, Ring/Splint; Flasche mit Lappen ...; gren_inst = Instanz mit
+eigenem Knoten). Geländewagen und Heli detailliert (bevel_box, Rohr-Überrollbügel, Profilreifen; aerodynamischer Rumpf,
+Verglasung, Rotorkopf), Trefferzonen als Quader passend zum Modell (VEH_HIT_BOXES, HELI_HIT_BOXES, vehicle_hit_t). Vollbart
+deckt das Kinn, Koteletten anliegend. Getragene Ausrüstung blendet das passende Kosmetik-Teil aus (Kopfbedeckung inkl.
+Headset/Nachtsicht, Weste + Rucksack, Stiefel; build_soldier -> PythonTag "cos"). Effekte/Partikel/Leuchtspuren als
+Instanzen mit eigenem Knoten (lagen vorher alle übereinander).
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -7571,18 +7577,15 @@ class World:
             if dist <= rng:
                 best, res = dist, (p, self.surface_normal(p, d), None)
         p1 = (o[0] + d[0] * rng, o[1] + d[1] * rng, o[2] + d[2] * rng)
-        for kind, lst, r, hh in (("v", self.vehicles, VEH_R, VEH_HIT_H), ("h", self.helis, HELI_R, HELI_HIT_H)):
+        for kind, lst in (("v", self.vehicles), ("h", self.helis)):
             for v in lst:
                 if v.hp <= 0:
                     continue
-                t = seg_cyl(o, p1, v.x, v.y, r, v.z, v.z + hh)
-                if t is not None and t * rng < best:
-                    best = t * rng
+                th = vehicle_hit_t(o, p1, v, kind == "h")   # 10f: Trefferquader (Normale = getroffene Fläche)
+                if th is not None and th[0] * rng < best:
+                    best = th[0] * rng
                     hp = (o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best)
-                    dx, dy = hp[0] - v.x, hp[1] - v.y
-                    l = math.hypot(dx, dy) or 1.0
-                    n = (0.0, 0.0, 1.0) if hp[2] > v.z + hh - 0.15 else (dx / l, dy / l, 0.0)
-                    res = (hp, n, (kind, v.id))
+                    res = (hp, th[1], (kind, v.id))
         return res
 
     def attach_offsets(self, att, pos, nrm):
@@ -8099,21 +8102,21 @@ class World:
         for v in self.vehicles:
             if v.hp <= 0 or v.id == own_v:               # der eigene Wagen wird nie vom eigenen Geschütz getroffen
                 continue
-            if (max(x0, x1) < v.x - VEH_R or min(x0, x1) > v.x + VEH_R
-                    or max(y0, y1) < v.y - VEH_R or min(y0, y1) > v.y + VEH_R):
+            if (max(x0, x1) < v.x - VEH_HIT_REACH or min(x0, x1) > v.x + VEH_HIT_REACH
+                    or max(y0, y1) < v.y - VEH_HIT_REACH or min(y0, y1) > v.y + VEH_HIT_REACH):
                 continue
-            t = seg_cyl(p0, p1, v.x, v.y, VEH_R, v.z, v.z + VEH_HIT_H)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "vehicle", v
+            th = vehicle_hit_t(p0, p1, v)                # 10f: Trefferquader passend zum Modell
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "vehicle", v
         for hc in self.helis:
             if hc.hp <= 0 or (b.owner >= 0 and hc.driver == b.owner):
                 continue
-            if (max(x0, x1) < hc.x - HELI_R or min(x0, x1) > hc.x + HELI_R
-                    or max(y0, y1) < hc.y - HELI_R or min(y0, y1) > hc.y + HELI_R):
+            if (max(x0, x1) < hc.x - HELI_HIT_REACH or min(x0, x1) > hc.x + HELI_HIT_REACH
+                    or max(y0, y1) < hc.y - HELI_HIT_REACH or min(y0, y1) > hc.y + HELI_HIT_REACH):
                 continue
-            t = seg_cyl(p0, p1, hc.x, hc.y, HELI_R, hc.z, hc.z + HELI_HIT_H)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "heli", hc
+            th = vehicle_hit_t(p0, p1, hc, True)
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "heli", hc
         if self.phase == "play":
             for pl in self.players.values():
                 if pl.hp <= 0 or pl.pid == b.owner or pl.protect > 0 or pl.vehicle >= 0 or pl.heli >= 0:
@@ -13049,6 +13052,9 @@ def _soldier_meshes(L):
     GL = L["glove"]
     GLASS = (0.12, 0.18, 0.26)
     tm = Mesh()
+    hm, vm = Mesh(), Mesh()       # 10f: Kopfbedeckung (+ Headset/Nachtsicht) und Weste/Rucksack - eigene Teile, die eine
+                                  # getragene Ausrüstung ausblendet (Kopf- bzw. Torso-Ausrüstung)
+    boots = []                    # 10f: Stiefel je Bein (Fuss-Ausrüstung blendet sie aus)
 
     # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
     zs = [-0.07, 0.0, 0.10, 0.20, 0.30, 0.42, 0.52, 0.585, 0.635, 0.668]
@@ -13070,24 +13076,24 @@ def _soldier_meshes(L):
     # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
     if L["weste"] == 0:
         vz = [0.30, 0.40, 0.50, 0.578]
-        loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
+        loft(vm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
              [0.130, 0.146, 0.156, 0.140], OLV, rng, None, None, (True, False), 0.04)
         for sx in (-1, 1):
-            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
+            box(vm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
         for x in (-0.09, 0.0, 0.09):
-            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
-            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
-        box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
-        box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
-        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
+            box(vm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
+            box(vm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
+        box(vm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
+        box(vm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
+        box(vm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
     # ---- Rucksack
     if L["pack"] == 0:                                                                       # gross mit Schlafrolle
-        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
-        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
-        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
+        box(vm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
+        box(vm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
+        ell(vm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
     elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
-        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
-        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
+        box(vm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
+        box(vm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
 
     # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
     #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
@@ -13120,7 +13126,8 @@ def _soldier_meshes(L):
     kopf, gesicht, brille, extra, frisur = L["kopf"], L["gesicht"], L["brille"], L["extra"], L["frisur"]
     mask = gesicht == 3
     loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
-    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else skin, rng)                  # Kinn
+    beard = gesicht == 1 and not mask
+    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else (hair if beard else skin), rng)   # Kinn (10f: im Bart)
     for sx in (-1, 1):
         ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
         if not mask:
@@ -13131,7 +13138,7 @@ def _soldier_meshes(L):
         box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
         box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
         if frisur != 1:
-            box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten
+            box(tm, sx * 0.083, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten (10f: anliegend)
     for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
                      ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
                      ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
@@ -13146,9 +13153,13 @@ def _soldier_meshes(L):
         box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
         box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
         box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                        # Mundspalt
-    if gesicht == 1:                                                                            # Kinnbart + Schnurrbart
-        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.03 + 0.003 for r in hrx[:3]],
-             [r * 1.03 + 0.003 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
+    if gesicht == 1:                                                                            # Vollbart + Schnurrbart
+        # 10f: dicker und weiter aussen - Kinn und Kiefer liegen komplett darin (vorher stach das Kinn durch)
+        loft(tm, [(0, cy + 0.006, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.10 + 0.010 for r in hrx[:3]],
+             [r * 1.12 + 0.012 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
+        ell(tm, (0, 0.118, 0.792), 0.046, 0.032, 0.036, hair, rng)                              # Kinnpartie
+        for sx in (-1, 1):                                                                      # Bart an den Wangen
+            ell(tm, (sx * 0.064, 0.072, 0.83), 0.026, 0.05, 0.05, hair, rng)
         box(tm, 0, 0.1345, 0.8585, 0.070, 0.014, 0.012, hair, rng)
     if gesicht == 2:                                                                            # Tarnbemalung
         g1, g2 = (0.10, 0.15, 0.07), (0.38, 0.33, 0.18)
@@ -13168,32 +13179,32 @@ def _soldier_meshes(L):
              [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
     # ---- Kopfbedeckung
     if kopf == 0:                                                                               # Gefechtshelm mit Tarnbezug
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
+        loft(hm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
                                                (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
              [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
              None, rng, None, lambda p: camo(p, 17.0, 0.7), (True, True))
-        loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
-        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
-        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
+        loft(hm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
+        loft(hm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
+        box(hm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
         for sx in (-1, 1):
-            box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
+            box(hm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
     elif kopf == 1:                                                                             # Buschhut mit Krempe
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
+        loft(hm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
              [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, None,
              lambda p: camo(p, 15.0, 0.4), (False, True))
-        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
+        loft(hm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
              lambda p: camo(p, 13.0, 0.9), (True, True))
-        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
+        loft(hm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
     elif kopf == 2:                                                                             # Barett
-        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
-        box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
-        loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
+        ell(hm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
+        box(hm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
+        loft(hm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
     elif kopf == 3:                                                                             # Feldmütze mit Schirm
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
+        loft(hm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
              [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, None,
              lambda p: camo(p, 15.0, 0.2), (True, True))
-        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
-        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
+        box(hm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
+        loft(hm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
     # ---- Brille
     if brille == 1:                                                                             # Schutzbrille
         box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
@@ -13214,22 +13225,22 @@ def _soldier_meshes(L):
         box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat=None)
     elif extra == 2:                                                                            # Headset
         for sx in (-1, 1):
-            ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
-        box(tm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
-        box(tm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
-        ell(tm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
+            ell(hm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
+        box(hm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
+        box(hm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
+        ell(hm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
         if kopf != 0:
-            loft(tm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+            loft(hm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
     elif extra == 3:                                                                            # Nachtsichtgerät
         if kopf != 0:
-            loft(tm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
-        box(tm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
-        box(tm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
-        box(tm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
+            loft(hm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
+        box(hm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
+        box(hm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
+        box(hm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
 
     legs = []
     for sx in (-1, 1):
-        lm = Mesh()
+        lm, bm = Mesh(), Mesh()
         off = sx * 0.4
         # Hose: Oberschenkel, Knie, Wade, Knöchel
         lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
@@ -13241,14 +13252,15 @@ def _soldier_meshes(L):
         box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
         box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
         # Stiefel: Schaft, Fuss, Sohle, Schnürung
-        loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
+        loft(bm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
              LEATH, rng, None, None, (False, False), 0.03)
-        loft(lm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
+        loft(bm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
              [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
-        box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
-        box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
+        box(bm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
+        box(bm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
         legs.append(lm)
-    return tm, legs, arms
+        boots.append(bm)
+    return tm, legs, arms, hm, vm, boots
 
 
 def build_soldier(look):
@@ -13257,17 +13269,20 @@ def build_soldier(look):
     key = look["key"]
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
-        tm, lms, ams = _soldier_meshes(look)
-        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams])
+        tm, lms, ams, hm, vm, bms = _soldier_meshes(look)
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams],
+                                       hm.node("kopfbedeckung"), vm.node("weste"), [bm.node("stiefel") for bm in bms])
     root = NodePath("soldier")
     torso = root.attachNewNode("torso")
     torso.setZ(0.75)
     torso.attachNewNode(parts[0])
+    cos = {"head": torso.attachNewNode(parts[3]), "torso": torso.attachNewNode(parts[4]), "feet": []}   # 10f
     legs = []
-    for sx, gn in zip((-1, 1), parts[1]):
+    for sx, gn, bn in zip((-1, 1), parts[1], parts[5]):
         leg = root.attachNewNode("leg")
         leg.setPos(sx * 0.115, 0, 0.75)
         leg.attachNewNode(gn)
+        cos["feet"].append(leg.attachNewNode(bn))
         legs.append(leg)
     arms = []
     for sh, gn in zip(SOLDIER_SH, parts[2]):
@@ -13291,6 +13306,7 @@ def build_soldier(look):
     fg.setColor(0.85, 0.1, 0.1, 1)
     fg.setDepthOffset(1)
     bar.hide()
+    root.setPythonTag("cos", cos)            # 10f: Kosmetik-Teile (Kopfbedeckung, Weste/Rucksack, Stiefel) zum Ausblenden
     return root, torso, legs[0], legs[1], bar, fg, arms[0], arms[1]
 
 
@@ -14392,51 +14408,172 @@ def build_rocket(lit=True):
     return NodePath(m.node("rocket")), NodePath(f.node("flame"))
 
 
+def bevel_box(m, cx, cy, cz, sx, sy, sz, b, col, rng=None, mat=None, top_k=1.0):
+    """10f: Quader mit abgeschrägten Kanten (Fasen b) - weichere Karosserieformen statt harter Kisten.
+    top_k < 1: die Oberseite ist schmaler (leicht trapezförmig, z. B. Motorhaube)."""
+    hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
+    b = min(b, hx * 0.9, hy * 0.9, hz * 0.9)
+    c = (cx, cy, cz)
+    col2 = jc(col, rng, 0.03) if rng else col
+
+    def inner(ix, iy, iz, ax):
+        """Punkt auf der Fläche senkrecht zu ax: in beiden anderen Achsen um b nach innen."""
+        k = top_k if iz > 0 else 1.0
+        x, y, z = ix * hx * k, iy * hy * k, iz * hz
+        if ax != 0:
+            x -= ix * b
+        if ax != 1:
+            y -= iy * b
+        if ax != 2:
+            z -= iz * b
+        return (cx + x, cy + y, cz + z)
+    S = (-1, 1)
+    for ax in range(3):                                  # 6 Hauptflächen
+        for sgn in S:
+            q = []
+            for u in S:
+                for v in S:
+                    idx = [0, 0, 0]
+                    idx[ax] = sgn
+                    o = [i for i in range(3) if i != ax]
+                    idx[o[0]], idx[o[1]] = u, v
+                    q.append(inner(idx[0], idx[1], idx[2], ax))
+            a_, b_, c_, d_ = q[0], q[1], q[3], q[2]
+            m.tri(a_, b_, c_, col2, c, mat=mat)
+            m.tri(a_, c_, d_, col2, c, mat=mat)
+    for a1 in range(3):                                  # 12 Kanten-Fasen
+        for a2 in range(a1 + 1, 3):
+            a3 = 3 - a1 - a2
+            for s1 in S:
+                for s2 in S:
+                    pts = []
+                    for s3 in S:
+                        idx = [0, 0, 0]
+                        idx[a1], idx[a2], idx[a3] = s1, s2, s3
+                        pts.append((inner(idx[0], idx[1], idx[2], a1), inner(idx[0], idx[1], idx[2], a2)))
+                    (p0, p1), (p2, p3) = pts
+                    m.tri(p0, p1, p3, col2, c, mat=mat)
+                    m.tri(p0, p3, p2, col2, c, mat=mat)
+    for ix in S:                                         # 8 Ecken
+        for iy in S:
+            for iz in S:
+                m.tri(inner(ix, iy, iz, 0), inner(ix, iy, iz, 1), inner(ix, iy, iz, 2), col2, c, mat=mat)
+
+
+def _wheel_mesh(rng, r=0.4, w=0.3, tire=(0.08, 0.08, 0.09), rim=(0.55, 0.56, 0.58)):
+    """10f: Rad mit Achse x: Reifen mit Profilstollen, Felge mit Speichen und Nabe."""
+    m = Mesh()
+    n = 18
+    for i in range(n):                                   # Lauffläche + Flanken (abgerundet)
+        a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+        for (x0_, r0), (x1_, r1) in (((-w / 2, r * 0.82), (-w / 2 + 0.03, r * 0.97)), ((-w / 2 + 0.03, r * 0.97), (w / 2 - 0.03, r)),
+                                     ((w / 2 - 0.03, r), (w / 2, r * 0.82))):
+            pa = (x0_, math.cos(a0) * r0, math.sin(a0) * r0)
+            pb = (x0_, math.cos(a1) * r0, math.sin(a1) * r0)
+            pc = (x1_, math.cos(a1) * r1, math.sin(a1) * r1)
+            pd = (x1_, math.cos(a0) * r1, math.sin(a0) * r1)
+            m.tri(pa, pb, pc, tire, (0, 0, 0))
+            m.tri(pa, pc, pd, tire, (0, 0, 0))
+        am = (a0 + a1) / 2                               # Profilstollen
+        obox(m, (0, math.cos(am) * (r + 0.012), math.sin(am) * (r + 0.012)), (1, 0, 0),
+             (0, -math.sin(am), math.cos(am)), (0, math.cos(am), math.sin(am)), w * 0.36, 0.035, 0.016, (0.05, 0.05, 0.06))
+    for sx in (-1, 1):                                   # Felge (beidseitig) mit 6 Speichen
+        x = sx * (w / 2 - 0.02)
+        for i in range(12):
+            a0, a1 = 2 * math.pi * i / 12, 2 * math.pi * (i + 1) / 12
+            m.tri((x, 0, 0), (x, math.cos(a0) * r * 0.62, math.sin(a0) * r * 0.62), (x, math.cos(a1) * r * 0.62, math.sin(a1) * r * 0.62),
+                  rim, (-sx, 0, 0))
+        for i in range(6):
+            a = 2 * math.pi * i / 6
+            obox(m, (x + sx * 0.012, math.cos(a) * r * 0.36, math.sin(a) * r * 0.36), (1, 0, 0), (0, math.cos(a), math.sin(a)),
+                 (0, -math.sin(a), math.cos(a)), 0.012, r * 0.22, 0.03, tuple(c * 0.8 for c in rim))
+        _tube(m, [(x, 0, 0), (x + sx * 0.05, 0, 0)], [0.07, 0.05], (0.3, 0.3, 0.32), rng, 8)       # Nabe
+    return m
+
+
 def build_vehicle_model():
-    """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück."""
+    """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück.
+    10f: detaillierter und runder - gefaste Wanne, gewölbte Motorhaube, Kotflügel über den Rädern, runde Scheinwerfer
+    mit Gittern, Kühlergrill mit Lamellen, Türen mit Fugen und Griffen, Rohr-Überrollbügel, Armaturenbrett mit Lenkrad,
+    gepolsterte Sitze, Reserverad und Kanister am Heck, Spiegel, Antenne, Profilreifen mit Speichenfelgen."""
     rng = random.Random(5)
     body_c, dark, glass = (0.52, 0.22, 0.14), (0.14, 0.14, 0.16), (0.55, 0.75, 0.85)
+    trim, steel, seat = tuple(c * 0.72 for c in (0.52, 0.22, 0.14)), (0.46, 0.48, 0.52), (0.20, 0.17, 0.14)
     root = NodePath("jeep")
     m = Mesh()
     m.mat = "metal"
-    box(m, 0, 0, 0.62, 1.7, 3.2, 0.34, body_c, rng)                  # Wanne
-    box(m, 0, 1.12, 0.95, 1.5, 0.95, 0.3, body_c, rng)               # Motorhaube
-    box(m, 0, 1.62, 0.78, 1.3, 0.08, 0.28, dark)                     # Kühlergrill
-    box(m, 0, -1.3, 0.95, 1.5, 0.5, 0.3, body_c, rng)                # Heck
+    bevel_box(m, 0, -0.05, 0.64, 1.72, 3.1, 0.40, 0.09, body_c, rng)                      # Wanne
+    bevel_box(m, 0, 1.12, 0.93, 1.52, 0.98, 0.30, 0.10, body_c, rng, top_k=0.92)          # Motorhaube (gewölbt)
+    _tube(m, [(0, 0.66, 1.08), (0, 1.58, 1.04)], [0.05, 0.04], trim, rng, 6)              # Mittelsicke
+    bevel_box(m, 0, 1.63, 0.80, 1.36, 0.10, 0.36, 0.04, dark, rng)                       # Kühlergrill
+    for k in range(7):                                                                   # Lamellen
+        box(m, -0.45 + k * 0.15, 1.69, 0.80, 0.05, 0.03, 0.28, (0.06, 0.06, 0.07))
+    bevel_box(m, 0, -1.30, 0.97, 1.52, 0.52, 0.30, 0.08, body_c, rng)                     # Heck
     for sx in (-1, 1):
-        box(m, sx * 0.45, -0.2, 0.9, 0.5, 0.55, 0.12, dark, rng)     # Sitze
-        box(m, sx * 0.45, -0.5, 1.2, 0.5, 0.1, 0.5, dark, rng)       # Lehnen
-        box(m, sx * 0.8, 0.45, 1.4, 0.07, 0.07, 0.95, dark)          # Überrollbügel
-        box(m, sx * 0.8, -1.0, 1.4, 0.07, 0.07, 0.95, dark)
-        box(m, sx * 0.8, -0.27, 1.88, 0.07, 1.5, 0.07, dark)
-        box(m, sx * 0.88, 1.1, 0.72, 0.16, 1.0, 0.1, dark, rng)      # Kotflügel
-    box(m, 0, 0.45, 1.88, 1.6, 0.07, 0.07, dark)
-    box(m, 0, -1.0, 1.88, 1.6, 0.07, 0.07, dark)
-    box(m, 0, 0.55, 1.28, 1.5, 0.05, 0.5, glass)                     # Windschutzscheibe
-    box(m, 0, -0.9, 1.3, 0.36, 0.36, 0.5, dark)                      # Sockel fürs Heckgeschütz
-    box(m, 0, -0.9, 1.56, 0.8, 0.8, 0.08, (0.46, 0.48, 0.52))        # Drehkranz
-    box(m, 0, 1.68, 0.6, 1.8, 0.16, 0.16, dark, rng)                 # Stossstange vorn
-    box(m, 0, -1.68, 0.6, 1.8, 0.14, 0.16, dark, rng)                # hinten
+        for sy in (1.05, -1.05):                                                         # Kotflügel über den Rädern
+            _tube(m, [(sx * 0.93, sy - 0.55, 0.62), (sx * 0.96, sy - 0.3, 0.86), (sx * 0.97, sy, 0.93),
+                      (sx * 0.96, sy + 0.3, 0.86), (sx * 0.93, sy + 0.55, 0.62)],
+                  [(0.13, 0.05), (0.15, 0.05), (0.16, 0.05), (0.15, 0.05), (0.13, 0.05)], body_c, rng, 6)
+        bevel_box(m, sx * 0.86, 0.05, 0.86, 0.04, 1.0, 0.36, 0.015, trim, rng)          # Tür (Fuge)
+        box(m, sx * 0.89, -0.18, 0.95, 0.03, 0.14, 0.03, steel)                          # Türgriff
+        box(m, sx * 0.875, 0.55, 0.86, 0.02, 0.02, 0.36, (0.10, 0.10, 0.11))             # Türspalt vorn
+        box(m, sx * 0.875, -0.45, 0.86, 0.02, 0.02, 0.36, (0.10, 0.10, 0.11))            # Türspalt hinten
+        box(m, sx * 0.88, 0.05, 0.60, 0.04, 2.6, 0.06, dark)                              # Trittbrett
+        _tube(m, [(sx * 0.80, 0.45, 1.0), (sx * 0.80, 0.45, 1.86), (sx * 0.78, -0.27, 1.92),
+                  (sx * 0.80, -1.0, 1.86), (sx * 0.80, -1.0, 1.0)], [0.045] * 5, dark, rng, 8)   # Überrollbügel
+        _tube(m, [(sx * 1.0, 0.52, 1.18), (sx * 1.08, 0.58, 1.2)], [0.02, 0.02], dark, rng, 4)   # Spiegelarm
+        bevel_box(m, sx * 1.1, 0.6, 1.2, 0.06, 0.16, 0.12, 0.02, dark, rng)                    # Spiegel
+        _tube(m, [(sx * 0.6, 1.62, 0.92), (sx * 0.6, 1.70, 0.92)], [0.15, 0.14], dark, rng, 12)   # Scheinwerfertopf
+        bevel_box(m, sx * 0.45, -0.25, 0.86, 0.52, 0.55, 0.14, 0.05, seat, rng)            # Sitzfläche
+        bevel_box(m, sx * 0.45, -0.55, 1.18, 0.50, 0.12, 0.55, 0.05, seat, rng)            # Lehne
+        bevel_box(m, sx * 0.45, -0.57, 1.52, 0.26, 0.10, 0.14, 0.04, seat, rng)            # Kopfstütze
+    _tube(m, [(-0.80, 0.45, 1.86), (0.80, 0.45, 1.86)], [0.045, 0.045], dark, rng, 8)
+    _tube(m, [(-0.80, -1.0, 1.86), (0.80, -1.0, 1.86)], [0.045, 0.045], dark, rng, 8)
+    for sx in (-1, 1):                                                                   # Scheibenrahmen
+        _tube(m, [(sx * 0.76, 0.58, 1.0), (sx * 0.74, 0.50, 1.55)], [0.035, 0.03], dark, rng, 6)
+    _tube(m, [(-0.74, 0.50, 1.55), (0.74, 0.50, 1.55)], [0.03, 0.03], dark, rng, 6)
+    box(m, 0, 0.62, 1.05, 1.5, 0.22, 0.14, dark, rng)                                    # Armaturenbrett
+    _tube(m, [(-0.45, 0.42, 1.08), (-0.45, 0.5, 1.2)], [0.025, 0.02], dark, rng, 5)     # Lenksäule
+    for i in range(10):                                                                  # Lenkrad
+        a0, a1 = 2 * math.pi * i / 10, 2 * math.pi * (i + 1) / 10
+        _tube(m, [(-0.45 + math.cos(a0) * 0.17, 0.4 + math.sin(a0) * 0.05, 1.2 + math.sin(a0) * 0.14),
+                  (-0.45 + math.cos(a1) * 0.17, 0.4 + math.sin(a1) * 0.05, 1.2 + math.sin(a1) * 0.14)], [0.018, 0.018], dark, None, 4)
+    box(m, 0, -0.9, 1.3, 0.36, 0.36, 0.5, dark)                                          # Sockel fürs Heckgeschütz
+    _tube(m, [(0, -0.9, 1.52), (0, -0.9, 1.60)], [0.42, 0.42], steel, rng, 16)           # Drehkranz
+    bevel_box(m, 0, 1.70, 0.60, 1.86, 0.16, 0.18, 0.05, dark, rng)                       # Stossstange vorn
     for sx in (-1, 1):
-        box(m, sx * 1.0, 0.55, 1.15, 0.06, 0.14, 0.16, dark)         # Aussenspiegel
-        box(m, sx * 0.62, 1.66, 0.9, 0.34, 0.1, 0.2, dark)           # Scheinwerfergehäuse
-    box(m, 0.55, -1.2, 1.12, 0.3, 0.22, 0.34, (0.30, 0.34, 0.20), rng)   # Kanister
-    box(m, -0.62, -1.62, 0.55, 0.08, 0.3, 0.08, (0.35, 0.35, 0.38))  # Auspuff
+        _tube(m, [(sx * 0.35, 1.72, 0.55), (sx * 0.35, 1.86, 0.55)], [0.05, 0.05], steel, rng, 6)   # Abschlepphaken
+    bevel_box(m, 0, -1.70, 0.60, 1.86, 0.14, 0.18, 0.05, dark, rng)                      # hinten
+    _tube(m, [(0, -1.62, 1.05), (0, -1.86, 1.05)], [0.36, 0.36], (0.08, 0.08, 0.09), rng, 14)   # Reserverad
+    _tube(m, [(0, -1.86, 1.05), (0, -1.9, 1.05)], [0.18, 0.12], steel, rng, 10)
+    bevel_box(m, 0.62, -1.48, 1.15, 0.26, 0.20, 0.36, 0.04, (0.30, 0.34, 0.20), rng)   # Kanister
+    box(m, 0.62, -1.48, 1.36, 0.08, 0.05, 0.05, (0.2, 0.22, 0.14))
+    _tube(m, [(-0.62, -1.6, 0.5), (-0.62, -1.82, 0.48)], [0.045, 0.04], (0.35, 0.35, 0.38), rng, 6)   # Auspuff
+    _tube(m, [(-0.82, -1.25, 1.12), (-0.86, -1.3, 2.6)], [0.012, 0.006], dark, None, 4)   # Funkantenne
     root.attachNewNode(m.node("body"))
+    gm = Mesh(alpha=0.45)                                                                # Windschutzscheibe (durchscheinend)
+    box(gm, 0, 0.55, 1.28, 1.42, 0.03, 0.5, glass)
+    gn = root.attachNewNode(gm.node("glas"))
+    gn.setTransparency(TransparencyAttrib.MAlpha)
+    gn.setTwoSided(True)
     lm = Mesh(lit=False)
     for sx in (-1, 1):
-        box(lm, sx * 0.55, 1.64, 0.9, 0.28, 0.06, 0.16, (1.0, 0.92, 0.55))
-        box(lm, sx * 0.6, -1.56, 0.92, 0.2, 0.05, 0.1, (0.9, 0.1, 0.1))
+        _tube(lm, [(sx * 0.6, 1.70, 0.92), (sx * 0.6, 1.72, 0.92)], [0.12, 0.11], (1.0, 0.95, 0.65), None, 12)   # Scheinwerfer
+        box(lm, sx * 0.6, -1.78, 0.92, 0.22, 0.04, 0.10, (0.9, 0.1, 0.1))                # Rücklichter
+        box(lm, sx * 0.84, 1.62, 0.78, 0.06, 0.04, 0.06, (1.0, 0.6, 0.1))                # Blinker
     root.attachNewNode(lm.node("lights"))
+    gr = Mesh()                                                                          # Scheinwerfergitter
+    for sx in (-1, 1):
+        for k in (-1, 0, 1):
+            box(gr, sx * 0.6 + k * 0.06, 1.735, 0.92, 0.012, 0.012, 0.22, dark)
+    root.attachNewNode(gr.node("gitter"))
+    wm = _wheel_mesh(rng)
+    wg = wm.node("tire")
     wheels = []
     for sx, sy in ((-1, 1.05), (1, 1.05), (-1, -1.05), (1, -1.05)):
         piv = root.attachNewNode("wheel")
         piv.setPos(sx * 0.95, sy, 0.4)
-        tm = Mesh()
-        prism(tm, 0, 0, -0.15, 0.4, 0.3, 8, (0.08, 0.08, 0.09), rng)
-        prism(tm, 0, 0, -0.17, 0.2, 0.34, 6, (0.62, 0.62, 0.66), rng)
-        tire = piv.attachNewNode(tm.node("tire"))
-        tire.setR(90)                                                # Achse = x
+        piv.attachNewNode(wg)                                        # Achse = x
         wheels.append(piv)
     bar = root.attachNewNode("bar")
     bar.setPos(0, 0, 2.7)
@@ -14458,47 +14595,98 @@ def build_vehicle_model():
 
 
 def build_heli_model():
-    """Kampfhubschrauber, Nase bei +y, Kufen bei z=0. Gibt (root, rotor, tail_rotor, bar, fg) zurück."""
+    """Kampfhubschrauber, Nase bei +y, Kufen bei z=0. Gibt (root, rotor, tail_rotor, bar, fg) zurück.
+    10f: aerodynamischer Rumpf (Querschnitte statt Kisten), Cockpitverglasung mit Rahmen, Schiebetüren mit Fenstern,
+    zwei Turbinen mit Einlässen und Auspuff, Heckausleger verjüngt, Leitwerk mit Profil, Rotorkopf mit Taumelscheibe und
+    Blattgriffen, verjüngte Rotorblätter, Kufen aus Rohren mit hochgebogenen Spitzen, Raketenbehälter mit Mündungen,
+    Bug-Minigun mit sechs Läufen, Sensorkugel, Positionslichter, Antennen."""
     rng = random.Random(31)
     body, dark, red = (0.30, 0.37, 0.27), (0.14, 0.14, 0.16), (0.72, 0.16, 0.1)
-    glass, steel = (0.5, 0.72, 0.88), (0.5, 0.52, 0.56)
+    glass, steel = (0.40, 0.62, 0.78), (0.5, 0.52, 0.56)
+    belly = tuple(c * 0.85 for c in body)
     root = NodePath("heli")
     m = Mesh()
     m.mat = "metal"
-    box(m, 0, 0.0, 1.45, 1.9, 3.6, 1.45, body, rng)                  # Kabine
-    blob(m, 0, 2.0, 1.4, 0.95, 1.2, 0.85, body, rng)                 # Bug
-    blob(m, 0, 2.55, 1.75, 0.8, 0.7, 0.6, glass, rng, jitter=0.05)   # Cockpitscheibe
-    box(m, 0, -3.3, 1.85, 0.5, 4.4, 0.5, body, rng)                  # Heckausleger
-    box(m, 0, -5.3, 2.5, 0.12, 0.95, 1.2, red)                       # Seitenleitwerk
-    box(m, 0, -4.9, 1.9, 1.7, 0.6, 0.1, body)                        # Höhenleitwerk
-    box(m, 0, -0.1, 2.35, 0.9, 1.6, 0.5, dark)                       # Turbinenaufbau
-    box(m, 0, -0.1, 2.7, 0.3, 0.3, 0.35, steel)                      # Rotormast
+    ys = [-1.9, -1.2, 0.0, 1.2, 2.2, 2.9, 3.3]                                           # Rumpf: Querschnitte von hinten nach vorn
+    zs = [1.85, 1.55, 1.45, 1.42, 1.32, 1.18, 1.08]
+    rx = [0.62, 0.92, 0.98, 0.98, 0.86, 0.60, 0.22]
+    rz = [0.55, 0.80, 0.82, 0.80, 0.70, 0.48, 0.18]
+    loft(m, [(0, y, z) for y, z in zip(ys, zs)], rx, rz, body, rng, sides=16,
+         colfn=lambda p: belly if p[2] < 1.0 else body)
+    loft(m, [(0, -1.9, 1.85), (0, -3.6, 1.95), (0, -5.3, 2.05)], [0.42, 0.26, 0.17], [0.40, 0.25, 0.17], body, rng, sides=10)   # Heckausleger
+    loft(m, [(0, -5.0, 1.95), (0, -5.55, 3.25)], [0.07, 0.05], [0.42, 0.28], red, rng, sides=8)          # Seitenleitwerk
+    loft(m, [(-1.0, -4.75, 1.95), (1.0, -4.75, 1.95)], [0.03, 0.03], [0.32, 0.32], body, rng, sides=6)   # Höhenleitwerk
     for sx in (-1, 1):
-        box(m, sx * 1.15, 0.1, 0.12, 0.12, 3.8, 0.1, dark)           # Kufen
-        box(m, sx * 1.05, 1.0, 0.6, 0.08, 0.1, 1.0, dark)            # Streben
-        box(m, sx * 1.05, -0.8, 0.6, 0.08, 0.1, 1.0, dark)
-        box(m, sx * 1.55, 0.3, 1.15, 0.55, 1.3, 0.5, dark, rng)      # Raketenbehälter
-        box(m, sx * 1.55, 1.0, 1.15, 0.42, 0.1, 0.38, red)           # Raketenspitzen
-    box(m, 0, 2.7, 0.8, 0.14, 1.2, 0.14, steel)                      # Minigun am Bug
-    box(m, 0, 2.1, 0.85, 0.35, 0.5, 0.3, dark)
-    blob(m, 0, 3.0, 0.95, 0.2, 0.26, 0.2, dark, rng, jitter=0.06)    # Sensorkugel
-    box(m, 0, -5.4, 3.15, 0.1, 0.1, 0.1, red)                         # Positionslicht
+        box(m, sx * 1.0, -4.75, 2.05, 0.06, 0.34, 0.24, body)                                         # Endscheiben
+    _tube(m, [(0.18, -5.35, 2.4), (0.32, -5.35, 2.4)], [0.12, 0.1], dark, rng, 8)                     # Heckrotor-Getriebe
+    loft(m, [(0, -1.4, 2.25), (0, 0.0, 2.40), (0, 1.0, 2.30)], [0.50, 0.58, 0.40], [0.22, 0.30, 0.20], dark, rng, sides=10)   # Turbinengehäuse
     for sx in (-1, 1):
-        box(m, sx * 0.97, 0.3, 1.5, 0.05, 1.3, 0.85, dark, rng)       # Türfeld
-        box(m, sx * 0.98, 1.0, 1.5, 0.06, 0.06, 0.8, steel)           # Türgriff / Rahmen
-    box(m, 0, -0.1, 3.0, 0.5, 0.5, 0.15, steel)                       # Rotorkopf
+        _tube(m, [(sx * 0.36, 1.05, 2.3), (sx * 0.36, 0.8, 2.32)], [0.17, 0.15], (0.06, 0.06, 0.07), rng, 10)   # Einlässe
+        _tube(m, [(sx * 0.38, -1.2, 2.32), (sx * 0.50, -1.65, 2.35)], [0.13, 0.11], (0.20, 0.18, 0.16), rng, 10)   # Auspuff
+    _tube(m, [(0, -0.1, 2.5), (0, -0.1, 2.88)], [0.14, 0.11], steel, rng, 10)                         # Rotormast
+    gl = Mesh(alpha=0.55)                                                                             # Cockpitverglasung
+    loft(gl, [(0, 1.95, 1.62), (0, 2.55, 1.55), (0, 3.05, 1.30), (0, 3.25, 1.12)], [0.84, 0.76, 0.54, 0.26],
+         [0.42, 0.40, 0.30, 0.14], glass, None, sides=14, caps=(False, True))
+    for sx in (-1, 1):                                                                                # Scheibenrahmen
+        _tube(m, [(sx * 0.62, 1.95, 1.95), (sx * 0.55, 2.6, 1.85), (sx * 0.32, 3.1, 1.5), (0, 3.28, 1.2)],
+              [0.025] * 4, dark, None, 4)
+    _tube(m, [(0, 1.95, 2.03), (0, 2.6, 1.93), (0, 3.1, 1.6)], [0.025] * 3, dark, None, 4)
+    for sx in (-1, 1):
+        box(m, sx * 0.99, 0.25, 1.45, 0.04, 1.5, 0.95, tuple(c * 0.9 for c in body), rng)            # Schiebetür
+        box(m, sx * 1.01, 0.25, 1.7, 0.03, 1.1, 0.40, glass)                                         # Türfenster
+        box(m, sx * 1.02, -0.45, 1.4, 0.03, 0.06, 0.25, steel)                                       # Griff
+        box(m, sx * 0.99, 0.25, 0.98, 0.05, 1.6, 0.04, steel)                                        # Laufschiene
+        for sy in (1.0, -0.9):                                                                       # Kufen-Streben
+            _tube(m, [(sx * 0.78, sy, 0.95), (sx * 1.1, sy, 0.12)], [0.05, 0.045], dark, rng, 6)
+        _tube(m, [(sx * 1.15, -1.8, 0.1), (sx * 1.15, 1.9, 0.1), (sx * 1.15, 2.35, 0.22), (sx * 1.15, 2.55, 0.48)],
+              [0.06, 0.06, 0.06, 0.05], dark, rng, 8)                                                  # Kufen (vorn hochgebogen)
+        _tube(m, [(sx * 0.75, 0.25, 1.05), (sx * 1.55, 0.25, 1.05)], [0.06, 0.05], dark, rng, 6)     # Waffenträger
+        _tube(m, [(sx * 1.55, -0.35, 1.0), (sx * 1.55, 0.95, 1.0)], [0.25, 0.25], dark, rng, 12)     # Raketenbehälter
+        for k in range(7):                                                                           # Raketenmündungen
+            a = 2 * math.pi * k / 7
+            rr = 0.0 if k == 0 else 0.15
+            _tube(m, [(sx * 1.55 + math.cos(a) * rr, 0.95, 1.0 + math.sin(a) * rr),
+                      (sx * 1.55 + math.cos(a) * rr, 0.98, 1.0 + math.sin(a) * rr)], [0.05, 0.05], red, None, 6)
+    _tube(m, [(0, 2.6, 0.95), (0, 2.95, 0.88)], [0.18, 0.15], dark, rng, 10)                         # Minigun-Halter
+    for k in range(6):                                                                               # sechs Läufe
+        a = 2 * math.pi * k / 6
+        _tube(m, [(math.cos(a) * 0.05, 2.95, 0.88 + math.sin(a) * 0.05), (math.cos(a) * 0.05, 3.55, 0.86 + math.sin(a) * 0.05)],
+              [0.018, 0.018], steel, None, 5)
+    ell(m, (0, 3.2, 1.0), 0.18, 0.2, 0.18, dark, rng, rings=6)                                        # Sensorkugel
+    _tube(m, [(0, 3.36, 1.0), (0, 3.4, 1.0)], [0.08, 0.08], (0.2, 0.3, 0.45), None, 10)
+    _tube(m, [(0.2, -0.9, 2.45), (0.22, -1.0, 3.0)], [0.012, 0.006], dark, None, 4)                  # Antennen
+    _tube(m, [(0, 0.5, 0.67), (0, 0.4, 0.4)], [0.012, 0.006], dark, None, 4)
     root.attachNewNode(m.node("body"))
+    gn = root.attachNewNode(gl.node("verglasung"))
+    gn.setTransparency(TransparencyAttrib.MAlpha)
+    lt = Mesh(lit=False)                                                                             # Positionslichter
+    box(lt, -0.97, 1.6, 1.85, 0.06, 0.06, 0.06, (1.0, 0.15, 0.1))
+    box(lt, 0.97, 1.6, 1.85, 0.06, 0.06, 0.06, (0.2, 1.0, 0.3))
+    box(lt, 0, -5.6, 3.25, 0.08, 0.08, 0.08, (1.0, 0.15, 0.1))
+    ln = root.attachNewNode(lt.node("lichter"))
+    ln.setFogOff()
     rotor = root.attachNewNode("rotor")
     rotor.setPos(0, -0.1, 2.95)
     rm = Mesh()
-    box(rm, 0, 0, 0, 10.0, 0.3, 0.05, dark)
-    box(rm, 0, 0, 0, 0.3, 10.0, 0.05, dark)
+    _tube(rm, [(0, 0, -0.08), (0, 0, 0.12)], [0.26, 0.2], steel, rng, 12)                            # Rotorkopf (Nabe)
+    _tube(rm, [(0, 0, -0.1), (0, 0, -0.04)], [0.36, 0.36], dark, rng, 14)                            # Taumelscheibe
+    for k in range(4):
+        a = k * math.pi / 2
+        ca, sa = math.cos(a), math.sin(a)
+        _tube(rm, [(ca * 0.2, sa * 0.2, 0.02), (ca * 0.62, sa * 0.62, 0.02)], [0.07, 0.05], steel, rng, 6)   # Blattgriff
+        _tube(rm, [(ca * 0.16, sa * 0.16, -0.07), (ca * 0.42, sa * 0.42, 0.0)], [0.015, 0.015], dark, None, 4)   # Steuerstange
+        loft(rm, [(ca * 0.6, sa * 0.6, 0.02), (ca * 5.0, sa * 5.0, -0.06)], [0.17, 0.13], [0.03, 0.02], dark, None,
+             sides=6)                                                                                   # Blatt (verjüngt)
+        box(rm, ca * 4.75, sa * 4.75, -0.05, 0.22 if abs(ca) < 0.5 else 0.25, 0.22 if abs(sa) < 0.5 else 0.25, 0.045, (0.9, 0.8, 0.1))   # Blattspitze
     rotor.attachNewNode(rm.node("blades"))
     trotor = root.attachNewNode("trotor")
-    trotor.setPos(0.25, -5.35, 2.5)
+    trotor.setPos(0.36, -5.35, 2.4)
     tm = Mesh()
-    box(tm, 0, 0, 0, 0.05, 0.2, 2.0, dark)
-    box(tm, 0, 0, 0, 0.05, 2.0, 0.2, dark)
+    _tube(tm, [(0, 0, 0), (0.08, 0, 0)], [0.09, 0.07], steel, rng, 8)
+    for k in range(4):
+        a = k * math.pi / 2 + 0.3
+        loft(tm, [(0.06, math.cos(a) * 0.08, math.sin(a) * 0.08), (0.06, math.cos(a) * 0.95, math.sin(a) * 0.95)],
+             [0.03, 0.02], [0.08, 0.06], dark, None, sides=4)
     trotor.attachNewNode(tm.node("tblades"))
     bar = root.attachNewNode("bar")
     bar.setPos(0, 0, 5.2)
@@ -14517,6 +14705,54 @@ def build_heli_model():
     fg.setDepthOffset(1)
     bar.hide()
     return root, rotor, trotor, bar, fg
+
+
+# --- 10f: Trefferzonen der Fahrzeuge als Quader im Fahrzeug-Koordinatensystem (x rechts, y vorn, z oben; Ursprung =
+# Fahrzeugposition) - passen zu den neuen Modellen statt eines groben Zylinders (der Wagen war zu breit und zu kurz,
+# beim Heli fehlte der Heckausleger).
+VEH_HIT_BOXES = ((-0.95, -1.80, 0.15, 0.95, 1.80, 1.12),     # Wanne, Motorhaube, Heck, Stossstangen
+                 (-0.85, -1.10, 1.12, 0.85, 0.55, 1.95))     # Überrollbügel / Sitze (darüber: Fahrer direkt)
+HELI_HIT_BOXES = ((-1.00, -1.95, 0.75, 1.00, 3.35, 2.45),    # Kabine mit Bug und Turbinen
+                  (-0.42, -5.60, 1.55, 0.42, -1.95, 2.35),   # Heckausleger
+                  (-0.15, -5.75, 2.30, 0.15, -4.80, 3.30),   # Seitenleitwerk
+                  (-1.85, -0.40, 0.70, 1.85, 1.00, 1.30),    # Waffenträger mit Raketenbehältern
+                  (-1.25, -1.90, 0.00, 1.25, 2.60, 0.75))    # Kufen und Streben
+VEH_HIT_REACH = 2.1      # m: grober Vorfilter (halbe Diagonale der Quader)
+HELI_HIT_REACH = 6.0
+
+
+class _HB:
+    __slots__ = ("x0", "y0", "z0", "x1", "y1", "z1")
+
+    def __init__(self, b):
+        self.x0, self.y0, self.z0, self.x1, self.y1, self.z1 = b
+
+
+_VEH_HB = [_HB(b) for b in VEH_HIT_BOXES]
+_HELI_HB = [_HB(b) for b in HELI_HIT_BOXES]
+
+
+def vehicle_hit_t(p0, p1, obj, heli=False):
+    """10f: Eintrittsparameter t (0..1) der Strecke p0-p1 in die Trefferquader eines Wagens/Helis (gedreht mit dem Kurs)
+    -> (t, Normale in Weltkoordinaten) oder None."""
+    h = math.radians(obj.heading)
+    c, s = math.cos(h), math.sin(h)
+
+    def loc(p):
+        dx, dy = p[0] - obj.x, p[1] - obj.y
+        return (dx * c + dy * s, -dx * s + dy * c, p[2] - obj.z)
+    a, b = loc(p0), loc(p1)
+    best = None
+    for hb in (_HELI_HB if heli else _VEH_HB):
+        t = seg_box(a, b, hb)
+        if t is not None and (best is None or t < best[0]):
+            q = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+            dd = ((abs(q[0] - hb.x0), (-1, 0, 0)), (abs(q[0] - hb.x1), (1, 0, 0)), (abs(q[1] - hb.y0), (0, -1, 0)),
+                  (abs(q[1] - hb.y1), (0, 1, 0)), (abs(q[2] - hb.z0), (0, 0, -1)), (abs(q[2] - hb.z1), (0, 0, 1)))
+            nl = min(dd)[1]
+            nw = (nl[0] * c - nl[1] * s, nl[0] * s + nl[1] * c, nl[2])
+            best = (t, nw)
+    return best
 
 
 def build_turret_model():
@@ -18455,8 +18691,7 @@ class PlayerView:
             return
         self.gren_kind = kind
         self.gren_nd.getChildren().detach()
-        nd = self.gren_nd.attachNewNode(gren_geom(kind))
-        nd.setScale(0.11)
+        nd = gren_inst(self.gren_nd, kind, 0.11)
         self.gren_flame = None
         if kind == "molotov":
             self.gren_flame = gren_flame_node(self.gren_nd, (0.008, 0.003, 0.068), 0.045)
@@ -18532,6 +18767,11 @@ class PlayerView:
         for n in self.gear_nodes:
             n.removeNode()
         self.gear_nodes = []
+        cos = self.root.getPythonTag("cos") or {}        # 10f: Ausrüstung ersetzt das eigene Kosmetik-Teil
+        for sl, gi in zip(GEAR_SLOTS, key):
+            for nd in (cos.get(sl) if sl == "feet" else [cos.get(sl)]) or ():
+                if nd is not None:
+                    (nd.hide if gi >= 0 else nd.show)()
         for sl, gi in zip(GEAR_SLOTS, key):
             if gi < 0:
                 continue
@@ -113543,58 +113783,118 @@ WEAPON_CLIPS = {
 
 
 # ======================================================================== 10e: Granaten-Modelle, Airdrop
+def _gren_fuse(m, rng, z0, col_lever=(0.70, 0.72, 0.74), ring=(0.78, 0.72, 0.42), lever_r=0.30, lever_z=-0.25):
+    """10f: Zünder oben auf der Granate: Zündergehäuse, Sicherungsbügel (Löffel), der seitlich am Körper anliegt,
+    Sicherungsring mit Splint."""
+    alu, dk = (0.62, 0.64, 0.66), (0.22, 0.22, 0.24)
+    _tube(m, [(0, 0, z0), (0, 0, z0 + 0.08)], [0.15, 0.14], alu, rng, 12)                   # Gewindehals
+    _tube(m, [(0, 0, z0 + 0.08), (0, 0, z0 + 0.17)], [0.12, 0.10], alu, rng, 12)            # Zündkopf
+    _tube(m, [(0, 0, z0 + 0.17), (0, 0, z0 + 0.19)], [0.10, 0.05], dk, rng, 10)
+    _tube(m, [(0.06, 0, z0 + 0.15), (0.14, 0, z0 + 0.17), (0.22, 0, z0 + 0.12), (lever_r, 0, z0 - 0.05),
+              (lever_r + 0.02, 0, lever_z)], [(0.025, 0.07), (0.025, 0.075), (0.022, 0.07), (0.02, 0.065), (0.018, 0.05)],
+          col_lever, rng, 4)                                                                     # Sicherungsbügel
+    _tube(m, [(-0.02, -0.12, z0 + 0.12), (-0.02, -0.2, z0 + 0.12)], [0.02, 0.02], dk, None, 5)   # Splint
+    for i in range(10):                                                                          # Ring (Torus)
+        a0, a1 = 2 * math.pi * i / 10, 2 * math.pi * (i + 1) / 10
+        _tube(m, [(-0.02 + math.cos(a0) * 0.1, -0.29 + math.sin(a0) * 0.1 * 0.3, z0 + 0.12 + math.sin(a0) * 0.1),
+                  (-0.02 + math.cos(a1) * 0.1, -0.29 + math.sin(a1) * 0.1 * 0.3, z0 + 0.12 + math.sin(a1) * 0.1)],
+              [0.018, 0.018], ring, None, 4)
+
+
 def gren_mesh(kind, m=None, rng=None):
-    """10e: Granate als Modell (Höhe ca. 1, Mitte im Ursprung, z nach oben) - jede Art mit eigener Form und Farbe:
-    Splitter (olivgrünes Ei mit Zünder und Bügel), Decoy (Messingdose mit Antenne), Blend (Alu-Zylinder mit
-    Löchern), Rauch (grauer Zylinder mit weissem Band), Drohne (lila Kugel mit Rotorstummeln), Molotow (Flasche
-    mit Lappen), Fackel (roter Stab mit Kappe). Wird für Welt, Hand, Mitspieler und Drops skaliert."""
+    """10e/10f: Granate als Modell (Höhe ca. 1, Mitte im Ursprung, z nach oben), detailliert in Sinans Formsprache:
+    Splitter (geriffelter Gusskörper "Ananas" mit Zünder, Sicherungsbügel, Ring und Splint), Decoy (Messingdose mit
+    Lautsprechergitter, LED und Antenne), Blend (Alu-Zylinder mit Lochreihen, Zünder), Rauch (Kanister mit
+    Abströmlöchern oben und Farbband), Drohne (Kugel mit angelegten Rotorarmen, Linse, Leuchtring), Molotow (Flasche
+    mit Schulter, Benzin, Etikett und eingestopftem, abgebundenem Lappen), Fackel (Stab mit Griffrillen und Zündkappe).
+    Wird für Welt, Hand (Ego + Wurf), Mitspieler und Drops skaliert."""
     m = m or Mesh()
     rng = rng or random.Random(sum(map(ord, kind)))
     c = GREN_COL.get(kind, (0.4, 0.4, 0.4))
     dark, alu, black = tuple(v * 0.55 for v in c), (0.68, 0.70, 0.72), (0.10, 0.10, 0.11)
     if kind == "frag":
-        ell(m, (0, 0, -0.08), 0.33, 0.33, 0.40, c, rng, rings=8)
-        _tube(m, [(0, 0, 0.28), (0, 0, 0.42)], [0.13, 0.12], alu, rng, 10)                   # Zünder
-        _tube(m, [(0.12, 0, 0.40), (0.30, 0, 0.18), (0.36, 0, -0.18)], [0.035, 0.035, 0.03], alu, rng, 5)   # Bügel
-        _tube(m, [(-0.14, 0, 0.37), (-0.26, 0, 0.37)], [0.05, 0.05], (0.75, 0.70, 0.40), rng, 8)   # Ring
+        ell(m, (0, 0, -0.08), 0.31, 0.31, 0.38, dark, rng, rings=8)                         # Kern (Fugen dunkel)
+        rows, cols = 6, 8
+        for r_ in range(rows):                                                              # Riffelung: Segmente
+            el = -math.pi / 2 + math.pi * (r_ + 0.5) / rows
+            for k in range(cols):
+                az = 2 * math.pi * (k + 0.5 * (r_ % 2)) / cols
+                nrm = (math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el))
+                cpt = (nrm[0] * 0.31, nrm[1] * 0.31, -0.08 + nrm[2] * 0.38)
+                tang = (-math.sin(az), math.cos(az), 0.0)
+                bit = cross(nrm, tang)
+                w_ = 0.09 * max(0.35, math.cos(el))
+                obox(m, cpt, tang, bit, nrm, w_, 0.075, 0.035, jc(c, rng, 0.05))
+        _gren_fuse(m, rng, 0.27, lever_r=0.34, lever_z=-0.15)
     elif kind == "decoy":
-        _tube(m, [(0, 0, -0.45), (0, 0, 0.30)], [0.24, 0.24], c, rng, 14)
-        _tube(m, [(0, 0, -0.05), (0, 0, 0.08)], [0.25, 0.25], black, rng, 14)                 # Band
-        _tube(m, [(0, 0, 0.30), (0, 0, 0.40)], [0.15, 0.13], alu, rng, 10)
-        _tube(m, [(0.08, 0, 0.40), (0.10, 0, 0.62)], [0.02, 0.012], black, rng, 4)          # Antenne
-        ell(m, (0.10, 0, 0.64), 0.035, 0.035, 0.035, (1.0, 0.2, 0.15), rng, rings=3)
+        _tube(m, [(0, 0, -0.46), (0, 0, 0.28)], [0.24, 0.24], c, rng, 16)
+        _tube(m, [(0, 0, -0.48), (0, 0, -0.44)], [0.22, 0.245], tuple(v * 0.8 for v in c), rng, 16)   # Bördelrand
+        _tube(m, [(0, 0, -0.05), (0, 0, 0.06)], [0.248, 0.248], black, rng, 16)            # Band
+        for row in range(4):                                                                # Lautsprechergitter
+            for k in range(-2, 3):
+                a = math.pi / 2 + k * 0.22
+                box(m, math.cos(a) * 0.238, math.sin(a) * 0.238, -0.35 + row * 0.07, 0.035, 0.035, 0.03, black)
+        ell(m, (math.cos(0.4) * 0.245, math.sin(0.4) * 0.245, 0.17), 0.03, 0.03, 0.03, (1.0, 0.25, 0.15), None, rings=3)   # LED
+        _gren_fuse(m, rng, 0.28, lever_r=0.27, lever_z=-0.2)
+        _tube(m, [(-0.12, 0.05, 0.28), (-0.16, 0.06, 0.66)], [0.018, 0.01], black, rng, 4)  # Antenne
+        ell(m, (-0.16, 0.06, 0.68), 0.03, 0.03, 0.03, black, None, rings=3)
     elif kind == "flash":
-        _tube(m, [(0, 0, -0.45), (0, 0, 0.30)], [0.22, 0.22], c, rng, 14)
-        for k in range(8):                                                                   # Löcher im Mantel
-            a = 2 * math.pi * k / 8
-            for z in (-0.25, 0.05):
-                box(m, math.cos(a) * 0.215, math.sin(a) * 0.215, z, 0.06, 0.06, 0.09, black)
-        _tube(m, [(0, 0, 0.30), (0, 0, 0.42)], [0.12, 0.11], alu, rng, 10)
-        _tube(m, [(0.1, 0, 0.40), (0.26, 0, 0.0), (0.27, 0, -0.30)], [0.03, 0.03, 0.025], alu, rng, 5)
+        _tube(m, [(0, 0, -0.46), (0, 0, 0.28)], [0.22, 0.22], c, rng, 16)
+        for z_ in (-0.46, 0.24):
+            _tube(m, [(0, 0, z_), (0, 0, z_ + 0.04)], [0.225, 0.225], tuple(v * 0.8 for v in c), rng, 16)
+        for row, z in enumerate((-0.32, -0.16, 0.0, 0.14)):                                 # Lochreihen im Mantel
+            for k in range(10):
+                a = 2 * math.pi * (k + 0.5 * (row % 2)) / 10
+                ell(m, (math.cos(a) * 0.212, math.sin(a) * 0.212, z), 0.03, 0.03, 0.035, black, None, rings=3)
+        _gren_fuse(m, rng, 0.28, lever_r=0.25, lever_z=-0.3)
     elif kind == "smoke":
-        _tube(m, [(0, 0, -0.48), (0, 0, 0.32)], [0.22, 0.22], c, rng, 14)
-        _tube(m, [(0, 0, 0.08), (0, 0, 0.18)], [0.225, 0.225], (0.92, 0.92, 0.9), rng, 14)   # weisses Band
-        _tube(m, [(0, 0, 0.32), (0, 0, 0.44)], [0.12, 0.11], alu, rng, 10)
-        _tube(m, [(0.1, 0, 0.42), (0.26, 0, 0.0), (0.27, 0, -0.32)], [0.03, 0.03, 0.025], alu, rng, 5)
-    elif kind == "drone":
-        ell(m, (0, 0, 0), 0.30, 0.30, 0.30, c, rng, rings=8)
-        _ring_z(m, 0, 0, -0.03, 0.03, 0.31, 0.31, (0.85, 0.85, 0.9), rng, 16)
+        _tube(m, [(0, 0, -0.48), (0, 0, 0.30)], [0.22, 0.22], c, rng, 16)
+        _tube(m, [(0, 0, 0.06), (0, 0, 0.18)], [0.225, 0.225], (0.92, 0.92, 0.9), rng, 16)  # weisses Farbband
+        box(m, 0, 0.226, -0.15, 0.2, 0.01, 0.12, (0.9, 0.88, 0.7))                          # Aufschrift-Feld
+        for k in range(6):                                                                  # Abströmlöcher oben
+            a = 2 * math.pi * k / 6
+            box(m, math.cos(a) * 0.14, math.sin(a) * 0.14, 0.305, 0.045, 0.045, 0.012, black)
         for k in range(4):
+            a = 2 * math.pi * k / 4 + 0.4
+            box(m, math.cos(a) * 0.12, math.sin(a) * 0.12, -0.485, 0.04, 0.04, 0.012, black)
+        _gren_fuse(m, rng, 0.30, lever_r=0.25, lever_z=-0.32)
+    elif kind == "drone":
+        ell(m, (0, 0, -0.02), 0.30, 0.30, 0.30, c, rng, rings=10)
+        _ring_z(m, 0, 0, -0.04, 0.02, 0.31, 0.31, (0.92, 0.85, 1.0), rng, 20)               # Leuchtring
+        for k in range(4):                                                                  # angelegte Rotorarme
             a = math.pi / 4 + k * math.pi / 2
-            _tube(m, [(math.cos(a) * 0.25, math.sin(a) * 0.25, 0.12), (math.cos(a) * 0.42, math.sin(a) * 0.42, 0.16)],
-                  [0.04, 0.03], dark, rng, 5)
-        ell(m, (0, 0.27, 0.05), 0.07, 0.05, 0.07, (0.9, 0.6, 1.0), rng, rings=3)
+            ca, sa = math.cos(a), math.sin(a)
+            _tube(m, [(ca * 0.27, sa * 0.27, 0.05), (ca * 0.30, sa * 0.30, -0.22)], [0.04, 0.035], dark, rng, 6)
+            _tube(m, [(ca * 0.31, sa * 0.31, -0.24), (ca * 0.31, sa * 0.31, -0.18)], [0.07, 0.07], black, rng, 8)   # Motor
+            loft(m, [(ca * 0.31, sa * 0.31, -0.17), (ca * 0.31 + sa * 0.16, sa * 0.31 - ca * 0.16, -0.165)],
+                 [0.03, 0.02], [0.006, 0.006], alu, None, sides=4)                          # Rotorblatt (gefaltet)
+        _tube(m, [(0, 0.24, 0.0), (0, 0.31, 0.0)], [0.08, 0.075], black, rng, 10)          # Kamera
+        _tube(m, [(0, 0.31, 0.0), (0, 0.32, 0.0)], [0.055, 0.055], (0.9, 0.55, 1.0), None, 10)
+        _tube(m, [(0, 0, 0.27), (0, 0, 0.36)], [0.10, 0.08], alu, rng, 10)                  # Auslöser oben
+        _tube(m, [(0.06, 0, 0.36), (0.22, 0, 0.30), (0.30, 0, 0.1)], [(0.02, 0.06), (0.02, 0.06), (0.018, 0.05)], alu, rng, 4)
     elif kind == "molotov":
-        glass = (0.32, 0.55, 0.30)
-        _tube(m, [(0, 0, -0.48), (0, 0, 0.05)], [0.20, 0.20], glass, rng, 12)
-        _tube(m, [(0, 0, 0.05), (0, 0, 0.20), (0, 0, 0.40)], [0.20, 0.08, 0.07], glass, rng, 12)
-        _tube(m, [(0, 0, 0.38), (0.02, 0.01, 0.52), (0.07, 0.03, 0.60)], [0.08, 0.06, 0.04], (0.90, 0.88, 0.80), rng, 6)
-        _tube(m, [(0, 0, -0.35), (0, 0, -0.02)], [0.205, 0.205], (0.75, 0.42, 0.12), rng, 12)  # Benzin (sichtbar)
-    else:                                                                                    # flare
-        _tube(m, [(0, 0, -0.50), (0, 0, 0.40)], [0.15, 0.15], c, rng, 12)
-        _tube(m, [(0, 0, 0.40), (0, 0, 0.52)], [0.17, 0.17], (0.95, 0.85, 0.30), rng, 12)       # Kappe
-        for z in (-0.3, -0.1):
-            _tube(m, [(0, 0, z), (0, 0, z + 0.04)], [0.155, 0.155], (0.95, 0.95, 0.9), rng, 12)
+        glass = (0.30, 0.52, 0.30)
+        prof = [(-0.50, 0.18), (-0.47, 0.20), (-0.05, 0.20), (0.08, 0.17), (0.18, 0.10), (0.26, 0.075), (0.40, 0.07),
+                (0.43, 0.08), (0.46, 0.07)]
+        _tube(m, [(0, 0, z) for z, _r in prof], [r for _z, r in prof], glass, rng, 14)      # Flasche mit Schulter
+        _tube(m, [(0, 0, -0.42), (0, 0, -0.02)], [0.205, 0.205], (0.78, 0.45, 0.12), rng, 14)   # Benzin
+        _tube(m, [(0, 0, -0.30), (0, 0, -0.10)], [0.208, 0.208], (0.86, 0.80, 0.62), rng, 14)   # Etikett
+        box(m, 0, 0.21, -0.2, 0.1, 0.01, 0.06, (0.6, 0.15, 0.1))
+        for k, (ox, oy) in enumerate(((0.0, 0.0), (0.03, 0.02), (-0.02, 0.03))):          # Lappen (eingestopft, hängt heraus)
+            _tube(m, [(ox * 0.3, oy * 0.3, 0.35), (ox, oy, 0.50), (0.06 + ox, 0.03 + oy, 0.60 - 0.02 * k),
+                      (0.12 + ox, 0.02 + oy, 0.52 - 0.03 * k)],
+                  [0.05, 0.05, 0.04, 0.03], (0.90, 0.87, 0.78) if k else (0.80, 0.76, 0.66), rng, 5)
+        _tube(m, [(0, 0, 0.405), (0, 0, 0.425)], [0.085, 0.085], (0.35, 0.25, 0.15), None, 10)   # Schnur
+    else:                                                                                   # flare
+        _tube(m, [(0, 0, -0.50), (0, 0, 0.36)], [0.15, 0.15], c, rng, 14)
+        for k in range(6):                                                                  # Griffrillen
+            z = -0.46 + k * 0.06
+            _tube(m, [(0, 0, z), (0, 0, z + 0.03)], [0.158, 0.158], tuple(v * 0.7 for v in c), None, 14)
+        _tube(m, [(0, 0, 0.0), (0, 0, 0.05)], [0.155, 0.155], (0.95, 0.95, 0.9), rng, 14)   # weisse Ringe
+        _tube(m, [(0, 0, 0.14), (0, 0, 0.19)], [0.155, 0.155], (0.95, 0.95, 0.9), rng, 14)
+        _tube(m, [(0, 0, 0.36), (0, 0, 0.50)], [0.17, 0.165], (0.95, 0.82, 0.25), rng, 14)  # Zündkappe
+        _tube(m, [(0, 0, 0.50), (0, 0, 0.54)], [0.12, 0.06], (0.6, 0.45, 0.1), rng, 10)
+        box(m, 0, 0.152, -0.15, 0.12, 0.01, 0.16, (0.95, 0.95, 0.9))                        # Aufschrift-Feld
     return m
 
 
@@ -113639,53 +113939,106 @@ def gren_geom(kind):
     return g
 
 
+def gren_inst(parent, kind, scale, name="gren"):
+    """10f: Granaten-Modell als Instanz unter einem eigenen Knoten (Lage/Grösse am Knoten, nie am geteilten GeomNode -
+    sonst würden alle Instanzen mitskaliert). -> Knoten"""
+    h = parent.attachNewNode(name)
+    h.attachNewNode(gren_geom(kind))
+    h.setScale(scale)
+    return h
+
+
 def gren_icon_mesh(kind, s=0.05):
-    """HUD-Symbol (Umriss in der x-z-Ebene, unbeleuchtet) - je Art eigene Form und Farbe."""
+    """HUD-Symbol (Umriss in der x-z-Ebene, unbeleuchtet) - je Art eigene Form und Farbe; 10f: mit Riffelung,
+    Zünder, Bügel und Ring (Splitter, Blend, Rauch, Decoy), Lochreihen, Etikett/Lappen, Rotorarmen."""
     m = Mesh(lit=False)
     c = GREN_COL.get(kind, (0.5, 0.5, 0.5))
     hi = tuple(min(1.0, v * 1.35 + 0.1) for v in c)
-    alu = (0.82, 0.82, 0.84)
+    lo = tuple(v * 0.55 for v in c)
+    alu, dk, ringc = (0.82, 0.82, 0.84), (0.12, 0.12, 0.14), (0.85, 0.78, 0.45)
 
-    def disc(cx, cz, rx, rz, col, n=14):
+    def disc(cx, cz, rx, rz, col, n=16, a0_=0.0, a1_=2 * math.pi):
         for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            a0 = a0_ + (a1_ - a0_) * i / n
+            a1 = a0_ + (a1_ - a0_) * (i + 1) / n
             m.tri((cx, 0, cz), (cx + math.cos(a0) * rx, 0, cz + math.sin(a0) * rz),
                   (cx + math.cos(a1) * rx, 0, cz + math.sin(a1) * rz), col)
 
     def rect(x0, z0, x1, z1, col):
         m.tri((x0, 0, z0), (x1, 0, z0), (x1, 0, z1), col)
         m.tri((x0, 0, z0), (x1, 0, z1), (x0, 0, z1), col)
+
+    def ring(cx, cz, r, w, col, n=14):
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            p0, p1 = (cx + math.cos(a0) * r, cz + math.sin(a0) * r), (cx + math.cos(a1) * r, cz + math.sin(a1) * r)
+            q0, q1 = (cx + math.cos(a0) * (r - w), cz + math.sin(a0) * (r - w)), (cx + math.cos(a1) * (r - w), cz + math.sin(a1) * (r - w))
+            m.tri((p0[0], 0, p0[1]), (p1[0], 0, p1[1]), (q1[0], 0, q1[1]), col)
+            m.tri((p0[0], 0, p0[1]), (q1[0], 0, q1[1]), (q0[0], 0, q0[1]), col)
+
+    def fuse(top, lever_x=0.62, lever_bot=-0.2):
+        rect(-0.24 * s, top, 0.24 * s, top + 0.28 * s, alu)                     # Zünder
+        rect(-0.16 * s, top + 0.28 * s, 0.16 * s, top + 0.38 * s, dk)
+        rect(0.2 * s, top + 0.16 * s, lever_x * s, top + 0.26 * s, alu)         # Bügel oben
+        rect((lever_x - 0.1) * s, lever_bot * s, lever_x * s, top + 0.26 * s, alu)   # Bügel seitlich
+        ring(-0.42 * s, top + 0.2 * s, 0.17 * s, 0.06 * s, ringc)               # Ring
     if kind == "frag":
-        disc(0, -0.1 * s, 0.8 * s, s, c)
-        rect(-0.25 * s, 0.8 * s, 0.25 * s, 1.15 * s, alu)
-        rect(0.25 * s, 0.9 * s, 0.85 * s, 1.0 * s, alu)
+        disc(0, -0.15 * s, 0.78 * s, 0.92 * s, lo)
+        for r_ in range(5):                                                     # Riffelung
+            z = -0.95 + 0.38 * r_
+            for k in range(-2, 3):
+                x = k * 0.3 + (0.15 if r_ % 2 else 0.0)
+                if (x / 0.78) ** 2 + ((z + 0.15) / 0.92) ** 2 < 0.8:
+                    rect((x - 0.12) * s, (z + 0.04) * s, (x + 0.12) * s, (z + 0.3) * s, c)
+        fuse(0.7 * s, 0.7, -0.5)
     elif kind == "drone":
-        disc(0, 0, 0.9 * s, 0.9 * s, c)
-        rect(-1.2 * s, 0.35 * s, 1.2 * s, 0.5 * s, hi)
-        disc(0, 0, 0.3 * s, 0.3 * s, (0.95, 0.75, 1.0))
+        disc(0, 0, 0.85 * s, 0.85 * s, c)
+        rect(-0.85 * s, -0.05 * s, 0.85 * s, 0.08 * s, hi)                      # Leuchtring
+        for sx in (-1, 1):
+            rect(sx * 0.85 * s, -0.55 * s, sx * 1.05 * s, 0.35 * s, lo)         # Rotorarme
+            rect(sx * 0.7 * s, -0.75 * s, sx * 1.2 * s, -0.6 * s, dk)
+        disc(0, 0.0, 0.28 * s, 0.28 * s, dk)
+        disc(0, 0.0, 0.18 * s, 0.18 * s, (0.95, 0.65, 1.0))
+        rect(-0.18 * s, 0.82 * s, 0.18 * s, 1.05 * s, alu)
     elif kind == "molotov":
-        rect(-0.45 * s, -1.0 * s, 0.45 * s, 0.25 * s, c)
-        rect(-0.18 * s, 0.25 * s, 0.18 * s, 0.85 * s, c)
-        rect(-0.15 * s, 0.85 * s, 0.2 * s, 1.15 * s, (0.95, 0.92, 0.85))
-        disc(0.1 * s, 1.3 * s, 0.2 * s, 0.3 * s, (1.0, 0.55, 0.1))
+        rect(-0.42 * s, -1.0 * s, 0.42 * s, 0.1 * s, c)
+        disc(0, 0.1 * s, 0.42 * s, 0.32 * s, c, 10, 0.0, math.pi)              # Schulter
+        rect(-0.15 * s, 0.35 * s, 0.15 * s, 0.85 * s, c)
+        rect(-0.42 * s, -0.65 * s, 0.42 * s, -0.2 * s, (0.88, 0.82, 0.62))      # Etikett
+        rect(-0.42 * s, -1.0 * s, 0.42 * s, -0.65 * s, (0.8, 0.5, 0.15))        # Benzin
+        rect(-0.12 * s, 0.85 * s, 0.25 * s, 1.15 * s, (0.95, 0.92, 0.85))       # Lappen
+        rect(0.1 * s, 0.95 * s, 0.38 * s, 1.08 * s, (0.95, 0.92, 0.85))
+        disc(0.22 * s, 1.35 * s, 0.22 * s, 0.32 * s, (1.0, 0.55, 0.1))          # Flamme
+        disc(0.22 * s, 1.30 * s, 0.11 * s, 0.18 * s, (1.0, 0.95, 0.5))
     elif kind == "flare":
-        rect(-0.3 * s, -1.0 * s, 0.3 * s, 0.85 * s, c)
-        rect(-0.36 * s, 0.85 * s, 0.36 * s, 1.15 * s, (0.95, 0.85, 0.3))
-        disc(0, 1.35 * s, 0.25 * s, 0.25 * s, (1.0, 0.3, 0.2))
-    else:                                                     # Zylinder: Decoy, Blend, Rauch
-        rect(-0.5 * s, -1.0 * s, 0.5 * s, 0.75 * s, c)
-        rect(-0.3 * s, 0.75 * s, 0.3 * s, 1.0 * s, alu)
+        rect(-0.3 * s, -1.0 * s, 0.3 * s, 0.8 * s, c)
+        for k in range(5):
+            z = -0.95 + k * 0.12
+            rect(-0.32 * s, z * s, 0.32 * s, (z + 0.05) * s, lo)                # Griffrillen
+        rect(-0.3 * s, 0.1 * s, 0.3 * s, 0.2 * s, (0.95, 0.95, 0.9))
+        rect(-0.36 * s, 0.8 * s, 0.36 * s, 1.1 * s, (0.95, 0.82, 0.25))
+        disc(0, 1.32 * s, 0.24 * s, 0.24 * s, (1.0, 0.3, 0.2))
+        disc(0, 1.32 * s, 0.12 * s, 0.12 * s, (1.0, 0.8, 0.6))
+    else:                                                                       # Zylinder: Decoy, Blend, Rauch
+        rect(-0.5 * s, -1.0 * s, 0.5 * s, 0.6 * s, c)
+        rect(-0.52 * s, -1.0 * s, 0.52 * s, -0.9 * s, lo)
         if kind == "smoke":
-            rect(-0.5 * s, 0.1 * s, 0.5 * s, 0.3 * s, (0.95, 0.95, 0.92))
+            rect(-0.5 * s, 0.1 * s, 0.5 * s, 0.32 * s, (0.95, 0.95, 0.92))
+            rect(-0.32 * s, -0.55 * s, 0.32 * s, -0.25 * s, (0.88, 0.86, 0.7))
         elif kind == "decoy":
-            rect(-0.5 * s, -0.2 * s, 0.5 * s, 0.0, (0.1, 0.1, 0.1))
-            rect(0.15 * s, 1.0 * s, 0.25 * s, 1.5 * s, (0.1, 0.1, 0.1))
+            rect(-0.5 * s, -0.1 * s, 0.5 * s, 0.06 * s, dk)
+            for row in range(3):
+                for k in range(-2, 3):
+                    rect((k * 0.17 - 0.05) * s, (-0.8 + row * 0.18) * s, (k * 0.17 + 0.05) * s, (-0.7 + row * 0.18) * s, dk)
+            disc(0.32 * s, 0.38 * s, 0.07 * s, 0.07 * s, (1.0, 0.25, 0.15))
+            rect(-0.36 * s, 0.6 * s, -0.3 * s, 1.5 * s, dk)                     # Antenne
         else:
-            for z in (-0.6, -0.1, 0.4):
-                for x in (-0.25, 0.15):
-                    rect(x * s, z * s, (x + 0.12) * s, (z + 0.15) * s, (0.15, 0.15, 0.17))
-        if kind != "decoy":
-            rect(0.3 * s, 0.8 * s, 0.75 * s, 0.9 * s, alu)
+            for row, z in enumerate((-0.7, -0.35, 0.0, 0.32)):
+                for k in range(-2, 3):
+                    x = k * 0.19 + (0.09 if row % 2 else 0.0)
+                    if abs(x) < 0.42:
+                        disc(x * s, z * s, 0.06 * s, 0.06 * s, dk, 6)
+        fuse(0.6 * s, 0.62, -0.6)
     return m
 
 
@@ -117187,9 +117540,8 @@ class Game(ShowBase):
         self.gren_nd = self.gren_arm.attachNewNode("grenade_vm")       # 10e: je Art ein Modell in der Hand
         self.gren_vm = {}
         for k_ in GREN_KINDS:
-            nd = self.gren_nd.attachNewNode(gren_geom(k_))
+            nd = gren_inst(self.gren_nd, k_, 0.105)
             nd.setPos(0, 0.0, 0.07)
-            nd.setScale(0.105)
             nd.hide()
             self.gren_vm[k_] = nd
         self.gren_vm_flame = gren_flame_node(self.gren_vm["molotov"], (0.07, 0.03, 0.62), 0.32)
@@ -119819,7 +120171,8 @@ class Game(ShowBase):
     def add_particle(self, pos, vel, col, size, life, bounce=0.3, spin=0.0, shrink=True):
         if len(self.parts) > 320:
             self.parts.pop(0).np.removeNode()
-        np = self.cube_np.instanceTo(self.render)
+        np = self.render.attachNewNode("part")         # 10f: eigener Knoten je Partikel (Instanzen teilen sonst die Lage)
+        self.cube_np.instanceTo(np)
         np.setScale(*size) if isinstance(size, tuple) else np.setScale(size)
         np.setColorScale(col[0], col[1], col[2], 1)
         np.setPos(*pos)
@@ -119852,7 +120205,8 @@ class Game(ShowBase):
         """Animierten Effekt (Fx) anlegen: Instanz eines Effektmodells, transparent."""
         if len(self.fx) > 90:
             self.fx.pop(0).np.removeNode()
-        np = model.instanceTo(self.render)
+        np = self.render.attachNewNode("fx")           # 10f: eigener Knoten je Effekt (vorher lagen alle übereinander)
+        model.instanceTo(np)
         np.setTransparency(TransparencyAttrib.MAlpha)
         np.setDepthWrite(False)
         np.setLightOff()
@@ -120807,7 +121161,8 @@ class Game(ShowBase):
                     fl.setTwoSided(True)
                     self.flames[b] = fl
                 else:
-                    np = self.tracer_np.instanceTo(self.render)
+                    np = self.render.attachNewNode("tracer")   # 10f: eigener Knoten je Leuchtspur
+                    self.tracer_np.instanceTo(np)
                     if b.blast_r > 0:      # Flak-Granate: dicker Leuchtstrich
                         np.setScale(2.6, 1.8, 2.6)
                 np.setFogOff()
@@ -121133,7 +121488,8 @@ class Game(ShowBase):
                     f_ = gren_flame_node(v, (c[0] + rng.uniform(-0.2, 0.2), c[1] + rng.uniform(-0.2, 0.2), c[2] + 0.02),
                                          rng.uniform(0.35, 0.6))
                     fl.append(f_)
-                    gl = self.scorch_np.instanceTo(v)
+                    gl = v.attachNewNode("glut")
+                    self.scorch_np.instanceTo(gl)
                     gl.setPos(c[0], c[1], c[2] + 0.04)
                     gl.setScale(MOLO_CELL * 0.7)
                     gl.setColorScale(1.0, 0.45, 0.1, 0.7)
@@ -121163,7 +121519,7 @@ class Game(ShowBase):
             if v is None:
                 root = self.render.attachNewNode(f"airdrop{a.aid}")
                 fl = root.attachNewNode("fackel")
-                fl.attachNewNode(gren_geom("flare")).setScale(0.3)
+                gren_inst(fl, "flare", 0.3)
                 fl.setPos(a.fx, a.fy, a.fz + 0.05)
                 fl.setP(70)
                 fire = gren_flame_node(fl, (0, 0, 0.18), 0.12)
@@ -121255,7 +121611,7 @@ class Game(ShowBase):
             np = self.gren_views.get(g)
             if np is None:                                     # 10e: Modell je Granatenart
                 np = self.gren_views[g] = self.render.attachNewNode("gren")
-                np.attachNewNode(gren_geom(g.kind)).setScale(0.24)
+                gren_inst(np, g.kind, 0.24)
                 if g.kind == "molotov":                        # brennender Lappen im Flug
                     np.setPythonTag("flame", gren_flame_node(np, (0.017, 0.007, 0.15), 0.08))
             np.setPos(g.x, g.y, g.z + 0.04)
@@ -121315,8 +121671,7 @@ class Game(ShowBase):
                 if d.gren > 0:                                 # 10b: Granaten-Päckchen (10e: Modell der Art)
                     mdl = v.attachNewNode("gren")
                     for k_ in range(min(3, d.gren)):
-                        gg = mdl.attachNewNode(gren_geom(d.gk))
-                        gg.setScale(0.24)
+                        gg = gren_inst(mdl, d.gk, 0.24)
                         gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0.12)
                 elif d.att >= 0 and d.att in self.att_drop_models:
                     mdl = self.att_drop_models[d.att].copyTo(v)
