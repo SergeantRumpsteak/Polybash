@@ -121,6 +121,14 @@ einem zufälligen Ort in der Burg (CTF_MID_SPOTS). Flagge mit "GB" (build_ctf_fl
 getragen, Kreis um den Träger auf der Minimap (CTF_PING_*), Pfeil zur Basis, fällt beim Tod (CTF_DROP_T), keine Fahrzeuge.
 Standard: Monster/Tomahawk aus, Hauptspiel-Loadout (Waffenwahl vor dem Spawn, World.loot_mode). Host-Menü: Modus in der
 Setup-Seite, im Rundenende und per Knopf in der Lobby; CTF-Regeln auf eigener Seite (CtfPage).
+12: Performance (kein Monster-Limit): Kollisionsraster für feste Props (World.solid_near, SOLID_GRID) - push_out und
+die Spawn-Prüfungen durchsuchen nicht mehr alle ~1800 Props (Ergebnis exakt wie vorher). Monster-KI gestaffelt
+(update_mobs_staggered, MOB_LOD_*): nahe/aktive Monster jedes Bild, ferne im Leerlauf reihum mit aufgelaufener Zeit;
+stillstehende Monster ohne Kollisions-/Bodenabfrage (Mob.needs_check). separate_mobs über ein Raster statt n x n.
+Kugeln prüfen nur Monster nahe ihrer Flugstrecke. Monster-Modelle aus Vorlagen (_mob_tpl, prewarm_mob_models) statt
+Neubau bei jedem Spawn. Darstellung: MobView nur bei Änderung, Schatten mit Reichweite (SHADOW_R) und Boden-Cache,
+Wind gestaffelt (WIND_BUCKETS), ruhende Partikel ohne Physik, Funk-Verdeckung gedrosselt (SND_OCC_*), Wurfbogen nur
+bei Änderung neu.
 
 Waffen und Kisten (in allen Modi und auf allen Karten):
   Jeder startet und respawnt nur mit der Pistole. Alle anderen Waffen gibt es ausschliesslich in Kisten.
@@ -501,6 +509,21 @@ def mob_level_of(v):
     except (TypeError, ValueError):
         return MOB_DEFAULT
 RESPAWN_T = 12.0
+
+# 12: Performance - Tuning-Werte (keine Obergrenze für Monster, nur schlankere Rechenwege)
+SOLID_GRID = 8.0         # m: Rastergrösse des Kollisionsrasters für feste Props (World.solid_near)
+SND_OCC_T = 0.1          # s: Wand-Dämpfung des Kontrollraum-Funks so oft neu berechnen (vorher jedes Bild)
+SND_OCC_MIN_VOL = 0.003  # ... und gar nicht mehr, wenn der Funk schon wegen der Entfernung leiser als das ist
+MOB_STILL_EPS = 0.002    # m: so wenig Bewegung seit der letzten Prüfung gilt als Stillstand (keine Kollision/Bodenabfrage)
+MOB_VEH_NEAR = 8.0       # m: ... ausser ein Fahrzeug ist so nah (es könnte das Monster wegschieben)
+MOB_LOD_R = 70.0         # m: Monster näher als das an einem lebenden Spieler rechnen jedes Bild (grösste Aggro: Titan 45 m)
+MOB_LOD_DIV = 4          # ferne Monster im Leerlauf: gestaffelt, jedes nur jedes 4. Bild (dafür mit der aufgelaufenen Zeit)
+MOB_LOD_MAX_DT = 0.12    # s: spätestens nach so viel aufgelaufener Zeit wird ein fernes Monster trotzdem aktualisiert
+MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
+SHADOW_R = 90.0          # m: Blob-Schatten von Monstern nur bis zu dieser Entfernung zur Kamera (Titan & Co.: weiter)
+WIND_BUCKETS = 2         # Wind-Wackeln (Bäume, Gras, Fahnen): jedes Bild nur jede 2. Gruppe - bei 60 FPS noch 30 Hz
+BULLET_MOB_PAD = 0.5     # m: Rand um die Flugstrecke eines Bildes, in dem Monster für die Kugel-Teilschritte vorgemerkt werden
+PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so viel Weg neu ab; liegende Partikel ruhen ganz
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
@@ -2716,6 +2739,9 @@ class Mob:
         self.home_i = -1          # 10g: Titan: Index in TITAN_HOMES
         self.forest = None        # 10g: Hase: Wald (x, y, r), in dem er gerade wohnt bzw. zu dem er hoppelt
         self.stay_t = rng.uniform(*CRITTER_STAY)
+        self.chk_pos = None       # 12: zuletzt geprüfte Position (Kollision/Boden) - steht es still, entfällt die Prüfung
+        self.lod_dt = 0.0         # 12: gestaffelte Updates - aufgelaufene Zeit seit dem letzten Update (ferne Monster)
+        self.upd_n = 0            # 12: Zähler der Updates - die Darstellung (MobView) rechnet nur, wenn er sich ändert
 
     def aggressive(self):
         return not MOB_KINDS[self.kind].get("calm", False)
@@ -2849,6 +2875,18 @@ class Mob:
         k = MOB_KINDS[self.kind]
         return k.get("rock_recover", 1.0) if self.atk_kind == 2 else k.get("recover", 0.4)
 
+    def needs_check(self, world):
+        """12: Kollision (push_out) und Bodenhöhe (floor_at) neu prüfen? Nur, wenn sich das Monster seit der letzten
+        Prüfung um mehr als MOB_STILL_EPS bewegt hat (auch durch Wegschieben) oder ein Fahrzeug in der Nähe ist -
+        sonst steht es noch genau dort, wo die Prüfung schon gelaufen ist."""
+        c = self.chk_pos
+        if c is None or abs(self.x - c[0]) > MOB_STILL_EPS or abs(self.y - c[1]) > MOB_STILL_EPS:
+            return True
+        for v in world.vehicles:
+            if v.hp > 0 and abs(v.x - self.x) < MOB_VEH_NEAR and abs(v.y - self.y) < MOB_VEH_NEAR:
+                return True
+        return False
+
     def turn_toward(self, dx, dy, dt, rate=420.0):
         target = math.degrees(math.atan2(-dx, dy))   # Blick = (-sin h, cos h)
         diff = (target - self.heading + 180.0) % 360.0 - 180.0
@@ -2858,8 +2896,7 @@ class Mob:
         """Nächster lebender Spieler oder None. Wer auf einem Turm/Dach steht, ist unerreichbar; wer im
         Gebirge auf dem Gelände steht, nicht (MTN_CLIMB: Monster laufen hinterher)."""
         best, bd = None, 1e18
-        on_terrain = (world is not None and MTN_CLIMB and self.hover <= 0
-                      and abs(self.gz - world.height(self.x, self.y)) < 0.6)
+        on_terrain = None                                 # 12: erst berechnen, wenn es gebraucht wird (spart 2 Höhenabfragen)
         own = getattr(self, "owner", None)                # 10e: eigene Drohne - nie Besitzer oder Verbündete
         for p in players:
             if p.hp <= 0:
@@ -2869,9 +2906,12 @@ class Mob:
             if self.hover > 0:                             # 7a: Drohne steigt bis DRONE_FLY_TOP - erreicht fast alle
                 if p.z - self.gz > DRONE_FLY_TOP + DRONE_TARGET_DZ:
                     continue
-            elif (abs(p.z - self.gz) > max(3.5, self.height * 0.6)
-                    and not (on_terrain and abs(p.z - world.height(p.x, p.y)) < 0.6)):
-                continue
+            elif abs(p.z - self.gz) > max(3.5, self.height * 0.6):
+                if on_terrain is None:
+                    on_terrain = (world is not None and MTN_CLIMB
+                                  and abs(self.gz - world.height(self.x, self.y)) < 0.6)
+                if not (on_terrain and abs(p.z - world.height(p.x, p.y)) < 0.6):
+                    continue
             d2 = (p.x - self.x) ** 2 + (p.y - self.y) ** 2
             if d2 < bd:
                 best, bd = p, d2
@@ -2889,8 +2929,10 @@ class Mob:
             self.y += self.ky * dt
             self.kx *= decay
             self.ky *= decay
-            self.x, self.y = push_out(self.x, self.y, self.radius * 0.5, world, self.gz)
-            self.gz = world.floor_at(self.x, self.y, self.gz)
+            if self.needs_check(world):                    # 12: liegt still -> keine Kollision/Bodenabfrage
+                self.x, self.y = push_out(self.x, self.y, self.radius * 0.5, world, self.gz)
+                self.gz = world.floor_at(self.x, self.y, self.gz)
+                self.chk_pos = (self.x, self.y, self.gz)
             self.hover = max(0.0, self.hover - 6.0 * dt)  # abgeschossene Drohne fällt herunter
             self.z = self.gz + self.hover
             return
@@ -3067,7 +3109,8 @@ class Mob:
         self.y += (uy * speed + self.ky) * dt
         self.kx *= decay
         self.ky *= decay
-        if self.hover <= 0:                          # Fliegende stossen nicht an niedrige Hindernisse
+        check = self.hover > 0 or self.needs_check(world)   # 12: steht es still, entfallen Kollision und Bodenabfrage
+        if self.hover <= 0 and check:                # Fliegende stossen nicht an niedrige Hindernisse
             self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz,
                                       skip=TITAN_PASS_PROPS if self.kind == "titan" else ())
         lo = edge_margin(world)
@@ -3097,7 +3140,9 @@ class Mob:
             self.hover = max(0.3, self.hover)
             self.z = self.gz + self.hover + 0.25 * math.sin(self.phase * 0.7 + self.id)
         else:
-            self.gz = world.floor_at(self.x, self.y, self.gz)
+            if check:
+                self.gz = world.floor_at(self.x, self.y, self.gz)
+                self.chk_pos = (self.x, self.y, self.gz)
             self.z = self.gz
         if speed > 0 and ux * ux + uy * uy > 0 and math.hypot(self.x - ox, self.y - oy) < speed * dt * 0.3:
             self.leg_left = 0.0                      # festgefahren: Fluchttier schlägt neuen Haken
@@ -3471,8 +3516,15 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=()):
     veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
     (Titan: TITAN_PASS_PROPS)."""
     under = z is not None and z < TUN_ROOF - 0.5         # 7c: im Tunnel stören Bäume/Felsen darüber nicht
-    for p in world.props:
-        if under or (skip and p.kind in skip):
+    # 12: nur Props aus dem Raster in der Nähe statt aller Props - gleiche Reihenfolge wie die Prop-Liste. Wird der Kreis
+    # verschoben, kommen die Nachbarn an der neuen Stelle dazu (nur spätere Props, wie früher beim Durchlauf der Liste):
+    # Ergebnis exakt wie vorher, nur ohne die Schleife über alle Props.
+    cand = () if under else world.solid_near_idx(x, y, r)
+    k = 0
+    while k < len(cand):
+        idx, p = cand[k]
+        k += 1
+        if skip and p.kind in skip:
             continue
         ddx, ddy = x - p.x, y - p.y
         min_d = p.solid_r + r
@@ -3484,6 +3536,11 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=()):
                 ddx, ddy, d = 1.0, 0.0, 1.0
             x = p.x + ddx / d * min_d
             y = p.y + ddy / d * min_d
+            rest = {e[0]: e for e in cand[k:]}
+            for e in world.solid_near_idx(x, y, r):
+                if e[0] > idx:
+                    rest[e[0]] = e
+            cand, k = [rest[i] for i in sorted(rest)], 0
     for v in world.vehicles:                     # Fahrzeuge sind feste Hindernisse
         if v.hp <= 0 or v.id == veh or (z is not None and abs(z - v.z) > 2.0):
             continue
@@ -5905,6 +5962,37 @@ class World:
                 out += self.grid.get((i, j), ())
         return out
 
+    def solid_near(self, x, y, r):
+        """12: Alle Props, deren Kollisionskreis (solid_r) den Kreis (x, y, r) berühren KÖNNTE - aus einem eigenen
+        Raster (SOLID_GRID) statt aus der ganzen Prop-Liste. Reihenfolge wie in self.props, ohne Doppelte."""
+        return [p for _i, p in self.solid_near_idx(x, y, r)]
+
+    def solid_near_idx(self, x, y, r):
+        """12: wie solid_near, aber als (Index in self.props, Prop), aufsteigend. Das Raster wird beim ersten Aufruf
+        gebaut und neu gebaut, sobald sich self.props ändert (neue Liste oder andere Länge)."""
+        props = self.props
+        key = (id(props), len(props))
+        if getattr(self, "_sgrid_key", None) != key:
+            c = SOLID_GRID
+            g = {}
+            for idx, p in enumerate(props):
+                sr = max(p.solid_r, 0.0)
+                for i in range(int((p.x - sr) // c), int((p.x + sr) // c) + 1):
+                    for j in range(int((p.y - sr) // c), int((p.y + sr) // c) + 1):
+                        g.setdefault((i, j), []).append((idx, p))
+            self._sgrid, self._sgrid_key = g, key
+        g, c = self._sgrid, SOLID_GRID
+        i0, i1 = int((x - r) // c), int((x + r) // c)
+        j0, j1 = int((y - r) // c), int((y + r) // c)
+        if i0 == i1 and j0 == j1:                        # häufigster Fall: Kreis liegt in einer Zelle
+            return g.get((i0, j0), ())
+        hits = {}
+        for i in range(i0, i1 + 1):
+            for j in range(j0, j1 + 1):
+                for e in g.get((i, j), ()):
+                    hits[e[0]] = e
+        return [hits[k] for k in sorted(hits)]
+
     def in_solid(self, x, y, r, z=None):
         """True, wenn ein Kreis (x,y,r) auf Bodenhöhe in einem Quader steckt."""
         if z is None:
@@ -5924,7 +6012,7 @@ class World:
             return False
         if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
             return False
-        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.5 for p in self.props):
+        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.5 for p in self.solid_near(x, y, 1.5)):
             return False
         return not self.in_solid(x, y, 1.5)
 
@@ -6378,13 +6466,13 @@ class World:
             if any(math.hypot(x - px, y - py) < r * 1.7 for px, py, r in self.ponds):
                 continue
             if any(p.kind != "pond" and math.hypot(x - p.x, y - p.y) < p.solid_r + 1.2
-                   for p in self.props):
+                   for p in self.solid_near(x, y, 1.2)):         # 12: Raster statt aller Props
                 continue
             big = MOB_KINDS[kind]["scale"] * 0.45
             if self.in_solid(x, y, max(1.2, big + 0.8)):
                 continue
             if big > 2.0 and any(p.kind != "pond" and math.hypot(x - p.x, y - p.y) < p.solid_r + big + 1.0
-                                 for p in self.props):
+                                 for p in self.solid_near(x, y, big + 1.0)):
                 continue
             m = Mob(kind, x, y, self)
             m.id = self.next_mid
@@ -7162,7 +7250,7 @@ class World:
             return None
         if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
             return None
-        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.0 for p in self.props):
+        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.0 for p in self.solid_near(x, y, 1.0)):
             return None
         if self.in_solid(x, y, 0.6):
             return None
@@ -8186,7 +8274,7 @@ class World:
             return False
         if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
             return False
-        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 4.0 for p in self.props):
+        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 4.0 for p in self.solid_near(x, y, 4.0)):
             return False
         return not self.in_solid(x, y, 1.3)
 
@@ -8868,14 +8956,15 @@ class World:
                 return t.vid
         return -1
 
-    def bullet_substep(self, b, h):
-        """Ein Integrationsschritt der Dauer h; False, wenn die Kugel endet."""
+    def bullet_substep(self, b, h, mobs=None):
+        """Ein Integrationsschritt der Dauer h; False, wenn die Kugel endet. mobs (12): vorab gefilterte Monster nahe
+        der Flugstrecke (None = alle)."""
         x0, y0, z0 = b.x, b.y, b.z
         b.vz -= GRAV_BULLET * b.grav * h                 # Bulletdrop
         x1, y1, z1 = x0 + b.vx * h, y0 + b.vy * h, z0 + b.vz * h
         p0, p1 = (x0, y0, z0), (x1, y1, z1)
         best_t, hit, who = 2.0, None, None
-        for m in self.mobs:
+        for m in (self.mobs if mobs is None else mobs):
             if m.state == "dead":
                 continue
             if m.kind == "gdrone" and self.allied(getattr(m, "owner", -1), b.owner):
@@ -8988,8 +9077,15 @@ class World:
             n = max(1, int(speed * dt / 1.0) + 1)        # Teilstücke <= ~1 m
             ok = True
             p0 = (b.x, b.y, b.z)
+            # 12: Monster nahe der ganzen Flugstrecke dieses Bildes einmal vorab heraussuchen (x/y ändern sich linear) -
+            # die Teilschritte prüfen dann nur diese statt jedes Mal alle Monster der Karte (gleiche Reihenfolge)
+            ex, ey = b.x + b.vx * dt, b.y + b.vy * dt
+            lx, hx_ = min(b.x, ex) - BULLET_MOB_PAD, max(b.x, ex) + BULLET_MOB_PAD
+            ly, hy_ = min(b.y, ey) - BULLET_MOB_PAD, max(b.y, ey) + BULLET_MOB_PAD
+            cand = [m for m in self.mobs if lx < m.x + m.radius and m.x - m.radius < hx_
+                    and ly < m.y + m.radius and m.y - m.radius < hy_]
             for _ in range(n):
-                if not self.bullet_substep(b, dt / n):
+                if not self.bullet_substep(b, dt / n, cand):
                     ok = False
                     break
             if self.mobs and b.blast_r <= 0:
@@ -9016,12 +9112,58 @@ class World:
                 b.alerted.add(m.id)
                 m.on_shot(self, d, False)
 
+    def update_mobs_staggered(self, dt, players):
+        """12: Monster-KI gestaffelt (Staggered Updates, kein Limit für die Anzahl). Jedes Bild voll gerechnet wird ein
+        Monster, das näher als MOB_LOD_R an einem lebenden Spieler ist oder gerade etwas tut (jagt, greift an, geht einem
+        Geräusch nach, ist alarmiert/getroffen/betäubt, Knockback, frisch tot, eigene Drohne). Ferne Monster im Leerlauf
+        sind auf MOB_LOD_DIV Gruppen verteilt: jedes Bild rechnet nur eine Gruppe - mit der seither aufgelaufenen Zeit,
+        so laufen sie gleich schnell und gleich weit, nur in gröberen Schritten (spätestens alle MOB_LOD_MAX_DT s)."""
+        self.lod_frame = getattr(self, "lod_frame", 0) + 1
+        live = [(p.x, p.y) for p in players if p.hp > 0]
+        r2 = MOB_LOD_R * MOB_LOD_R
+        for m in self.mobs:
+            busy = (m.kind in TEMP_MOBS or m.noise_at is not None or m.alert_t > 0 or m.hurt_t > 0
+                    or (m.state != "idle" and not (m.state == "dead" and m.dead_t > 1.0))
+                    or getattr(m, "stun_t", 0.0) > 0 or getattr(m, "daze_t", 0.0) > 0
+                    or m.fear is not None or abs(m.kx) + abs(m.ky) > 0.2)
+            if not busy:
+                x, y = m.x, m.y
+                for px, py in live:
+                    if (px - x) * (px - x) + (py - y) * (py - y) < r2:
+                        busy = True
+                        break
+            step = m.lod_dt + dt
+            if busy or (self.lod_frame + m.id) % MOB_LOD_DIV == 0 or step >= MOB_LOD_MAX_DT:
+                m.lod_dt = 0.0
+                m.upd_n += 1
+                m.update(step, self, players)
+            else:
+                m.lod_dt = step
+
     def separate_mobs(self):
         """Monster schieben sich gegenseitig auseinander - nur, wenn sie auch in der Höhe aneinanderstossen
-        (Drohne über einem Grunt schiebt nicht)."""
+        (Drohne über einem Grunt schiebt nicht). 12: über ein Raster - jedes Monster prüft nur die Nachbarzellen
+        statt aller anderen Monster (vorher n x n Paare, bremste bei vielen Monstern)."""
         ms = [m for m in self.mobs if m.state != "dead"]
+        if len(ms) < 2:
+            return
+        c = max(MOB_SEP_CELL, 2.0 * max(m.radius for m in ms))   # Zelle >= grösster Abstand, bei dem man sich berührt
+        cells = {}
+        for i, m in enumerate(ms):
+            cells.setdefault((int(m.x // c), int(m.y // c)), []).append(i)
         for i, a in enumerate(ms):
-            for b in ms[i + 1:]:
+            ci, cj = int(a.x // c), int(a.y // c)
+            near = []
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    for j in cells.get((ci + di, cj + dj), ()):
+                        if j > i:
+                            near.append(j)
+            if not near:
+                continue
+            near.sort()                                  # gleiche Reihenfolge wie früher (Paare i < j)
+            for j in near:
+                b = ms[j]
                 dx, dy = b.x - a.x, b.y - a.y
                 md = a.radius + b.radius
                 if abs(dx) > md or abs(dy) > md:
@@ -9194,8 +9336,7 @@ class World:
             if d.lock > 0:
                 d.lock = max(0.0, d.lock - dt)
         self.update_noise(dt, players)
-        for m in self.mobs:
-            m.update(dt, self, players)
+        self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
         if self.rocks:
             self.update_rocks(dt)
         self.separate_mobs()
@@ -13711,17 +13852,75 @@ _MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_h
            "titan": _mob_hi_titan}
 
 
+_MOB_TPL = {}     # 12: fertige Modell-Vorlagen (Drohnen, Hasen): Schlüssel -> (Wurzel, Indexpfade der Teile)
+
+
+def _np_index_path(root, np):
+    """12: Kind-Indizes von root bis np (zum Wiederfinden des Teils in einer Kopie)."""
+    out = []
+    while np != root:
+        parent = np.getParent()
+        out.append(parent.node().findChild(np.node()))
+        np = parent
+    return out[::-1]
+
+
+def _mob_tpl(key, make):
+    """12: Monster-Modell aus einer Vorlage. Monster wurden bei jedem Spawn komplett neu modelliert (Hasen und Drohnen
+    20-30 ms je Stück, Jägerin ~7 ms = spürbarer Ruckler bei jedem Respawn und jeder Drohnen-Granate). Jetzt wird die
+    Vorlage je Art einmal gebaut (gleiches Aussehen: die Bauer nutzen feste Zufallssamen) und danach nur der Knotenbaum
+    kopiert - die Geometrie wird geteilt. make() -> (root, Teil, Teil, ...) mit Teilen unterhalb von root.
+    -> dasselbe Tupel für eine neue, unabhängige Kopie."""
+    tpl = _MOB_TPL.get(key)
+    if tpl is None:
+        full = make()
+        tpl = _MOB_TPL[key] = (full[0], [_np_index_path(full[0], n) for n in full[1:]])
+    root0, paths = tpl
+    root = NodePath(root0.node().copySubgraph())
+    out = [root]
+    for path in paths:
+        n = root
+        for i in path:
+            n = n.getChild(i)
+        out.append(n)
+    return tuple(out)
+
+
+def _with_bar(built):
+    """12: (root, torso, legs, bar) von build_drone/build_critter -> (root, torso, bar, fg, Bein, Bein, ...)."""
+    root, torso, legs, bar = built
+    bar, fg = mob_bar(bar)
+    return (root, torso, bar, fg) + tuple(legs)
+
+
+def prewarm_mob_models(mtn=True):
+    """12: Alle Monster-Modelle einmal im Ladebildschirm bauen (füllt _MOB_TPL / _MOB_GEOM). Vorher passierte das beim
+    ersten Auftauchen jeder Art mitten im Spiel - der Koloss allein brauchte dafür über eine halbe Sekunde."""
+    for kind in MOB_KINDS:
+        try:
+            look = {"fur": CRITTER_COLORS["standard" if mtn else "karte"]} if kind == "critter" else None
+            build_mob(kind, look)[0].removeNode()
+        except Exception:                                      # Vorwärmen darf nie den Spielstart verhindern
+            pass
+
+
 def build_mob(kind, look=None):
     """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
     Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
-    if kind in DRONE_KINDS:
-        root, torso, legs, bar = build_drone(kind)
-        bar, fg = mob_bar(bar)
+    if kind in DRONE_KINDS:                                    # 12: Vorlage einmal bauen, danach nur kopieren
+        root, torso, bar, fg, *legs = _mob_tpl((kind,), lambda: _with_bar(build_drone(kind)))
         return root, torso, legs[0], legs[1], bar, fg, legs
     if kind == "critter":
-        root, torso, legs, bar = build_critter((look or {}).get("fur", CRITTER_COLORS["standard"]))
-        bar, fg = mob_bar(bar)
+        fur = (look or {}).get("fur", CRITTER_COLORS["standard"])
+        root, torso, bar, fg, *legs = _mob_tpl(("critter", tuple(fur)), lambda: _with_bar(build_critter(fur)))
         return root, torso, legs[0], legs[1], bar, fg
+    if look is None:                                           # 12: Standard-Aussehen -> aus der Vorlage
+        return _mob_tpl(("hum", kind), lambda: _build_mob_humanoid(kind, None))
+    return _build_mob_humanoid(kind, look)
+
+
+def _build_mob_humanoid(kind, look=None):
+    """Humanoides Monster neu bauen: einfaches Modell + detailliertes Modell per LODNode (siehe build_mob)."""
     lo = _build_mob_lo(kind, look)
     if kind not in _MOB_HI:
         return lo
@@ -15793,6 +15992,8 @@ class Particle:
         self.life, self.age = life, 0.0
         self.bounce, self.spin, self.shrink = bounce, spin, shrink
         self.scale = np.getScale()
+        self.gnd = None           # 12: (x, y, Bodenhöhe) der letzten Geländeabfrage
+        self.rest = False         # 12: liegt still am Boden (keine Physik mehr, nur Ausblenden)
 
 
 class Fx:
@@ -115893,9 +116094,14 @@ class Sfx:
         node.setPos(*src)
         cam = self.cam()
         d = math.dist(src, cam)
-        occ = self.wall_factor(world, src, cam)
+        free = self.CHAT_VOL * min(1.0, self.CHAT_REF / max(d, 0.01)) * math.exp(-max(0.0, d - self.CHAT_REF) / self.CHAT_AIR)
+        self.chat_occ_t = getattr(self, "chat_occ_t", 0.0) - dt
+        occ = getattr(self, "chat_occ_raw", 1.0)
+        if free >= SND_OCC_MIN_VOL and self.chat_occ_t <= 0.0:   # 12: Wand-Strahltest nur alle SND_OCC_T s und nur,
+            occ = self.chat_occ_raw = self.wall_factor(world, src, cam)   # wenn der Ton überhaupt hörbar ist
+            self.chat_occ_t = SND_OCC_T
         self.chat_occ = getattr(self, "chat_occ", occ) + (occ - getattr(self, "chat_occ", occ)) * min(1.0, 10.0 * dt)
-        vol = self.chat_occ * self.CHAT_VOL * min(1.0, self.CHAT_REF / max(d, 0.01)) * math.exp(-max(0.0, d - self.CHAT_REF) / self.CHAT_AIR)
+        vol = self.chat_occ * free
         snd.setVolume(max(0.0, min(1.0, vol)))
         if snd.status() != 2:
             snd.play()
@@ -118155,6 +118361,7 @@ class Game(ShowBase):
             nd.removeNode()
         self.rock_views = None
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
+        self.shadow_gz = {}                                    # 12: Bodenhöhen-Cache der Schatten leeren
         self.strike_fx = None
         self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # 10e: Blendung vorbei, Ton normal
         self.apply_volume()
@@ -118418,6 +118625,7 @@ class Game(ShowBase):
         land, water, zone, extra = (build_mc_scene(world) if world.mc else
                                     build_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)))
         self.loading_step(0.78, "Szene wird eingerichtet ...")
+        prewarm_mob_models(getattr(world, "mtn", True))   # 12: Monster-Modelle jetzt bauen, nicht beim ersten Auftauchen
         self.land_np = self.render.attachNewNode(land)
         if world.mc:
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
@@ -121064,7 +121272,9 @@ class Game(ShowBase):
         cx, cy = cp[0], cp[1]
         wd = math.radians(35.0)
         dx, dy = math.cos(wd), math.sin(wd)
-        for wnp, x, y, zref, kind in self.wind_nodes:
+        self.wind_frame = (getattr(self, "wind_frame", 0) + 1) % WIND_BUCKETS   # 12: gestaffelt - je Bild eine Gruppe
+        nodes = self.wind_nodes[self.wind_frame::WIND_BUCKETS] if WIND_BUCKETS > 1 else self.wind_nodes
+        for wnp, x, y, zref, kind in nodes:
             if abs(x - cx) > 150 or abs(y - cy) > 150:
                 continue
             ph = (x + y) * 0.045
@@ -121091,11 +121301,26 @@ class Game(ShowBase):
             self.shadow_tpl.setBin("transparent", 2)
             self.shadow_tpl.setDepthOffset(2)
         seen = set()
+        gz_cache = self.__dict__.setdefault("shadow_gz", {})      # 12: Bodenhöhe je Schatten (nur neu bei Bewegung)
+        cp = self.camera.getPos(self.render)
+        cx_, cy_ = cp[0], cp[1]
+
+        def hide_far(key):                                         # 12: zu weit weg - Knoten behalten, nur verstecken
+            np = self.shadows.get(key)
+            if np is not None:
+                np.hide()
+                seen.add(key)
 
         def put(key, x, y, z, rx, ry, heading, alpha, fly=False):
-            gz = world.floor_at(x, y, z + (0.3 if not fly else 0.0))
+            c = gz_cache.get(key)
+            if c is not None and abs(c[0] - x) < 0.01 and abs(c[1] - y) < 0.01 and abs(c[2] - z) < 0.01:
+                gz = c[3]
+            else:
+                gz = world.floor_at(x, y, z + (0.3 if not fly else 0.0))
+                if fly:
+                    gz = max(gz, world.ground_for(x, y, z))
+                gz_cache[key] = (x, y, z, gz)
             if fly:
-                gz = max(gz, world.ground_for(x, y, z))
                 alpha *= max(0.0, 1.0 - (z - gz) / 28.0)
                 rx *= 1.0 + (z - gz) * 0.03
                 ry *= 1.0 + (z - gz) * 0.03
@@ -121113,6 +121338,10 @@ class Game(ShowBase):
 
         for m in self.mob_views:
             if m.state != "dead":
+                lim = SHADOW_R * max(1.0, m.scale * 0.5)           # 12: grosse Monster (Titan) werfen weiter sichtbare Schatten
+                if (m.x - cx_) ** 2 + (m.y - cy_) ** 2 > lim * lim:
+                    hide_far(("m", id(m)))
+                    continue
                 put(("m", id(m)), m.x, m.y, m.z, 0.62 * m.scale, 0.62 * m.scale, 0.0, 0.5)
         for pid in self.player_views:
             p = world.players.get(pid)
@@ -121124,6 +121353,7 @@ class Game(ShowBase):
             put(("h", id(q)), q.x, q.y, q.z, 1.8, 3.2, q.heading, 0.5, fly=True)
         for k in [k for k in self.shadows if k not in seen]:
             self.shadows.pop(k).removeNode()
+            gz_cache.pop(k, None)
 
     def place_camera(self):
         pl = self.player
@@ -122557,6 +122787,12 @@ class Game(ShowBase):
             if v is None:
                 v = self.mob_views[m] = MobView(m, getattr(world, "mtn", True))
                 v.root.reparentTo(self.render)
+            n = getattr(m, "upd_n", None)                  # 12: gestaffelt nicht gerechnet -> Bild bleibt gleich, nichts tun
+            if n is not None:                              # (Mitspieler: Monster aus dem Netz haben keinen Zähler)
+                key = (n, m.hp)
+                if v.drawn == key:
+                    continue
+                v.drawn = key
             v.update(m)
         for m in [m for m in self.mob_views if m not in current]:
             self.mob_views.pop(m).root.removeNode()
@@ -122584,11 +122820,19 @@ class Game(ShowBase):
             if p.age >= p.life:
                 p.np.removeNode()
                 continue
+            if p.rest:                                   # 12: liegt still - nur noch ausblenden
+                if p.shrink and p.life - p.age < 0.25:
+                    p.np.setScale(p.scale * max((p.life - p.age) / 0.25, 0.01))
+                keep.append(p)
+                continue
             p.vz -= 9.81 * dt
             p.x += p.vx * dt
             p.y += p.vy * dt
             p.z += p.vz * dt
-            gz = world.ground_for(p.x, p.y, p.z + 0.3)
+            gc = p.gnd                                   # 12: Geländehöhe nur nach PART_GROUND_STEP Weg neu abfragen
+            if gc is None or abs(p.x - gc[0]) > PART_GROUND_STEP or abs(p.y - gc[1]) > PART_GROUND_STEP:
+                gc = p.gnd = (p.x, p.y, world.ground_for(p.x, p.y, p.z + 0.3))
+            gz = gc[2]
             if p.z < gz + 0.01:
                 p.z = gz + 0.01
                 if p.bounce > 0 and p.vz < -0.6:
@@ -122601,6 +122845,8 @@ class Game(ShowBase):
                     p.vx *= fr
                     p.vy *= fr
                     p.spin = 0.0
+                    if p.vx * p.vx + p.vy * p.vy < 0.0025:   # 12: kaum noch Tempo -> ruht ab jetzt
+                        p.rest = True
             p.np.setPos(p.x, p.y, p.z)
             if p.spin:
                 p.np.setH(p.np.getH() + 700 * dt)
@@ -122689,6 +122935,11 @@ class Game(ShowBase):
         Abpraller), gestrichelt gezeichnet; am Landepunkt ein Ring."""
         world = self.world
         eye, d, sp = self.gren_throw_params(pl, ch)
+        key = (kind, round(eye[0], 2), round(eye[1], 2), round(eye[2], 2),          # 12: nichts verändert (Spieler
+               round(d[0], 3), round(d[1], 3), round(d[2], 3), round(sp, 2))       # steht und zielt) -> Bogen bleibt
+        if self.gren_arc is not None and getattr(self, "gren_arc_key", None) == key:
+            return
+        self.gren_arc_key = key
         g = Grenade(-1, eye[0], eye[1], eye[2], d[0] * sp, d[1] * sp, d[2] * sp + 2.0, -1, 99.0, kind)
         pts, t = [eye], 0.0
         while t < GREN_ARC_T:
@@ -125230,6 +125481,7 @@ class MobView:
                 lod.setSwitch(0, d_, 0.0)
                 lod.setSwitch(1, 1e6, d_)
         self.spark_t = 0.0
+        self.drawn = None         # 12: (Update-Zähler, HP) des zuletzt gezeichneten Zustands
 
     def update(self, m):
         r = self.root
