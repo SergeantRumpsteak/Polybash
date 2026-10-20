@@ -29,7 +29,7 @@ Polybash/
   Regel in Experimental: Alle starten und respawnen nur mit der Pistole, alle anderen Waffen kommen aus Kisten.
   Das Ausrüstungsmenü (Aufsätze, Visier, Gadget), Sounds und Spielmechaniken stammen aus `spiel.py`
   (Stand: v0.8, zusammengeführt) - bei Änderungen im Hauptspiel bitte gelegentlich in Robins Datei übernehmen.
-- Spielmodi im Hauptspiel: King of the Hill, Deathmatch und Capture the Flag (zwei Teams, Flagge holen; Regeln unter "CTF-Regeln" im Host-Setup), dazu "Experimental". Standardkarte ist `maps/polytown.ptmap`; die frühere im Code erzeugte Karte und Blood Gulch gibt es nicht mehr.
+- Spielmodi im Hauptspiel: King of the Hill, Deathmatch und Capture the Flag (zwei Teams, Flagge holen; die Regeln werden beim Start in einer eigenen Seite eingestellt), dazu "Experimental". Standardkarte ist `maps/polytown.ptmap`; die frühere im Code erzeugte Karte und Blood Gulch gibt es nicht mehr.
 - `main` ist der Stand für alle Freunde. Zusammengeführt wird per Pull Request.
 
 ## Starten

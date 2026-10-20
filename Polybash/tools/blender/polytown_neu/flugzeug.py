@@ -274,6 +274,32 @@ def leitwerk(f, fin, rud, stab, mat_fin, mat_rud, mat_stab, dicke=0.1, streben=N
                 f.beam((a[0], sg * a[1], a[2]), (b2[0], sg * b2[1], b2[2]), 0.05, 0.05, "Flug Metall")
 
 
+def kollision_flugzeug(f, b, stat, secs, zmax_extra=0.3):
+    """Kollisionsquader eines Flugzeugs beliebigen Kurses: Rumpf und beide Tragflaechen werden in der Ortsebene in Zellen von
+    ca. 1 m zerlegt, jede Zelle ist ein achsenparalleler Weltquader (Zellmitte, Halbkante = 0,5 * Wurzel 2, damit gedrehte Rechtecke
+    luckenlos bleiben). Volle Hoehe vom Boden bis zur Oberkante - man kann weder hindurch noch darunter laufen."""
+    cell = 1.0
+    half = 0.5 * math.sqrt(2.0) * cell
+    ztop_f = max(s[1] + s[3] for s in stat) + zmax_extra
+    rects = [(min(s[0] for s in stat[1:]), max(s[0] for s in stat[1:-0 or None]) - 0.6, -max(s[2] for s in stat), max(s[2] for s in stat),
+              ztop_f)]
+    for k in range(len(secs) - 1):
+        y0, y1 = secs[k][0], secs[k + 1][0]
+        xl = max(secs[k][1], secs[k + 1][1])
+        xt = min(secs[k][1] - secs[k][2], secs[k + 1][1] - secs[k + 1][2])
+        zt = max(secs[k][3] + secs[k][4] / 2, secs[k + 1][3] + secs[k + 1][4] / 2) + 0.1
+        for sg in (-1, 1):
+            rects.append((xt, xl, min(sg * y0, sg * y1), max(sg * y0, sg * y1), zt))
+    for (xa, xb, ya, yb, zt) in rects:
+        nx, ny = max(1, int(math.ceil((xb - xa) / cell))), max(1, int(math.ceil((yb - ya) / cell)))
+        for i in range(nx):
+            for j in range(ny):
+                xc = xa + (i + 0.5) * (xb - xa) / nx
+                yc = ya + (j + 0.5) * (yb - ya) / ny
+                wx, wy, wz = f.P(xc, yc, 0.0, False)
+                b.bx.append((wx - half, wy - half, wz, wx + half, wy + half, wz + zt))
+
+
 # ------------------------------------------------------------------ Junkers Ju 87 B "Stuka"
 def stuka(b, ox, oy, psi, z0=0.0):
     f = Fz(b, ox, oy, psi, z0, nick=11.0, pivot=(0.8, 2.0))
@@ -353,6 +379,7 @@ def stuka(b, ox, oy, psi, z0=0.0):
         for sg in (-1, 1):
             f.beam((xx, sg * 0.32, 1.38), (xx, sg * 0.30, 0.96), 0.07, 0.07, "Flug Metall")
     bombe(f, 0.30, 0.0, 0.90, 1.65, 0.25)
+    kollision_flugzeug(f, b, stat, secs)
     return b
 
 
@@ -457,6 +484,7 @@ def jaeger(b, ox, oy, psi, typ, z0=0.0, anstrich=None):
     a = f.N(-4.2, 0.0, 1.55)
     f.beam((a[0], 0.0, a[2]), (a[0] - 0.05, 0.0, 0.22), 0.06, 0.06, "Flug Metall", False, False)
     f.rad(a[0] - 0.06, 0.0, 0.17, 0.17, 0.09, n=8)
+    kollision_flugzeug(f, b, stat, secs)
     return b
 
 

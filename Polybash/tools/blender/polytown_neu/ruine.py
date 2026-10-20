@@ -335,15 +335,6 @@ def burg(R):
         if abs(x) < 2.3 and y < -8.2:
             continue
         R.brocken(x, y, 0.0, rnd.uniform(0.18, 0.5))
-    # Felsen am Fuss der Burgmauern (Burgfels), Hangkante
-    for k in range(34):
-        a = 2 * math.pi * k / 34 + rnd.uniform(-0.1, 0.1)
-        rr = rnd.uniform(14.2, 16.8)
-        x, y = rr * math.cos(a), rr * math.sin(a)
-        zl = U.gelaende_hoehe(RX + x, RY + y) - U.RUINE_Z if R.zb else 0.0
-        if abs(a - 4.71) < 0.35 or abs(a - 4.71 + 6.283) < 0.35:                                 # Zufahrt freihalten
-            continue
-        R.brocken(x, y, zl, rnd.uniform(0.7, 1.7), "Felsen Burg", 1.1)
 
 
 def bewuchs(R):

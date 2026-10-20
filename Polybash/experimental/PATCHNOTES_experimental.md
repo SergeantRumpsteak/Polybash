@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## CTF-Regelseite vor dem Start, Flugzeug-Kollision, Burgruine, Vorschaubild (2026-10-21)
+- GEÄNDERT **CTF (Hauptspiel):** Bei Capture the Flag erscheint nach „Start“ zuerst die Seite „CTF-Regeln“ und muss bestätigt werden („Spiel starten“ / Enter; „Zurück“ / Esc bricht ab). Der Knopf „CTF-Regeln“ im normalen Menü und die Taste C entfallen. Ausserdem: CTF-Logik läuft jetzt wirklich im Spielschritt, Einzelspieler bekommt ein Team.
+- GEFIXT Polytown: **Flugzeuge am Flugplatz sind fest** (Kollisionsboxen für Stuka und Jäger); Startpunkte liegen nicht darin.
+- GEÄNDERT Polytown: Der Ring prismenartiger Felsen um die Burgruine auf dem Hügel ist entfernt.
+- GEÄNDERT Vorschaubild von Polytown: Perspektivansicht (Stadt, Burg, Flugplatz), aus den Kartendaten gerendert.
+
 ## Aufräumen: CTF ins Hauptspiel, Blood Gulch und alte Polytown gelöscht (2026-10-21)
 - GEÄNDERT **Capture the Flag** ist jetzt ein Spielmodus des Hauptspiels (`spiel.py`, Modus „Capture the Flag“ im Host-Setup neben King of the Hill und Deathmatch) und steht nicht mehr in `robin_experimental.py`. Die CTF-Änderungen aus „Experimental 11“ sind aus dieser Datei entfernt (Modus, Flaggen, Teams, HUD, Seite „CTF-Regeln“, Netzfelder).
 - GEÄNDERT **NET_VERSION 42 → 41** (CTF-Netzfelder entfallen); `EXP_NET_VERSION` in `spiel.py` ist wieder 41.
