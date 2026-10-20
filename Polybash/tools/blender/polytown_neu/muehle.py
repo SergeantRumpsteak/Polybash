@@ -37,11 +37,11 @@ MUEHLE = (270.0, 284.0, -45.0)           # Mitte, Drehung in Grad (-45: Fluegel 
 KOEHLER = (279.5, 264.0, 90.0)           # Huette, Tuer nach Osten zum Meiler
 MEILER = (288.5, 264.0)
 JAGD = (255.3, 263.5, 0.0)               # Blockhaus, Tuer nach Sueden
-HOCHSITZ = (246.0, 288.0, -90.0)         # Treppe zeigt nach Westen
+HOCHSITZ = (94.5, 264.0, -90.0)          # Hochsitz in der oestlichen Sattelsenke der Burgruine (flach, 2,9 m); Treppe zeigt nach Westen zur Ruine
 FUTTER = (240.0, 272.0, 0.0)             # Futterkrippe am Waldrand
 ZELT = (290.0, 290.0)                     # Zeltplatz mit Feuerstelle in der Nordostecke
 HOCHSITZ_WALD = (250.0, 43.0, -90.0)     # zweiter Hochsitz im Wald suedlich des Flugplatzes
-BAUPLAETZE = ((270.0, 284.0, 15.0), (257.0, 262.0, 10.0), (285.0, 264.0, 12.0), (246.0, 288.0, 7.0), (290.0, 290.0, 9.0), (240.0, 272.0, 4.0), (250.0, 43.0, 7.0))
+BAUPLAETZE = ((270.0, 284.0, 15.0), (257.0, 262.0, 10.0), (285.0, 264.0, 12.0), (94.5, 264.0, 7.0), (290.0, 290.0, 9.0), (240.0, 272.0, 4.0), (250.0, 43.0, 7.0))
 
 
 def _wr(cx, cy, th, x0, y0, x1, y1, m=0.4):

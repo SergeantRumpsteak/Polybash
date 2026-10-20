@@ -774,3 +774,136 @@ def kirche(b, cx, cy, zb, theta, lvl=1):
     return g
 
 
+
+
+# ------------------------------------------------------------------ Hotel (Stadthaus)
+S.FARBEN.setdefault("Bettzeug", ((0.86, 0.85, 0.78), 0.95, 0.0))
+S.FARBEN.setdefault("Bettdecke", ((0.28, 0.36, 0.52), 0.95, 0.0))
+S.FARBEN.setdefault("Sofa", ((0.38, 0.17, 0.18), 0.9, 0.0))
+S.FARBEN.setdefault("Putz creme", ((0.86, 0.80, 0.62), 0.9, 0.0))
+S.FARBEN.setdefault("Putz creme alt", (S._verwittert(S.FARBEN["Putz creme"][0]), 0.95, 0.0))
+
+
+def hotel(b, cx, cy, zb, theta, lvl=1):
+    """Stadthotel 12 x 10 m, zwei Geschosse (Walmdach): Vordach mit Saeulen und Schriftzug HOTEL, Freitreppe. Innen begehbar: Empfang mit Rezeptionstresen
+    und Sofaecke, Fruehstuecksraum hinten, Treppe an der Ostwand; im Obergeschoss Flur an der Rueckseite mit drei Gaestezimmern (Bett, Nachttisch, Schrank),
+    das mittlere Zimmer hat ein offenes Fenster zur Strasse. Tuer in der Mitte (x = 0), Dienstzugang hinten links."""
+    from stadt import F1
+    g = Lok(b, cx, cy, zb, theta, 1)
+    g.kachel = 0.25                                           # schraeg stehendes Gebaeude: Hindernisse als Kacheln
+    w, d = 12.0, 10.0
+    hw, hd = w / 2, d / 2
+    H = F1 + 3.0
+    mat = "Putz creme alt" if lvl else "Putz creme"
+    stein = "Stein alt" if lvl else "Stein"
+    laden = "Laden braun alt" if lvl else "Laden braun"
+    ix0, ix1, iy0, iy1 = -hw + WD, hw - WD, -hd + WD, hd - WD
+    zc_e, zc_o = F0 + 1.55, F1 + 1.4
+    ew, ow = 1.4, 1.6
+    fe = (-4.6, -2.6, 2.6, 4.6)
+    fo = (-4.05, -0.75, 3.3)
+    be = (-4.0, -1.2, 1.6)
+    bo = (-4.05, -0.75, 3.3)
+    se = (-2.6, 0.2, 2.8)
+    so = (-2.6, 3.6)
+    door = (-1.1, 1.1, F0, F0 + 2.5)
+    rueck = (-5.2, -3.8, F0, F0 + 2.3)
+    oef_v = [door] + [(x - ew / 2, x + ew / 2, zc_e - ow / 2, zc_e + ow / 2) for x in fe] + [(x - 0.6, x + 0.6, zc_o - ow / 2, zc_o + ow / 2) for x in fo]
+    oef_h = [rueck] + [(x - ew / 2, x + ew / 2, zc_e - ow / 2, zc_e + ow / 2) for x in be] + [(x - 0.6, x + 0.6, zc_o - ow / 2, zc_o + ow / 2) for x in bo]
+    oef_s = [(y - 0.6, y + 0.6, zc_e - ow / 2, zc_e + ow / 2) for y in se] + [(y - 0.6, y + 0.6, zc_o - ow / 2, zc_o + ow / 2) for y in so]
+    aussenwand(g, "x", -hd, -1, -hw, hw, H, mat, oef_v)
+    aussenwand(g, "x", hd, 1, -hw, hw, H, mat, oef_h)
+    aussenwand(g, "y", -hw, -1, -hd + WD, hd - WD, H, mat, oef_s)
+    aussenwand(g, "y", hw, 1, -hd + WD, hd - WD, H, mat, oef_s)
+    for x in fe:
+        fensterschmuck(g, "x", -hd, -1, x, zc_e, ew, ow, laden)
+    for x in fo:
+        fensterschmuck(g, "x", -hd, -1, x, zc_o, 1.2, ow, laden, "offen" if x == -0.75 else "ok")
+    for x in be:
+        fensterschmuck(g, "x", hd, 1, x, zc_e, ew, ow, None)
+    for x in bo:
+        fensterschmuck(g, "x", hd, 1, x, zc_o, 1.2, ow, None)
+    for sg in (-1, 1):
+        for y in se:
+            fensterschmuck(g, "y", sg * hw, sg, y, zc_e, 1.2, ow, laden)
+        for y in so:
+            fensterschmuck(g, "y", sg * hw, sg, y, zc_o, 1.2, ow, laden)
+    # Eingang: Rahmen, Tuerfluegel offen, Vordach auf zwei Saeulen mit Schriftzug, Freitreppe
+    tuerrahmen(g, "x", -hd - 0.07, -hd, door[0], door[1], F0, F0 + 2.5, stein, t=0.15)
+    g.box(0.95, iy0, F0, 1.1, iy0 + 1.0, F0 + 2.45, "Tuer")
+    for sx in (-1, 1):
+        g.box(sx * 1.9 - 0.2, -hd - 1.9, F0, sx * 1.9 + 0.2, -hd - 1.5, F0 + 3.05, stein)
+        g.box(sx * 1.9 - 0.3, -hd - 2.0, F0, sx * 1.9 + 0.3, -hd - 1.4, F0 + 0.25, stein)
+    g.box(-2.4, -hd - 2.1, F0 + 3.05, 2.4, -hd, F0 + 3.3, stein)
+    g.box(-2.5, -hd - 2.2, F0 + 3.3, 2.5, -hd - 1.95, F0 + 3.85, "Schild gruen")
+    schrift(g, "HOTEL", 0.0, F0 + 3.38, -hd - 2.2, 0.065, "Schrift weiss", 0.04)
+    for k in range(3):
+        g.box(-2.6, -hd - 2.7 + 0.45 * k, -0.6, 2.6, -hd - 0.07, F0 - 0.09 * (2 - k), "Beton")
+    g.box(-1.1, -hd - 0.1, F0 - 0.04, 1.1, -hd + WD, F0, "Beton")
+    tuerrahmen(g, "x", hd, hd + 0.07, rueck[0], rueck[1], F0, F0 + 2.3)
+    g.box(-5.4, hd, -0.6, -3.6, hd + 1.0, F0, "Beton")
+    # Boden, Decken
+    g.box(ix0, iy0, -0.7, ix1, iy1, F0, "Dielen")
+    g.box(-5.6, -4.6, F0, -0.3, -1.4, F0 + 0.02, "Teppich")
+    g.box(ix0, iy0, H - 0.25, ix1, iy1, H, "Decke")
+    # Treppe an der Ostwand (x 2.9 .. ix1), 15 Stufen, Loch in der OG-Decke mit Gelaender
+    sx0, ys, nst = 2.9, -1.2, 15
+    rise = (F1 - F0) / nst
+    hy0, hy1 = ys + 3 * 0.27, ys + nst * 0.27
+
+    def platte(x0, y0, x1, y1):
+        g.box(x0, y0, F1 - 0.25, x1, y1, F1 - 0.05, "Decke")
+        g.box(x0, y0, F1 - 0.05, x1, y1, F1, "Dielen")
+    platte(ix0, iy0, sx0, iy1)
+    platte(sx0, iy0, ix1, hy0)
+    platte(sx0, hy1, ix1, iy1)
+    for k in range(nst):
+        y0 = ys + k * 0.27
+        zt = F0 + (k + 1) * rise
+        g.box(sx0, y0, F0, ix1, y0 + 0.27, zt, "Holz")
+        g.box(sx0 - 0.07, y0, zt + 0.45, sx0 - 0.02, y0 + 0.27, zt + 0.5, "Holz")
+        g.box(sx0 - 0.07, y0, zt + 0.92, sx0 - 0.02, y0 + 0.27, zt + 0.97, "Holz")
+        if k % 3 == 0:
+            g.box(sx0 - 0.08, y0 + 0.1, zt, sx0 - 0.01, y0 + 0.17, zt + 0.97, "Holz")
+    for (x0, y0, x1, y1) in ((sx0 - 0.07, hy0, sx0 - 0.02, hy1), (sx0, hy0 - 0.07, ix1, hy0 - 0.02)):
+        g.box(x0, y0, F1 + 0.45, x1, y1, F1 + 0.5, "Holz")
+        g.box(x0, y0, F1 + 0.95, x1, y1, F1 + 1.0, "Holz")
+    # Erdgeschoss: Rezeption (links vorn), Sofaecke, Fruehstuecksraum hinten
+    g.box(-5.6, -0.9, F0, -1.6, -0.3, F0 + 1.05, "Holz")
+    g.box(-5.7, -1.0, F0 + 1.05, -1.5, -0.2, F0 + 1.12, "Holz alt")
+    g.box(-5.6, 0.45, F0 + 0.8, -1.6, 0.6, F0 + 2.0, "Regal")                           # Schluesselbrett hinter dem Tresen
+    for k in range(6):
+        g.box(-5.4 + 0.6 * k, 0.4, F0 + 1.3, -5.3 + 0.6 * k, 0.45, F0 + 1.45, "Messing")
+    g.box(-5.6, -4.5, F0, -3.2, -3.7, F0 + 0.5, "Sofa")                                   # Sofa
+    g.box(-5.6, -4.5, F0 + 0.5, -5.2, -3.7, F0 + 1.0, "Sofa")
+    g.box(-4.6, -3.2, F0, -3.6, -2.6, F0 + 0.4, "Holz")                                   # Couchtisch
+    g.prism(-5.5, -2.0, F0, 0.3, 1.0, 8, "Ware blau")                                     # Kuebelpflanze
+    for (tx, ty) in ((-4.4, 2.5), (-1.8, 2.5), (0.2, 3.4)):                               # Fruehstuecksraum: Tische mit Stuehlen
+        g.box(tx - 0.6, ty - 0.45, F0 + 0.72, tx + 0.6, ty + 0.45, F0 + 0.76, "Holz")
+        g.box(tx - 0.08, ty - 0.08, F0, tx + 0.08, ty + 0.08, F0 + 0.72, "Holz dunkel" if "Holz dunkel" in S.FARBEN else "Holz")
+        for sy in (-0.85, 0.85):
+            g.box(tx - 0.22, ty + sy - 0.22, F0, tx + 0.22, ty + sy + 0.22, F0 + 0.45, "Holz")
+    g.box(ix1 - 1.4, 3.1, F0, ix1 - 0.05, 4.6, F0 + 0.9, "Holz")                            # Buffet
+    # Obergeschoss: Flurwand y = 2.5 mit Tueren, Zimmertrennwaende x = -2.4 / 0.9, Betten
+    zlo, zhi = F1, H - 0.25
+    tueren = [(-4.6, -3.6, zlo, zlo + 2.1), (-1.6, -0.6, zlo, zlo + 2.1), (1.1, 2.1, zlo, zlo + 2.1)]
+    wand(g, "x", 2.44, 2.56, ix0, sx0, zlo, zhi, "Innenwand", tueren)
+    for o in tueren:
+        tuerrahmen(g, "x", 2.44, 2.56, o[0], o[1], zlo, zlo + 2.1)
+    for xw in (-2.4, 0.9):
+        wand(g, "y", xw - 0.06, xw + 0.06, iy0, 2.44, zlo, zhi, "Innenwand", [])
+    for (bx_, by_) in ((-4.05, -3.2), (-0.75, -3.2)):                                       # Betten (Kopfende an der Vorderwand)
+        g.box(bx_ - 0.5, by_ - 1.0, F1, bx_ + 0.5, by_ + 1.0, F1 + 0.45, "Holz")
+        g.box(bx_ - 0.45, by_ - 0.95, F1 + 0.45, bx_ + 0.45, by_ + 0.5, F1 + 0.6, "Bettdecke")
+        g.box(bx_ - 0.4, by_ + 0.55, F1 + 0.45, bx_ + 0.4, by_ + 0.95, F1 + 0.58, "Bettzeug")
+        g.box(bx_ + 0.6, by_ + 0.6, F1, bx_ + 1.0, by_ + 1.0, F1 + 0.5, "Holz alt")          # Nachttisch
+        g.box(bx_ - 1.4, 1.0, F1, bx_ - 0.7, 2.3, F1 + 2.0, "Regal")                         # Schrank an der Flurwand
+    g.box(2.2, -3.6, F1, 4.9, -2.6, F1 + 0.45, "Holz")                                      # Bett Zimmer rechts (hinter dem Treppenloch, an der Vorderwand)
+    g.box(2.25, -3.55, F1 + 0.45, 4.85, -2.65, F1 + 0.6, "Bettdecke")
+    g.box(1.1, -4.4, F1, 1.8, -3.7, F1 + 0.5, "Holz alt")
+    g.box(ix1 - 0.7, -1.9, F1, ix1 - 0.05, -0.9, F1 + 2.0, "Regal")
+    # Dach: Walm mit Kamin
+    rz = dach(g, "walm", w, d, H, 2.8, "Dach Schiefer", mat, e=0.55)
+    g.box(-3.9, 0.9, H - 0.1, -3.2, 1.6, rz(-3.5, 1.2) + 0.9, "Klinker alt" if lvl else "Klinker")
+    g.box(-4.0, 0.8, rz(-3.5, 1.2) + 0.9, -3.1, 1.7, rz(-3.5, 1.2) + 1.02, "Stein")
+    return g

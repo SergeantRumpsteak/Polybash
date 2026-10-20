@@ -33,6 +33,19 @@ _FONT = {
     "E": ("#####", "#....", "#....", "####.", "#....", "#....", "#####"),
     "-": (".....", ".....", ".....", "#####", ".....", ".....", "....."),
     "H": ("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "R": ("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
+    "T": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
+    "U": ("#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "S": (".####", "#....", "#....", ".###.", "....#", "....#", "####."),
+    "N": ("#...#", "##..#", "##..#", "#.#.#", "#..##", "#..##", "#...#"),
+    "O": (".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "F": ("#####", "#....", "#....", "####.", "#....", "#....", "#...."),
+    "L": ("#....", "#....", "#....", "#....", "#....", "#....", "#####"),
+    "G": (".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+    "P": ("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
+    "Z": ("#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"),
+    "K": ("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+    "I": (".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."),
 }
 PIX = 0.062                      # Pixelkante (m): Zeichenhoehe 7 x 0,062 = 0,43 m
 TEILUNG = 0.40                   # Zeichenabstand
@@ -60,11 +73,11 @@ def _tafel_breite(text, pfeil):
     return text_breite(text) + 0.36 + (0.55 if pfeil else 0.0)
 
 
-def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN):
+def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN, zb=0.0):
     """Schild bei (x, y) mit Blickrichtung face ('N','S','E','W' = Richtung, in die die Vorderseite zeigt).
 
     tafeln: Liste (art, text, pfeil) von links nach rechts aus Sicht des Betrachters; art 'standort'|'richtung'|'halt',
-    pfeil None|'links'|'rechts' (links/rechts aus Sicht des Betrachters). Rueckgabe: Breite des Schilds."""
+    pfeil None|'links'|'rechts'|'oben' (links/rechts aus Sicht des Betrachters); zb = Bodenhoehe am Schild. Rueckgabe: Breite des Schilds."""
     n = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[face]
     r = (-n[1], n[0])                                             # rechts aus Sicht des Betrachters
     def W(u, w, v):
@@ -78,7 +91,7 @@ def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN):
     breiten = [_tafel_breite(t, p) for (_, t, p) in tafeln]
     gesamt = sum(breiten) + 0.04 * (len(tafeln) - 1)
     u = -gesamt / 2
-    v0, v1 = unten, unten + TAFEL_H
+    v0, v1 = zb + unten, zb + unten + TAFEL_H
     nv = (n[0], n[1], 0.0)
     for (art, text, pfeil), bw in zip(tafeln, breiten):
         grund, schrift, rahmen = {"standort": ("Schild schwarz", "Schild gelb", "Schild gelb"),
@@ -113,6 +126,12 @@ def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN):
             ux += TEILUNG
         if pfeil:
             vc = (v0 + v1) / 2
+            if pfeil == "oben":
+                uc = u + bw - 0.35
+                _flat(b, [W(uc, wf, vc + 0.30), W(uc - 0.19, wf, vc + 0.04), W(uc + 0.19, wf, vc + 0.04)], schrift, nv)
+                _flat(b, [W(uc - 0.05, wf, vc - 0.28), W(uc + 0.05, wf, vc - 0.28), W(uc + 0.05, wf, vc + 0.04), W(uc - 0.05, wf, vc + 0.04)], schrift, nv)
+                u += bw + 0.04
+                continue
             if pfeil == "links":
                 ua, ub, sg = u + 0.12, u + 0.12 + 0.46, 1
             else:
@@ -122,10 +141,10 @@ def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN):
             _flat(b, [W(kopf, wf, vc - 0.045), W(ub, wf, vc - 0.045), W(ub, wf, vc + 0.045), W(kopf, wf, vc + 0.045)], schrift, nv)
         u += bw + 0.04
     if pfosten == "mitte":
-        lbox(-0.05, 0.05, -0.05, 0.05, 0.0, v0 + 0.02, "Schild Pfosten")
+        lbox(-0.05, 0.05, -0.05, 0.05, zb, v0 + 0.02, "Schild Pfosten")
     elif pfosten:
         for pu in (-gesamt / 2 + 0.25, gesamt / 2 - 0.25):
-            lbox(pu - 0.04, pu + 0.04, -0.04, 0.04, 0.0, v0 + 0.02, "Schild Pfosten")
+            lbox(pu - 0.04, pu + 0.04, -0.04, 0.04, zb, v0 + 0.02, "Schild Pfosten")
     return gesamt
 
 

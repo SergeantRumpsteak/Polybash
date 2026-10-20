@@ -253,6 +253,20 @@ def _hoch(b, x, y, z0, ix, iy):
             _spitze(b, tx, ty, z0 + h * 0.8, h * 0.28, (lean[0] * 0.2, lean[1] * 0.2), 0.045, a, "Samen")
 
 
+def _mittel(b, x, y, z0, ix, iy, hmax):
+    """Mittelhoher Grasbueschel (35..85 cm, fuenf geneigte Halme) - ueber alle Gruenflaechen gestreut, ergaenzt das niedrige Kurzgras."""
+    ph = T._h01(ix, iy, 5090) * 6.28
+    t = T._h01(ix, iy, 5091)
+    mat = "Gras hoch 1" if t < 0.4 else ("Gras hoch 3" if t < 0.75 else ("Gras 2" if t < 0.92 else "Gras trocken"))
+    hs = min(hmax, 0.35 + 0.5 * T.noise(x / 7.0, y / 7.0, T.SEED + 441) + 0.15 * T._h01(ix, iy, 5092))
+    for k in range(5):
+        a = ph + 1.26 * k
+        r = 0.05 + 0.04 * (k % 3)
+        h = hs * (0.75 + 0.25 * ((k * 31) % 10) / 10.0)
+        lean = (0.2 * h * math.cos(a + 0.5), 0.2 * h * math.sin(a + 0.5))
+        _spitze(b, x + r * math.cos(a), y + r * math.sin(a), z0, h, lean, 0.03, a, mat)
+
+
 def _horst(b, x, y, z0, ix, iy):
     ph = T._h01(ix, iy, 5020) * 6.28
     hs = 0.7 + 0.6 * T._h01(ix, iy, 5021)
@@ -329,6 +343,21 @@ def bauen_gras(P):
                     _kurz(b, x + 0.3, y + 0.2, z0, ix, iy)
             else:
                 _kurz(b, x, y, z0, ix, iy)
+    # Hoehere Graeser auf ALLEN Gruenflaechen: zusaetzliches Streuraster (eigenes Rauschen, Lichtungen dazwischen), Pistennaehe niedriger gehalten
+    r2 = 2.4
+    for ix in range(int(300.0 / r2)):
+        for iy in range(int(300.0 / r2)):
+            x = ix * r2 + T._h01(ix, iy, 5101) * r2
+            y = iy * r2 + T._h01(ix, iy, 5102) * r2
+            fl = T.fbm(x / 8.0, y / 8.0, T.SEED + 451, 3)
+            if T._h01(ix, iy, 5103) > 0.22 + 0.55 * B.smoothstep(0.35, 0.60, fl):
+                continue
+            if not M.ok(x, y):
+                continue
+            nah = M.pistennah(x, y)
+            if nah and T._h01(ix, iy, 5104) > 0.3:
+                continue
+            _mittel(b, x, y, U.gelaende_hoehe(x, y) - 0.02, ix, iy, 0.45 if nah else 0.9)
     # Farn: im Unterholz der Waldflaechen und an Huegelkuppen; Schilf: an den Teichen
     import wald as W
     for (tx, ty, _k) in W.alle_baeume(P):

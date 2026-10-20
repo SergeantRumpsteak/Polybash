@@ -170,3 +170,16 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - Bankgebaeude (`oeffentlich.bankhaus`) auf der NW-Gruenflaeche im Kreis; Eckhaus an der Strassenbiegung zur Feuerwehr (45 Grad).
 - Bauernhof-Zufahrt als geschwungener Feldweg; Getreidefelder gerade ausgerichtet; mehr Baeume im Nordosten.
 - Tests sind reine Mock-Tests (kein echtes Blender).
+
+### Wegweiser, hohes Gras, Gewaechshaus, Kampfhubschrauber, neue Baeume, Ruinenplattformen (ausstattung.py, gras.py, bauernhof.py, flugzeug.py, baumarten.py, ruine.py, muehle.py, stadt.py, oeffentlich.py)
+- Wegweiser (gelbe Tafeln, Pfeile) an den Ringabzweigen: RATHAUS, BAHNHOF, FLUGPLATZ, KREISEL (= Nordkreisel), dazu STEINBRUCH am Abzweig nach Westen.
+- Hoehere Graeser (35..90 cm, `gras._mittel`) per Streuraster mit Rauschen ueber alle Gruenflaechen (an der Piste niedriger). Gras auf Asphalt: Fahrbahnhoehe beruecksichtigt die Nachbarschaft des Wiesennetzes (`umgebung._z_auf`), quer mehrere Stuetzpunkte; Test: kein Wiesendreieck durchstoesst eine Fahrbahn.
+- NW-Gruenflaeche im Kreis: Hotel (`oeffentlich.hotel`, begehbar, Rezeption, Zimmer; ein offenes Fenster) statt Bank. Die Bank steht jetzt auf der Zwischengruenflaeche im SW des Kreises, Eingang zum Bauernhof.
+- Neues Wohnhaus am NW-Eck des Marktrings zwischen Feuerwehr und Kirche.
+- Offene Fenster (`fensterschmuck(..., "offen")`, keine Scheibe, Fluegel aufgeschwenkt) im OG von etwa jedem dritten begehbaren Zweigeschosshaus. Treppenloch im OG beginnt jetzt eine Stufe frueher (Kopffreiheit bei schraeg gedrehten Haeusern).
+- Kampfhubschrauber (`flugzeug.kampfhubschrauber`, ca. 17 m, Vierblattrotor, Stummelfluegel mit vier 19-Rohr-Raketenbehaeltern und zwei Lenkflugkoerpern, sechslaeufige Minigun am Kinn) auf dem Helipad.
+- Gewaechshaus am Bauernhof (`bauernhof.gewaechshaus`): Halbzylinder 16 x 6,8 m aus durchsichtigem Glas (Material mit Alpha: `FARBEN`-Eintrag mit 4. Wert, `talkessel.material(..., alpha)`), Steinsockel, Rippen, Tuer zum Hof, innen begehbar mit Beeten und Pflanztisch.
+- Neue Baumarten (`baumarten.py`, 230..430 Flaechen je Baum): Eiche, Birke, Fichte, Waldkiefer, Pappel, Obstbaum. `wald.tanne/laubbaum`, Ortsbaeume und Hofobstbaeume nutzen sie; der dichte Randguertel behaelt die einfachen Baeume (`tanne_alt/laubbaum_alt`).
+- Hochsitz bei der Muehle entfernt; neuer Standort in der oestlichen Sattelsenke der Burgruine (94,5 / 264).
+- Burgruine: die drei Steintreppen enden in begehbaren Plattformen (Suedtreppe am Eckbastion, Nordtreppe hinter dem Palas, Turmtreppe auf der Nordmauerkrone) mit Bruestung; Treppen haben Bruchsteinbruestungen an der offenen Seite.
+- Tests sind reine Mock-Tests (kein echtes Blender).

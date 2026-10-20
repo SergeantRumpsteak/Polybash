@@ -257,6 +257,29 @@ for _k in ("Seerose Blatt", "Seerose Blatt hell", "Seerose weiss", "Seerose rosa
     U.FARBEN.setdefault(_k, S.FARBEN[_k])
 
 
+def wegweiser(b, x, y, zb, face, eintraege):
+    """Wegweiser: Mittelpfosten mit uebereinander gestapelten Richtungstafeln (gelb, schwarze Schrift, Pfeil); eintraege = [(Text, Pfeil)] von oben nach unten."""
+    n = len(eintraege)
+    for i, (text, pfeil) in enumerate(eintraege):
+        SC.schild(b, x, y, face, [("richtung", text, pfeil)], pfosten=False, unten=1.15 + 0.95 * (n - 1 - i), zb=zb)
+    h = 1.15 + 0.95 * n + 0.15
+    b.prism(x, y, zb - 0.5, 0.06, h + 0.5, 6, "Schild Pfosten")
+    b.bx.append((x - 0.06, y - 0.06, zb - 0.5, x + 0.06, y + 0.06, zb + h))
+
+
+def _wegweiser_orte():
+    """(Name, Winkel/Position, Blickrichtung, Eintraege): an den Ringabzweigen jeweils vor der Einmuendung auf der Aussenseite (Fahrer sehen die Vorderseite)."""
+    pi = math.pi
+    return (("Ring W nord", pi + 0.22, "S", [("RATHAUS", "links"), ("KREISEL", "oben")]),
+            ("Ring W sued", pi - 0.22, "N", [("RATHAUS", "rechts"), ("BAHNHOF", "oben")]),
+            ("Ring S west", -pi / 2 - 0.22, "W", [("FLUGPLATZ", "oben"), ("BAHNHOF", "rechts")]),
+            ("Ring S ost", -pi / 2 + 0.22, "E", [("BAHNHOF", "links")]),
+            ("Ring N west", pi / 2 + 0.22, "W", [("KREISEL", "links")]),
+            ("Ring N ost", pi / 2 - 0.22, "E", [("KREISEL", "rechts")]),
+            ("Ring O sued", -0.45, "S", [("FLUGPLATZ", "rechts")]),
+            ("Ring O nord", 0.45, "N", [("FLUGPLATZ", "links")]))
+
+
 def bauen(gruppen, P):
     """Gruppen 'ausstattung' (Brunnen, Haltestellen, Rastplaetze mit Tisch und Baenken, Teichbaenke) und 'seerosen'."""
     import gras as GR
@@ -279,12 +302,12 @@ def bauen(gruppen, P):
         belegt.append(_footprint(x, y, th, w, d))
         return True
 
-    def gras_ok(x0, y0, x1, y1):
+    def gras_ok(x0, y0, x1, y1, flug=False):
         """Alle Stichproben des Rechtecks sind Grasflaeche (nicht Strasse, Wasser, Graben, Hof, Flugplatz)."""
         for k in range(5):
             for m in range(5):
                 px, py = x0 + (x1 - x0) * k / 4, y0 + (y1 - y0) * m / 4
-                if M.im_flug(px, py) or not M.ok(px, py, flug_gras=False):
+                if (M.im_flug(px, py) and not flug) or not M.ok(px, py, flug_gras=flug):
                     return False
         return True
 
@@ -338,6 +361,30 @@ def bauen(gruppen, P):
                 continue
             if setze(bank, x, y, th, w, dd, zb_tol=0.5, teich_ok=True):
                 n += 1
+    # Wegweiser an den Ringabzweigen (Rathaus, Bahnhof, Flugplatz, Kreisel = Nordkreisel) und am Abzweig zum Steinbruch
+    def wegweiser_setzen(anker, face, eintraege):
+        th = 0 if face in ("N", "S") else 90
+        w = max(SC._tafel_breite(t, p) for t, p in eintraege) + 0.2
+        kand = sorted(((dx, dy) for dx in range(-12, 13) for dy in range(-12, 13)), key=lambda q: q[0] ** 2 + q[1] ** 2)
+        for dx, dy in kand:
+            x, y = anker[0] + dx * 0.75, anker[1] + dy * 0.75
+            x0, y0, x1, y1 = _footprint(x, y, th, w, 0.4)
+            if not gras_ok(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1 + 0.3, flug=True):
+                continue
+            if any(bx0 < x1 and bx1 > x0 and by0 < y1 and by1 > y0 for (bx0, by0, bx1, by1) in belegt):
+                continue
+            ok, zb = _ort_ok(R, P, x, y, th, w, 0.4, zb_tol=0.9)
+            if ok:
+                wegweiser(b, x, y, zb, face, eintraege)
+                PLATZIERT.append(("wegweiser:" + eintraege[0][0], round(x, 1), round(y, 1), face))
+                belegt.append((x0, y0, x1, y1))
+                return True
+        print("Hinweis: Wegweiser %s nicht platzierbar" % eintraege[0][0])
+        return False
+
+    for (_n, a, face, eintr) in _wegweiser_orte():
+        wegweiser_setzen(U.ring_punkt(a, U.BREITE_WEG / 2 + 1.5), face, eintr)
+    wegweiser_setzen((86.3, 108.0), "N", [("STEINBRUCH", "rechts")])
     ABGESETZT.clear()
     # Seerosen auf allen Teichen
     sr = Bau("seerosen")

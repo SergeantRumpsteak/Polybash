@@ -24,8 +24,8 @@ def _h(ix, iy, s):
     return T._h01(ix, iy, 7000 + s)
 
 
-def tanne(b, x, y, zb, rnd):
-    """Fichte/Tanne: Stamm und vier Kronenstufen (Kegel, 7 Ecken); Krone beginnt bei ~2,2 m."""
+def tanne_alt(b, x, y, zb, rnd):
+    """(Einfache Variante, fuer den dichten Randguertel) Fichte/Tanne: Stamm und vier Kronenstufen (Kegel, 7 Ecken); Krone beginnt bei ~2,2 m."""
     hs = 0.8 + 0.8 * rnd(1)
     b.prism(x, y, zb - 0.15, 0.24, 2.6 * hs + 0.15, 6, "Stamm")
     mat = "Tanne" if rnd(2) < 0.6 else "Tanne hell"
@@ -40,8 +40,8 @@ def tanne(b, x, y, zb, rnd):
     b.bx.append((x - 0.25, y - 0.25, zb, x + 0.25, y + 0.25, zb + 2.6 * hs))
 
 
-def laubbaum(b, x, y, zb, rnd):
-    """Eiche/Buche: hoher Stamm, zwei versetzte Kronenkoerper (Bipyramiden mit unregelmaessigem Ring)."""
+def laubbaum_alt(b, x, y, zb, rnd):
+    """(Einfache Variante, fuer den dichten Randguertel) Eiche/Buche: hoher Stamm, zwei versetzte Kronenkoerper (Bipyramiden mit unregelmaessigem Ring)."""
     hs = 0.9 + 0.5 * rnd(1)
     b.prism(x, y, zb - 0.15, 0.28, 3.0 * hs + 0.15, 6, "Stamm")
     mat = "Laub" if rnd(2) < 0.5 else ("Laub hell" if rnd(2) < 0.85 else "Laub herbst")
@@ -57,6 +57,12 @@ def laubbaum(b, x, y, zb, rnd):
         f = [(i, (i + 1) % n, n) for i in range(n)] + [((i + 1) % n, i, n + 1) for i in range(n)]
         b.add(ring + [top, bot], f, mat)
     b.bx.append((x - 0.28, y - 0.28, zb, x + 0.28, y + 0.28, zb + 3.0 * hs))
+
+
+import baumarten as BM  # noqa: E402
+
+tanne = BM.nadelbaum                                                   # detailreiche Baumarten (baumarten.py): Fichte, Kiefer / Eiche, Birke, Pappel
+laubbaum = BM.laubbaum
 
 
 def busch(b, x, y, zb, rnd):

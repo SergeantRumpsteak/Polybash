@@ -153,7 +153,7 @@ class Ruine:
                         c0 = rnd.uniform(b0, max(b0, b1 - 0.6))
                         self.pbox(ach, c0, min(b1, c0 + rnd.uniform(0.4, 1.0)), min(fc, fc + sg * 0.03), max(fc, fc + sg * 0.03), zr, zr + h, rnd.choice(("Efeu", "Efeu hell")), fein=True)
 
-    def treppe(self, ach, vorz, start, quer0, quer1, n, rise, run, z_start=0.0, mat=None):
+    def treppe(self, ach, vorz, start, quer0, quer1, n, rise, run, z_start=0.0, mat=None, rail=None):
         """Treppe laengs ach: Stufe i deckt [start + vorz*run*i, +run] ab, quer von quer0..quer1; Steigungen leicht unregelmaessig (<= 0,30 m)."""
         rnd = self.rnd
         steig = [rise * rnd.uniform(0.92, 1.06) for _ in range(n)]
@@ -167,6 +167,9 @@ class Ruine:
             q0 = quer0
             m = mat or rnd.choice(("Burgstein", "Stein alt", "Burgstein warm"))
             self.pbox(ach, lo, hi, q0, quer1, z_start - 0.6 if i == 0 else z_start, z, m)
+            if rail and i >= rail[1]:                                       # niedrige Bruchsteinbrüstung an der offenen Seite (Absturzschutz), rail = (Seite, ab Stufe)
+                qa, qb = (quer0, quer0 + 0.2) if rail[0] == "min" else (quer1 - 0.2, quer1)
+                self.pbox(ach, lo, hi, qa, qb, z, z + 0.85, "Burgstein dunkel")
         return z
 
     def brocken(self, x, y, z, r, mat=None, flach=0.7):
@@ -222,7 +225,11 @@ def burg(R):
             R.box(x, -9.75, 3.9, x + 0.8, -9.25, 4.85, rnd.choice(MAUER))
         x += 1.55
     # Treppe an der Innenseite zum Wehrgang
-    R.treppe("x", -1, -3.0, -8.25, -7.25, 14, 3.9 / 14, 0.30)
+    R.treppe("x", -1, -3.0, -8.25, -7.25, 14, 3.9 / 14, 0.30, rail=("max", 3))
+    # Plattform am oberen Ende (verbindet Treppe, Wehrgang und Eckbastion; Bruestung an den offenen Kanten)
+    R.box(-8.6, -8.25, -1.3, -6.9, -6.8, 3.9, "Stein alt")
+    R.box(-8.6, -6.95, 3.9, -6.9, -6.8, 4.75, "Burgstein dunkel")
+    R.box(-7.05, -7.25, 3.9, -6.9, -6.95, 4.75, "Burgstein dunkel")
     # ---- Eckbastion Suedwest (Plattform 3,9 m)
     R.box(-12.0, -10.4, -1.3, -8.6, -6.8, 3.9, "Stein alt")
     R.relief("x", -10.4, -1, -12.0, -8.6, 0.0, 3.9)
@@ -252,7 +259,11 @@ def burg(R):
     # ---- Nordmauer: Krone 2,8 m, Treppe von der Hofseite
     R.mauer("x", 10.0, -11.5, -9.5, 1.5, interp([(-11.5, 5.2), (-9.5, 3.4)]))
     R.mauer("x", 10.0, -9.5, 3.9, 1.5, lambda a: 2.8, opens=((-1.2, -0.7, 1.0, 2.0),), flach=True)
-    R.treppe("x", -1, 3.1, 8.25, 9.25, 10, 2.8 / 10, 0.30)
+    R.treppe("x", -1, 3.1, 8.25, 9.25, 10, 2.8 / 10, 0.30, rail=("min", 3))
+    # Plattform am oberen Ende (an der Palas-Giebelwand und der Nordmauerkrone; Bruestung an den offenen Seiten)
+    R.box(-1.7, 7.6, -0.6, 0.1, 9.25, 2.8, "Stein alt")
+    R.box(-1.7, 7.6, 2.8, 0.1, 7.75, 3.65, "Burgstein dunkel")
+    R.box(-0.05, 7.75, 2.8, 0.1, 8.25, 3.65, "Burgstein dunkel")
     # ---- Ostmauer mit Bresche (Halde)
     R.mauer("y", 10.75, -8.25, -5.8, 1.5, interp([(-8.25, 3.4), (-5.8, 1.6)]))
     R.mauer("y", 10.75, -2.0, 3.0, 1.5, interp([(-2.0, 1.8), (0.5, 3.0), (3.0, 4.2)]))
@@ -273,8 +284,12 @@ def burg(R):
     # Treppen im Turm: Lauf A (Sued, nach Ost), Podest, Lauf B (Ost, nach Nord) bis zur Mauerkrone
     ra = R.treppe("x", 1, 5.55, 4.65, 5.65, 11, 0.28, 0.30)
     R.box(8.85, 4.65, -0.6, 9.85, 5.65, ra + 0.28, "Burgstein")                                  # Podest
-    rb = R.treppe("y", 1, 5.65, 8.85, 9.85, 11, 0.28, 0.30, z_start=ra + 0.28)
+    rb = R.treppe("y", 1, 5.65, 8.85, 9.85, 11, 0.28, 0.30, z_start=ra + 0.28, rail=("min", 0))
     R.box(8.85, 5.65 + 0.30 * 10, rb - 0.1, 9.85, 9.1, rb, "Burgstein")                         # oberste Stufe bis zur Krone
+    # Plattform am Treppenende: Auflager an der Nordmauer (Krone 6,72 m) reicht 1,1 m in den Turm; Bruestung zur Turmmitte
+    R.box(6.2, 8.0, 5.9, 8.85, 9.1, 6.72, "Burgstein")
+    R.box(6.2, 7.85, 6.72, 8.85, 8.0, 7.55, "Burgstein dunkel")
+    R.box(6.2, 8.0, 6.72, 6.4, 9.1, 7.55, "Burgstein dunkel")
     for (cx, cy) in ((5.7, 8.9), (5.7, 6.0)):                                                     # Balkenkonsolen der zerstoerten Decke
         R.fein(cx - 0.15, cy - 0.15, 4.0, cx + 0.2, cy + 0.2, 4.3, "Burgstein warm")
     for yy in (5.4, 6.9, 8.2):

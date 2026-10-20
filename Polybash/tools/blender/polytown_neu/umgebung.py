@@ -344,24 +344,36 @@ def _wiesenrauschen(x, y):
 
 
 def _z_auf(x, y, z0, hf):
+    """Hoehe der Fahrbahn: Wiese am Punkt, dazu die hoechste Wiesenhoehe der Nachbarschaft (das Wiesennetz hat nur 2,5 m Gitterweite und kann zwischen
+    den Stuetzpunkten ueber der exakten Hoehe liegen), um hoechstens 0,22 m, und ein kleiner Zuschlag - so schauen keine Gruenflecken durch die Fahrbahn."""
     h = hf(x, y) if hf else 0.0
-    return h + z0 + 0.03 * min(1.0, abs(h) / 0.05)                     # kleiner Zuschlag, damit die Wiese nicht durchsticht
+    if hf:
+        hn = max(hf(x + 1.25, y), hf(x - 1.25, y), hf(x, y + 1.25), hf(x, y - 1.25))
+        h += min(0.22, max(0.0, hn - h))
+    return h + z0 + 0.04 * min(1.0, abs(h) / 0.02)
 
 
 # ------------------------------------------------------------------ flache Wegstuecke (Oberflaechen)
-def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=3.0):
+def _quer(w):
+    """Zahl der Stuetzpunkte quer zur Fahrbahn (etwa alle 1,6 m): so durchstoesst keine schmale Bodenwelle in der Wegmitte die Fahrbahn."""
+    return max(2, int(math.ceil(w / 1.6)) + 1)
+
+
+def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=1.5):
     """Gerades Wegstueck von p0 nach p1 (Breite w), dem Gelaende folgend (Hoehe z ueber der Wiese), Normale nach oben."""
     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
     ln = math.hypot(dx, dy)
-    nx, ny = -dy / ln * w / 2, dx / ln * w / 2
+    nx, ny = -dy / ln, dx / ln
     n = max(1, int(math.ceil(ln / schritt)))
+    K = _quer(w)
     v = []
     for i in range(n + 1):
         cx, cy = p0[0] + dx * i / n, p0[1] + dy * i / n
-        for sg in (1, -1):
-            x, y = cx + sg * nx, cy + sg * ny
+        for c in range(K):
+            o = w / 2 - w * c / (K - 1)
+            x, y = cx + o * nx, cy + o * ny
             v.append((x, y, _z_auf(x, y, z, hf)))
-    f = [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)]
+    f = [(i * K + c, i * K + c + 1, (i + 1) * K + c + 1, (i + 1) * K + c) for i in range(n) for c in range(K - 1)]
     b.add(v, f, mat)
 
 
@@ -395,8 +407,8 @@ def rund(pts, r, geschlossen=False, n=8):
     return out
 
 
-def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=3.0):
-    """Weg (Breite w) entlang eines Linienzugs, dem Gelaende folgend; zu lange Stuecke werden unterteilt. Normale nach oben."""
+def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=1.5):
+    """Weg (Breite w) entlang eines Linienzugs, dem Gelaende folgend; zu lange Stuecke werden unterteilt, quer mehrere Stuetzpunkte. Normale nach oben."""
     q = []
     m = len(pts)
     for i in range(m if geschlossen else m - 1):
@@ -408,32 +420,37 @@ def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=3.0):
         q.append(tuple(pts[-1]))
     v = []
     M = len(q)
+    K = _quer(w)
     for i in range(M):
         a = q[(i - 1) % M] if (geschlossen or i > 0) else q[i]
         c = q[(i + 1) % M] if (geschlossen or i < M - 1) else q[i]
         dx, dy = c[0] - a[0], c[1] - a[1]
         ln = math.hypot(dx, dy) or 1.0
-        nx, ny = -dy / ln * w / 2, dx / ln * w / 2
-        for sg in (1, -1):
-            x, y = q[i][0] + sg * nx, q[i][1] + sg * ny
+        nx, ny = -dy / ln, dx / ln
+        for k in range(K):
+            o = w / 2 - w * k / (K - 1)
+            x, y = q[i][0] + o * nx, q[i][1] + o * ny
             v.append((x, y, _z_auf(x, y, z, hf)))
-    f = [(2 * i, 2 * i + 1, 2 * ((i + 1) % M) + 1, 2 * ((i + 1) % M)) for i in range(M if geschlossen else M - 1)]
+    f = [(i * K + k, i * K + k + 1, ((i + 1) % M) * K + k + 1, ((i + 1) % M) * K + k) for i in range(M if geschlossen else M - 1) for k in range(K - 1)]
     b.add(v, f, mat)
 
 
-def ring(b, w, z, mat, n=180, hf=gelaende_hoehe):
-    """Ringweg (Breite w) um die Burgmitte mit schwankendem Mittelradius ring_r(a), dem Gelaende folgend; n Vierecke."""
+def ring(b, w, z, mat, n=240, hf=gelaende_hoehe):
+    """Ringweg (Breite w) um die Burgmitte mit schwankendem Mittelradius ring_r(a), dem Gelaende folgend; n Teilstuecke, quer mehrere Stuetzpunkte."""
     v = []
+    K = _quer(w)
     for i in range(n):
         a = 2 * math.pi * i / n
         r = ring_r(a)
-        for rr in (r - w / 2, r + w / 2):
+        for k in range(K):
+            rr = r - w / 2 + w * k / (K - 1)
             x, y = C + rr * math.cos(a), C + rr * math.sin(a)
             v.append((x, y, _z_auf(x, y, z, hf)))
     f = []
     for i in range(n):
         j = (i + 1) % n
-        f.append((2 * i, 2 * i + 1, 2 * j + 1, 2 * j))                 # innen, aussen, aussen weiter, innen weiter
+        for k in range(K - 1):
+            f.append((i * K + k, i * K + k + 1, j * K + k + 1, j * K + k))
     b.add(v, f, mat)
 
 
@@ -1079,7 +1096,7 @@ def flugzeuge():
         FL.stuka(b, STUKA_X, yy, 225.0)
     for yc, typ in zip(REIHE_YC, ("bf109", "fw190", "spitfire")):
         FL.jaeger(b, REIHE_X0 + 7.6, yc, 180.0, typ, Z_BODEN)
-    FL.hubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)                       # Hubschrauber auf dem Helipad
+    FL.kampfhubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)                  # Kampfhubschrauber auf dem Helipad
     return b
 
 

@@ -596,3 +596,109 @@ def hubschrauber(b, ox, oy, psi, z0=0.0):
             ps = [f.P(x, y, 0.0, False) for x in (x0, x1) for y in (-hy_, hy_)]
             b.bx.append((min(p[0] for p in ps), min(p[1] for p in ps), z0, max(p[0] for p in ps), max(p[1] for p in ps), z0 + hz))
     return b
+
+
+# ------------------------------------------------------------------ Kampfhubschrauber
+FARBEN.update({"Heli Oliv": ((0.15, 0.17, 0.12), 0.6, 0.0), "Heli Dunkel": ((0.07, 0.08, 0.075), 0.55, 0.0), "Heli Rakete": ((0.30, 0.32, 0.27), 0.5, 0.0),
+               "Heli Spitze": ((0.55, 0.12, 0.08), 0.5, 0.0), "Heli Glas": ((0.12, 0.17, 0.2), 0.08, 0.0)})
+
+
+def kampfhubschrauber(b, ox, oy, psi, z0=0.0):
+    """Schwerer Kampfhubschrauber (Bauart AH-64 Apache): schmaler Tandemrumpf mit Doppelkanzel, Nasensensor, Kinn-Minigun mit sechs Laeufen,
+    zwei Triebwerksgondeln, Stummelfluegel mit vier 19-Rohr-Raketenbehaeltern und zwei Lenkflugkoerpern, Vierblatt-Hauptrotor (parkend), Heckrotor,
+    Spornradfahrwerk. Laenge ca. 17 m, Rotordurchmesser 14,6 m. Nase nach psi."""
+    ox, oy = ox + 1.5 * math.cos(math.radians(psi)), oy + 1.5 * math.sin(math.radians(psi))          # Rumpfmitte (x = -1,5) liegt auf dem Helipad-Mittelpunkt
+    f = Fz(b, ox, oy, psi, z0)
+    n = 12
+    ell = lambda x, w, h, zc: [(x, w * math.cos(2 * math.pi * k / n), zc + h * math.sin(2 * math.pi * k / n)) for k in range(n)]
+    # Rumpf: Nase -> Kabine -> Rumpfmitte -> Heckansatz
+    f.loft([ell(6.9, 0.22, 0.22, 1.05), ell(6.1, 0.55, 0.50, 1.15), ell(4.6, 0.82, 0.80, 1.35), ell(2.4, 0.88, 0.95, 1.55), ell(-0.6, 0.84, 0.95, 1.6),
+            ell(-2.6, 0.62, 0.72, 1.62), ell(-3.8, 0.38, 0.42, 1.68)], "Heli Oliv", nick=False)
+    # Kanzeln: vorn Schuetze (niedrig), dahinter Pilot (erhoeht), Glas
+    kup = lambda x, w, h, z0_: [(x, w * math.cos(math.pi * k / 10), z0_ + h * math.sin(math.pi * k / 10)) for k in range(11)]
+    f.loft([kup(6.4, 0.22, 0.2, 1.38), kup(5.8, 0.55, 0.70, 1.45), kup(4.8, 0.68, 0.74, 1.7), kup(4.2, 0.55, 0.45, 1.9)], "Heli Glas", caps=(True, True), nick=False)
+    f.loft([kup(3.9, 0.45, 0.35, 2.05), kup(3.3, 0.68, 0.78, 2.1), kup(2.2, 0.72, 0.80, 2.2), kup(1.5, 0.5, 0.45, 2.3)], "Heli Glas", caps=(True, True), nick=False)
+    f.kasten(4.05, 4.30, -0.72, 0.72, 1.70, 2.45, "Heli Dunkel", nick=False)                      # Panzersplitter-Trennwand zwischen den Kanzeln
+    # Nasensensor (Kugelturm) und Kinnturm
+    sph = lambda x, r, zc: [(x, r * math.cos(2 * math.pi * k / 10), zc + r * math.sin(2 * math.pi * k / 10)) for k in range(10)]
+    f.loft([sph(6.95, 0.12, 1.45), sph(7.25, 0.34, 1.45), sph(7.6, 0.30, 1.45), sph(7.95, 0.0001, 1.45)], "Heli Dunkel", nick=False)
+    f.kasten(5.0, 6.0, -0.30, 0.30, 0.55, 0.95, "Heli Dunkel", nick=False)
+    # Minigun: Drehkranz, sechs Laeufe (Buendel) mit Klemmringen, Munitionstrommel
+    f.kasten(5.45, 5.95, -0.28, 0.28, 0.3, 0.58, "Flug Metall", nick=False)
+    for k in range(6):
+        a = 2 * math.pi * k / 6
+        yy, zz = 0.11 * math.cos(a), 0.46 + 0.11 * math.sin(a)
+        f.beam((5.9, yy, zz), (7.55, yy, zz), 0.05, 0.05, "Flug Schwarz", False, False)
+    for xr in (6.2, 6.9, 7.5):
+        f.loft([[(xr, 0.2 * math.cos(2 * math.pi * k / 8), 0.46 + 0.2 * math.sin(2 * math.pi * k / 8)) for k in range(8)],
+                [(xr + 0.08, 0.2 * math.cos(2 * math.pi * k / 8), 0.46 + 0.2 * math.sin(2 * math.pi * k / 8)) for k in range(8)]], "Flug Metall", nick=False)
+    f.kasten(4.2, 5.4, -0.34, 0.34, 0.28, 0.62, "Heli Dunkel", nick=False)
+    # Triebwerksgondeln beiderseits des Rotormasts mit Lufteinlass und Auspuff
+    for sg in (-1, 1):
+        cy = sg * 0.95
+        f.loft([[(3.1, cy + 0.32 * math.cos(2 * math.pi * k / 10), 2.55 + 0.34 * math.sin(2 * math.pi * k / 10)) for k in range(10)],
+                [(2.0, cy + 0.46 * math.cos(2 * math.pi * k / 10), 2.55 + 0.46 * math.sin(2 * math.pi * k / 10)) for k in range(10)],
+                [(-1.8, cy + 0.46 * math.cos(2 * math.pi * k / 10), 2.55 + 0.46 * math.sin(2 * math.pi * k / 10)) for k in range(10)],
+                [(-3.1, cy + 0.30 * math.cos(2 * math.pi * k / 10), 2.5 + 0.30 * math.sin(2 * math.pi * k / 10)) for k in range(10)]], "Heli Oliv", nick=False)
+        f.loft([[(-3.1, cy + 0.22 * math.cos(2 * math.pi * k / 8), 2.5 + 0.22 * math.sin(2 * math.pi * k / 8)) for k in range(8)],
+                [(-3.5, cy + 0.2 * math.cos(2 * math.pi * k / 8), 2.5 + 0.2 * math.sin(2 * math.pi * k / 8)) for k in range(8)]], "Heli Dunkel", nick=False)
+    f.kasten(-2.8, 2.0, -0.95, 0.95, 2.1, 2.5, "Heli Oliv", nick=False)                           # Getriebeverkleidung zwischen den Gondeln
+    # Heckausleger, Seitenflosse, Hoehenleitwerk, Heckrotor
+    m = 10
+    ring2 = lambda x, w, h, zc: [(x, w * math.cos(2 * math.pi * k / m), zc + h * math.sin(2 * math.pi * k / m)) for k in range(m)]
+    f.loft([ring2(-3.6, 0.40, 0.45, 1.7), ring2(-6.5, 0.30, 0.36, 1.85), ring2(-9.6, 0.16, 0.24, 2.1)], "Heli Oliv", nick=False)
+    f.poly([(-8.2, 0.0, 2.0), (-9.4, 0.0, 2.1), (-10.5, 0.0, 4.2), (-9.4, 0.0, 4.2)], "Heli Oliv", (0, 1, 0), nick=False)
+    f.poly([(-8.2, 0.0, 2.0), (-9.4, 0.0, 2.1), (-9.9, 0.0, 1.3), (-9.0, 0.0, 1.2)], "Heli Oliv", (0, 1, 0), nick=False)
+    f.poly([(-8.0, -1.9, 2.2), (-8.0, 1.9, 2.2), (-9.4, 1.8, 2.2), (-9.4, -1.8, 2.2)], "Heli Oliv", (0, 0, 1), nick=False)
+    f.kasten(-10.3, -10.0, -0.3, -0.0, 3.45, 3.75, "Flug Metall", nick=False)
+    for k in range(2):
+        a = math.radians(90.0 * k + 20.0)
+        f.beam((-10.15, -0.15, 3.6), (-10.15, -0.15 + 1.35 * math.cos(a), 3.6 + 1.35 * math.sin(a)), 0.16, 0.04, "Flug Schwarz", False, False)
+        f.beam((-10.15, -0.15, 3.6), (-10.15, -0.15 - 1.35 * math.cos(a), 3.6 - 1.35 * math.sin(a)), 0.16, 0.04, "Flug Schwarz", False, False)
+    # Stummelfluegel mit Behaeltern: je Seite innen 19-Rohr-Raketenbehaelter (Rohrbuendel sichtbar), aussen Lenkflugkoerper
+    for sg in (-1, 1):
+        f.loft([[(2.2, sg * 0.85, 1.35 + 0.0), (0.2, sg * 0.85, 1.3), (0.2, sg * 0.85, 1.42), (2.2, sg * 0.85, 1.5)],
+                [(2.0, sg * 3.6, 1.28), (0.8, sg * 3.6, 1.26), (0.8, sg * 3.6, 1.36), (2.0, sg * 3.6, 1.38)]], "Heli Oliv", nick=False)
+        for yy in (1.55, 2.5):                                                                   # Raketenbehaelter
+            y_ = sg * yy
+            r = 0.30
+            pod = lambda x, rr: [(x, y_ + rr * math.cos(2 * math.pi * k / 10), 1.05 + rr * math.sin(2 * math.pi * k / 10)) for k in range(10)]
+            f.loft([pod(2.8, 0.12), pod(2.55, r), pod(0.0, r), pod(-0.1, 0.22)], "Heli Rakete", nick=False)
+            f.beam((1.1, y_, 1.2), (1.1, y_, 1.28), 0.05, 0.05, "Flug Metall", False, False)
+            f.beam((0.5, y_, 1.2), (0.5, y_, 1.28), 0.05, 0.05, "Flug Metall", False, False)
+            for k in range(7):                                                                   # Raketenspitzen in den Rohren (vorn)
+                a = 2 * math.pi * k / 7 if k < 6 else 0.0
+                rr = 0.17 if k < 6 else 0.0
+                f.loft([[(2.58, y_ + rr * math.cos(a) + 0.045 * math.cos(2 * math.pi * j / 5), 1.05 + rr * math.sin(a) + 0.045 * math.sin(2 * math.pi * j / 5)) for j in range(5)],
+                        [(2.9, y_ + rr * math.cos(a) + 0.012 * math.cos(2 * math.pi * j / 5), 1.05 + rr * math.sin(a) + 0.012 * math.sin(2 * math.pi * j / 5)) for j in range(5)]], "Heli Spitze", caps=(False, False), nick=False)
+        yo = sg * 3.45                                                                              # Lenkflugkoerper (zwei uebereinander) am Aussenpylon
+        for zz in (0.98, 0.7):
+            f.beam((2.9, yo, zz), (0.4, yo, zz), 0.16, 0.16, "Heli Rakete", False, False)
+            f.beam((2.9, yo, zz), (3.4, yo, zz), 0.1, 0.1, "Heli Spitze", False, False)
+            for xx in (0.5, 2.7):
+                f.poly([(xx, yo - 0.4, zz), (xx + 0.35, yo - 0.4, zz), (xx + 0.35, yo + 0.4, zz), (xx, yo + 0.4, zz)], "Heli Dunkel", (0, 0, 1), nick=False)
+        f.beam((1.2, yo, 1.28), (1.2, yo, 0.62), 0.07, 0.07, "Flug Metall", False, False)
+    # Fahrwerk: zwei Hauptfahrwerke mit Streben, Spornrad
+    for sg in (-1, 1):
+        f.beam((1.8, sg * 0.75, 1.0), (1.6, sg * 1.45, 0.45), 0.09, 0.09, "Flug Metall", False, False)
+        f.beam((1.4, sg * 0.75, 1.0), (1.6, sg * 1.45, 0.45), 0.07, 0.07, "Flug Metall", False, False)
+        f.rad(1.6, sg * 1.5, 0.42, 0.42, 0.28)
+    f.beam((-7.4, 0.0, 1.9), (-7.7, 0.0, 0.5), 0.09, 0.09, "Flug Metall", False, False)
+    f.rad(-7.7, 0.0, 0.33, 0.33, 0.2)
+    # Hauptrotor: Mast, Nabe, vier Blaetter (parkend, im Kreuz), Blattspitzen dunkel
+    f.beam((0.5, 0.0, 2.5), (0.5, 0.0, 3.55), 0.28, 0.28, "Flug Metall", False, False)
+    f.kasten(0.2, 0.8, -0.3, 0.3, 3.5, 3.72, "Heli Dunkel", nick=False)
+    for k in range(4):
+        a = math.radians(40.0 + 90.0 * k)
+        f.beam((0.5, 0.0, 3.62), (0.5 + 7.3 * math.cos(a), 7.3 * math.sin(a), 3.52), 0.42, 0.05, "Flug Schwarz", False, False)
+        f.beam((0.5 + 6.7 * math.cos(a), 6.7 * math.sin(a), 3.53), (0.5 + 7.3 * math.cos(a), 7.3 * math.sin(a), 3.52), 0.43, 0.055, "Heli Spitze", False, False)
+    # Auspuffblenden und Lampen
+    f.kasten(6.1, 6.2, -0.08, 0.08, 0.95, 1.05, "Flug Gelb", nick=False)
+    for sg in (-1, 1):
+        f.poly([(0.1, sg * 0.86, 1.2), (1.5, sg * 0.86, 1.2), (1.5, sg * 0.86, 1.9), (0.1, sg * 0.86, 1.9)], "Heli Dunkel", (0, sg, 0), nick=False)
+    # Kollision (nur bei Kurs im 90-Grad-Raster): Rumpf, Heck, Stummelfluegel
+    if round(psi) % 90 == 0:
+        for (x0, x1, hy_, hz) in ((-3.8, 7.2, 1.1, 3.0), (-10.5, -3.8, 0.45, 3.4), (0.0, 3.0, 3.8, 1.5)):
+            ps = [f.P(x, y, 0.0, False) for x in (x0, x1) for y in (-hy_, hy_)]
+            b.bx.append((min(p[0] for p in ps), min(p[1] for p in ps), z0, max(p[0] for p in ps), max(p[1] for p in ps), z0 + hz))
+    return b
