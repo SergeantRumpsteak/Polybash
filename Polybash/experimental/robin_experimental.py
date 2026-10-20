@@ -1406,7 +1406,7 @@ MOB_HIT_UP = 0.3           # m: Monster-Schlag reicht so weit über den eigenen 
 MOB_HIT_DOWN = 0.5         # m: ... und so weit unter die eigenen Füsse (Spieler in einer Mulde)
 # --- 7a: Titan (und Koloss) bleiben nicht mehr hängen
 TITAN_PASS_PROPS = ("tree", "rock")   # durch diese Hindernisse läuft der Titan einfach durch (Gebäude/Mauern nicht)
-MOB_STUCK_KINDS = ("titan", "colossus")   # diese Arten erkennen, wenn sie festhängen ...
+MOB_STUCK_KINDS = ("titan", "colossus", "drone", "pdrone", "gdrone")   # diese Arten erkennen, wenn sie festhängen ...
 MOB_STUCK_T = 2.5          # s ohne Fortschritt -> festgefahren ...
 MOB_DETOUR_T = 2.2         # ... dann so lange schräg zur Seite (Umweg) ...
 MOB_DETOUR_ANGS = (75.0, -75.0, 140.0, -140.0, 180.0)   # ... nacheinander um diese Winkel (Grad) neben die
@@ -2954,6 +2954,8 @@ class Mob:
         if self.hover <= 0 and check:                # Fliegende stossen nicht an niedrige Hindernisse
             self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz,
                                       skip=TITAN_PASS_PROPS if self.kind == "titan" else ())
+        elif self.hover > 0 and self.state != "dead":   # Drohnen: nicht durch Gebäude/Wände (aber über Dächern und Bäumen)
+            self.x, self.y = push_out(self.x, self.y, max(self.radius, 0.4), world, self.z, air=True)
         lo = edge_margin(world)
         self.x = clampf(self.x, lo, WORLD - lo)
         self.y = clampf(self.y, lo, WORLD - lo)
@@ -3308,17 +3310,18 @@ def z_overlap(a0, a1, b0, b1, tol=MOB_Z_TOL):
     return min(a1, b1) - max(a0, b0) > tol
 
 
-def push_out(x, y, r, world, z=None, veh=-1, skip=()):
+def push_out(x, y, r, world, z=None, veh=-1, skip=(), air=False):
     """Kreis (x,y,r) aus allen festen Objekten (Bäume, Felsen, Teiche, Gebäude,
     Fahrzeuge) schieben. z = Fusshöhe: Quader, über deren Oberkante man steht
     (abzüglich STEP_H), und Quader über dem Kopf blockieren nicht.
     veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
-    (Titan: TITAN_PASS_PROPS)."""
+    (Titan: TITAN_PASS_PROPS). air = Flieger (Drohne): Bäume/Felsen/Fahrzeuge unter ihr blockieren nicht, Wände und Gebäude
+    (Quader, Netz-Karte) schon - sie fliegt nicht durch Mauern."""
     under = z is not None and z < TUN_ROOF - 0.5         # 7c: im Tunnel stören Bäume/Felsen darüber nicht
     # 12: nur Props aus dem Raster in der Nähe statt aller Props - gleiche Reihenfolge wie die Prop-Liste. Wird der Kreis
     # verschoben, kommen die Nachbarn an der neuen Stelle dazu (nur spätere Props, wie früher beim Durchlauf der Liste):
     # Ergebnis exakt wie vorher, nur ohne die Schleife über alle Props.
-    cand = () if under else world.solid_near_idx(x, y, r)
+    cand = () if (under or air) else world.solid_near_idx(x, y, r)
     k = 0
     while k < len(cand):
         idx, p = cand[k]
@@ -3340,7 +3343,7 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=()):
                 if e[0] > idx:
                     rest[e[0]] = e
             cand, k = [rest[i] for i in sorted(rest)], 0
-    for v in world.vehicles:                     # Fahrzeuge sind feste Hindernisse
+    for v in (() if air else world.vehicles):    # Fahrzeuge sind feste Hindernisse
         if v.hp <= 0 or v.id == veh or (z is not None and abs(z - v.z) > 2.0):
             continue
         ddx, ddy = x - v.x, y - v.y

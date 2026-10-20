@@ -2,6 +2,9 @@
 
 Neueste Änderungen oben.
 
+## Drohnen fliegen nicht mehr durch Gebäude und Wände (2026-10-21)
+- GEFIXT Alle Drohnen (Elektro-, Spieler- und Abwehrdrohne) werden jetzt von Wänden und Gebäuden (Quader und Karten-Kollision) gestoppt (`push_out(..., air=True)` mit der Flughöhe der Drohne). Über Dächern, Bäumen und Fahrzeugen fliegen sie weiterhin frei. Hängen sie an einer Wand fest, suchen sie wie Titan/Koloss einen Umweg.
+
 ## CTF-Regelseite vor dem Start, Flugzeug-Kollision, Burgruine, Vorschaubild (2026-10-21)
 - GEÄNDERT **CTF (Hauptspiel):** Bei Capture the Flag erscheint nach „Start“ zuerst die Seite „CTF-Regeln“ und muss bestätigt werden („Spiel starten“ / Enter; „Zurück“ / Esc bricht ab). Der Knopf „CTF-Regeln“ im normalen Menü und die Taste C entfallen. Ausserdem: CTF-Logik läuft jetzt wirklich im Spielschritt, Einzelspieler bekommt ein Team.
 - GEFIXT Polytown: **Flugzeuge am Flugplatz sind fest** (Kollisionsboxen für Stuka und Jäger); Startpunkte liegen nicht darin.
