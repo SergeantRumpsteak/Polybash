@@ -43,6 +43,22 @@ SPIN_NAMEN = {"tower_radar": 6.0 * 24.0}          # drehende Teile: Grad pro Sek
 BODEN = ("wiese", "berge", "burg_gelaende", "bruch_grube", "umgebung_wege", "stadt_wege", "umgebung_landebahn",
          "umgebung_helipad", "hof_boden", "acker", "ruine_weg")                  # begehbares Gelaende (Kollision als Dreiecke)
 
+# Blender-Material -> (Spiel-Textur, Kachelgroesse in m). Die Texturen erzeugt spiel.py selbst (TEXGEN); hier stehen nur Name und Massstab.
+TEXMAP = {}
+for _n in ("Wiese", "Wiese Rand"):
+    TEXMAP[_n] = ("pt_grass", 6.0)
+for _n in ("Strasse", "Weg", "Piste", "Vorfeld", "Fahrbahn", "Pfad"):
+    TEXMAP[_n] = ("pt_asphalt", 6.0)
+for _n in ("Wasser", "Teichwasser", "Brunnenwasser"):
+    TEXMAP[_n] = ("pt_water", 8.0)
+for _n in ("Mauerwerk", "Mauerwerk dunkel", "Hof", "Stufen", "Treppensaeule", "Burgstein", "Burgstein dunkel", "Burgstein warm"):
+    TEXMAP[_n] = ("pt_fort", 4.0)
+WASSER_ALPHA = 0.9                                # Wasser ist leicht durchsichtig
+KIND_KLIPP, KIND_ZWEI, KIND_DACH, KIND_EIN = 1, 2, 4, 8       # wie TriMesh in spiel.py
+DACH_NZ = 0.3                                     # Dachflaechen: nach oben zeigend (Neigung < ca. 73 Grad)
+
+WEGLASSEN = ("umgebung_heli",)                    # im Spiel eigenes Fahrzeug (HeliView), nicht Teil der Karte
+
 # ------------------------------------------------------------------ Abfangen der Blender-Aufrufe
 MATS = {}
 TEILE = []
@@ -131,7 +147,7 @@ def teile_umrechnen():
     """Teile in Weltkoordinaten (Objektposition/-drehung anwenden); drehende Teile bleiben lokal."""
     out = []
     for t in TEILE:
-        if not t["f"]:
+        if not t["f"] or t["name"] in WEGLASSEN:
             continue
         loc, rot = t["ob"].location, t["ob"].rotation_euler
         try:
@@ -155,9 +171,10 @@ def teile_umrechnen():
 
 # ------------------------------------------------------------------ Darstellung
 class Gruppe:
-    def __init__(self, cls, spin, key=None):
-        self.cls, self.spin, self.key = cls, spin, key
+    def __init__(self, cls, spin, key=None, tx=None):
+        self.cls, self.spin, self.key, self.tx = cls, spin, key, tx
         self.P, self.N, self.C, self.I = array.array("f"), array.array("H"), bytearray(), array.array("H")
+        self.UV = array.array("f")
         self.nv = 0
 
 
@@ -212,10 +229,10 @@ def darstellung(teile):
     fertig = []
     zaehl = collections.Counter()
 
-    def gruppe(cls, key, spin):
-        g = gruppen.get((cls, key))
+    def gruppe(cls, key, spin, tx):
+        g = gruppen.get((cls, tx, key))
         if g is None:
-            g = gruppen[(cls, key)] = Gruppe(cls, spin, None if spin else list(key))
+            g = gruppen[(cls, tx, key)] = Gruppe(cls, spin, None if spin else list(key), tx)
         return g
 
     for t in teile:
@@ -228,6 +245,7 @@ def darstellung(teile):
                 a, b = vk[fc[i]], vk[fc[(i + 1) % n]]
                 kanten[(a, b) if a < b else (b, a)] += 1
         faces = ausrichten(v, faces, zaehl)
+        t["fa"] = faces                                           # ausgerichtete Flaechen (fuer die Dach-Kollision)
         for fc, mn in zip(faces, fm):
             if mn.startswith("Heli "):
                 zaehl["heli"] += 1
@@ -238,6 +256,9 @@ def darstellung(teile):
                 zaehl["entartet"] += 1
                 continue
             rgb, _rauh, emit, alpha = MATS[mn]
+            tx = TEXMAP.get(mn)
+            if tx and tx[0] == "pt_water":
+                alpha = min(alpha, WASSER_ALPHA)
             if emit >= 1.0:
                 cls, f3 = 3, (1.0, 1.0, 1.0)
             else:
@@ -260,29 +281,37 @@ def darstellung(teile):
                 cx = sum(p[0] for p in pts) / len(pts)
                 cy = sum(p[1] for p in pts) / len(pts)
                 key = (int(math.floor(cx / CH)), int(math.floor(cy / CH)))
-            g = gruppe(cls, key, t["spin"])
+            txn = tx[0] if (tx and not t["spin"]) else None
+            g = gruppe(cls, key, t["spin"], txn)
             if g.nv + len(pts) > MAXV:
-                fertig.append(gruppen.pop((cls, key)))
-                g = gruppe(cls, key, t["spin"])
+                fertig.append(gruppen.pop((cls, txn, key)))
+                g = gruppe(cls, key, t["spin"], txn)
             base = g.nv
             code = oct_code(nrm)
             for p in pts:
                 g.P.extend(p)
                 g.N.append(code)
                 g.C += col
+                if txn:                                           # Texturkoordinaten: Ebene, die zur Flaechenrichtung passt (in Kacheln)
+                    if abs(nrm[2]) >= 0.7:
+                        g.UV.extend((p[0] / tx[1], p[1] / tx[1]))
+                    elif abs(nrm[0]) > abs(nrm[1]):
+                        g.UV.extend((p[1] / tx[1], p[2] / tx[1]))
+                    else:
+                        g.UV.extend((p[0] / tx[1], p[2] / tx[1]))
             for i in range(1, len(pts) - 1):
                 g.I.extend((base, base + i, base + i + 1))
             g.nv += len(pts)
             zaehl["flaechen"] += 1
     fertig.extend(gruppen.values())
-    fertig.sort(key=lambda g: (g.key or [-9999, -9999], g.cls))
+    fertig.sort(key=lambda g: (g.key or [-9999, -9999], g.cls, g.tx or ""))
     print("[Export] Darstellung:", dict(zaehl), "Gruppen", len(fertig), "Vertices", sum(g.nv for g in fertig))
     return fertig
 
 
 # ------------------------------------------------------------------ Kollision
 def gelaende_dreiecke(teile):
-    verts, tris = [], []
+    verts, tris, kinds = [], [], []
     for t in teile:
         if t["name"] not in BODEN:
             continue
@@ -297,13 +326,63 @@ def gelaende_dreiecke(teile):
                     continue
             for i in range(1, len(fc) - 1):
                 tris.append((off + fc[0], off + fc[i], off + fc[i + 1]))
+                kinds.append(0)
+    nboden = len(tris)
+    # Daecher: nach oben zeigende Flaechen mit "dach" im Materialnamen - begehbar (zweiseitig: auch Decke), nicht Teil der Gelaendehoehe
+    for t in teile:
+        if t["spin"] is not None or "fa" not in t:
+            continue
+        v = t["w"]
+        off = len(verts)
+        genutzt = False
+        for fc, mn in zip(t["fa"], t["fm"]):
+            if "dach" not in mn.lower() or len(fc) < 3:
+                continue
+            nrm = newell([v[i] for i in fc])
+            if nrm is None or nrm[2] < DACH_NZ:
+                continue
+            if not genutzt:
+                verts.extend(v)
+                genutzt = True
+            for i in range(1, len(fc) - 1):
+                tris.append((off + fc[0], off + fc[i], off + fc[i + 1]))
+                kinds.append(KIND_DACH | KIND_ZWEI)
+    print("[Export] Dach-Kollision:", len(tris) - nboden, "Dreiecke")
     # nur benutzte Vertices behalten
     benutzt = sorted({i for tr in tris for i in tr})
     neu = {a: k for k, a in enumerate(benutzt)}
     verts2 = [verts[a] for a in benutzt]
     tris2 = [(neu[a], neu[b], neu[c]) for a, b, c in tris]
     print("[Export] Gelaende-Kollision:", len(verts2), "Vertices,", len(tris2), "Dreiecke")
-    return verts2, tris2
+    return verts2, tris2, kinds
+
+
+def wasser_maske(teile, R):
+    """Wassermaske (0,5-m-Zellen, ein Byte je Zelle): 0 = kein tiefes Wasser, sonst (Wasserspiegel + 5) * 20 + 1. Tief heisst: Wasserflaeche
+    ueber der Zelle und Gelaende darunter. Im Spiel kommt man von Land nicht in diese Zellen (Spieler und Fahrzeuge), wer drin ist, kann
+    hinaus; wer hoeher als 1,5 m ueber dem Spiegel ist (Bruecke), wird nicht behindert."""
+    S, n = R.S, R.n
+    wz = [[None] * n for _ in range(n)]
+    for t in teile:
+        for fc, mn in zip(t["f"], t["fm"]):
+            if mn not in ("Wasser", "Teichwasser"):
+                continue
+            ps = [t["w"][i] for i in fc]
+            z = max(p[2] for p in ps)
+            for i in range(max(0, int(min(p[0] for p in ps) / S)), min(n, int(max(p[0] for p in ps) / S) + 1)):
+                for j in range(max(0, int(min(p[1] for p in ps) / S)), min(n, int(max(p[1] for p in ps) / S) + 1)):
+                    if R.wasser[j][i] and (wz[j][i] is None or z > wz[j][i]):
+                        wz[j][i] = z
+    m = bytearray(n * n)
+    tief = 0
+    for j in range(n):
+        for i in range(n):
+            z = wz[j][i]
+            if z is not None and R.H[j][i] < z - 0.02 and -5.0 <= z <= 7.5:
+                m[j * n + i] = int(round((z + 5.0) * 20.0)) + 1
+                tief += 1
+    print("[Export] Wassermaske: tiefe Zellen", tief, "=", tief * S * S, "m2")
+    return bytes(m)
 
 
 def quader_sammeln(teile):
@@ -312,7 +391,7 @@ def quader_sammeln(teile):
         bau = t["bau"]
         if bau is None or t["spin"] is not None or t.get("verschoben"):
             continue
-        for b in bau.bx:
+        for b in list(bau.bx) + list(getattr(bau, "kol", [])):
             x0, y0, z0, x1, y1, z1 = b
             if x1 < -2.0 or x0 > WELT + 2.0 or y1 < -2.0 or y0 > WELT + 2.0:
                 continue
@@ -523,7 +602,7 @@ def minimap(teile, R, px=2.0):
 
 
 # ------------------------------------------------------------------ Schreiben
-def schreiben(pfad, gruppen, verts, tris, boxes, spawns, crates, fahrzeuge, mm):
+def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm):
     little = sys.byteorder == "little"
 
     def b(a):
@@ -533,23 +612,23 @@ def schreiben(pfad, gruppen, verts, tris, boxes, spawns, crates, fahrzeuge, mm):
         return a.tobytes()
     meta = dict(name="Polytown", id=PT_ID, size=WELT, groups=[], ncm=[len(verts), len(tris)], nbox=len(boxes), mm=mm[0],
                 spawns=spawns, crates=crates, vehicles=fahrzeuge, pads=[[240.0, 184.0, 110.0]],
-                gras_hoehe=None)
+                gras_hoehe=None, ver=2, wm=int(WELT / Raster.S), ws=Raster.S)
     blob = bytearray()
     for g in gruppen:
-        meta["groups"].append(dict(c=g.cls, nv=g.nv, ni=len(g.I), sp=g.spin, k=g.key))
-        blob += b(g.P) + b(g.N) + bytes(g.C) + b(g.I)
+        meta["groups"].append(dict(c=g.cls, nv=g.nv, ni=len(g.I), sp=g.spin, k=g.key, tx=g.tx))
+        blob += b(g.P) + b(g.N) + bytes(g.C) + (b(g.UV) if g.tx else b"") + b(g.I)
     va = array.array("f")
     for p in verts:
         va.extend(p)
     ta = array.array("I")
     for t in tris:
         ta.extend(t)
-    blob += b(va) + b(ta)
+    blob += b(va) + b(ta) + bytes(kinds)
     ba = array.array("f")
     for q in boxes:
         ba.extend(q)
     blob += b(ba)
-    blob += mm[1]
+    blob += mm[1] + wm
     mj = json.dumps(meta, separators=(",", ":")).encode("utf-8")
     raw = struct.pack("<I", len(mj)) + mj + bytes(blob)
     comp = zlib.compress(raw, 9)
@@ -565,12 +644,13 @@ def main():
     szene_bauen()
     teile = teile_umrechnen()
     gruppen = darstellung(teile)
-    verts, tris = gelaende_dreiecke(teile)
+    verts, tris, kinds = gelaende_dreiecke(teile)
     boxes = quader_verschmelzen(quader_sammeln(teile))
     R = Raster(teile, boxes)
+    wm = wasser_maske(teile, R)
     spawns, crates, fahrzeuge = spiel_daten(R)
     mm = minimap(teile, R)
-    schreiben(pfad, gruppen, verts, tris, boxes, spawns, crates, fahrzeuge, mm)
+    schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm)
 
 
 if __name__ == "__main__":

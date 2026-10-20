@@ -95,6 +95,7 @@ class Bau:
         self.name = name
         self.v, self.f, self.m = [], [], []
         self.bx = []                  # achsenparallele Quader (x0, y0, z0, x1, y1, z1) - fuer Pruefungen
+        self.kol = []                 # nur Kollision (Spiel-Export): zusaetzliche Quader, z. B. durchgehende Zaunwand
 
     def add(self, verts, faces, mat):
         o = len(self.v)

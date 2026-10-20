@@ -147,6 +147,11 @@ def zaun(b, x0, y0, x1, y1, luecke=None, mat="Holz alt"):
         if luecke and luecke[0] < t < luecke[1]:
             continue
         b.box(px - 0.08, py - 0.08, 0.0, px + 0.08, py + 0.08, 1.35, "Holz dunkel")
+    teile = [(0.0, ln)] if not luecke else [(0.0, luecke[0]), (luecke[1], ln)]
+    for (ta, tb) in teile:                                                                    # Spiel: durchgehende, dicke Zaunwand
+        if tb - ta > 0.05:
+            xa, ya, xb, yb = x0 + ux * ta, y0 + uy * ta, x0 + ux * tb, y0 + uy * tb
+            b.kol.append((min(xa, xb) - 0.3, min(ya, yb) - 0.3, 0.0, max(xa, xb) + 0.3, max(ya, yb) + 0.3, 1.4))
     for z in (0.55, 1.05):
         a = 0.0
         while a < ln:

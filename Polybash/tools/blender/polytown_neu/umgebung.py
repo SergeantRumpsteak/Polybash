@@ -874,6 +874,9 @@ def tower():
 
 
 # ------------------------------------------------------------------ Zaun, Tore, Checkpoint
+ZAUN_LUECKE = (247.0, 253.0)                                                                # durchgebogene Zaunstelle (Nord- und Suedzaun): x von .. bis
+
+
 def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
     """Zaun entlang einer Achse ('x': y = fest, von x = t0 bis t1; 'y': x = fest); in den 'luecken' (a, c) steht kein Zaun.
     Pfosten (0,12 m) alle <= 3 m, zwei Querholme; an den Luecken ein Endpfosten."""
@@ -902,6 +905,27 @@ def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
                 b.box(s0, fest - 0.03, zr0, s1, fest + 0.03, zr1, "Metall")
             else:
                 b.box(fest - 0.03, s0, zr0, fest + 0.03, s1, zr1, "Metall")
+        if achse == "x":                                                                      # Spiel: durchgehende, dicke Zaunwand
+            b.kol.append((s0 - 0.25, fest - 0.3, 0.0, s1 + 0.25, fest + 0.3, 2.0))
+        else:
+            b.kol.append((fest - 0.3, s0 - 0.25, 0.0, fest + 0.3, s1 + 0.25, 2.0))
+
+
+def zaun_umgeknickt(b, fest, a, c, richtung):
+    """Durchgebogene Stelle im Zaun (x-Achse, y = fest, von x = a bis c): die Pfosten liegen nach aussen (richtung -1/+1 in y) fast am
+    Boden, die Querholme haengen durch. Keine Kollisionsquader: man geht darueber hinweg. Die Endpfosten (zaunstrecke, Luecke) stehen."""
+    mitte = (a + c) / 2.0
+    for k, p in enumerate((a + 1.4, mitte - 0.9, mitte + 0.9, c - 1.4)):                     # umgeknickte Pfosten
+        ja = (-0.15, 0.2, -0.25, 0.1)[k]
+        b.beam((p, fest, 0.05), (p + ja, fest + richtung * 1.85, 0.32 + 0.06 * (k % 2)), 0.12, 0.12, "Metall")
+    for zr, tief, aus in ((0.33, 0.16, 0.5), (1.03, 0.22, 1.2), (1.93, 0.30, 1.7)):          # Querholme: vom stehenden Pfosten zur Mulde
+        pa = (a, fest, zr)
+        pm = (mitte, fest + richtung * aus, tief)
+        pc = (c, fest, zr)
+        b.beam(pa, (a + (mitte - a) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), 0.06, 0.06, "Metall")
+        b.beam((a + (mitte - a) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), pm, 0.06, 0.06, "Metall")
+        b.beam(pm, (mitte + (c - mitte) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), 0.06, 0.06, "Metall")
+        b.beam((mitte + (c - mitte) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), pc, 0.06, 0.06, "Metall")
 
 
 def schranke(b, px, py, hx, hy, laenge, winkel=80.0):
@@ -932,8 +956,10 @@ def zaun():
     lw = BREITE_WEG / math.sqrt(0.5) / 2.0 + 0.9                                             # halbe Torbreite entlang des Zauns
     luecken = [yz] + [(y - lw, y + lw) for y in yb]
     zaunstrecke(b, "y", x0, y0, y1, luecken)                                                 # Westzaun mit den drei Toren
-    zaunstrecke(b, "x", y0, x0, x1)                                                          # Suedzaun
-    zaunstrecke(b, "x", y1, x0, x1)                                                          # Nordzaun
+    zaunstrecke(b, "x", y0, x0, x1, luecken=[ZAUN_LUECKE])                                   # Suedzaun mit durchgebogener Stelle
+    zaunstrecke(b, "x", y1, x0, x1, luecken=[ZAUN_LUECKE])                                   # Nordzaun mit durchgebogener Stelle
+    zaun_umgeknickt(b, y0, ZAUN_LUECKE[0], ZAUN_LUECKE[1], -1)
+    zaun_umgeknickt(b, y1, ZAUN_LUECKE[0], ZAUN_LUECKE[1], 1)
     zaunstrecke(b, "y", x1, y0, y1)                                                          # Ostzaun (an den Bergen)
     # ---- Checkpoint am Zubringer: Mittelinsel mit Wachhaus, Vordach ueber beide Fahrstreifen, je Richtung eine Schranke
     gx = GATE_X
@@ -1096,7 +1122,14 @@ def flugzeuge():
         FL.stuka(b, STUKA_X, yy, 225.0)
     for yc, typ in zip(REIHE_YC, ("bf109", "fw190", "spitfire")):
         FL.jaeger(b, REIHE_X0 + 7.6, yc, 180.0, typ, Z_BODEN)
-    FL.kampfhubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)                  # Kampfhubschrauber auf dem Helipad
+    return b
+
+
+def hubschrauber():
+    """Kampfhubschrauber auf dem Helipad - eigenes Objekt, damit der Spiel-Export ihn weglassen kann (im Spiel ist er ein eigenes,
+    flugfaehiges Fahrzeug; sonst blieben Rotor und Teile am Boden stehen)."""
+    b = Bau("umgebung_heli")
+    FL.kampfhubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)
     return b
 
 
@@ -1126,7 +1159,7 @@ FARBEN.update(SC.FARBEN)
 
 def baue_alles():
     """Gibt die Baugruppen zurueck (ohne bpy aufrufbar)."""
-    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad(), flugzeuge(), rollwegschilder()]
+    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad(), flugzeuge(), hubschrauber(), rollwegschilder()]
 
 
 def bauen():

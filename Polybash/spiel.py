@@ -252,7 +252,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 154               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 155               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -1111,19 +1111,32 @@ def load_ptmap(path):
     groups = []
     for g in meta["groups"]:
         nv, ni = g["nv"], g["ni"]
-        P, N, C, I = (blob[pos + o:pos + o + s] for o, s in ((0, nv * 12), (nv * 12, nv * 2), (nv * 14, nv * 4), (nv * 18, ni * 2)))
-        pos += nv * 18 + ni * 2
-        groups.append({"c": g["c"], "nv": nv, "ni": ni, "k": g.get("k"), "sp": g.get("sp"), "P": P, "N": N, "C": C, "I": I})
+        tx = g.get("tx")
+        P, N, C = (blob[pos + o:pos + o + s] for o, s in ((0, nv * 12), (nv * 12, nv * 2), (nv * 14, nv * 4)))
+        pos += nv * 18
+        UV = None
+        if tx:                                               # Texturkoordinaten (u, v als float32, in Kacheln)
+            UV = blob[pos:pos + nv * 8]
+            pos += nv * 8
+        I = blob[pos:pos + ni * 2]
+        pos += ni * 2
+        groups.append({"c": g["c"], "nv": nv, "ni": ni, "k": g.get("k"), "sp": g.get("sp"), "P": P, "N": N, "C": C, "I": I,
+                       "tx": tx, "UV": UV})
     ncv, nct = meta["ncm"]
     V, Tr, Bx = array("f"), array("I"), array("f")
     V.frombytes(blob[pos:pos + ncv * 12])
     pos += ncv * 12
     Tr.frombytes(blob[pos:pos + nct * 12])
     pos += nct * 12
+    kinds = list(blob[pos:pos + nct]) if meta.get("ver", 1) >= 2 else [0] * nct          # Dreiecksarten (TriMesh-Bits)
+    if meta.get("ver", 1) >= 2:
+        pos += nct
     Bx.frombytes(blob[pos:pos + meta["nbox"] * 24])
     pos += meta["nbox"] * 24
     mm = blob[pos:pos + meta["mm"] * meta["mm"] * 3]
-    return {"head": head, "meta": meta, "groups": groups, "cmv": V, "cmt": Tr, "boxes": Bx, "minimap": mm}
+    pos += meta["mm"] * meta["mm"] * 3
+    wmask = blob[pos:pos + meta["wm"] ** 2] if meta.get("wm") else None                  # Wassermaske (World.water_at)
+    return {"head": head, "meta": meta, "groups": groups, "cmv": V, "cmt": Tr, "boxes": Bx, "minimap": mm, "kinds": kinds, "wmask": wmask}
 
 
 def pt_mapdata(path):
@@ -1139,7 +1152,7 @@ def pt_mapdata(path):
                        "crates": meta.get("crates") or [], "vehicles": meta.get("vehicles") or [], "pads": meta.get("pads") or []})
     verts = [(V[i], V[i + 1], V[i + 2]) for i in range(0, len(V), 3)]
     tris = [(Tr[i], Tr[i + 1], Tr[i + 2]) for i in range(0, len(Tr), 3)]
-    md["mesh"] = {"coll": (verts, tris, [0] * len(tris)), "render": [], "photo": None}
+    md["mesh"] = {"coll": (verts, tris, pt["kinds"]), "render": [], "photo": None}
     md["terrain"] = None
     md["steep"] = True
     md["pt"] = pt
@@ -1614,7 +1627,9 @@ def push_out(x, y, r, world, z=None, veh=-1):
 class TriMesh:
     """Kollision gegen ein Dreiecksnetz (Karten mit "mesh", z. B. Blood Gulch): Böden, Decken, Wände und Strahlen
     werden direkt gegen die Dreiecke geprüft - ohne Höhenraster. Dreiecke stehen in einem 2D-Gitter (CELL Meter).
-    kind-Bits: 1 = nur für Spieler/Fahrzeuge (Player-Clip, Kugeln fliegen hindurch), 2 = zweiseitig."""
+    kind-Bits: 1 = nur für Spieler/Fahrzeuge (Player-Clip, Kugeln fliegen hindurch), 2 = zweiseitig,
+    4 = Dach (begehbar, zählt aber nicht für die Geländehöhe "ups"), 8 = einseitige Wand (blockiert nur von der Vorderseite,
+    z. B. Ufer: von Land aus nicht ins Wasser, aus dem Wasser heraus schon)."""
     CELL = 6.0
     WALK_NZ = 0.64           # flacher als ca. 50 Grad ist begehbar
 
@@ -1635,18 +1650,18 @@ class TriMesh:
                 continue
             nx, ny, nz = nx / ln, ny / ln, nz / ln
             kind = kinds[idx]
-            clip, two = kind & 1, kind & 2
+            clip, two, roof, oneway = kind & 1, kind & 2, kind & 4, kind & 8
             det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
             mnx, mxx = min(a[0], b[0], c[0]), max(a[0], b[0], c[0])
             mny, mxy = min(a[1], b[1], c[1]), max(a[1], b[1], c[1])
             mnz, mxz = min(a[2], b[2], c[2]), max(a[2], b[2], c[2])
             t = (a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], nx, ny, nz, clip, det,
-                 mnx, mxx, mny, mxy, mnz, mxz, two)
+                 mnx, mxx, mny, mxy, mnz, mxz, two, oneway)
             cells = [(i, j) for i in range(int(mnx // C), int(mxx // C) + 1) for j in range(int(mny // C), int(mxy // C) + 1)]
             fl = nz >= W or (two and nz <= -W)
             ce = nz <= -W or (two and nz >= W)
             wl = abs(nz) < W
-            up = (nz > 0.05 or (two and nz < -0.05)) and not clip
+            up = (nz > 0.05 or (two and nz < -0.05)) and not clip and not roof
             for cell in cells:
                 if fl and abs(det) > 1e-12:
                     self.floors.setdefault(cell, []).append(t)
@@ -1783,6 +1798,8 @@ class TriMesh:
                             if (x + r < t[14] or x - r > t[15] or y + r < t[16] or y - r > t[17]
                                     or cz + r < t[18] or cz - r > t[19]):
                                 continue
+                            if t[21] and (x - t[0]) * t[9] + (y - t[1]) * t[10] < 0.0:
+                                continue                                  # einseitige Wand: Rückseite lässt durch
                             qx, qy, qz = self._closest(t, x, y, cz)
                             dx, dy, dz = x - qx, y - qy, cz - qz
                             if dx * dx + dy * dy + dz * dz >= r * r:
@@ -2178,6 +2195,25 @@ class World:
             hc.reset()
         self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
         self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
+        self.wmask = self.pt.get("wmask")
+        self.wm_n = int(self.pt["meta"].get("wm") or 0)
+        self.wm_s = float(self.pt["meta"].get("ws") or 0.5)
+
+    wmask = None
+    wm_n = 0
+    wm_s = 0.5
+
+    def water_at(self, x, y, z):
+        """Tiefes Wasser (Polytown: Burggraben, Teiche) bei (x,y) für jemanden auf Höhe z? Wer weit über dem Spiegel ist (Brücke), zählt nicht."""
+        m = self.wmask
+        if m is None:
+            return False
+        i, j = int(x / self.wm_s), int(y / self.wm_s)
+        n = self.wm_n
+        if not (0 <= i < n and 0 <= j < n):
+            return False
+        b = m[j * n + i]
+        return b != 0 and z < (b - 1) / 20.0 - 5.0 + 1.5
 
     def build_structures(self):
         """Burg (Polytown: Radarstation) in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
@@ -5221,8 +5257,17 @@ def update_crouch(pl, dt, world):
 
 
 def step(pl, forward, strafe, run, jump, dt, world):
-    """Ein Simulationsschritt. forward/strafe in -1..1.
-    Später läuft derselbe Code auf dem Server."""
+    """Ein Simulationsschritt. forward/strafe in -1..1. Lange Bilder (niedrige fps) werden in höchstens 0,05-s-Schritte
+    zerlegt, damit man auch dann nicht durch dünne Wände/Zäune tunnelt."""
+    n = min(8, int(math.ceil(dt / 0.05)))
+    if n <= 1:
+        return _step_once(pl, forward, strafe, run, jump, dt, world)
+    for _ in range(n):
+        _step_once(pl, forward, strafe, run, jump, dt / n, world)
+
+
+def _step_once(pl, forward, strafe, run, jump, dt, world):
+    """Ein Simulationsschritt (siehe step)."""
     h = math.radians(pl.heading)
     fx, fy = -math.sin(h), math.cos(h)
     rx, ry = math.cos(h), math.sin(h)
@@ -5245,6 +5290,14 @@ def step(pl, forward, strafe, run, jump, dt, world):
     pl.x, pl.y = push_out(pl.x, pl.y, PLAYER_R, world, pl.z)
     pl.x = max(1.0, min(WORLD - 1.0, pl.x))
     pl.y = max(1.0, min(WORLD - 1.0, pl.y))
+    if getattr(world, "wmask", None) is not None and (pl.x != ox or pl.y != oy) and world.water_at(pl.x, pl.y, pl.z) \
+            and not world.water_at(ox, oy, pl.z):                  # nicht ins tiefe Wasser gehen (hinaus schon)
+        if not world.water_at(pl.x, oy, pl.z):
+            pl.y = oy
+        elif not world.water_at(ox, pl.y, pl.z):
+            pl.x = ox
+        else:
+            pl.x, pl.y = ox, oy
     if getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving:
         too_steep(pl, ox, oy, world)                 # Felswände im Gebirge: nicht hinauf (auch nicht springend)
 
@@ -5421,6 +5474,8 @@ def drive(v, throttle, steer, brake, dt, world):
         if hh < lo and hh < h_old and world.ponds and any(
                 math.hypot(ax - px, ay - py) < pr * 2.2 for px, py, pr in world.ponds):
             return False                         # Teich: nur dort ist wirklich Wasser, trockene Senken (braunes Gras) sind befahrbar
+        if getattr(world, "wmask", None) is not None and world.water_at(ax, ay, v.z):
+            return False                         # Polytown: Burggraben und Teiche sind für Fahrzeuge gesperrt
         return not world.in_void(ax, ay, 1.5)
 
     if not passable(px, py):                     # Teich, Treppenschacht, tiefe Senke: seitlich entlanggleiten
@@ -6071,6 +6126,129 @@ def _t_water(S):
     return out
 
 
+def _t_pt_grass(S):
+    """Polytown: Rasen - Flecken in mehreren Massstaben, feine Halmstriche (in beide Richtungen), Klee-/Trockenstellen."""
+    big, mid = _fbm(S, 211, 3, 4), _fbm(S, 212, 12, 3, 0.55)
+    bl1, bl2 = _fbm(S, 213, 4, 3, px=120, py=36), _fbm(S, 214, 4, 3, px=34, py=120)
+    fine, spk = _fbm(S, 215, 90, 2, 0.6), _fbm(S, 216, 128, 1)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            b = big[y][x]
+            v = (0.80 + 0.34 * (b - 0.5) + 0.30 * (mid[y][x] - 0.5) + 0.26 * (bl1[y][x] - 0.5) + 0.26 * (bl2[y][x] - 0.5)
+                 + 0.20 * (fine[y][x] - 0.5))
+            if spk[y][x] > 0.74:                              # einzelne helle/dunkle Halme
+                v += 0.16 if spk[y][x] > 0.86 else -0.12
+            t = _sstep(0.35, 0.70, b)                          # dunkel-saftig <-> sonnig-gelblich
+            row.append(_rgb(v, (0.97 + 0.05 * t, 1.0, 0.96 - 0.08 * t)))
+        out.append(row)
+    return out
+
+
+def _t_pt_asphalt(S):
+    """Polytown: Asphalt - Splittkörnung, fleckige Abnutzung, feine Risse und Teernähte."""
+    patch, wear, grain = _fbm(S, 221, 4, 4), _fbm(S, 222, 18, 3, 0.55), _fbm(S, 223, 110, 1)
+    vor = _voronoi(S, 7, 224)
+    seams = _fbm(S, 225, 5, 2)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            g = _hash01(x * 7919 + y * 104729 + 17)                # Korn je Pixel
+            v = 0.80 + 0.30 * (patch[y][x] - 0.5) + 0.20 * (wear[y][x] - 0.5) + 0.26 * (g - 0.5) + 0.12 * (grain[y][x] - 0.5)
+            if g > 0.965:
+                v += 0.22                                         # helle Splitkörner
+            d1, d2, _c = vor[y][x]
+            e = d2 - d1
+            if e < 0.022 and seams[y][x] > 0.60:                  # feine Risse: nur stellenweise
+                v *= 0.62
+            row.append(_rgb(v, (1.0, 1.0, 1.03)))
+        out.append(row)
+    return out
+
+
+def _t_pt_water(S):
+    """Polytown: Wasser - überlagerte Wellen, Lichtnetz (Kaustik) und weiche Glanzlichter; nahtlos."""
+    n, n2 = _fbm(S, 231, 5, 3), _fbm(S, 232, 14, 3, 0.55)
+    vor = _voronoi(S, 5, 233)
+    waves = ((3, 2, 0.0), (-2, 5, 1.7), (6, -1, 3.1), (1, 7, 0.6), (4, 4, 2.2))
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            sw = 0.0
+            for kx, ky, ph in waves:
+                sw += math.sin(2 * math.pi * (kx * x + ky * y) / S + ph + 2.2 * n[y][x])
+            d1, d2, _c = vor[y][x]
+            caus = 1.0 - _sstep(0.0, 0.35, d2 - d1)               # weiche Lichtreflexe am Grund
+            v = 0.80 + 0.06 * sw + 0.22 * (n2[y][x] - 0.5) + 0.12 * caus
+            if sw > 3.2:
+                v += 0.16 * (sw - 3.2)                             # Glanzlichter auf Wellenkämmen
+            row.append(_rgb(v, (0.92, 0.99, 1.0)))
+        out.append(row)
+    return out
+
+
+def _t_pt_fort(S):
+    """Polytown: Festungsmauer - Quader in Reihen unterschiedlicher Höhe und Breite, eingetiefte Fugen, Kanten-Schlag,
+    Verwitterung und Moos an den unteren Rändern; nahtlos."""
+    rnd = random.Random(241)
+    rows, y0 = [], 0
+    for hgt in (42, 50, 38, 48, 40, 38):
+        rows.append((y0, hgt))
+        y0 += hgt
+    rows[-1] = (rows[-1][0], S - rows[-1][0])
+    blk = []
+    for r, (ry, rh) in enumerate(rows):
+        k = 3 + (r % 2)
+        cuts = sorted(rnd.sample(range(40, S - 40, 8), k - 1))
+        while any(b - a < 44 for a, b in zip([0] + cuts, cuts + [S])):
+            cuts = sorted(rnd.sample(range(40, S - 40, 8), k - 1))
+        off = rnd.randrange(S)
+        blk.append(([(a + off) % S for a in [0] + cuts], [b - a for a, b in zip([0] + cuts, cuts + [S])], off))
+    n1, n2, n3 = _fbm(S, 242, 5, 4), _fbm(S, 243, 40, 3, 0.6), _fbm(S, 244, 100, 2)
+    moss = _fbm(S, 245, 9, 3)
+    cols, h = [], []
+    for y in range(S):
+        r = 0
+        while r + 1 < len(rows) and y >= rows[r + 1][0]:
+            r += 1
+        ry, rh = rows[r]
+        starts, widths, off = blk[r]
+        ly = y - ry
+        crow, hrow = [], []
+        for x in range(S):
+            # Block suchen (Starts sind modulo S verschoben)
+            bi, lx = 0, 0
+            for i, (a, w) in enumerate(zip(starts, widths)):
+                d = (x - a) % S
+                if d < w:
+                    bi, lx = i, d
+                    break
+            w = widths[bi]
+            e = min(lx, w - 1 - lx, ly, rh - 1 - ly)
+            if e < 3:
+                v = 0.40 + 0.20 * (n3[y][x] - 0.5) + 0.04 * e         # Fuge: tief, sandig-dunkel
+                t = (1.02, 0.98, 0.90)
+                hv = -1.0 + 0.3 * e
+            else:
+                tone = _hash01(r * 977 + bi * 61 + 241)
+                v = (0.90 + 0.20 * (tone - 0.5) + 0.34 * (n1[y][x] - 0.5) + 0.22 * (n2[y][x] - 0.5) + 0.12 * (n3[y][x] - 0.5))
+                if ly > rh * 0.72:
+                    v *= 0.90 - 0.10 * (ly - rh * 0.72) / (rh * 0.28)    # Regenschatten unten
+                if e < 6:
+                    v += 0.07 * (6 - e) / 3.0 * (1.0 if ly < rh / 2 else -0.6)   # Kantenschlag: oben hell, unten dunkel
+                m = _sstep(0.50, 0.68, moss[y][x]) * _sstep(0.35, 0.9, ly / rh)
+                t = (1.0 - 0.14 * m, 1.0 + 0.04 * m, 1.0 - 0.20 * m)
+                hv = 1.0 + 0.6 * n2[y][x] + 0.3 * n3[y][x] - (0.35 if e < 5 else 0.0)
+            crow.append(_rgb(v, t))
+            hrow.append(hv)
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.5)
+
+
 def _t_fire(S):
     a, b = _fbm(S, 161, 4, 4), _fbm(S, 162, 12, 2)
     return [[_rgb(0.62 + 0.9 * (a[y][x] - 0.5) + 0.5 * (b[y][x] - 0.5) + 0.3) for x in range(S)]
@@ -6147,7 +6325,9 @@ TEXGEN = {
     "brick": (256, _t_brick, False, True, 3.0), "corrug": (128, _t_corrug, False, True, 2.0),
     "plaster": (256, _t_plaster, False, True, 3.0), "concrete": (128, _t_concrete, False, True, 4.0),
     "metal": (128, _t_metal, False, True, 2.0), "cloth": (32, _t_cloth, False, True, 0.4),
-    "water": (128, _t_water, False, True, 6.0), "fire": (64, _t_fire, False, True, 3.0),
+    "water": (128, _t_water, False, True, 6.0),
+    "pt_grass": (256, _t_pt_grass, False, True, 6.0), "pt_asphalt": (256, _t_pt_asphalt, False, True, 6.0),
+    "pt_water": (256, _t_pt_water, False, True, 8.0), "pt_fort": (256, _t_pt_fort, False, True, 4.0), "fire": (64, _t_fire, False, True, 3.0),
     "cloud": (128, _t_cloud, True, True, 200.0), "blob": (64, _t_blob, True, False, 1.0),
     "glow": (64, _t_glow, True, False, 1.0), "edge": (64, _t_edge, True, False, 1.0),
     "vignette": (96, _t_vignette, True, False, 1.0),
@@ -6723,6 +6903,7 @@ def build_mc_scene(world):
 # ------------------------------------------------------------ Polytown aus Blender (maps/polytown.ptmap)
 _PT_NT = None
 _PT_FMT = None
+_PT_FMT_UV = None
 
 
 def _pt_normals():
@@ -6741,9 +6922,21 @@ def _pt_normals():
     return _PT_NT
 
 
-def _pt_format():
-    """Vertex-Format mit drei getrennten Feldern (Position, Normale, Farbe): die Karte liefert sie fertig als Bytes."""
-    global _PT_FMT
+def _pt_format(uv=False):
+    """Vertex-Format mit drei getrennten Feldern (Position, Normale, Farbe, ggf. Texturkoordinaten): die Karte liefert sie fertig als Bytes."""
+    global _PT_FMT, _PT_FMT_UV
+    if uv:
+        if _PT_FMT_UV is None:
+            f = GeomVertexFormat()
+            for name, nc, nt, cont in ((InternalName.getVertex(), 3, Geom.NTFloat32, Geom.CPoint),
+                                       (InternalName.getNormal(), 3, Geom.NTFloat32, Geom.CNormal),
+                                       (InternalName.getColor(), 4, Geom.NTUint8, Geom.CColor),
+                                       (InternalName.getTexcoord(), 2, Geom.NTFloat32, Geom.CTexcoord)):
+                a = GeomVertexArrayFormat()
+                a.addColumn(name, nc, nt, cont)
+                f.addArray(a)
+            _PT_FMT_UV = GeomVertexFormat.registerFormat(f)
+        return _PT_FMT_UV
     if _PT_FMT is None:
         f = GeomVertexFormat()
         a = GeomVertexArrayFormat()
@@ -6768,14 +6961,18 @@ def _pt_geom(g):
     codes.frombytes(g["N"])
     nt = _pt_normals()
     nb = b"".join([nt[c] for c in codes])
+    uvd = g.get("UV") if g.get("tx") else None
     try:
-        vd = GeomVertexData("pt", _pt_format(), Geom.UHStatic)
+        vd = GeomVertexData("pt", _pt_format(uvd is not None), Geom.UHStatic)
         vd.setNumRows(nv)
         prim = GeomTriangles(Geom.UHStatic)
         prim.setIndexType(Geom.NTUint16)
         prim.modifyVertices(ni)
-        for arr, data in ((vd.modifyArray(0), g["P"]), (vd.modifyArray(1), nb), (vd.modifyArray(2), g["C"]),
-                          (prim.modifyVertices(), g["I"])):
+        fuell = [(vd.modifyArray(0), g["P"]), (vd.modifyArray(1), nb), (vd.modifyArray(2), g["C"]),
+                 (prim.modifyVertices(), g["I"])]
+        if uvd is not None:
+            fuell.append((vd.modifyArray(3), uvd))
+        for arr, data in fuell:
             try:
                 arr.modifyHandle().copyDataFrom(data)
             except Exception:                                 # ältere/andere Panda3D-Fassung: Pufferzugriff
@@ -6784,12 +6981,19 @@ def _pt_geom(g):
         if not getattr(_pt_geom, "warned", False):
             print("Polytown: schneller Vertex-Pfad nicht verfügbar, nehme den langsamen:", e)
             _pt_geom.warned = True
-        vd = GeomVertexData("pt", GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
+        uvd = g.get("UV") if g.get("tx") else None
+        vd = GeomVertexData("pt", GeomVertexFormat.getV3n3c4t2() if uvd is not None else GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
         vw, nw, cw = (GeomVertexWriter(vd, k) for k in ("vertex", "normal", "color"))
+        tw = GeomVertexWriter(vd, "texcoord") if uvd is not None else None
+        UVa = array("f")
+        if uvd is not None:
+            UVa.frombytes(uvd)
         P = array("f")
         P.frombytes(g["P"])
         for i in range(nv):
             vw.addData3(P[3 * i], P[3 * i + 1], P[3 * i + 2])
+            if tw is not None:
+                tw.addData2(UVa[2 * i], UVa[2 * i + 1])
             nx, ny, nz = struct.unpack("<3f", nb[12 * i:12 * i + 12])
             nw.addData3(nx, ny, nz)
             cw.addData4(g["C"][4 * i] / 255.0, g["C"][4 * i + 1] / 255.0, g["C"][4 * i + 2] / 255.0, g["C"][4 * i + 3] / 255.0)
@@ -6801,6 +7005,14 @@ def _pt_geom(g):
     geom = Geom(vd)
     geom.addPrimitive(prim)
     return geom
+
+
+def _pt_state(base, tx):
+    """Zustand der Gruppe: Klassen-Zustand plus Textur (falls vorhanden und verfügbar)."""
+    if not tx:
+        return base
+    ms = mat_state(tx)
+    return base.compose(ms) if ms is not None else base
 
 
 def build_pt_scene(world, progress=None):
@@ -6825,14 +7037,14 @@ def build_pt_scene(world, progress=None):
         sp = g.get("sp")
         if sp:
             node = GeomNode("pt_spin")
-            node.addGeom(geom, states[g["c"]])
+            node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
             spins.append({"node": node, "x": sp["x"], "y": sp["y"], "z": sp["z"], "h0": sp["h0"], "speed": sp["speed"]})
             continue
         k = tuple(g.get("k") or (0, 0))
         node = chunks.get(k)
         if node is None:
             node = chunks[k] = GeomNode("pt_%d_%d" % k)
-        node.addGeom(geom, states[g["c"]])
+        node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
     zone = []
     if world.mode == "koth":
         zone = _koth_zone()
