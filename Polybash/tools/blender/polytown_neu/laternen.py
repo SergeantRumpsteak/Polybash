@@ -48,6 +48,12 @@ def _frei(x, y, P, strs):
             return False
     if S.strassenabstand(x, y, strs) < 0.45:
         return False
+    for p, q in U.strassen_achsen():                                  # Wege des Umlands (Zubringer, Abzweige): nicht auf deren Fahrbahn
+        if U._seg_abstand(x, y, p, q) < U.BREITE_WEG / 2 + 0.45:
+            return False
+    ang = math.atan2(y - S.C, x - S.C)
+    if abs(math.hypot(x - S.C, y - S.C) - U.ring_r(ang)) < U.BREITE_WEG / 2 + 0.45:
+        return False
     for a, c in P["pfade"]:
         if U._seg_abstand(x, y, a, c) < 2.3:
             return False
@@ -72,10 +78,14 @@ def _linien(P):
     return out
 
 
+LAMPEN = []                                  # (x, y) der zuletzt gesetzten Laternen (Pruefung)
+
+
 def bauen_laternen(P):
     b = Bau("stadt_laternen")
     strs = P["strs"]
-    gesetzt = []
+    gesetzt = LAMPEN
+    del gesetzt[:]
     for pts, hw, zu in _linien(P):
         m = len(pts)
         seg = [(pts[i], pts[(i + 1) % m]) for i in range(m if zu else m - 1)]

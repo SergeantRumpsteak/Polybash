@@ -695,6 +695,13 @@ def tonnenreihe(b, x0, x1, ycs, R, dicke=0.4, n=12, mat="Hangar Dach", mat_boden
                 pts = pts[:-1]
             if len(pts) >= 3:
                 _quad_orient(b, pts, d, mat)
+    for k in range(len(ao) - 1):                                                  # Kollision: die steilen Teile der Rundbogenwand (flache Teile = Dach, begehbar) und die Rueckwand
+        (y0, z0), (y1, z1) = ao[k], ao[k + 1]
+        (iy0, iz0), (iy1, iz1) = ai[k], ai[k + 1]
+        if abs(z1 - z0) > 0.8 * abs(y1 - y0):
+            ys_ = (y0, y1, iy0, iy1)
+            b.bx.append((x0, min(ys_), min(z0, z1, iz0, iz1), x1, max(ys_), max(z0, z1, iz0, iz1)))
+    b.bx.append((x1 - t, ao[0][0], 0.0, x1, ao[-1][0], max(z for _y, z in ao)))
     for xr in (x0 + 0.3, x0 + (x1 - x0) / 2, x1 - t - 0.2):                      # Dachrippen innen (sichtbare Bogenbinder)
         for k in range(len(ai) - 1):
             a = (xr, ai[k][0], max(0.0, ai[k][1] - 0.15))
@@ -893,6 +900,7 @@ def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
                 neu.append((c, s1))
         spans = neu
     for s0, s1 in spans:
+        n_bx = len(b.bx)
         n = max(1, int(math.ceil((s1 - s0) / abstand)))
         for i in range(n + 1):
             p = s0 + (s1 - s0) * i / n
@@ -905,6 +913,7 @@ def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
                 b.box(s0, fest - 0.03, zr0, s1, fest + 0.03, zr1, "Metall")
             else:
                 b.box(fest - 0.03, s0, zr0, fest + 0.03, s1, zr1, "Metall")
+        del b.bx[n_bx:]                                                                       # Pfosten/Holme: nur Optik, Schuesse gehen durch (Kollision macht die Zaunwand unten)
         if achse == "x":                                                                      # Spiel: durchgehende, dicke Zaunwand
             b.kol.append((s0 - 0.25, fest - 0.3, 0.0, s1 + 0.25, fest + 0.3, 2.0))
         else:
@@ -931,6 +940,7 @@ def zaun_umgeknickt(b, fest, a, c, richtung):
 def schranke(b, px, py, hx, hy, laenge, winkel=80.0):
     """Offene Schranke: Pfosten bei (px, py), der Baum (rot-weiss, Laenge 'laenge') steht um 'winkel' Grad aufgerichtet und neigt
     sich in Richtung (hx, hy) ueber die Fahrbahn; am anderen Ende ein Auflager."""
+    n_bx = len(b.bx)                                                  # Schranken: nur Optik (Fahrzeuge muessen durch die schmalen Torspuren passen)
     n = math.hypot(hx, hy)
     hx, hy = hx / n, hy / n
     b.box(px - 0.2, py - 0.2, 0.0, px + 0.2, py + 0.2, 1.1, "Metall")
@@ -942,6 +952,7 @@ def schranke(b, px, py, hx, hy, laenge, winkel=80.0):
         pa = (px + hx * a0 * math.cos(w), py + hy * a0 * math.cos(w), z0 + a0 * math.sin(w))
         pb = (px + hx * a1 * math.cos(w), py + hy * a1 * math.cos(w), z0 + a1 * math.sin(w))
         b.beam(pa, pb, 0.14, 0.14, "Schranke rot" if k % 2 == 0 else "Schranke weiss")
+    del b.bx[n_bx:]
 
 
 def zaun():
@@ -971,8 +982,10 @@ def zaun():
         B.fenster(b, gx + sx * 1.6, C, 1.7, 1.2, 1.0, sx, 0)
     b.box(gx - 2.6, C - 4.8, 3.6, gx + 2.6, C + 4.8, 3.9, "Tower Dach")                     # Vordach
     b.box(gx - 1.6, C - 1.1, 2.7, gx + 1.6, C + 1.1, 3.6, "Tower Beton")                    # Aufsatz zwischen Haus und Dach
+    n_st = len(b.bx)
     for sy in (-1, 1):
         b.box(gx - 0.15, C + sy * 4.55 - 0.15, 0.0, gx + 0.15, C + sy * 4.55 + 0.15, 3.6, "Tower Beton")      # Stuetzen am Fahrbahnrand
+    del b.bx[n_st:]                                                                          # Stuetzen am Rand: keine Kollision (Fahrzeugspur)
     # Einfahrt (nach Osten): Fahrstreifen y 146..148,7; Schranke vor dem Dach, Baum neigt sich zum Fahrbahnrand
     schranke(b, gx - 3.4, C - 1.5, 0.0, -1.0, 2.9)
     # Ausfahrt (nach Westen): Fahrstreifen y 151,3..154; Schranke hinter dem Dach

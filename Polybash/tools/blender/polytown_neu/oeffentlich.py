@@ -849,7 +849,7 @@ def hotel(b, cx, cy, zb, theta, lvl=1):
     # Treppe an der Ostwand (x 2.9 .. ix1), 15 Stufen, Loch in der OG-Decke mit Gelaender
     sx0, ys, nst = 2.9, -1.2, 15
     rise = (F1 - F0) / nst
-    hy0, hy1 = ys + 3 * 0.27, ys + nst * 0.27
+    hy0, hy1 = ys + 1 * 0.27, ys + nst * 0.27
 
     def platte(x0, y0, x1, y1):
         g.box(x0, y0, F1 - 0.25, x1, y1, F1 - 0.05, "Decke")

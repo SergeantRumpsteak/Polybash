@@ -73,6 +73,7 @@ def kegel(b, cx, cy, z0, r, h, mat, n=8, rot=0.0):
 
 def gleis_gerade(b, y, x0, x1, ballast=True, sleeper_dx=0.7, bett_breite=3.4):
     """Gerades Gleis in x-Richtung bei y von x0 bis x1: Schotterbett, Schwellen (alle 0,7 m), zwei Schienen."""
+    n_bx = len(b.bx)                                                  # Gleisteile sind nur Optik: keine Kollision (sonst wackelt man ueber Schwellen/Schienen)
     if ballast:
         b.box(x0, y - bett_breite / 2, 0.0, x1, y + bett_breite / 2, BALLAST_H, "Schotterbett")
     n = int((x1 - x0) / sleeper_dx)
@@ -82,6 +83,7 @@ def gleis_gerade(b, y, x0, x1, ballast=True, sleeper_dx=0.7, bett_breite=3.4):
     for sg in (-1, 1):
         yy = y + sg * SPUR / 2
         b.box(x0, yy - 0.035, BALLAST_H + 0.1, x1, yy + 0.035, BALLAST_H + 0.24, "Schiene")
+    del b.bx[n_bx:]                                                   # man laeuft auf einer Ebene (Gelaendehoehe) ueber das ganze Gleis
 
 
 def gleis_kurve(b, pts, bett_breite=3.4):
@@ -364,7 +366,7 @@ def stellwerk(b, lvl=1):
     for k in range(n):                                                                           # Treppengelaender zur Raumseite (Fuellung)
         xk = -2.6 + 0.26 * k
         g.box(xk, 0.93, F0 + rise * (k + 1), xk + 0.26, 1.07, max(F0 + rise * (k + 1) + 1.0, zf2 + 1.0 if xk >= -1.9 else 0.0), "Holz")
-    ox0, ox1, oy0, oy1 = -1.9, 0.5, 1.0, hd - WD
+    ox0, ox1, oy0, oy1 = -2.6, 0.5, 1.0, hd - WD                                              # Loch beginnt am Treppenfuss (sonst Kopf an der Decke beim Abstieg)
     sl = [(-hw + WD, -hd + WD, ox0, hd - WD), (ox0, -hd + WD, ox1, oy0), (ox1, -hd + WD, hw - WD, hd - WD)]
     for (a, c, d, e) in sl:
         g.box(a, c, zf2 - 0.25, d, e, zf2, "Decke")

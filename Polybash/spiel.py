@@ -252,7 +252,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 156               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 157               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -263,6 +263,7 @@ MAX_PLAYERS = 8
 
 STEP_H = 0.6             # so viel darf man ohne Sprung hochsteigen (Treppenstufe)
 PLAYER_H = 1.8           # Körpergrösse (Trefferzylinder)
+HEAD_TOL = 0.35          # so weit darf der Kopf in einen Quader über ihm ragen, ohne dass er seitlich blockt (Treppe unter OG-Geländer)
 PLAYER_HIT_R = 0.45      # Trefferradius der Spieler
 PROTECT_T = 3.0          # Spawnschutz in s (endet beim Schiessen)
 OVER_T = 15.0            # so lange bleibt die Rangliste nach Rundenende stehen
@@ -1460,6 +1461,8 @@ class Mob:
 def seg_box(p0, p1, b):
     """Schnitt der Strecke p0->p1 mit einem Quader (Slab-Methode).
     Gibt den Eintrittsparameter t in [0,1] zurück oder None."""
+    if b.clip:
+        return None
     t0, t1 = 0.0, 1.0
     for a0, d, lo, hi in ((p0[0], p1[0] - p0[0], b.x0, b.x1),
                           (p0[1], p1[1] - p0[1], b.y0, b.y1),
@@ -1479,7 +1482,7 @@ def seg_box(p0, p1, b):
 
 class Box:
     """Achsenparalleler Quader (Mauer, Turm, Treppenstufe, Dach ...)."""
-    __slots__ = ("x0", "y0", "x1", "y1", "z0", "z1", "col", "mm", "vis")
+    __slots__ = ("x0", "y0", "x1", "y1", "z0", "z1", "col", "mm", "vis", "clip")
 
     def __init__(self, x0, y0, x1, y1, z0, z1, col, mm=False, vis=True):
         self.x0, self.y0 = min(x0, x1), min(y0, y1)
@@ -1488,6 +1491,7 @@ class Box:
         self.col = col
         self.mm = mm              # auf der Minimap zeichnen?
         self.vis = vis            # False: nur Kollision (z. B. Stufen unter einer glatten Dachfläche)
+        self.clip = False         # True: blockt nur Figuren/Fahrzeuge, Schüsse gehen hindurch (Zaun)
 
 
 HUD_TEXT = 0.042                      # Schriftgrösse für Killfeed, Legende, Tooltips
@@ -1603,7 +1607,7 @@ def push_out(x, y, r, world, z=None, veh=-1):
             z = world.height(x, y)
         for _ in range(2):                       # 2 Durchgänge: Ecken zwischen zwei Mauern
             for b in world.boxes_near(x - r, y - r, x + r, y + r):
-                if z >= b.z1 - STEP_H or z + PLAYER_H <= b.z0:
+                if z >= b.z1 - STEP_H or z + PLAYER_H - HEAD_TOL <= b.z0:   # HEAD_TOL: Geländer des Stockwerks darüber
                     continue
                 nx, ny = clampf(x, b.x0, b.x1), clampf(y, b.y0, b.y1)
                 dx, dy = x - nx, y - ny
@@ -1661,6 +1665,10 @@ class TriMesh:
             fl = nz >= W or (two and nz <= -W)
             ce = nz <= -W or (two and nz >= W)
             wl = abs(nz) < W
+            if roof:                                   # Dächer sind immer begehbar (auch steil, bis ca. 73 Grad) und keine Wand: sonst fällt man durch
+                fl = nz >= 0.3 or (two and nz <= -0.3)
+                ce = False
+                wl = False
             up = (nz > 0.05 or (two and nz < -0.05)) and not clip and not roof
             for cell in cells:
                 if fl and abs(det) > 1e-12:
@@ -2188,8 +2196,12 @@ class World:
         ausser Reichweite (es gibt noch keinen Kontrollraum; die Tomahawk-Mechanik selbst bleibt im Code)."""
         b = self.pt["boxes"]
         col = (0.5, 0.5, 0.5)
-        for i in range(0, len(b), 6):
-            self.boxes.append(Box(b[i], b[i + 1], b[i + 3], b[i + 4], b[i + 2], b[i + 5], col, False, False))
+        nclip = int(self.pt["meta"].get("nclip") or 0)
+        n_all = len(b) // 6
+        for k, i in enumerate(range(0, len(b), 6)):
+            bx_ = Box(b[i], b[i + 1], b[i + 3], b[i + 4], b[i + 2], b[i + 5], col, False, False)
+            bx_.clip = k >= n_all - nclip
+            self.boxes.append(bx_)
         for hc in self.helis:                                              # Hubschrauber stehen auf dem Gelände des Pads
             hc.home = (hc.x, hc.y, self.cm.top(hc.x, hc.y) or 0.0, hc.heading)
             hc.reset()
@@ -2213,7 +2225,14 @@ class World:
         if not (0 <= i < n and 0 <= j < n):
             return False
         b = m[j * n + i]
-        return b != 0 and z < (b - 1) / 20.0 - 5.0 + 1.5
+        if b == 0 or z >= (b - 1) / 20.0 - 5.0 + 1.5:
+            return False
+        try:                                          # auf einer Brücke/Planke (fester Boden deutlich über dem Grund): kein Wasser
+            if self.floor_at(x, y, z) > self.height(x, y) + 0.3:
+                return False
+        except Exception:
+            pass
+        return True
 
     def build_structures(self):
         """Burg (Polytown: Radarstation) in der Mitte, vier Türme in den Ecken, Häuser, Lagerhalle, Ruine (oder die Auswahl der Karte)."""
@@ -6326,6 +6345,75 @@ def _t_pt_rubble(S):
     return _finish(S, cols, h, 0.5)
 
 
+def _t_pt_gravel(S):
+    """Polytown: Kies - dicht gepackte, verschieden helle Kieselsteine mit kleinen Schatten und feinem Sand dazwischen."""
+    vor = _voronoi(S, 22, 291)
+    n1, n2 = _fbm(S, 292, 5, 3), _fbm(S, 293, 70, 2)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            d1, d2, cid = vor[y][x]
+            e = d2 - d1
+            tone = _hash01(cid * 13 + 291)
+            if e < 0.07:
+                v = 0.42 + 0.10 * (n2[y][x] - 0.5)                  # Sand/Schatten zwischen den Steinen
+                t = (1.0, 0.97, 0.90)
+            else:
+                shade = min(1.0, (e - 0.07) * 5.0)                  # Kuppe heller als der Rand
+                v = 0.62 + 0.55 * (tone - 0.5) + 0.22 * shade + 0.16 * (n1[y][x] - 0.5) + 0.10 * (n2[y][x] - 0.5)
+                tt = _hash01(cid * 5 + 293)
+                t = (1.0 + 0.05 * (tt - 0.5), 1.0, 1.0 - 0.10 * (tt - 0.3))
+            row.append(_rgb(v, t))
+        out.append(row)
+    return out
+
+
+def _t_pt_cobble(S):
+    """Polytown: Pflaster - versetzte Natursteinplatten in Reihen mit Fugen, Farbwechsel je Stein und Abnutzung."""
+    n1, n2 = _fbm(S, 301, 6, 3), _fbm(S, 302, 60, 2)
+    rh = S // 8
+    out = []
+    for y in range(S):
+        r, ly = y // rh, y % rh
+        tw = S // (5 + (r * 3) % 3)                                 # Steinbreite wechselt je Reihe
+        off = (r * 37) % tw
+        row = []
+        for x in range(S):
+            xx = (x + off) % S
+            c, lx = xx // tw, xx % tw
+            tone = _hash01((r * 31 + c) * 7 + 301)
+            edge = min(lx, tw - 1 - lx, ly, rh - 1 - ly)
+            if edge < 2:
+                v, t = 0.30 + 0.08 * (n2[y][x] - 0.5), (1.0, 0.98, 0.94)
+            else:
+                v = 0.74 + 0.34 * (tone - 0.5) + 0.20 * (n1[y][x] - 0.5) + 0.14 * (n2[y][x] - 0.5)
+                if edge < 4:
+                    v *= 0.88                                       # abgerundete Kante
+                t = (1.0 + 0.03 * (tone - 0.5), 1.0, 1.0 - 0.06 * (tone - 0.4))
+            row.append(_rgb(v, t))
+        out.append(row)
+    return out
+
+
+def _t_pt_dirt(S):
+    """Polytown: festgetretene Erde - fleckig, mit Steinchen, Furchen und trockenen Stellen."""
+    n1, n2, n3 = _fbm(S, 311, 4, 4), _fbm(S, 312, 20, 3), _fbm(S, 313, 90, 1)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            g = _hash01(x * 6007 + y * 99991 + 5)
+            v = 0.78 + 0.34 * (n1[y][x] - 0.5) + 0.22 * (n2[y][x] - 0.5) + 0.16 * (n3[y][x] - 0.5) + 0.10 * (g - 0.5)
+            if g > 0.985:
+                v += 0.28                                           # Steinchen
+            if n2[y][x] > 0.66:
+                v += 0.10                                           # trockene Stellen
+            row.append(_rgb(v, (1.0, 0.96, 0.88)))
+        out.append(row)
+    return out
+
+
 def _t_pt_tile(S):
     """Polytown: Tonziegeldach - versetzte Hohlziegel-Reihen mit Schattenkante, Tonwechsel, Moos und dunklen Stellen."""
     n1, n2, moos = _fbm(S, 281, 6, 3), _fbm(S, 282, 60, 2), _fbm(S, 283, 5, 4)
@@ -6508,7 +6596,8 @@ TEXGEN = {
     "pt_plaster": (256, _t_pt_plaster, False, True, 3.0), "pt_brick": (256, _t_pt_brick, False, True, 3.0),
     "pt_rubble": (256, _t_pt_rubble, False, True, 3.0), "pt_tile": (256, _t_pt_tile, False, True, 2.5),
     "pt_slate": (256, _t_pt_slate, False, True, 2.5), "pt_wood": (256, _t_pt_wood, False, True, 2.0),
-    "pt_sign": (128, _t_pt_sign, False, True, 1.0), "fire": (64, _t_fire, False, True, 3.0),
+    "pt_sign": (128, _t_pt_sign, False, True, 1.0), "pt_gravel": (256, _t_pt_gravel, False, True, 2.5),
+    "pt_cobble": (256, _t_pt_cobble, False, True, 3.0), "pt_dirt": (256, _t_pt_dirt, False, True, 4.0), "fire": (64, _t_fire, False, True, 3.0),
     "cloud": (128, _t_cloud, True, True, 200.0), "blob": (64, _t_blob, True, False, 1.0),
     "glow": (64, _t_glow, True, False, 1.0), "edge": (64, _t_edge, True, False, 1.0),
     "vignette": (96, _t_vignette, True, False, 1.0),
@@ -7188,8 +7277,8 @@ def _pt_geom(g):
     return geom
 
 
-SMOKE_PUFFS = 7              # Puffs je rauchendem Schornstein
-SMOKE_PERIOD = 7.0           # Sekunden, bis ein Puff aufgestiegen und verblasst ist
+SMOKE_PUFFS = 14             # Puffs je rauchendem Schornstein
+SMOKE_PERIOD = 10.0          # Sekunden, bis ein Puff aufgestiegen und verblasst ist
 
 
 def _pt_state(base, tx):
@@ -111490,7 +111579,7 @@ class Game(ShowBase):
                     pn.setLightOff()
                     pn.setDepthWrite(False)
                     pn.setTwoSided(True)
-                    pn.setColorScale(0.42, 0.41, 0.40, 0.0)
+                    pn.setColorScale(0.09, 0.09, 0.09, 0.0)
                     puffs.append(pn)
                 self.smoke.append((qx, qy, qz, puffs))
             for fd in extra[5]:
@@ -113234,12 +113323,12 @@ class Game(ShowBase):
                 continue
             for k, pn in enumerate(puffs):
                 ph = (t / SMOKE_PERIOD + k / len(puffs) + (qx + qy) * 0.37) % 1.0
-                a = min(1.0, ph * 6.0) * (1.0 - ph) ** 1.3 * 0.55
-                drift = 4.0 * ph * ph
+                a = min(1.0, ph * 6.0) * (1.0 - ph) ** 1.1 * 0.92
+                drift = 9.0 * ph * ph
                 pn.show()
-                pn.setPos(qx + 0.82 * drift + 0.25 * math.sin(ph * 9.0 + qx), qy + 0.57 * drift + 0.25 * math.cos(ph * 7.0 + qy), qz + 0.2 + 6.0 * ph)
-                pn.setScale(0.55 + 2.4 * ph)
-                pn.setColorScale(0.42, 0.41, 0.40, a)
+                pn.setPos(qx + 0.82 * drift + 0.25 * math.sin(ph * 9.0 + qx), qy + 0.57 * drift + 0.25 * math.cos(ph * 7.0 + qy), qz + 0.2 + 16.0 * ph)
+                pn.setScale(0.7 + 3.4 * ph)
+                pn.setColorScale(0.09, 0.09, 0.09, a)
         if not self.wind_nodes and not self.flag_nodes:
             return
         cx, cy = cp[0], cp[1]
@@ -113950,9 +114039,10 @@ class Game(ShowBase):
         rest = (-0.30, 0.10, -0.40)
         if magp is None:                                   # Raketenwerfer: Hand schiebt die Rakete hinein
             slide = smoothstep(0.35, 0.85, u)
-            tgt = (0.0, 0.5 + 1.1 * (1 - slide), -0.07 + 0.25 * (1 - slide))
+            off = 1 - slide                                # Rakete kommt von links unten ins Bild, die Hand fasst sie von der Seite
+            tgt = (-0.07 - 0.28 * off, 0.5 + 0.9 * off, -0.05 - 0.12 * off)
             if u < 0.35:
-                return lp(rest, (0.0, 1.6, 0.18), smoothstep(0.0, 0.3, u))
+                return lp(rest, (-0.35, 1.4, -0.17), smoothstep(0.0, 0.3, u))
             if u > 0.9:
                 return lp(tgt, rest, smoothstep(0.9, 1.0, u))
             return tgt
@@ -114061,8 +114151,8 @@ class Game(ShowBase):
             if pl.reload_t > 0:
                 u = 1.0 - pl.reload_t / w.reload
                 slide = smoothstep(0.35, 0.85, u)
-                self.vm_rocket.setPos(0, 0.5 + 1.1 * (1 - slide), 0.02 + 0.25 * (1 - slide))
-                (self.vm_rocket.show if u > 0.3 else self.vm_rocket.hide)()
+                self.vm_rocket.setPos(-0.28 * (1 - slide), 0.5 + 0.9 * (1 - slide), 0.02 - 0.12 * (1 - slide))
+                (self.vm_rocket.show if u > 0.05 else self.vm_rocket.hide)()
             elif g.mag > 0:
                 self.vm_rocket.setPos(0, 0.5, 0.02)
                 self.vm_rocket.show()

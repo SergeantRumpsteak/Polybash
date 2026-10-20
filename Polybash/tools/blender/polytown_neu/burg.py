@@ -696,6 +696,7 @@ def bruecken(b):
     for k in range(n):
         zz = ya + (yb - ya) * (k + 0.5) / n
         b.cbox(cx, zz, -0.03, x1 - x0 - 0.5, (yb - ya) / n - 0.04, 0.1, "Fahrbahn")
+    b.bx.append((x0 + 0.25, ya, -0.08, x1 - 0.25, yb, 0.02))                  # durchgehende Fahrbahn-Kollision (ohne die 4-cm-Fugen zwischen den Bohlen)
     for sx_ in (c - 1.6, c + 1.6):                                           # Laengstraeger
         b.box(sx_ - 0.15, ya, -0.55, sx_ + 0.15, yb, -0.1, "Stahl")
     nseg = max(3, int(round((yb - ya) / 1.5)))

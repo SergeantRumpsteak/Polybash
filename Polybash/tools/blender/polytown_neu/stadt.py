@@ -154,7 +154,7 @@ def strassenabstand(x, y, strs, ohne=None):
 # ------------------------------------------------------------------ lokaler Bauplatz (Drehung und Verschiebung)
 class Lok:
     """Wie Bau.box/add, aber in lokalen Koordinaten (Haus um (0,0), Tuer auf der -y-Seite) mit Drehung theta und Fusshoehe zb."""
-    kachel = 0.0                                   # > 0: Hindernisse schraeg gedrehter Boxen als Kacheln dieser Kantenlaenge (z. B. Muehle, 45 Grad)
+    kachel = 0.6                                   # > 0: Hindernisse schraeg gedrehter Boxen als Kacheln dieser Kantenlaenge (sonst unsichtbare Waende an den Ecken: AABB)
 
     def __init__(self, b, cx, cy, zb, theta, sx=1):
         self.b, self.cx, self.cy, self.zb = b, cx, cy, zb
@@ -173,7 +173,8 @@ class Lok:
         w = [self.P(p) for p in v]
         self.b.add(w, B.BOX_FACES, mat)
         if self.kachel and abs(math.sin(2 * math.atan2(self.s, self.c))) > 1e-6:       # schraeg gedrehter Bau: Hindernis als Kacheln statt eines grossen Rahmens
-            nx_, ny_ = max(1, math.ceil((x1 - x0) / self.kachel)), max(1, math.ceil((y1 - y0) / self.kachel))
+            kk = max(self.kachel, math.sqrt((x1 - x0) * (y1 - y0) / 120.0))                  # hoechstens ca. 120 Kacheln je Quader
+            nx_, ny_ = max(1, math.ceil((x1 - x0) / kk)), max(1, math.ceil((y1 - y0) / kk))
             for i in range(nx_):
                 for j in range(ny_):
                     q = [self.P((xx, yy, zz)) for xx in (x0 + (x1 - x0) * i / nx_, x0 + (x1 - x0) * (i + 1) / nx_)
@@ -277,9 +278,10 @@ def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden, zustand="ok", lz=("o
             pb(fa, fb, 0.05, 0.05 + w / 2 + 0.02, zl, zh, "Rahmen weiss")
             pb(fa - 0.0, fb, 0.05, 0.05 + w / 2 + 0.02, zl + 0.08, zh - 0.08, "Fenster")
     else:
-        pb(al, ah, -0.17, -0.13, zl, ztop, "Fenster")
-        pb(ac - 0.025, ac + 0.025, -0.19, -0.11, zl, zh, "Rahmen weiss alt" if "Rahmen weiss alt" in FARBEN else "Rahmen weiss")
-        pb(al, ah, -0.19, -0.11, zc + h / 6 - 0.025, zc + h / 6 + 0.025, "Rahmen weiss")
+        pf = 0.0                                                                          # Scheibe buendig an der Wandflaeche (tiefer lag sie in vollen Kernen: "zugemauert")
+        pb(al, ah, pf, pf + 0.04, zl, ztop, "Fenster")
+        pb(ac - 0.025, ac + 0.025, pf - 0.02, pf + 0.06, zl, zh, "Rahmen weiss alt" if "Rahmen weiss alt" in FARBEN else "Rahmen weiss")
+        pb(al, ah, pf - 0.02, pf + 0.06, zc + h / 6 - 0.025, zc + h / 6 + 0.025, "Rahmen weiss")
     pb(al - t, al, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
     pb(ah, ah + t, 0.0, 0.05, zl - t, zh + t, "Rahmen weiss")
     pb(al, ah, 0.0, 0.05, zh, zh + t, "Rahmen weiss")
@@ -690,7 +692,7 @@ def haus(b, cx, cy, zb, theta, T, seed=0):
     nst = 15
     rise = (F1 - F0) / nst
     if st == 2:
-        hy0, hy1 = ys + 3 * 0.27, ys + nst * 0.27                 # Treppenloch in der OG-Decke
+        hy0, hy1 = ys + 1 * 0.27, ys + nst * 0.27                 # Treppenloch in der OG-Decke
 
         def platte(x0, y0, x1, y1):
             g.box(x0, y0, F1 - 0.25, x1, y1, F1 - 0.05, "Decke")
@@ -797,12 +799,23 @@ def laden(b, cx, cy, theta):
     return g
 
 
+def kreis_sperre(b, cx, cy, r, h, z0=0.0, kachel=0.8):
+    """Kollision (nur Quader, unsichtbar) fuer eine runde Anlage: Kacheln, deren Mitte im Kreis liegt - kein Durchgehen durch Brunnen, Silos usw."""
+    n = int(math.ceil(r / kachel))
+    for i in range(-n, n):
+        for j in range(-n, n):
+            mx, my = cx + (i + 0.5) * kachel, cy + (j + 0.5) * kachel
+            if math.hypot(mx - cx, my - cy) <= r - 0.25:
+                b.bx.append((cx + i * kachel, cy + j * kachel, z0, cx + (i + 1) * kachel, cy + (j + 1) * kachel, z0 + h))
+
+
 def brunnen(b, cx, cy):
     b.prism(cx, cy, 0.0, 3.4, 0.5, 8, "Stein")                         # Becken
     b.prism(cx, cy, 0.4, 2.9, 0.15, 8, "Brunnenwasser")
     b.prism(cx, cy, 0.4, 0.45, 2.3, 8, "Stein")                        # Saeule
     b.prism(cx, cy, 2.4, 1.3, 0.25, 8, "Stein")                        # obere Schale
     b.prism(cx, cy, 2.6, 0.9, 0.12, 8, "Brunnenwasser")
+    kreis_sperre(b, cx, cy, 3.3, 3.0)                                  # Brunnen ist fest
 
 
 def marktstand(b, cx, cy, theta, farbe):
@@ -832,6 +845,7 @@ def dorfbrunnen(b, cx, cy):
     for sx in (-1, 1):
         b.box(cx + sx * 1.1 - 0.08, cy - 0.08, 0.9, cx + sx * 1.1 + 0.08, cy + 0.08, 2.6, "Holz")
     b.box(cx - 1.4, cy - 0.9, 2.6, cx + 1.4, cy + 0.9, 2.8, "Dach rot")
+    kreis_sperre(b, cx, cy, 1.4, 1.2)
 
 
 # ------------------------------------------------------------------ Platzierung
@@ -1369,6 +1383,15 @@ def baue_alles():
     for (px0, py0, px1, py1) in P["plaetze"]:
         w.add([(px0, py0, Z_PLATZ), (px1, py0, Z_PLATZ), (px1, py1, Z_PLATZ), (px0, py1, Z_PLATZ)], [(0, 1, 2, 3)], "Pflaster")
     for a, c in P["pfade"]:
+        if strassenabstand(a[0], a[1], P["strs"]) > strassenabstand(c[0], c[1], P["strs"]):
+            a, c = c, a                                                       # a = Strassenende: der Pfad endet an der Strassenkante, nicht mittig auf dem Asphalt
+        ln = math.hypot(c[0] - a[0], c[1] - a[1])
+        k = 0.0
+        while k < ln and strassenabstand(a[0] + (c[0] - a[0]) * k / ln, a[1] + (c[1] - a[1]) * k / ln, P["strs"]) < -0.05:
+            k += 0.1
+        if ln - k < 0.3:
+            continue
+        a = (a[0] + (c[0] - a[0]) * k / ln, a[1] + (c[1] - a[1]) * k / ln)
         U.streifen(w, a, c, W_PFAD, Z_PFAD, "Pfad")
     # Gebaeude im Zentrum
     z = Bau("stadt_zentrum")
@@ -1398,8 +1421,8 @@ def baue_alles():
     # Teiche
     t = Bau("stadt_teiche")
     for tx, ty, tr in U.TEICHE:
-        n = 24
-        rr = tr + 1.4
+        n = 48
+        rr = tr + 3.2                                   # Wasser reicht unter das Ufer (Mulde endet erst bei tr + 3,5): keine Luecke zum Teichrand
         t.add([(tx + rr * math.cos(2 * math.pi * i / n), ty + rr * math.sin(2 * math.pi * i / n), U.TEICH_Z) for i in range(n)], [tuple(range(n))], "Teichwasser")
     import bahn as BA                                  # Gleise, Bahnhof, Zuege und Steinbruch (steinbruch.py)
     import steinbruch as SB

@@ -217,3 +217,19 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - **Rauch**: `rustik.kamin` merkt sich jede Kaminoeffnung (`SCHORNSTEINE`); der Export laesst aus 13 von 25 Schornsteinen Rauch aufsteigen (`meta.smoke`). Im Spiel steigen je 7 weiche, grauer werdende Puffs auf, wachsen, driften mit dem Wind und verblassen (nur im Umkreis von 110 m berechnet).
 - Test: nur Attrappen (Weltaufbau, Kollision, Szenenaufbau); die Nabenlage der Fluegel wurde rechnerisch geprueft (Radius 4,5 / 7,7 m, Achsversatz < 1 m). Rauch, Strassenrand und Texturen im echten Spiel nicht gesehen.
 
+
+#### Nachbesserung 3: Treppen, Schienen, Fenster, Kollision, Boeden, Teiche, Rauch
+- **Treppen**: Das Treppenloch der Haeuser (`stadt.haus`, `oeffentlich`) beginnt jetzt schon bei der 2. Stufe (vorher 4.), und `push_out` ignoriert Quader, in die nur der Kopf (`HEAD_TOL` 0,35 m) hineinragt - sonst blieb man beim Abstieg am OG-Geländer/an der Decke haengen.
+- **Schienen**: Gleisteile (Bett, Schwellen, Schienen) sind nur Optik, ohne Kollisionsquader - man laeuft auf Gelaendehoehe ohne Wackeln.
+- **Fenster**: Die Scheibe sitzt buendig an der Wandflaeche (vorher 17 cm tief in vollen Kernen = "zugemauert", v. a. Rathaus/Gasthaus am Markt).
+- **Schuesse durch Zaeune**: Zaunpfosten/-holme sind nur Optik; die Spielerkollision macht die Zaunwand (`kol`), die im `.ptmap` als `meta.nclip` letzte Quader steht und als `Box.clip` Schuesse (`seg_box`) durchlaesst.
+- **Fahrzeuge**: niedrige senkrechte Kanten (< 0,3 m, z. B. Pistenmarkierungen) sind keine Kollisionswaende mehr; Schranken und Torstuetzen am Flughafen haben keine Kollision mehr (Spur war enger als der Wagen).
+- **Hangars**: die Rundbogenhallen haben Kollision an den steilen Bogenteilen und der Rueckwand.
+- **Unsichtbare Waende**: schraeg gedrehte Quader (`Lok.kachel`) werden immer als Kacheln (0,6 m) erfasst statt als ausgerichteter Rahmen.
+- **Boeden**: neue Texturen `pt_gravel` (Pfad, Schotter, Schotterbett, Bruch Erde), `pt_cobble` (Pflaster, Bahnsteig), `pt_dirt` (Hofboden, Acker, Schlamm), `concrete` (Beton, Hangar Boden).
+- **Bankweg**: Pfade enden an der Strassenkante statt mitten auf dem Asphalt.
+- **Teiche**: Wasserflaeche reicht bis `tr + 3,2` (Mulde endet bei `tr + 3,5`), keine Luecke zum Ufer.
+- **Rauch**: 14 Puffs, 16 m hoch, dunkel (0,09) und dichter (Alpha 0,92).
+- **Raketenwerfer**: Beim Nachladen kommt die Rakete von links unten ins Bild, die Hand fasst sie von der Seite.
+- Test: nur Attrappen (kein Blender, kein Panda3D-Rendering).
+- Weitere Punkte dieser Runde: Wasserpruefung (`water_at`) zaehlt Brueckenplanken nicht als Wasser, Nordbruecke hat eine durchgehende Fahrbahn-Kollision; Dachdreiecke sind bis ca. 73 Grad immer begehbar (kein Durchfallen); Marktbrunnen/Dorfbrunnen haben Kollision (`kreis_sperre`); Laternen stehen nicht auf Umlandwegen; Boeschung der Festungsinsel traegt die Gras-Textur; Stellwerk-Treppenloch beginnt am Treppenfuss; Steinbruch-Wegweiser siehe unten.

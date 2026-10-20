@@ -45,9 +45,9 @@ BODEN = ("wiese", "berge", "burg_gelaende", "bruch_grube", "umgebung_wege", "sta
 
 # Blender-Material -> (Spiel-Textur, Kachelgroesse in m). Die Texturen erzeugt spiel.py selbst (TEXGEN); hier stehen nur Name und Massstab.
 TEXMAP = {}
-for _n in ("Wiese", "Wiese Rand"):
+for _n in ("Wiese", "Wiese Rand", "Boeschung"):
     TEXMAP[_n] = ("pt_grass", 6.0)
-for _n in ("Strasse", "Weg", "Piste", "Vorfeld", "Fahrbahn", "Pfad"):
+for _n in ("Strasse", "Weg", "Piste", "Vorfeld", "Fahrbahn"):
     TEXMAP[_n] = ("pt_asphalt", 6.0)
 for _n in ("Wasser", "Teichwasser", "Brunnenwasser"):
     TEXMAP[_n] = ("pt_water", 8.0)
@@ -70,6 +70,14 @@ for _n in ("Holz", "Holz alt", "Holz dunkel", "Dielen", "Laden braun", "Laden br
     TEXMAP[_n] = ("pt_wood", 2.0)
 for _n in ("Schild gelb", "Schild weiss", "Schild rot", "Schild gruen", "Schild Pfosten"):
     TEXMAP[_n] = ("pt_sign", 1.0)
+for _n in ("Pfad", "Schotter", "Schotterbett", "Schotterstrasse", "Bruch Erde"):                       # Kieswege, Schotter, Gleisbett
+    TEXMAP[_n] = ("pt_gravel", 2.5)
+for _n in ("Pflaster", "Bahnsteig"):                                                                   # Marktplatz, Bahnhofsvorplatz, Bahnsteig
+    TEXMAP[_n] = ("pt_cobble", 3.0)
+for _n in ("Hofboden", "Acker", "Schlamm"):                                                            # Bauernhof, Felder
+    TEXMAP[_n] = ("pt_dirt", 4.0)
+for _n in ("Beton", "Hangar Boden"):
+    TEXMAP[_n] = ("concrete", 4.0)
 # Die Burgruine: ALLE Steinteile tragen die Burgstein-Textur (sonst fielen "Stein alt", "Stein dunkel" und "Felsen Burg" heraus)
 TEXPART = {("burgruine", _n): ("pt_fort", 4.0) for _n in ("Stein alt", "Stein dunkel", "Felsen Burg", "Burgstein", "Burgstein dunkel", "Burgstein warm")}
 WASSER_ALPHA = 0.9                                # Wasser ist leicht durchsichtig
@@ -458,6 +466,11 @@ def gelaende_dreiecke(teile):
                 cy = sum(v[i][1] for i in fc) / len(fc)
                 if not (-60.0 <= cx <= WELT + 60.0 and -60.0 <= cy <= WELT + 60.0):
                     continue
+            zz = [v[i][2] for i in fc]
+            if max(zz) - min(zz) < 0.3 and t["name"] != "berge":              # niedrige Kanten (Markierungen, Bordsteine): keine Wand fuer Fahrzeuge
+                nrm = newell([v[i] for i in fc])
+                if nrm is not None and abs(nrm[2]) < 0.5:
+                    continue
             for i in range(1, len(fc) - 1):
                 tris.append((off + fc[0], off + fc[i], off + fc[i + 1]))
                 kinds.append(0)
@@ -519,13 +532,13 @@ def wasser_maske(teile, R):
     return bytes(m)
 
 
-def quader_sammeln(teile):
+def quader_sammeln(teile, kol=False):
     boxes = set()
     for t in teile:
         bau = t["bau"]
         if bau is None or t["spin"] is not None or t.get("verschoben"):
             continue
-        for b in list(bau.bx) + list(getattr(bau, "kol", [])):
+        for b in (list(getattr(bau, "kol", [])) if kol else list(bau.bx)):
             x0, y0, z0, x1, y1, z1 = b
             if x1 < -2.0 or x0 > WELT + 2.0 or y1 < -2.0 or y0 > WELT + 2.0:
                 continue
@@ -747,6 +760,9 @@ def rauchquellen():
     return out
 
 
+NCLIP = [0]
+
+
 def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm, rauch=()):
     little = sys.byteorder == "little"
 
@@ -755,7 +771,7 @@ def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeug
             a = array.array(a.typecode, a)
             a.byteswap()
         return a.tobytes()
-    meta = dict(name="Polytown", id=PT_ID, size=WELT, groups=[], ncm=[len(verts), len(tris)], nbox=len(boxes), mm=mm[0],
+    meta = dict(name="Polytown", id=PT_ID, size=WELT, groups=[], ncm=[len(verts), len(tris)], nbox=len(boxes), nclip=NCLIP[0], mm=mm[0],
                 spawns=spawns, crates=crates, vehicles=fahrzeuge, pads=[[240.0, 184.0, 110.0]],
                 gras_hoehe=None, ver=2, wm=int(WELT / Raster.S), ws=Raster.S, smoke=[list(r) for r in rauch])
     blob = bytearray()
@@ -789,6 +805,10 @@ def main():
     szene_bauen()
     teile = teile_umrechnen()
     boxes = quader_verschmelzen(quader_sammeln(teile))
+    clip = quader_verschmelzen(quader_sammeln(teile, kol=True))      # Zaunwaende: blocken nur Spieler/Fahrzeuge, Schuesse gehen hindurch
+    nclip = len(clip)
+    NCLIP[0] = nclip
+    boxes = boxes + clip
     R = Raster(teile, boxes)
     rand = strassenraender(teile, R)
     gruppen = darstellung(teile + [rand])
