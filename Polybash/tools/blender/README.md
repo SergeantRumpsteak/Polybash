@@ -190,3 +190,12 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - Offene Fenster haben keine Laeden und keine Bretter. Alle Haeuser mit offenem Fenster (Stadthaus, Bauernhaus, Hotel) sind per Treppe bis ins Obergeschoss begehbar (Test).
 - Einzelne Laubbaeume (`wald.ring_baeume`, 10 Stueck) auf den Gruenflaechen zwischen Burg und Kreisstrasse.
 - Bahnhofsuhr sitzt jetzt auf dem Giebeldreieck vor dem Dachrand und ist komplett sichtbar (vorher verdeckte die Dachkante die obere Haelfte).
+
+### Uebertragung ins Spiel: Polytown neu ist jetzt die Standardkarte (export_spiel.py, ../../maps/polytown.ptmap, spiel.py)
+- `python3 export_spiel.py` (reines Python, ohne Blender; baut dieselbe Szene mit einer bpy-Attrappe, ca. 45 s) schreibt `Polybash/maps/polytown.ptmap` (18,8 MB). Nach jeder Aenderung an der Karte neu ausfuehren und die Datei mit einchecken.
+- Inhalt: 792k Flaechen in 32-m-Bloecken (je Block vier Klassen: opak, zweiseitig, durchsichtig, leuchtend; Licht wie `Mesh.tri` in die Vertexfarben eingebacken, Normalen fuer die Echtzeit-Schatten), 70k Gelaende-Dreiecke fuer die Kollision (`TriMesh` der Engine: Wiese, Berge, Burggelaende, Steinbruchgrube, Wege, Piste ...), 80k Kollisionsquader (`Bau.bx`, Kacheln gedrehter Waende verschmolzen), 61 Startpunkte, 12 Kisten, 2 Fahrzeuge, Helipad (240/184), Minimap und Menue-Vorschau.
+- `spiel.py`: `pt_find`/`load_ptmap`/`pt_mapdata` laden die Datei, `World.build_pt` setzt die Quader (Raster 4 m), `build_pt_scene` baut die Grafik direkt aus den fertigen Vertex-Feldern. Fehlt `maps/polytown.ptmap`, startet die alte, im Code erzeugte Polytown-Karte. Mitspieler bekommen vom Host nur die Kopfzeile und laden die Datei aus ihrem Ordner `maps` (wie bei der Minecraft-Karte).
+- Der flugfaehige Spiel-Hubschrauber steht auf dem Helipad; der statische Kampfhubschrauber der Blender-Szene wird dafuer nicht exportiert. Die Radarantenne auf dem Tower dreht sich (144 Grad/s wie in Blender).
+- Tomahawk: Code, Zustand und Einstellungen bleiben unveraendert; der Knopf liegt ausser Reichweite, bis der Kontrollraum nachgebaut ist (`World.build_pt`, `button`/`timer_panel`).
+- Tests: nur Spiellogik mit Panda3D-Attrappen (Weltaufbau, keine Luecken im Gelaende, Startpunkte, Haeuser betreten, Heli, Auto, Netz-Pruefsumme). Die Grafik (echte Panda3D-Geometrie, Schatten) konnte hier nicht gerendert werden.
+
