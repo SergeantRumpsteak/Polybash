@@ -114,13 +114,6 @@ Geschütz, Fahrzeug/Heli) erscheint als grober Kreis (Lärmradius, Mitte zufäll
 ihn hören kann; echter Sichtkontakt (Sichtlinie, Blickfeld, Sichtweite - ENEMY_SIGHT_*) als roter Punkt mit Nachleuchten.
 Sichtungen werden pro Spieler gesammelt und mit Verbündeten (World.allied) geteilt (Game.sightings, intel_*). Set komplett:
 Rahmen in der Spielerfarbe um die Ausrüstungs-Kacheln. Neue Granate Abwehrdrohne ("guard", Mob "gdrone", GDRONE_*).
-11: Capture the Flag (Modus "ctf", CTF_*): zwei Teams (ctf_assign/ctf_balance, Armbinde in der Teamfarbe, Sichtungen und
-Lärm-Pings fürs ganze Team), Eigenbeschuss-Schalter. Blood Gulch (nur im CTF): Teamflagge je Basis, gegnerische holen,
-eigene muss daheim sein. Polytown: zwei feste Stützpunkte NW/SO (build_ctf_bases, in allen Modi), neutrale Flagge an
-einem zufälligen Ort in der Burg (CTF_MID_SPOTS). Flagge mit "GB" (build_ctf_flag), darüberlaufen nimmt sie, am Rücken
-getragen, Kreis um den Träger auf der Minimap (CTF_PING_*), Pfeil zur Basis, fällt beim Tod (CTF_DROP_T), keine Fahrzeuge.
-Standard: Monster/Tomahawk aus, Hauptspiel-Loadout (Waffenwahl vor dem Spawn, World.loot_mode). Host-Menü: Modus in der
-Setup-Seite, im Rundenende und per Knopf in der Lobby; CTF-Regeln auf eigener Seite (CtfPage).
 12: Performance (kein Monster-Limit): Kollisionsraster für feste Props (World.solid_near, SOLID_GRID) - push_out und
 die Spawn-Prüfungen durchsuchen nicht mehr alle ~1800 Props (Ergebnis exakt wie vorher). Monster-KI gestaffelt
 (update_mobs_staggered, MOB_LOD_*): nahe/aktive Monster jedes Bild, ferne im Leerlauf reihum mit aufgelaufener Zeit;
@@ -187,7 +180,6 @@ Ausrüstung (aus allen Kistenarten, Tabelle GEAR + LOOT_GEAR_TABLES; LOOT_CATEGO
   Tasten stehen zentral in KEYS (Vorbereitung für frei belegbare Steuerung).
 
 Spielmodi (vom Host im Start-Menü gewählt, mit einstellbarem Zeitlimit):
-  Capture the Flag  (11) Zwei Teams. Flagge holen und in die eigene Basis bringen = 1 Punkt (siehe oben, CTF_*).
   King of the Hill  Die Burg in der Mitte ist die Zone. Jeder Spieler in der Zone
                     bekommt 1 Punkt pro Sekunde (auch mehrere gleichzeitig).
                     Ein Kill gibt 10 Punkte, steht der Killer dabei in der Zone: 20.
@@ -204,9 +196,6 @@ Fallschaden: bis 5,5 m Fallhöhe nichts, darüber 11 HP pro Meter (Sprung vom Tu
 Mitgelieferte Karte "TTT Minecraft b5": eine Minecraft-Welt Block für Block mit Originaltexturen
 (Datei maps/ttt_minecraft_b5.mcmap, im Setup-Menü Zeile 7 wählbar; Deathmatch ohne Monster;
 Leitern: W/Leertaste klettern, Ducken hält fest). Alle Spieler brauchen die .mcmap-Datei im Ordner 'maps'.
-Mitgelieferte Karte "Blood Gulch" (maps/blood_gulch.json, nach Halo CE): langer Canyon mit zwei gespiegelten Basen (West blau,
-Ost rot; Türen, Dachtreppe), Felsformationen mit Treppen, Scharfschützen-Simsen an den Wänden, zwei Aussichtstürmen,
-je zwei Geländewagen, Helipad und MG an der Basis; die Mitte (Mulde) ist die King-of-the-Hill-Zone.
 Eigene Karten: .json-Dateien aus dem Kartenbau-Editor in den Ordner 'maps' neben
 dem Spiel legen; der Host wählt sie im Setup-Menü (Zeile 7). Mitspieler bekommen
 die Karte beim Beitritt automatisch vom Host.
@@ -409,39 +398,10 @@ def sticky_keys_restore():
 # ---------------------------------------------------------------- Konstanten
 SEED = 42
 MAP_WORLD = 200.0        # Kartendateien (Editor, Minecraft): Spielfeld 0..200 m
-EXP_MAP_SCALE = 1.5      # 7c: Experimental-Standardkarte so viel grösser als Sinans 300-m-Polytown (Seitenlänge -> 450 m)
-STD_WORLD = 300.0 * EXP_MAP_SCALE   # Standardkarte: aussen ringsum ein Gebirgszug
-BIG_MAP = EXP_MAP_SCALE >= 1.25   # grosse Karte: Ortskern + Wälder, Park, Hütten, Militärecke (sonst Sinans Polytown)
-BIG_TREE_K = 1.8         # grosse Karte: so viel mehr Streubäume (dazu die Wälder BIG_FORESTS)
-BIG_TREE_DETAIL_R = 105.0  # m um die Mitte: Bäume im Detail (Sinans Bäume); weiter draussen und in den Wäldern Low-Poly-
                            # Bäume (ca. 60 statt 1000-2000 Dreiecke) - so bleibt die grosse Karte flüssig
-BIG_ROCK_K = 1.8         # ... Felsen
-BIG_PONDS = 8            # ... Teiche
-BIG_COVER = 52           # ... verstreute Deckungsblöcke
-BIG_CRATE_K = 1.7        # ... Kisten je Art (CRATES_STD x das)
-BIG_MOB_K = 1.7          # ... Monster je Art
 # Wälder (Mitte relativ zur Kartenmitte, Radius, Bäume). Lichtungen bleiben frei (Bauwerke halten Abstand).
-BIG_FORESTS = (
-    (25.0, 136.0, 32.0, 190),     # Nordwald um den Tunneleingang Nord
-    (122.0, 52.0, 28.0, 150),     # Ostwald um den Tunneleingang Ost
-    (92.0, 140.0, 26.0, 120),     # Nordostwald mit Jagdhütte
-    (-148.0, 62.0, 22.0, 90),     # Westwald mit Hütte
-    (-150.0, -30.0, 18.0, 60),
-    (-98.0, -138.0, 36.0, 420),   # Südwestwald (Felsformation auf einer Lichtung; 10g: grösser, viel dichter)
-    (-138.0, -92.0, 26.0, 230),   # 10g: Südwestwald, nördlicher Ausläufer (vorher freie Wiese)
-    (-30.0, -148.0, 24.0, 95),
-    (150.0, -22.0, 20.0, 75),     # Ostrand mit Hütte
-    (-40.0, 150.0, 22.0, 85),
-    (150.0, 120.0, 20.0, 70),
-    (-150.0, 140.0, 16.0, 45),
-    (-60.0, -90.0, 14.0, 40),     # Wäldchen zwischen Ort und Südwestwald
-)
-BIG_FOREST_GAP = 3.2     # m Mindestabstand der Waldbäume (Stamm zu Stamm) - dicht, aber begehbar
-BIG_FOREST_GAP_DENSE = 2.4   # 10g: ... im dichten Südwestwald (BIG_DENSE)
-BIG_DENSE = ((-98.0, -138.0, 36.0), (-138.0, -92.0, 26.0))   # 10g: dichte Wälder (Mitte, Radius)
-BIG_UNDERGROWTH = ((-98.0, -138.0, 36.0, 300), (-138.0, -92.0, 26.0, 170), (-60.0, -90.0, 14.0, 35))
                          # 10g: Unterholz (Mitte, Radius, Büsche) - Deckung überall im Südwestwald
-WORLD = STD_WORLD        # Spielfeld: 0..WORLD in x und y (wird pro Karte gesetzt, siehe set_world_size)
+WORLD = 300.0            # Spielfeld: 0..WORLD in x und y (wird pro Karte gesetzt, siehe set_world_size)
 CENTER = WORLD / 2       # Mitte der Karte = Burg
 MARGIN = 30.0            # Gelände wird über den Rand hinaus gezeichnet
 CELL = 4.0               # Gitterweite des Geländes
@@ -472,7 +432,6 @@ N_TITAN = 2              # Titan (Boss): höchstens so viele gleichzeitig (10g: 
 # 10g: Reviere der Titanen auf der grossen Karte (Mitte relativ zur Kartenmitte, Radius m). Norden = +y, Westen = -x:
 # Titan A im Nordwest-Viertel, Titan B im Südost-Viertel bei der Landebahn. Ohne Aggro bleiben sie in ihrem Revier.
 TITAN_HOMES = ((-95.0, 95.0, 55.0), (95.0, -105.0, 50.0))
-COLOSSUS_HOME_R = 40.0   # 10g: Koloss - Revier um seinen Startpunkt (dorthin kehrt er nach einem Treffer-Ping zurück)
 TITAN_PING_ERR = 5.0     # 10g: Titan/Koloss angeschossen: Ping auf den Schützen, so ungenau (m) - egal wie weit weg
 MOB_HIT_POS_ERR = 7.0    # 10g: andere Monster angeschossen: laufen zur Stelle des Schützen beim Schuss (so ungenau, m)
 HOME_RETURN_K = 1.0      # 10g: Tempo-Faktor (auf "speed") beim Rückweg ins Revier
@@ -523,7 +482,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 42         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 11: 42 - CTF)
+NET_VERSION = 41         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
 NET_LOAD_TIMEOUT = 120.0  # Frist für Beitretende, die noch die Karte laden
@@ -539,49 +498,13 @@ PROTECT_T = 3.0          # Spawnschutz in s (endet beim Schiessen)
 SB_EVERY = 15            # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot (2x pro Sekunde)
 OVER_T = 15.0            # so lange bleibt die Rangliste nach Rundenende stehen
 
-MODES = ("koth", "dm", "ctf")
-MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch", "ctf": "Capture the Flag"}
-# --- 11: Capture the Flag (zwei Teams). Blood Gulch: je Basis eine Teamflagge, gegnerische holen und zur eigenen Basis
-# bringen = 1 Punkt. Polytown: neutrale Flagge in der Burg, beide Teams bringen sie in ihren Stützpunkt.
-CTF_TEAM_NAMES = ("Blau", "Rot")
-CTF_TEAM_COLS = ((0.18, 0.40, 0.95), (0.92, 0.20, 0.18))     # Teamfarben (Armbinde, Fahne, HUD, Minimap)
-CTF_NEUTRAL_COL = (1.0, 0.80, 0.12)                          # neutrale Flagge (Polytown)
-CTF_PICK_R = 1.4         # m: wer so nah (waagerecht) an der Flagge ist, nimmt sie (einfach darüberlaufen)
-CTF_PICK_DZ = 1.9        # m: ... bei höchstens diesem Höhenunterschied
-CTF_CAP_R = 4.0          # m um den eigenen Flaggenständer: Flagge abgeben = 1 Punkt
-CTF_NEED_HOME = True     # Blood Gulch: Punkt nur, wenn die eigene Flagge gerade in der Basis steht
-CTF_DROP_T = 20.0        # s: so lange bleibt eine gefallene Flagge liegen, dann kehrt sie zurück (Vorschlag)
-CTF_NEUTRAL_DELAY = 3.0  # s: Polytown - nach einem Punkt erscheint so viel später eine neue Flagge in der Mitte
-CTF_PING_T = 1.5         # s: so oft sehen alle einen Kreis um den Flaggenträger (Startwert, sinnvoll 1-2 s)
-CTF_PING_R = 10.0        # m: Radius dieses Kreises (Mitte zufällig versetzt, der Träger ist irgendwo darin)
-CTF_PING_LIFE = 2.2      # s: so lange bleibt ein Träger-Kreis sichtbar
-CTF_NO_VEHICLES = True   # mit Flagge: keine Fahrzeuge, kein Heli, kein Schützensitz (Vorschlag)
-CTF_PTS_MAX = 10         # Punktelimit im Host-Menü: 0 (aus) .. so viele Punkte
-CTF_FF_DEFAULT = False   # Eigenbeschuss (Standard aus)
-CTF_LOOT_DEFAULT = "loadout"   # "loadout" = Hauptspiel-Loadout (Waffenwahl vor dem Spawn) | "exp" = Experimental-Loot
-CTF_MOBS_DEFAULT = 0     # Monster im CTF: aus
-CTF_TOMA_DEFAULT = False # Tomahawk im CTF: aus
-CTF_BASE_A = 12.0        # Polytown-Stützpunkt: halbe Kantenlänge (m)
-CTF_BASE_WALL_H = 2.3    # Mauerhöhe (stehend auf dem Auftritt schiesst man darüber, geduckt volle Deckung)
-CTF_BASE_STEP_H = 0.9    # Auftritt an der Mauerinnenseite
-# Polytown-Stützpunkte (Mitte relativ zur Kartenmitte, Ausrichtung): Team 0 (Blau) im Nordwest-Wäldchen, Team 1 (Rot)
-# im Südosten am Ende der Landebahn. s = +1: Tore nach Süden und Osten (zur Burg), s = -1: Tore nach Norden und Westen.
-CTF_BASES = ((-140.0, 147.0, 1), (169.0, -113.0, -1))
-CTF_FLAG_LOCAL = (-6.0, 6.0)   # Flaggenständer im Stützpunkt (lokal, hinten im Unterstand)
-# Blood Gulch: Flaggenstand in der Mitte des Untergeschosses jeder Basis (West = Blau, Ost = Rot)
-CTF_BG_FLAGS = ((135.5, 309.7), (279.6, 100.9))
-# Polytown, neutrale Flagge: mögliche Orte in der Burg (relativ zur Mitte, Boden-z) - Hof, Kasematten, Wehrgänge,
-# Stege und der Raum im Kontrollturm; ungültige (Wand, Decke zu tief) werden beim Aufbau aussortiert
-CTF_MID_SPOTS = ((-7.0, 7.0, 0.0), (7.0, -7.0, 0.0), (-10.0, -16.6, 0.0), (10.0, -16.6, 0.0), (-10.0, 16.6, 0.0),
-                 (0.0, 11.0, 5.0), (0.0, -11.0, 5.0), (20.5, 6.0, 5.0), (-20.5, -6.0, 5.0),
-                 (-2.6, 2.8, 12.2), (2.8, -2.6, 12.2))     # 5.0 = Stege (KT_MID), 12.2 = Turmraum (KT_MID + Treppe)
+MODES = ("koth", "dm")
+MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch"}
 LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Minuten
 STD_MAP_NAME = "Polytown"                # Name der eingebauten Standardkarte
 MAP_ALIASES = {"9d7c83d12b8832f1": "Minecraft Insel"}    # Anzeigename einer .mcmap-Karte nach ihrer Kennung
 MAP_PREVIEW_IDS = {"9d7c83d12b8832f1": "mc_ttt"}       # eingebautes Vorschaubild dazu
 ZONE_R = 15.0            # Radius der King-of-the-Hill-Zone (Burghof; 10a: nur noch Karten ohne die Polytown-Burg)
-KOTH_ZONE_TOL = 1.0      # 10a: m über der höchsten Burg-/Turmebene zählt noch zur Zone (darüber: Luft, zählt nicht)
-KOTH_TOWER = True        # 10a: Polytown: Kontrollturm in der Burgmitte statt des offenen Bergfrieds
 KT_BASE = 3.0            # 10a: halbe Breite von Sockel und Schaft des Turms (m)
 KT_MID = 5.0             # 10a: mittlere Etage (= Wehrgang der Mauer, dort docken die Stege an)
 KT_STEP = 0.45           # 10a: Stufenhöhe der Wendeltreppe
@@ -742,32 +665,7 @@ TOMA_SPOTS = (
     (4.0, 60.0, None),      # Wiese nördlich der Burg
     (76.0, 56.0, None),     # Feld Nordost
 )
-TOMA_SPOTS_BIG = (       # 7c: grosse Karte (relativ zur Mitte; z = feste Höhe, None = Boden in der Nähe suchen)
-    (-57.1, 56.8, 9.0),     # Feldturm Nordwest (lange Treppe)
-    (57.1, -59.2, 9.0),     # Feldturm Südost
-    (75.0, -112.0, 3.5),    # Dach der Bunkerstellung (Militärecke)
-    (104.3, -92.2, 5.2),    # Aussichtspunkt auf den Containern
-    (105.0, 81.5, 2.4),     # Heuboden der Scheune (Hof im Nordosten)
-    (-128.0, -31.2, 3.3),   # Ruinendorf, Obergeschoss
-    (-105.0, -100.0, 5.4),  # Felsbogen im Südwestwald
-    (40.0, -100.0, 2.6),    # Dach eines Unterstands (Militärecke)
-    (-112.0, 107.0, 2.9),   # Pavillon im Park
-    (40.0, -40.0, None),    # freies Feld Südost
-    (-80.0, -56.0, None),   # Feld Südwest
-    (-40.0, 52.0, None),    # Wiese Nordwest
-    (76.0, 56.0, None),     # Feld Nordost
-    (-88.0, 82.0, None),    # Parkwiese
-    (-118.0, 118.0, None),  # Park, Nordwestecke
-    (98.0, -52.0, None),    # Militärecke, Exerzierplatz
-    (118.0, 104.0, None),   # Wiese hinter dem Hof (10g: vorher Acker beim Hof - dort steht jetzt die neue Gasse)
-    (-118.0, 20.0, None),   # Westwiese
-    (130.0, -10.0, None),   # Ostwiese
-    (-20.0, -112.0, None),  # Südwiese
-    (20.0, 112.0, None),    # Lichtung vor dem Nordwald
-    (-60.0, -125.0, None),  # Lichtung am Südwestwald
-)
 TOMA_GROUND_CLEAR = 9.0  # m: so viel Platz brauchen Bodenorte zu Wänden/Deckung (keine Engstellen für Fahrzeuge)
-TOMA_KEEP_FREE = 12.0    # m Abstand zu Rollbahn, Helipads und Fahrzeug-Startplätzen
 TOMA_SEE_R = 120.0       # Mitspieler erfahren vom Host (und sehen) die Säule nur in dieser Entfernung
 TOMA_RISE_T = 3.0        # s: so lange fährt die Säule hoch; erst danach ist der Knopf benutzbar
 TOMA_SINK_T = 8.0        # s: so lange versinkt die benutzte Säule wieder im Boden
@@ -808,41 +706,22 @@ WI_SLAM = -10            # Bodenschlag des Kolosses
 WI_ROCK = -11            # Steinbrocken des Titans
 
 # --- Gebirge am Rand der Standardkarte
-MTN_BAND = 46.0          # so breit ist der Gebirgsgürtel (m, schwankt)
 MTN_H = 46.0             # Höhe am Kartenrand (dahinter steigt es weiter; 7a: von 36 auf 46 m erhöht)
 MTN_CLIMB = True         # True: Spieler UND Monster können das Gebirge hochlaufen (Sniper-Posten oben);
                          # False: alter Zustand - Felswände steiler als MTN_SLOPE sperren, jetzt auch für Monster
 MTN_SLOPE = 0.95         # (nur bei MTN_CLIMB = False) steiler als das (ca. 43 Grad) kommt man nicht hoch
 MTN_WALL = 1.0           # unsichtbare Wand: so weit vor dem Kartenrand (Gebirgskamm) ist Schluss - für alle
                          # (10g: 4,0 -> 1,0 m - Spieler und Monster kommen höher ins Gebirge, Grenze bleibt am Kamm)
-CRITTER_MTN_MAX = 0.4    # 10g: Hasen bleiben im flachen Gelände: höchstens so viel m Gebirge unter sich
 CRITTER_STAY = (35.0, 80.0)   # 10g: so lange (s) bleibt ein Hase in einem Wald, dann hoppelt er zum nächsten
 CRITTER_TRAVEL_K = 2.6   # 10g: zwischen zwei Wäldern (auch quer durch den Ort) so viel schneller als beim Umherhoppeln
 CRITTER_FOREST_PULL = 0.7     # 10g: auf der Flucht zieht es ihn so stark Richtung nächster Wald (0 = nur weg)
 # 9a: Alpen-Look (Form + Farben)
 MTN_PEAK_MIN, MTN_PEAK_MAX = 0.55, 1.30   # Gipfelhöhe relativ zu MTN_H: niedrige Sättel bis hohe Spitzen
-MTN_RIDGE = 0.24         # Stärke der Grate (scharfe Kämme, die zum Rand hin hochlaufen)
-MTN_TERRACE = 5.5        # m: Höhe der Felsstufen (steile Felsbänder mit flacheren Absätzen dazwischen)
-MTN_TERRACE_K = 0.45     # Anteil der Stufung (0 = glatte Hänge)
-MTN_FOREST_Z = 14.0      # m: bis hierhin dunkles Bergwald-/Almgrün am Hangfuss
-MTN_ROCK_Z = 16.0        # m: ab hier überwiegt Fels (grau bis braungrau, mit Gesteinsschichten)
 MTN_SNOW_Z = 34.0        # m: Schneegrenze (schwankt um +-5 m)
-MTN_SNOW_SOFT = 7.0      # m: weicher Übergang an der Schneegrenze
-MTN_SNOW_STEEP = 0.55    # Hangneigung (Normale z): steiler hält nur dünner Schnee
-MTN_SNOW_THIN = 0.62     # so viel Schnee bleibt an steilen Stellen über der Schneegrenze
 MTN_FOG = 0.0085         # 9a: Nebeldichte auf der Gebirgskarte (vorher 0.012 - die Alpen sollen sichtbar sein)
 # 9a: Wasserfälle im Gebirge (je Fall: Felsscharte mit Klippe, Wasserband, Gischt, Becken, leises Rauschen)
 WATERFALL_COUNT = 3      # 0..4 (die ersten aus WF_SPOTS)
 WF_SPOTS = (("N", 0.40), ("W", 0.62), ("S", 0.78), ("E", 0.22))   # Kartenrand + Lage entlang des Randes (0..1)
-WF_CLIFF_D = 9.0         # m: Abstand der Klippenkante vom Kartenrand
-WF_CLIFF_W = 1.5         # m: so schmal ist die Klippe (fast senkrecht)
-WF_HALF_W = 9.0          # m: halbe Breite der Scharte
-WF_FLOOR = 0.06          # Restanteil des Bergs am Grund der Scharte
-WF_POOL_R = 4.5          # m: Becken am Fuss
-WF_POOL_DEPTH = 0.9      # m: Tiefe des Beckens (zum Waten)
-WF_WIDTH = 3.2           # m: Breite des Wasserbands
-WF_SPEED = 1.6           # Texturdurchläufe pro Sekunde (fallendes Wasser)
-WF_SPRAY = 14            # Gischtflocken je Wasserfall
 WF_VOL = 0.35            # Lautstärke des Rauschens (leise)
 WF_RANGE = 70.0          # m: so weit hört man es
 VEH_SLOPE = 0.7          # ... mit dem Geländewagen
@@ -881,10 +760,7 @@ FLAK_SPEED, FLAK_INTERVAL, FLAK_LIFE, FLAK_HEAT = 260.0, 0.55, 2.6, 0.14
 TUN_Z = -4.2             # Boden der Tunnel (unter dem ebenen Gelände um Burg und Häuser)
 MOB_TUNNELS = True       # Monster dürfen die Treppen hinunter in die Tunnel (Drohnen nicht)
 TUN_LONG = True          # Standardkarte: die langen Tunnel vom Kartenrand (Nord, Süd) mit je einem Abzweig
-TUN_COVER_MIN = -0.5     # m: tiefer darf das Gelände über einem Gang nicht liegen (sonst wird es dort angehoben)
 TUN_SEG = 8.0            # m: Wände/Decke in Stücken, deren Oberkante dem Gelände darüber folgt
-TUN_ENTRY_FLAT = 10.0    # m: so weit ist das Gelände um die neuen Eingänge ganz eben (keine Ritzen im Gelände)
-TUN_LAMP = 9.0           # m Abstand der Lampen in den neuen Gängen
 TUN_ROOF = -1.7          # Unterkante der Decke (Gang: 2,5 m hoch)
 GROUND_ANCHOR_Z = 0.6    # 9a: Quader mit Unterkante bis hierhin gelten als "steht auf dem Boden"
 GROUND_FOOT_SINK = 0.3   # 9a: so tief (m) reicht das Fundament unter den tiefsten Geländepunkt der Grundfläche
@@ -1484,20 +1360,6 @@ SCOPE_INFO = ("offene Visierung", "Leuchtpunkt, 1x", "4-fach Zielfernrohr", "8-f
 SIGHT_NAMES = ("iron", "red", "acog", "sniper")
 DEFAULT_SCOPE = {3: SC_SNIPER}              # Scharfschützengewehr ab Werk mit Sniper-Visier
 DEFAULT_LOADOUT = (1, 0, GAD_C4, SC_IRON)   # Sturmgewehr + Pistole + C4 + Kimme und Korn
-
-
-def loadout_valid(v):
-    """11: Loadout eines Mitspielers prüfen ([Hauptwaffe, Kleinwaffe, Gadget, Visier, Aufsätze Haupt, Aufsätze Klein])
-    -> bereinigte Liste oder None. Der Host gibt nur Waffen aus PRIMARIES/SECONDARIES heraus."""
-    if not isinstance(v, (list, tuple)) or len(v) < 4:
-        return None
-    pri, sec, gad, sc = v[:4]
-    if pri not in PRIMARIES or sec not in SECONDARIES or gad not in range(len(GADGETS)):
-        return None
-    sc = sc if isinstance(sc, int) and not isinstance(sc, bool) and 0 <= sc < len(SCOPES) else SC_IRON
-    a1 = att_valid(v[4]) if len(v) > 4 else None
-    a2 = att_valid(v[5]) if len(v) > 5 else None
-    return [pri, sec, gad, sc, a1 or ATT_NONE, a2 or ATT_NONE]
 ROCKET_WI = next(i for i, w in enumerate(WEAPONS) if w.blast_r > 0)   # Raketenwerfer
 PISTOL_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Pistole")   # richtet am Helikopter keinen Schaden an
 MINIGUN_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Minigun")
@@ -1648,17 +1510,14 @@ MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "coloss
              "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne"}
 
 
-def end_tabs(koth, ctf=False):
+def end_tabs(koth):
     """Reiter des Endbildschirms: (Titel, [(Spaltenkopf, Wert(e) -> Zahl/Text, hervorheben?)],
-    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier. 11: ctf = Team-Spalte
-    in der Übersicht und Reiter "Flaggen"."""
+    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier."""
     kd = lambda e: e["kills"] / max(1, e["deaths"])                                       # noqa: E731
     st = lambda e, k: e["stats"].get(k, 0)                                                  # noqa: E731
     mob = lambda e, k: e["stats"].get("mob", {}).get(k, 0)                                  # noqa: E731
     crate = lambda e, k: e["stats"].get("crate", {}).get(k, 0)                              # noqa: E731
-    team = lambda e: CTF_TEAM_NAMES[e["team"]] if e.get("team") in (0, 1) else "-"         # noqa: E731
-    tabs = [("Übersicht", ([("Team", team, False), ("Flaggen", lambda e: st(e, "flag_caps"), True)] if ctf else [])
-             + ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
+    tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
              + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
                 ("K/D", lambda e: round(kd(e), 2), True)]
              + ([("Zeit in der Radarstation", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
@@ -1688,13 +1547,6 @@ def end_tabs(koth, ctf=False):
                           ("Im Heli", lambda e: f"{st(e, 'fly'):.0f} m", False),
                           ("Flüge", lambda e: st(e, "flights"), True)],
              "Weltenbummler", lambda e: st(e, "walk") + st(e, "drive") + st(e, "fly"))]
-    if ctf:                                          # 11: CTF-Werte als eigener Reiter direkt nach der Übersicht
-        tabs.insert(1, ("Flaggen", [("Team", team, False),
-                                    ("Flaggen geholt", lambda e: st(e, "flag_caps"), True),
-                                    ("Zurückgebracht", lambda e: st(e, "flag_returns"), True),
-                                    ("Träger getötet", lambda e: st(e, "carrier_kills"), True)],
-                        "Flaggen-Held", lambda e: st(e, "flag_caps") * 100 + st(e, "flag_returns") * 10
-                        + st(e, "carrier_kills")))
     return tabs
 
 
@@ -1950,100 +1802,6 @@ def hills(x, y):
             + math.sin((x + y) * 0.02) * 2.0)
 
 
-_WF_CACHE = {}
-
-
-def waterfall_spots():
-    """9a: [(Seite, Lage entlang des Randes in m)] der Wasserfälle für die aktuelle Kartengrösse."""
-    v = _WF_CACHE.get(WORLD)
-    if v is None:
-        v = _WF_CACHE[WORLD] = [(s, f * WORLD) for s, f in WF_SPOTS[:max(0, min(len(WF_SPOTS), WATERFALL_COUNT))]]
-    return v
-
-
-def wf_local(side, x, y):
-    """9a: (Abstand vom Kartenrand der Seite, Lage entlang des Randes)."""
-    if side == "N":
-        return WORLD - y, x
-    if side == "S":
-        return y, x
-    if side == "W":
-        return x, y
-    return WORLD - x, y
-
-
-def wf_world(side, d, u):
-    """9a: Umkehrung von wf_local -> (x, y)."""
-    if side == "N":
-        return u, WORLD - d
-    if side == "S":
-        return u, d
-    if side == "W":
-        return d, u
-    return WORLD - d, u
-
-
-def wf_pool_d():
-    return WF_CLIFF_D + WF_CLIFF_W + WF_POOL_R * 0.85
-
-
-def near_waterfall(x, y, pad=0.0):
-    """9a: liegt (x, y) in einer Wasserfall-Scharte (Klippe bis Becken, plus pad)?"""
-    for side, u0 in waterfall_spots():
-        d, u = wf_local(side, x, y)
-        if abs(u - u0) < WF_HALF_W + pad and WF_CLIFF_D - 2.0 - pad < d < wf_pool_d() + WF_POOL_R + pad:
-            return True
-    return False
-
-
-def mountain(x, y):
-    """Gebirgszug am Rand der Standardkarte: 0 im Inneren, steigt zum Rand hin (erst sanfte Ausläufer,
-    dann steile Felswände) und hinter dem Rand weiter. Gipfel und Sättel wechseln sich ab.
-    9a: Alpen-Form - unterschiedlich hohe Gipfel (MTN_PEAK_*), scharfe Grate (MTN_RIDGE), Felsstufen
-    (MTN_TERRACE) und Scharten mit Klippe + Becken für die Wasserfälle (WF_*)."""
-    W = WORLD
-    ex, ey = min(x, W - x), min(y, W - y)
-    k = 16.0                                             # weiche Ecken (Soft-Minimum der Randabstände)
-    m = min(ex, ey)
-    d = m - k * math.log(math.exp((m - ex) / k) + math.exp((m - ey) / k))
-    wob = (6.0 * math.sin(x * 0.037 + 1.9) + 5.0 * math.sin(y * 0.041 - 0.6)
-           + 3.0 * math.sin((x - y) * 0.023 + 0.4))      # Breite des Gürtels schwankt
-    t = (MTN_BAND + wob - d) / (MTN_BAND + wob)
-    if t <= 0.0:
-        return 0.0
-    pk = 0.5 + 0.5 * math.sin(x * 0.061 + 0.8) * math.cos(y * 0.057 - 1.3)
-    pk2 = 0.5 + 0.5 * math.sin(x * 0.023 - y * 0.019 + 2.1)
-    peaks = MTN_PEAK_MIN + (MTN_PEAK_MAX - MTN_PEAK_MIN) * (0.6 * pk + 0.4 * pk2) ** 1.3
-    if t <= 1.0:
-        h = MTN_H * peaks * t ** 3
-    else:                                                # hinter dem Kartenrand: weiter bergauf, flacher
-        h = MTN_H * peaks * (1.0 + 1.6 * (1.0 - math.exp(-(t - 1.0) * 1.5)))
-    wr = smoothstep(0.3, 0.8, t)
-    if wr > 0.0:                                         # Grate: scharfe Kämme (1 - |sin|), leicht verbogen
-        r = 0.5 * (1.0 - abs(math.sin(x * 0.046 + 2.0 * math.sin(y * 0.021 + 0.5))))
-        r += 0.5 * (1.0 - abs(math.sin(y * 0.043 + 2.0 * math.sin(x * 0.019 - 1.1))))
-        h *= 1.0 + wr * MTN_RIDGE * (2.0 * r ** 1.5 - 1.0)
-        q = h / MTN_TERRACE                              # Felsstufen: steile Bänder, flachere Absätze
-        fl = math.floor(q)
-        f = q - fl
-        f = f * f * (3.0 - 2.0 * f)
-        f = f * f * (3.0 - 2.0 * f)
-        h += MTN_TERRACE_K * wr * ((fl + f) * MTN_TERRACE - h)
-    rug = (1.4 * math.sin(x * 0.19 + 0.3) * math.sin(y * 0.23 - 0.9)
-           + 0.8 * math.sin(x * 0.47 + y * 0.31)) * min(1.0, t * 1.4)   # Felsstruktur
-    h = max(0.0, h + rug * min(1.0, t * 2.0))
-    if WATERFALL_COUNT > 0:                              # Wasserfall-Scharten: Klippe, dahinter (zur Mitte) tiefer Grund
-        for side, u0 in waterfall_spots():
-            d_, u_ = wf_local(side, x, y)
-            du = abs(u_ - u0)
-            if du >= WF_HALF_W or d_ < WF_CLIFF_D - 1.0:
-                continue
-            lat = 1.0 - smoothstep(WF_HALF_W * 0.55, WF_HALF_W, du)
-            h *= 1.0 - lat * smoothstep(WF_CLIFF_D, WF_CLIFF_D + WF_CLIFF_W, d_) * (1.0 - WF_FLOOR)
-            pr = math.hypot(d_ - wf_pool_d(), du)
-            if pr < WF_POOL_R:
-                h -= WF_POOL_DEPTH * (1.0 - smoothstep(WF_POOL_R * 0.45, WF_POOL_R, pr))
-    return h
 
 
 # ------------------------------------------------------------ Kartendateien (vom Karteneditor)
@@ -2104,7 +1862,7 @@ def sanitize_map(raw):
     m["steep"] = bool(raw.get("steep", False))        # steile Hänge sind nicht begehbar (wie das Gebirge der Standardkarte)
     kp = raw.get("keep") if isinstance(raw.get("keep"), dict) else {}
     m["keep"] = {k: bool(kp.get(k, True)) for k in ("castle", "runway", "tunnels")}
-    m["mesh"] = decode_mesh(raw.get("mesh"), WS)          # Dreiecksnetz (Blood Gulch): ersetzt Höhenraster und Quader
+    m["mesh"] = decode_mesh(raw.get("mesh"), WS)          # Dreiecksnetz: ersetzt Höhenraster und Quader
     m["terrain"] = None if m["mesh"] else decode_terrain(raw.get("terrain"), WS)
 
     def lst(key):
@@ -3201,19 +2959,6 @@ class Mob:
         self.y = clampf(self.y, lo, WORLD - lo)
         if world.in_void(self.x, self.y, 0.3) and (self.hover > 0 or not MOB_TUNNELS):   # Treppenschacht
             self.x, self.y = ox, oy
-        if (self.kind == "critter" and getattr(world, "mtn", False)
-                and mountain(self.x, self.y) > CRITTER_MTN_MAX and mountain(self.x, self.y) > mountain(ox, oy)):
-            self.x, self.y = ox, oy                        # 10g: Hasen bleiben im Flachland (nicht ins Gebirge)
-            self.leg_left = 0.0                            # neuer Haken
-            self.wander_t = 0.0
-        if (not MTN_CLIMB and getattr(world, "mtn", False) and self.hover <= 0
-                and steep_uphill(world, ox, oy, self.x, self.y, self.gz)):   # gleiche Regel wie für Spieler
-            if not steep_uphill(world, ox, oy, self.x, oy, self.gz):
-                self.y = oy
-            elif not steep_uphill(world, ox, oy, ox, self.y, self.gz):
-                self.x = ox
-            else:
-                self.x, self.y = ox, oy
         if self.hover > 0:
             self.gz = world.height(self.x, self.y)
             want = self.fly_base + DRONE_FLY_SWAY * math.sin(self.phase * 0.13 + self.id * 1.7)
@@ -3388,17 +3133,7 @@ def new_stats():
     und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus STAT_TABS."""
     return {"mob": {k: 0 for k in KINDS}, "crate": {k: 0 for k in CRATE_KINDS}, "buffs": 0, "melee_kills": 0,
             "toma_fired": 0, "toma_kills": 0, "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0,
-            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0,
-            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # 11: CTF - geholt, zurückgebracht, Träger getötet
-
-
-def ctf_summary(p):
-    """11: (Flaggen geholt, zurückgebracht, Träger getötet) für das Tab-Scoreboard - Host aus pl.stats, Mitspieler
-    aus dem Snapshot (pl.sb_ctf)."""
-    st = getattr(p, "stats", None)
-    if st is not None and getattr(p, "sb", None) is None:
-        return st.get("flag_caps", 0), st.get("flag_returns", 0), st.get("carrier_kills", 0)
-    return getattr(p, "sb_ctf", None) or (0, 0, 0)
+            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0}
 
 
 def stat_summary(p):
@@ -3419,28 +3154,6 @@ class Crate:
         self.kind = kind if kind in CRATE_KINDS else "common"
         self.bonus = False        # Belohnung (Titan): wird nach dem Öffnen nicht ersetzt, Lichtsäule
         self.air = False          # 10e: Airdrop-Kiste - sieht neutral aus (Seltenheit unsichtbar), wird nicht ersetzt
-
-
-FLAG_STATES = ("home", "carried", "dropped", "wait")   # 11: Index = Zustand im Netz (neue nur hinten anhängen)
-
-
-class Flag:
-    """11: Flagge im Capture the Flag. team = 0/1 (Blood Gulch: Teamflagge mit Basis) oder -1 (Polytown: neutral,
-    erscheint an einem zufälligen Ort in der Burg). state: home (am Ständer) | carried (carrier trägt sie) |
-    dropped (liegt, drop_t s bis zur Rückkehr) | wait (Polytown: nach einem Punkt kurz weg)."""
-
-    def __init__(self, fid, team, x, y, z):
-        self.fid, self.team = fid, team
-        self.home = (x, y, z)
-        self.x, self.y, self.z = x, y, z
-        self.state = "home"
-        self.carrier = -1
-        self.drop_t = 0.0
-        self.hint_t = 0.0         # Host: Sperrzeit für den Hinweis "eigene Flagge muss in der Basis sein"
-
-    def place(self, x, y, z, state="home"):
-        self.x, self.y, self.z = x, y, z
-        self.state, self.carrier, self.drop_t = state, -1, 0.0
 
 
 class Rock:
@@ -3669,7 +3382,7 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=()):
 
 # ------------------------------------------------------------ Dreiecksnetz-Karten (exakte Kollision)
 class TriMesh:
-    """Kollision gegen ein Dreiecksnetz (Karten mit "mesh", z. B. Blood Gulch): Böden, Decken, Wände und Strahlen
+    """Kollision gegen ein Dreiecksnetz (Karten mit "mesh", z. B. Kartenbau-Export): Böden, Decken, Wände und Strahlen
     werden direkt gegen die Dreiecke geprüft - ohne Höhenraster. Dreiecke stehen in einem 2D-Gitter (CELL Meter).
     kind-Bits: 1 = nur für Spieler/Fahrzeuge (Player-Clip, Kugeln fliegen hindurch), 2 = zweiseitig,
     4 = Dach (begehbar, zählt aber nicht für die Geländehöhe "ups"), 8 = einseitige Wand (blockiert nur von der Vorderseite,
@@ -4001,24 +3714,20 @@ class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None):
-        ctf = ctf if isinstance(ctf, dict) else {}
-        self.ctf_ff = bool(ctf.get("ff", CTF_FF_DEFAULT))                  # 11: Eigenbeschuss im CTF
-        self.ctf_loot = "exp" if ctf.get("loot", CTF_LOOT_DEFAULT) == "exp" else "loadout"
-        self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # 11: Punktelimit (0 = aus)
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True):
         if mob_level is None:
             mob_level = MOB_DEFAULT if spawn_mobs else 0
         spawn_mobs = bool(spawn_mobs) and mob_level > 0
-        set_world_size(STD_WORLD if mapdata is None else mapdata.get("size", MAP_WORLD))   # vor allem anderen: Grösse dieser Karte
+        if mapdata is None:
+            raise ValueError("Keine Karte angegeben (Standardkarte: maps/polytown.ptmap)")
+        set_world_size(mapdata.get("size", MAP_WORLD))   # vor allem anderen: Grösse dieser Karte
         rng = random.Random(seed)
-        self.map = mapdata                   # bereinigte Kartendatei (sanitize_map) oder None = Standardkarte
+        self.map = mapdata                   # bereinigte Kartendatei (sanitize_map, Polytown-.ptmap oder Minecraft-.mcmap)
         self.mc = mapdata.get("mc") if mapdata else None      # Minecraft-Welt (.mcmap) oder None
         self.pt = mapdata.get("pt") if mapdata else None      # Polytown aus Blender (maps/polytown.ptmap) oder None
         if self.pt:
             self.GRID = 4.0                  # viele kleine Quader (Häuser, Zäune, Stämme): feineres Raster hält die Abfragen kurz
-        self.mtn = mapdata is None           # Standardkarte: Gebirgszug ringsum
-        self.big = self.mtn and BIG_MAP      # 7c: grosse Experimental-Karte
-        self.steep = self.mtn or bool(mapdata and mapdata.get("steep"))   # steile Hänge sperren den Weg
+        self.steep = bool(mapdata and mapdata.get("steep"))   # steile Hänge sperren den Weg
         if self.mc:
             spawn_mobs, mode = False, "dm"   # Minecraft-Karte: Deathmatch ohne Monster
         self.hgrid = mapdata["terrain"] if mapdata else None
@@ -4114,13 +3823,6 @@ class World:
                 x = rng.uniform(r + 3, WORLD - r - 3)
                 y = rng.uniform(r + 3, WORLD - r - 3)
                 vis = r * (1.4 if kind == "pond" else 1.0)
-                if self.mtn:                          # Teiche nur im Tal, Bäume nicht an den Felswänden
-                    mz = mountain(x, y)
-                    if kind == "pond" and (mz > 0.0 or mountain(x + vis * 2, y) + mountain(x - vis * 2, y)
-                                           + mountain(x, y + vis * 2) + mountain(x, y - vis * 2) > 0.0):
-                        continue
-                    if kind == "tree" and mz > 16.0:
-                        continue
                 if kind == "pond" and any(x0 - r * 2.4 - 2 < x < x1 + r * 2.4 + 2 and y0 - r * 2.4 - 2 < y < y1 + r * 2.4 + 2
                                           for x0, y0, x1, y1 in self.tunnels):
                     continue                          # 7c: kein Teich über einem Tunnelgang (Decke bliebe stehen)
@@ -4133,12 +3835,10 @@ class World:
                     placed += 1
 
         mp = self.map or {}
-        big = 1.6 if self.mtn else 1.0             # Standardkarte: mehr Fläche, mehr Bäume und Felsen
-        tk, rk = (BIG_TREE_K, BIG_ROCK_K) if self.big else (1.0, 1.0)
         for kind, key, count, rmin, rmax, solid in (() if self.mc else
-                                                    (("pond", "ponds", BIG_PONDS if self.big else (5 if self.mtn else 4), 4.5, 8.0, lambda r: r * 0.72),
-                                                     ("rock", "rocks", int(35 * big * 1.3 * rk), 0.7, 1.8, lambda r: r * 0.85),
-                                                     ("tree", "trees", int(110 * big * tk), 1.6, 2.8, lambda r: 0.45))):
+                                                    (("pond", "ponds", 4, 4.5, 8.0, lambda r: r * 0.72),
+                                                     ("rock", "rocks", int(35 * 1.3), 0.7, 1.8, lambda r: r * 0.85),
+                                                     ("tree", "trees", 110, 1.6, 2.8, lambda r: 0.45))):
             if mp.get(key) is None:
                 scatter(count, kind, rmin, rmax, solid)
             else:                                    # Karte aus dem Editor: genau diese Objekte
@@ -4149,28 +3849,16 @@ class World:
                     self.props.append(p)
                     if kind == "pond":
                         self.ponds.append((x, y, r))
-        if self.big:
-            self.add_forests(rng)                    # 7c: Wälder statt der Wäldchen
-        elif self.mtn:
-            self.add_groves(rng)
         if not self.mc:
-            nb0 = len(self.boxes)
             if mp.get("blocks") is None:
                 self.add_cover(rng)
-            cover = set(self.boxes[nb0:])
             self.add_map_objects()
-            if self.big:
-                self.build_ctf_bases(cover)          # 11: zwei Stützpunkte (in allen Modi da, Teambasen im CTF)
             self.ground_boxes()                      # 9a: nichts schwebt über Senken und Hängen
-        if self.mtn and WATERFALL_COUNT > 0 and self.cm is None and self.hgrid is None:
-            self.props = [q for q in self.props if q.kind not in ("tree", "rock") or not near_waterfall(q.x, q.y, 2.0)]
         self.build_grids()
         self.last_spawn = {}
         self.spawns = self.make_spawns(rng)
         if not self.mc:
             self.build_vehicles()
-        if self.mtn:
-            self.build_toma_spots()                  # nach den Fahrzeugen: deren Startplätze bleiben frei
 
         # --- Mobs, Kugeln, Ereignisse (eigener RNG: ändert die Welt nicht)
         self.mrng = random.Random(seed + 2)
@@ -4200,20 +3888,6 @@ class World:
         self.place_toma()        # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
         if spawn_mobs:           # der Client bekommt die Monster vom Host
             self.populate_mobs()
-        # --- 11: Capture the Flag
-        self.team_of = {}        # Spieler-ID -> Team (0/1) - nur im CTF belegt (sonst gilt jeder für sich, allied())
-        self.team_score = [0, 0]
-        self.flags = []          # Flaggen (beim Mitspieler aus den Snapshots)
-        self.next_fid = 1
-        self.ctf_setup_map()     # Flaggenstände, Team-Startpunkte, Orte der neutralen Flagge (aus Seed + Karte)
-        if self.mode == "ctf":
-            self.ctf_reset()
-
-    @property
-    def loot_mode(self):
-        """11: "loadout" = Hauptspiel-Loadout (Waffenwahl vor dem Spawn, keine Monster-Beute), "exp" = Experimental-
-        Loot. Nur der CTF kennt die Einstellung - KotH und DM bleiben beim Experimental-Loot."""
-        return self.ctf_loot if self.mode == "ctf" else "exp"
 
     def prop_count(self):
         """Prüfsumme für den Beitritt: stimmt nur bei gleicher Version und Seed."""
@@ -4344,23 +4018,16 @@ class World:
         else:
             for t in mp["towers"]:
                 self.build_tower(t["x"], t["y"], t["side"], t["crate"])
-        if keep.get("runway", True) and not self.big:     # grosse Karte: Landebahn/Helipads in der Militärecke
+        if keep.get("runway", True):
             self.build_runway()
-        if not self.big:
-            self.build_helipads(mp.get("pads"))
+        self.build_helipads(mp.get("pads"))
         if mp.get("houses") is None:
-            if self.mtn:
-                self.build_town()
-            else:
-                self.default_houses()
+            self.default_houses()
         else:
             for h in mp["houses"]:
                 self.map_house(h)
-        if self.mtn:
-            self.build_outposts()
         if mp.get("ruins") is None:
-            if not self.mtn:
-                self.build_ruin(c - 30, c + 35)
+            self.build_ruin(c - 30, c + 35)
         else:
             for x, y in mp["ruins"]:
                 self.build_ruin(x, y)
@@ -4413,7 +4080,7 @@ class World:
         if not mp:
             return
         for b in mp.get("blocks") or ():
-            if b.get("za") is not None:                       # absolute Höhen (z. B. Basen von Blood Gulch)
+            if b.get("za") is not None:                       # absolute Höhen 
                 zb = b["zb"] if b.get("zb") is not None else b["za"] - 6.0
                 self.add_box(b["x0"], b["y0"], b["x1"], b["y1"], zb, b["za"], b["c"], b["mm"])
                 continue
@@ -4447,40 +4114,8 @@ class World:
                  (116.0, 79.0, 118.6, 83.0, "N"),    # Osthaus
                  (66.0, 72.4, 68.6, 76.4, "S"),      # Burghof Südwest
                  (89.0, 92.0, 91.6, 96.0, "N")]      # Burghof Nordost
-        new = []
-        if self.big:                                 # 7c: grosse Karte - Eingänge in Deckung (Wald, Containerlager, Ruine)
-            new = [(104.0, 79.0, 106.6, 208.0),          # Nord: bis in den Nordwald
-                   (106.6, 129.0, 198.0, 131.6),         # Ost: bis in den Ostwald
-                   (81.2, -17.0, 83.8, 62.0),            # Süd: vom Kommandoraum ...
-                   (83.8, -17.0, 198.0, -14.4),          #   ... nach Osten ins Containerlager (Militärecke)
-                   (-43.3, 41.0, 81.2, 43.6)]            # West: bis ins Ruinendorf
-            corr += new
-            wells += [(104.0, 208.0, 106.6, 212.0, "N"),  # Nordwald (dichte Bäume ringsum)
-                      (198.0, 129.0, 202.0, 131.6, "E"),  # Ostwald
-                      (198.0, -17.0, 202.0, -14.4, "E"),  # mitten im Containerlager, unter der Plane
-                      (-43.3, 43.6, -40.7, 47.6, "N")]    # Ruinendorf: Gasse zwischen zwei Ruinenmauern
-        elif self.mtn and TUN_LONG:                  # Standardkarte: lange Tunnel vom Kartenrand (Norden, Süden)
-            new = [(104.0, 79.0, 106.6, 178.0),          # Nord: vom Ost-West-Gang bis kurz vors Gebirge
-                   (106.6, 129.0, 130.0, 131.6),         #   Abzweig nach Osten (zwischen den Aussenposten)
-                   (81.2, -10.0, 83.8, 62.0),            # Süd: vom Kommandoraum unter der Landebahn durch
-                   (30.0, 41.0, 81.2, 43.6)]             #   Abzweig nach Westen (beim Aussenposten Südwest)
-            corr += new
-            wells += [(104.0, 178.0, 106.6, 182.0, "N"),  # Nord-Eingang am Gebirgsrand
-                      (130.0, 129.0, 134.0, 131.6, "E"),  # Ausgang Abzweig Ost
-                      (81.2, -14.0, 83.8, -10.0, "S"),    # Süd-Eingang hinter der Landebahn
-                      (26.0, 41.0, 30.0, 43.6, "W")]      # Ausgang Abzweig West
         corr = [(a + o, b + o, c + o, d + o) for a, b, c, d in corr]
         wells = [(a + o, b + o, c + o, d + o, e) for a, b, c, d, e in wells]
-        new = [(a + o, b + o, c + o, d + o) for a, b, c, d in new]
-        for x0, y0, x1, y1, _d in wells[4:]:        # neue Eingänge: Gelände eben (die Treppe ist auf Höhe 0 gebaut)
-            self.flats.append(((x0 + x1) / 2, (y0 + y1) / 2, TUN_ENTRY_FLAT, TUN_ENTRY_FLAT + 7.0))
-        for x0, y0, x1, y1 in new:                   # über dem Gang darf das Gelände nicht zu tief liegen
-            n = max(1, int(max(x1 - x0, y1 - y0) // 3.0))
-            for i in range(n + 1):
-                fx = x0 + (x1 - x0) * i / n if x1 - x0 >= y1 - y0 else (x0 + x1) / 2
-                fy = y0 + (y1 - y0) * i / n if y1 - y0 > x1 - x0 else (y0 + y1) / 2
-                if self.surface_height(fx, fy) < TUN_COVER_MIN:
-                    self.flats.append((fx, fy, 3.0, 8.0))
         wall_col, roof_col, floor_col = (0.34, 0.32, 0.30), (0.28, 0.27, 0.27), (0.30, 0.28, 0.26)
         n_st, sd = 8, 0.5
         sh = (-0.1 - TUN_Z) / n_st
@@ -4575,17 +4210,6 @@ class World:
             self.decor.append((lx - 0.25 + o, 77.5 + o, lx + 0.25 + o, 77.9 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
         for ly in (84, 90):
             self.decor.append((89.9 + o, ly - 0.25 + o, 90.7 + o, ly + 0.25 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
-        for x0, y0, x1, y1 in new:                   # Lampen in den neuen Gängen alle TUN_LAMP m
-            if x1 - x0 >= y1 - y0:
-                cy = (y0 + y1) / 2
-                for k in range(1, int((x1 - x0) // TUN_LAMP) + 1):
-                    lx = x0 + k * TUN_LAMP - TUN_LAMP / 2
-                    self.decor.append((lx - 0.25, cy - 0.2, lx + 0.25, cy + 0.2, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
-            else:
-                cx = (x0 + x1) / 2
-                for k in range(1, int((y1 - y0) // TUN_LAMP) + 1):
-                    ly = y0 + k * TUN_LAMP - TUN_LAMP / 2
-                    self.decor.append((cx - 0.2, ly - 0.25, cx + 0.2, ly + 0.25, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
 
     def in_tunnel(self, x, y):
         for x0, y0, x1, y1 in self.tunnels:
@@ -4618,12 +4242,12 @@ class World:
                 self.vehicles.append(Vehicle(k, x, y, z, hd))
                 self.turrets.append(Turret(len(self.turrets), x, y, z + 1.75, hd, "car", k))
             return
-        for k, base in enumerate((315.0, 135.0) if self.big else (45.0, 225.0)):
+        for k, base in enumerate((45.0, 225.0)):
             done = False
             for dr in (0, 1, 2, 3, 4, 5):
                 for da in (0, 1, -1, 2, -2):
                     a = math.radians(base + da * 6.0)
-                    r = (68.0 if self.big else 46.0) + dr * 2.5
+                    r = 46.0 + dr * 2.5
                     x, y = CENTER + math.cos(a) * r, CENTER + math.sin(a) * r
                     if (self.height(x, y) < WATER_LEVEL + 1.0 or self.in_solid(x, y, 2.6)
                             or any(math.hypot(x - px, y - py) < pr * 1.8 + 3 for px, py, pr in self.ponds)
@@ -4647,7 +4271,7 @@ class World:
 
     def build_castle(self):
         cx = cy = CENTER
-        WALL, WALL_D = (WALL_C, WALL_CD) if self.mtn else (STONE, STONE_D)      # Polytown: Betonbauten (Radarstation)
+        WALL, WALL_D = STONE, STONE_D
         H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
         x0, x1, y0, y1 = cx - H, cx + H, cy - H, cy + H
         g0, g1 = cx - 4.0, cx + 4.0                     # Tore im Süden und Norden
@@ -4682,14 +4306,10 @@ class World:
         # Treppen im Hof hinauf zu den Wehrgängen West und Ost
         self.stairs(x0 + T, cy - 10, "N", 10, 2.5, 0, 0.5, 0.8)
         self.stairs(x1 - T - 2.5, cy + 10, "S", 10, 2.5, 0, 0.5, 0.8)
-        if self.mtn and KOTH_TOWER:                     # 10a: Kontrollturm mit Stegen von der Nord- und Südmauer
-            top = self.koth_tower(cx, cy, H, T, ZW, WALL, WALL_D)
-            self.koth_box = (x0, y0, x1, y1, max(top, ZT + 1.2) + KOTH_ZONE_TOL)
-        else:                                           # Bergfried in der Mitte mit Treppe aufs Dach
-            B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)
-            B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
-            B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
-            self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
+        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)             # Bergfried in der Mitte mit Treppe aufs Dach
+        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
+        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
+        self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
         # niedrige Deckung: vor den Toren aussen und im Hof
         for s in (-1, 1):
             for a, b in ((cx - 5, cx - 2), (cx + 2, cx + 5)):
@@ -4729,15 +4349,10 @@ class World:
             B(tx - 0.45, ty - 0.45, tx + 0.45, ty + 0.45, ZT, ZT + 0.9, (0.30, 0.32, 0.34))
             self.turrets.append(Turret(len(self.turrets), tx, ty, ZT + 1.35,
                                        math.degrees(math.atan2(-(cx - tx), cy - ty)), "flak"))
-        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, CONCRETE if self.mtn else COBBLE))
+        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, COBBLE))
         self.flats.append((cx, cy, 36.0, 50.0))
         self.add_crate(cx - 12, cy + 8, 0.0)
         self.add_crate(cx + 12, cy - 8, 0.0)
-        if self.mtn:
-            if not KOTH_TOWER:
-                B(cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 6.0, 9.3, WALL_D, False, False)  # Sockel der Radarschüssel
-            self.build_moat()
-            self.castle_extras()
 
     def koth_tower(self, cx, cy, H, T, ZW, WALL, WALL_D):
         """10a: Kontrollturm (Flughafen-/Militär-Tower) in der Burgmitte: massiver Betonsockel ohne Zugang, zwei Stege
@@ -5002,46 +4617,6 @@ class World:
         if b is not None and b[0] > 0.5:
             self.roads.append((x, y, b[1], b[2], hw, kind))
 
-    def box_free(self, x0, y0, x1, y1, m=0.0):
-        return not any(b.x0 < x1 + m and b.x1 > x0 - m and b.y0 < y1 + m and b.y1 > y0 - m and b.z1 > 0.3
-                       for b in self.boxes)
-
-    def build_moat(self):
-        """Wassergraben um die Burg (Gelände-Mulde, siehe surface_height) mit Brücken: Zugbrücke im Norden,
-        Steinbrücke im Süden, zwei Dämme über dem Tunnelgang im Westen und Osten."""
-        c, a = CENTER, 25.5
-        self.moats.append((c, c, a, 0.8, 4.4, 6.0, 9.5, 2.0))
-        hwb = 4.0
-        self.dams.append((c - hwb, c + a + 0.5, c + hwb, c + a + 12.0))       # Norden: Zugbrücke
-        self.dams.append((c - hwb, c - a - 12.0, c + hwb, c - a - 0.5))       # Süden: Steinbrücke
-        self.dams.append((c - a - 12.0, c - 2.6, c - a - 0.5, c + 2.6))       # Westen: Damm über dem Tunnel
-        self.dams.append((c + a + 0.5, c - 2.6, c + a + 12.0, c + 2.6))       # Osten
-        W, T = CONCRETE, CONC_D
-        B = self.add_box
-        # Zugbrücke (Holz) nach Norden: Fahrbahn bündig mit dem Boden, Geländer als niedrige Deckung
-        yb0, yb1 = c + 22.0, c + a + 11.0
-        for sx in (-1, 1):
-            B(c + sx * hwb - (0.2 if sx > 0 else 0.0), yb0 + 2.6, c + sx * hwb + (0.0 if sx > 0 else 0.2), yb1 - 0.3,
-              -0.5, 1.0, STEEL)
-        self.vis.append({"k": "bridge", "style": "wood", "x0": c - hwb, "x1": c + hwb, "y0": yb0, "y1": yb1, "axis": "y",
-                         "dir": 1})
-        # Steinbrücke nach Süden
-        ys0, ys1 = c - a - 11.0, c - 22.0
-        for sx in (-1, 1):
-            B(c + sx * hwb - (0.35 if sx > 0 else 0.0), ys0 + 0.5, c + sx * hwb + (0.0 if sx > 0 else 0.35), ys1 - 2.6,
-              -3.0, 1.0, W)
-        self.vis.append({"k": "bridge", "style": "stone", "x0": c - hwb, "x1": c + hwb, "y0": ys0, "y1": ys1, "axis": "y",
-                         "dir": -1})
-        # Dämme (Steinstege) über dem Tunnel
-        for sgn in (-1, 1):
-            xa, xb = (c + sgn * (a + 0.8), c + sgn * (a + 9.2))
-            xa, xb = min(xa, xb), max(xa, xb)
-            for yy in (c - 2.5, c + 2.2):
-                B(xa, yy, xb, yy + 0.3, -3.0, 0.8, W)
-            self.vis.append({"k": "bridge", "style": "causeway", "x0": xa, "x1": xb, "y0": c - 2.6, "y1": c + 2.6,
-                             "axis": "x", "dir": sgn})
-        self.flats.append((c, c, 50.0, 64.0))
-
     def stair_flights(self, spec_side, x0, y0, x1, y1, t, n_fl, fh, sd=0.65, sh=0.4):
         """Treppenläufe (hin und her) an der Innenwand spec_side: Liste (Stockwerk, Quader-Anker, Richtung, Aussparung)."""
         n = int(round(fh / sh))
@@ -5281,25 +4856,6 @@ class World:
         self.vis.append({"k": "nissen", "x": x, "y": y, "L": L, "R": R, "H0": H0, "door": door, "seed": int(x * 3 + y)})
         return xb if sg > 0 else xa
 
-    def market_stall(self, x, y, along_x, col_a, col_b):
-        """Marktstand: Pfosten, Tresen, Stoffdach in zwei Farben (Dach als Deckung von oben)."""
-        w, d = (3.4, 2.2) if along_x else (2.2, 3.4)
-        x0, x1, y0, y1 = x - w / 2, x + w / 2, y - d / 2, y + d / 2
-        for px, py in ((x0, y0), (x1 - 0.18, y0), (x0, y1 - 0.18), (x1 - 0.18, y1 - 0.18)):
-            self.add_box(px, py, px + 0.18, py + 0.18, -1, 2.5, WOOD_D)
-        if along_x:
-            self.add_box(x0 + 0.2, y0 + 0.1, x1 - 0.2, y0 + 0.85, -1, 1.0, WOOD_M)
-        else:
-            self.add_box(x0 + 0.1, y0 + 0.2, x0 + 0.85, y1 - 0.2, -1, 1.0, WOOD_M)
-        n = 6
-        for i in range(n):
-            col = col_a if i % 2 == 0 else col_b
-            if along_x:
-                self.add_box(x0 - 0.1 + (w + 0.2) * i / n, y0 - 0.3, x0 - 0.1 + (w + 0.2) * (i + 1) / n, y1 + 0.3, 2.5, 2.7, col)
-            else:
-                self.add_box(x0 - 0.3, y0 - 0.1 + (d + 0.2) * i / n, x1 + 0.3, y0 - 0.1 + (d + 0.2) * (i + 1) / n, 2.5, 2.7, col)
-        self.vis.append({"k": "stall", "x": x, "y": y, "w": w, "d": d, "along_x": along_x, "seed": int(x * 3 + y)})
-
     def fountain(self, x, y):
         s = 2.7
         for a, b, c2, d2 in ((x - s, y - s, x + s, y - s + 0.5), (x - s, y + s - 0.5, x + s, y + s),
@@ -5327,168 +4883,8 @@ class World:
                 a = y0 + (y1 - y0) * (i + 0.5) / n
                 self.add_box(x0, a - mw / 2, x1, a + mw / 2, z, z + h, STONE_D)
 
-    def castle_extras(self):
-        """Radarstation: Wachhäuser an den Toren, Fahnen, Löschwasserbehälter im Hof, drehende Antennen (Schüssel + zwei Freya)."""
-        c = CENTER
-        H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
-        g0, g1 = c - 4.0, c + 4.0
-        B = self.add_box
-        # Wachhäuser links und rechts der Tore (Nord = Stahlbrücke, Süd = Betonbrücke) und Sturz über dem Tor
-        for sgn in (1, -1):
-            yw = (c + H) if sgn > 0 else (c - H)                 # Aussenseite der Mauer
-            ya, yb = (yw, yw + 2.7) if sgn > 0 else (yw - 2.7, yw)
-            wy0, wy1 = (c + H - T, c + H) if sgn > 0 else (c - H, c - H + T)
-            B(g0, wy0, g1, wy1, 4.0, ZW, WALL_C, True)
-            for gx0, gx1 in ((g0 - 3.0, g0), (g1, g1 + 3.0)):
-                B(gx0, ya, gx1, yb, -2, 7.2, WALL_C, True)
-                B(gx0, ya, gx1, yb, 7.2, 7.5, WALL_CD)
-                outer = (yb - 0.45, yb) if sgn > 0 else (ya, ya + 0.45)
-                B(gx0, outer[0], gx1, outer[1], 7.5, 8.2, WALL_CD)
-                B(gx0 if gx0 < c else gx1 - 0.45, ya, gx0 + 0.45 if gx0 < c else gx1, yb, 7.5, 8.2, WALL_CD)
-            self.vis.append({"k": "gate", "x0": g0, "x1": g1, "y": yw, "sgn": sgn, "zt": 4.0, "zw": ZW})
-            for gx in (g0 - 1.5, g1 + 1.5):
-                self.flagpole(gx, (ya + yb) / 2, 8.2, 4.0, (0.85, 0.84, 0.78) if sgn > 0 else (0.55, 0.45, 0.20), 2.2, 1.3,
-                              90.0 if sgn > 0 else -90.0)
-        # Fahnen auf den Türmen und dem Betriebsgebäude
-        cols = {(-1, -1): OLIVE, (1, 1): (0.55, 0.45, 0.20)}
-        for (sx, sy), fc in cols.items():
-            self.flagpole(c + sx * H, c + sy * H - sy * 2.6, ZT + 1.2, 4.2, fc, 2.4, 1.4, 0.0)
-        if not KOTH_TOWER:
-            self.flagpole(c + 3.4, c + 3.4, 7.2, 4.0, (0.85, 0.84, 0.78), 2.6, 1.5, 0.0)
-        # Löschwasserbehälter im Hof
-        wx, wy = c + 8.0, c - 8.0
-        for a, b, c2, d2 in ((wx - 1.1, wy - 1.1, wx + 1.1, wy - 0.7), (wx - 1.1, wy + 0.7, wx + 1.1, wy + 1.1),
-                             (wx - 1.1, wy - 0.7, wx - 0.7, wy + 0.7), (wx + 0.7, wy - 0.7, wx + 1.1, wy + 0.7)):
-            B(a, b, c2, d2, -1, 0.95, WALL_C)
-        self.vis.append({"k": "well", "x": wx, "y": wy})
-        # Drehende Antennen: grosse Schüssel (Würzburg-Riese) auf dem Betriebsgebäude, zwei Freya-Wände auf den freien Ecktürmen
-        if not KOTH_TOWER:                                   # 10a: dort steht jetzt der Kontrollturm
-            self.vis.append({"k": "spin", "kind": "dish", "x": c, "y": c, "z": 6.3, "speed": 24.0, "h0": 20.0})
-        for (sx, sy), spd in (((-1, -1), 34.0), ((1, 1), -34.0)):
-            tx, ty = c + sx * H, c + sy * H
-            B(tx - 0.4, ty - 0.4, tx + 0.4, ty + 0.4, ZT, ZT + 4.2, WALL_CD, False, False)
-            self.vis.append({"k": "spin", "kind": "freya", "x": tx, "y": ty, "z": ZT, "speed": spd, "h0": 90.0 * sx})
-
-    def build_town(self):
-        """Polytown (Stützpunkt der 40er Jahre): Appellplatz mit Kommandantur im Norden (an der Brücke), Ringstrasse um die
-        Radarstation, Wohn- und Unterkunftshäuser, Flughafenstrasse im Süden. Jedes Gebäude hängt mit Weg(en) am Strassennetz."""
-        c = CENTER
-        R = 52.0
-        ring = [(c + R * math.cos(2 * math.pi * i / 28), c + R * math.sin(2 * math.pi * i / 28)) for i in range(28)]
-        self.add_road(ring, 2.3, "dirt", closed=True)
-        self.add_road([(c, c + 26.0), (c, c + 76.0)], 2.9, "cobble")             # Zufahrt zum Appellplatz
-        self.add_road([(c, c - 26.0), (c, c - 68.0)], 2.9, "cobble")             # zur Landebahn (Süd)
-        self.add_road([(c - R, c), (c - 70.0, c)], 2.4, "dirt")                  # zum Helipad West
-        self.add_road([(c + R, c), (c + 70.0, c)], 2.4, "dirt")                  # zum Helipad Ost
-        # Appellplatz mit Löschwasserbecken und Fahnenmast, Versorgungsständen
-        px, py = c, c + 64.0
-        self.floors.append((px - 15, py - 12, px + 15, py + 12, CONCRETE))
-        self.flats.append((px, py, 21.0, 31.0))
-        self.fountain(px, py)
-        for sx, sy, ax, ca, cb in ((-9.0, -7.0, True, AWN[0], AWN[1]), (9.0, -7.0, True, AWN[2], AWN[1]),
-                                   (-9.0, 8.0, True, AWN[3], AWN[1]), (9.0, 8.0, True, AWN[0], AWN[1])):
-            self.market_stall(px + sx, py + sy, ax, ca, cb)
-        # Häuser (Mitte x, y, Breite, Tiefe, Stockwerke, Tür, ...)
-        rathaus = self.town_house(c, c + 86.0, 20.0, 12.0, floors=3, door="S", col=(0.78, 0.74, 0.64), roof=ROOFS[2],
-                                  balcony=True, tower=(c, c + 86.0, 4.6, 7.4), wide=True, sign="KOMMANDANTUR", seed=11,
-                                  crate=(c - 6.0, c + 86.0))
-        self.town_house(c - 27.0, c + 64.0, 14.0, 12.0, floors=2, door="E", col=HOUSE_COLS[1], roof=ROOFS[1], balcony=True,
-                        sign="KANTINE", seed=12, shop=True, crate=(c - 31.0, c + 62.0))
-        self.town_house(c + 27.0, c + 64.0, 12.0, 10.0, floors=2, door="W", col=HOUSE_COLS[0], roof=ROOFS[0], sign="LAZARETT",
-                        seed=13, shop=True)
-        self.town_house(c - 27.0, c + 86.0, 10.0, 9.0, floors=2, door="E", col=HOUSE_COLS[3], roof=ROOFS[3], seed=14)
-        self.town_house(c + 27.0, c + 86.0, 10.0, 9.0, floors=2, door="W", col=HOUSE_COLS[2], roof=ROOFS[1], seed=15)
-        # Tunnelhäuser (hier liegen die Treppenschächte in den Tunnel)
-        self.town_house(c - 41.0, c, 12.0, 12.0, floors=2, door="W", col=HOUSE_COLS[4], roof=ROOFS[2], stairs="N", seed=16,
-                        avoid=[(c - 39.1, c - 1.6, c - 35.4, c + 3.6)], crate=(c - 38.0, c - 3.5))
-        self.town_house(c + 41.0, c, 12.0, 12.0, floors=2, door="E", col=HOUSE_COLS[0], roof=ROOFS[0], stairs="N", seed=17,
-                        avoid=[(c + 35.4, c - 1.6, c + 39.2, c + 3.6)])
-        # Streusiedlung ausserhalb der Ringstrasse
-        for hx, hy, dr, ci, ri in ((c - 49.0, c - 29.0, "E", 3, 3), (c + 49.0, c + 29.0, "W", 2, 2)):
-            self.town_house(hx, hy, 10.0, 9.0, floors=2, door=dr, col=HOUSE_COLS[ci], roof=ROOFS[ri],
-                            seed=int(hx * 3 + hy))
-        # Unterkünfte: Nissenhütten (Wellblech) an der Ringstrasse
-        for hx, hy, dr in ((c + 50.0, c - 29.0, "W"), (c - 50.0, c + 29.0, "E")):
-            ex = self.nissen(hx, hy, dr)
-            self.connect_road(ex + (1.4 if dr == "E" else -1.4), hy, 1.2, "dirt")
-        # Süden: Flugleitung und Werkstatt an der Flughafenstrasse
-        self.town_house(c - 25.0, c - 57.0, 13.0, 10.0, floors=2, door="E", col=(0.74, 0.74, 0.72), roof=ROOFS[2], seed=21,
-                        flat=True, balcony=False, sign="FLUGLEITUNG", crate=(c - 28.0, c - 57.0))
-        self.town_house(c + 26.0, c - 57.0, 14.0, 10.0, floors=1, door="W", col=(0.62, 0.64, 0.66), roof=ROOFS[2], seed=22,
-                        flat=True, wide=True, chimney=False, sign="WERKSTATT")
-        # Wege zu den Türen und zu allen Aussenposten
-        for r in list(self.vis):
-            if r["k"] != "house":
-                continue
-            dx, dy = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[r["door"]]
-            if r["door"] in "NS":
-                ex, ey = r["dpos"], r["y"] + dy * (r["d"] / 2 + 1.4)
-            else:
-                ex, ey = r["x"] + dx * (r["w"] / 2 + 1.4), r["dpos"]
-            self.connect_road(ex, ey, 1.2, "dirt")
-        for tx, ty in ((c - 54.2, c - 69.0), (c + 54.2, c - 46.6), (c - 54.2, c + 47.0), (c + 54.2, c + 67.6)):
-            self.connect_road(tx, ty, 1.2, "dirt")
-        # Alleebäume an der Burgstrasse und Bäume auf dem Marktplatz
-        for k in range(5):
-            for sx in (-1, 1):
-                self._add_tree(c + sx * 5.2, c + 30.0 + k * 7.0, 1.4, "poplar")
-        for tx, ty in ((px - 14, py - 11), (px + 14, py - 11), (px - 14, py + 11), (px + 14, py + 11)):
-            self._add_tree(tx, ty, 2.2, "oak")
-        for k in range(4):
-            for sx in (-1, 1):
-                self._add_tree(c + sx * 5.2, c - 32.0 - k * 8.0, 2.0, "oak")
-
-    def _add_tree(self, x, y, br, tk=None):
-        p = Prop("tree", x, y, br, 0.45)
-        p.base_r = br
-        p.tk = tk                      # Baumart: "fir", "oak", "birch", "poplar" (None = Zufall)
-        self.props.append(p)
-
     # ------------------------------------------------------------ Aussenposten (nur Standardkarte)
-    def build_outposts(self):
-        """Zusätzliche Deckung auf der grossen Standardkarte - am Boden UND gegen Beschuss aus der Luft
-        (Dächer, Überhänge, überdachte Gassen): Containerlager, Bunkerstellung, Scheune, Felsformation,
-        Ruinendorf, Hangar an der Landebahn, Splitterschutz an den Helipads, kleine Unterstände."""
-        c = CENTER
-        if self.big:
-            self.build_big_outskirts()
-            return
-        self.container_yard(c + 74, c - 36)
-        self.bunker_post(c - 74, c - 36)
-        self.barn(c + 76, c + 38)
-        self.rock_outcrop(c - 76, c + 40)
-        self.hangar(c - 66, c - 77)
-        for sx in (-1, 1):
-            self.pad_walls(c + sx * 78.0, c, sx)
-        for x, y, side in ((c + 52, c + 74, "S"), (c - 52, c - 70, "N")):
-            self.lean_to(x, y, side)
-        for ox, oy, st in ((c + 74, c - 36, 5.5), (c - 74, c - 36, 6.0), (c + 76, c + 38, 8.0), (c - 76, c + 40, 6.0),
-                           (c - 66, c - 77, 7.0)):
-            self.connect_road(ox - (st if ox > c else -st), oy, 1.4, "dirt")
-
     # ------------------------------------------------------------ 7c: grosse Karte (Experimental)
-    def build_big_outskirts(self):
-        """Grosse Karte um Sinans Polytown herum: alte Häuser und Ruine an den früheren Helipads (alter Ortsteil),
-        Militärecke im Südosten (Landebahn, Hangar, Containerlager, Helipads, Bunker), Park im Nordwesten, Hof mit
-        Scheune im Nordosten, Ruinendorf im Westen, Felsformation im Südwestwald, Hütten in den Wäldern."""
-        c = CENTER
-        self.town_northeast()                            # 10g: Ort am Marktplatz dichter (vor allem anderen dort)
-        self.old_quarter()
-        self.military_zone()
-        self.park(c - 100.0, c + 95.0)
-        self.barn(c + 100.0, c + 80.0)
-        self.connect_road(c + 92.0, c + 80.0, 1.4, "dirt")
-        self.ruin_village(c - 130.0, c - 34.2)
-        self.connect_road(c - 112.0, c - 40.0, 1.4, "dirt")
-        self.rock_outcrop(c - 105.0, c - 100.0)
-        for x, y, door in ((c + 95.0, c + 141.0, "S"), (c - 146.0, c + 66.0, "E"), (c - 88.0, c - 146.0, "N"),
-                           (c + 150.0, c - 30.0, "W"), (c - 40.0, c + 152.0, "S"), (c + 136.0, c + 50.0, "W")):
-            self.forest_hut(x, y, door)
-        for x, y, side in ((c + 60.0, c + 112.0, "S"), (c - 62.0, c - 110.0, "N")):
-            self.lean_to(x, y, side)
-        self.add_road([(c, c + 92.0), (c + 12.0, c + 112.0), (c + 22.0, c + 124.0)], 1.4, "dirt")   # Pfad zum Nordwald
-        self.add_road([(c + 70.0, c), (c + 104.0, c + 18.0), (c + 128.0, c + 46.0)], 1.4, "dirt")   # Pfad zum Ostwald
-
     def town_northeast(self):
         """10g: Polytown wächst vom Marktplatz nach Nordosten: eine neue Gasse mit zwei Häuserreihen (gleicher Stil
         wie am Marktplatz - Backstein/Putz, Ziegel/Schiefer, innen Treppen und Möbel). Der Unterstand am Acker
@@ -5510,513 +4906,17 @@ class World:
             dx, dy = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[dr]
             self.connect_road(hx + dx * (w / 2 + 1.4), hy + dy * (d / 2 + 1.4), 1.2, "dirt")
 
-    def old_quarter(self):
-        """Alter Ortsteil (Häuser, Lagerhalle, Ruine der ersten Polytown) dort, wo früher die Helipads lagen."""
-        c = CENTER
-        door = lambda ctr: [(ctr, 1.1, 0.0, 2.4)]           # noqa: E731
-        win = lambda ctr: [(ctr, 0.9, 1.2, 2.2)]            # noqa: E731
-        for hy, cr in ((c + 10.0, (c - 87.0, c + 8.0)), (c - 10.0, None)):
-            hx = c - 84.0
-            self.build_house(hx, hy, 10, 8, 3.2, {"E": door(hy), "W": win(hy), "N": win(hx), "S": win(hx)},
-                             crate=cr, flat_r=8.0)
-        self.build_ruin(c - 100.0, c + 26.0)
-        wx, wy = c + 88.0, c + 4.0                            # Lagerhalle: Tore nach Westen und Süden
-        self.build_house(wx, wy, 16, 8, 4.2,
-                         {"W": [(wy, 1.6, 0.0, 3.2)], "S": [(wx - 4, 1.6, 0.0, 3.2), (wx + 4, 1.6, 0.0, 3.2)],
-                          "N": [(wx, 1.6, 0.0, 3.2), (wx - 6, 0.7, 1.5, 2.7), (wx + 6, 0.7, 1.5, 2.7)],
-                          "E": [(wy, 0.9, 1.5, 2.7)]},
-                         crate=(wx + 5.0, wy + 1.5), floor=CONCRETE, flat_r=12.0, col=(0.55, 0.57, 0.60))
-        self.add_crate(wx - 5.0, wy - 1.5, 0.0)
-        self.connect_road(c - 78.5, c + 10.0, 1.2, "dirt")
-        self.connect_road(c - 78.5, c - 10.0, 1.2, "dirt")
-        self.connect_road(wx - 9.0, wy, 1.4, "dirt")
-
-    def military_zone(self):
-        """Militärecke im Südosten: Landebahn mit Hangar, Containerlager (mit Tunneleingang), zwei Helipads mit
-        Splitterschutz, Bunkerstellung, Unterstände; Strasse vom Ortskern."""
-        c = CENTER
-        ry = c - 135.0
-        self.build_runway(ry, c + 25.0, c + 150.0)
-        self.hangar(c + 10.0, ry - 1.0)
-        self.container_yard(c + 112.0, c - 95.4)
-        pads = ((c + 60.0, c - 72.0, 270.0), (c + 150.0, c - 82.0, 90.0))
-        self.build_helipads(pads)
-        self.pad_walls(pads[0][0], pads[0][1], -1)
-        self.pad_walls(pads[1][0], pads[1][1], 1)
-        self.bunker_post(c + 75.0, c - 112.0)
-        self.lean_to(c + 40.0, c - 100.0, "W")
-        self.lean_to(c + 135.0, c - 112.0, "N")
-        for k in range(6):                                    # Sandsackreihe am Exerzierplatz
-            self.sandbags(c + 86.0 + k * 4.0, c - 42.0, c + 88.6 + k * 4.0, c - 41.2)
-        self.add_road([(c, c - 68.0), (c + 18.0, c - 96.0), (c + 46.0, c - 118.0), (c + 112.0, c - 118.0)], 2.4, "dirt")
-        self.add_road([(c + 46.0, c - 118.0), (c + 60.0, c - 82.0)], 2.0, "dirt")
-        self.add_road([(c + 112.0, c - 118.0), (c + 150.0, c - 92.0)], 2.0, "dirt")
-        self.connect_road(c + 112.0, c - 106.0, 1.6, "dirt")
-        self.connect_road(c + 79.0, c - 112.0, 1.2, "dirt")
-        self.connect_road(c + 18.0, c - 136.0, 1.6, "dirt")
-
-    def park(self, cx, cy):
-        """Park: Wege (Kreuz + Rundweg), Brunnen mit Fahne, Pavillon (Dach = Tomahawk-Ort), Bänke, Beete,
-        Baumreihen, kleiner Teich."""
-        self.flats.append((cx, cy, 24.0, 34.0))
-        R = 15.0
-        ring = [(cx + R * math.cos(2 * math.pi * i / 18), cy + R * math.sin(2 * math.pi * i / 18)) for i in range(18)]
-        self.add_road(ring, 1.3, "cobble", closed=True)
-        self.add_road([(cx - 26.0, cy), (cx + 26.0, cy)], 1.4, "cobble")
-        self.add_road([(cx, cy - 26.0), (cx, cy + 26.0)], 1.4, "cobble")
-        self.fountain(cx, cy)
-        px, py = cx - 12.0, cy + 12.0                         # Pavillon mit Treppe aufs Dach
-        self.shed_roof(px - 3.0, py - 3.0, px + 3.0, py + 3.0, 2.6, (0.36, 0.42, 0.30))
-        self.stairs(px + 3.3 + 6 * 0.7, py - 3.0, "W", 6, 1.2, 0, 0.5, 0.7, WOOD_F)    # Stufen von Osten aufs Dach
-        bench = (0.45, 0.32, 0.20)
-        for a in range(0, 360, 45):                           # Bänke am Rundweg
-            r = R + 2.6
-            bx, by = cx + r * math.cos(math.radians(a + 22.5)), cy + r * math.sin(math.radians(a + 22.5))
-            if math.hypot(bx - px, by - py) < 6.0:
-                continue
-            self.add_box(bx - 0.8, by - 0.8, bx + 0.8, by + 0.8, -0.5, 0.45, bench)
-        for sx in (-1, 1):                                    # Blumenbeete (flach)
-            for sy in (-1, 1):
-                fx, fy = cx + sx * 7.0, cy + sy * 7.0
-                col = (0.85, 0.25, 0.30) if sx * sy > 0 else (0.95, 0.80, 0.25)
-                self.decor.append((fx - 1.6, fy - 1.6, fx + 1.6, fy + 1.6, 0.0, 0.18, (0.33, 0.22, 0.14), True))
-                self.decor.append((fx - 1.3, fy - 1.3, fx + 1.3, fy + 1.3, 0.18, 0.32, col, True))
-        for k in range(-3, 4):                                # Pappelallee am Kreuzweg, Eichen in den Ecken
-            if k:
-                for sx in (-1, 1):
-                    self._add_tree(cx + k * 6.5, cy + sx * 3.6, 1.4, "poplar")
-        for sx, sy in ((-1, -1), (1, -1), (1, 1)):
-            self._add_tree(cx + sx * 21.0, cy + sy * 21.0, 2.4, "oak")
-            self._add_tree(cx + sx * 24.0, cy + sy * 12.0, 2.0, "birch")
-        tx, ty, tr = cx + 18.0, cy + 18.0, 4.6                # Teich
-        self.ponds.append((tx, ty, tr))
-        pp = Prop("pond", tx, ty, tr * 1.4, tr * 0.72)
-        pp.base_r = tr
-        self.props.append(pp)
-        self.add_crate(px - 1.5, py + 1.5, 0.0)
-        self.connect_road(cx + 26.0, cy, 1.4, "cobble")
-        self.connect_road(cx, cy - 26.0, 1.4, "cobble")
-
-    def forest_hut(self, x, y, door):
-        """Kleine Holzhütte im Wald (Tür, Fenster, Lootkiste innen, Holzstapel daneben)."""
-        dn = {"N": "S", "S": "N", "E": "W", "W": "E"}[door]
-        ctr = lambda s: x if s in "NS" else y                 # noqa: E731
-        ops = {s: [(ctr(s), 0.9, 1.2, 2.1)] for s in "NSEW" if s != door and s != dn}
-        ops[door] = [(ctr(door), 1.0, 0.0, 2.2)]
-        self.build_house(x, y, 6.0, 5.0, 2.8, ops, crate=(x - 1.4, y - 1.0), floor=WOOD_F, flat_r=6.5,
-                         col=(0.42, 0.30, 0.19))
-        ox, oy = {"N": (2.0, 3.2), "S": (-2.0, -3.2), "E": (3.6, -1.6), "W": (-3.6, 1.6)}[door]
-        self.add_box(x - ox - 0.6, y - oy - 0.5, x - ox + 0.6, y - oy + 0.5, -0.5, 1.0, (0.50, 0.36, 0.22))   # Holzstapel
-        self.connect_road(x + {"E": 3.6, "W": -3.6}.get(door, 0.0), y + {"N": 3.1, "S": -3.1}.get(door, 0.0), 1.0, "dirt")
-
-    def add_forests(self, rng):
-        """7c: Wälder (BIG_FORESTS): dicht stehende Bäume, aber begehbar; Lichtungen um Bauwerke, Wege, Tunneleingänge."""
-        c = CENTER
-        kinds = ("fir", "fir", "fir", "oak", "birch")
-        self.forest_areas = []                             # 10g: Wälder (x, y, r) - Zuhause der Hasen
-        hcell = {}                                         # 10g: Raster der Props (schneller bei vielen Bäumen)
-
-        hbig = []                                          # grosse Props (r > 5 m) prüft jeder Kandidat
-
-        def h_add(p_):
-            if p_.r > 5.0:
-                hbig.append(p_)
-            else:
-                hcell.setdefault((int(p_.x // 8.0), int(p_.y // 8.0)), []).append(p_)
-
-        def h_near(x_, y_):
-            i_, j_ = int(x_ // 8.0), int(y_ // 8.0)
-            return hbig + [q for a_ in (i_ - 1, i_, i_ + 1) for b_ in (j_ - 1, j_, j_ + 1) for q in hcell.get((a_, b_), ())]
-
-        for p_ in self.props:
-            h_add(p_)
-        for fx, fy, R, n in BIG_FORESTS:
-            gx, gy = c + fx, c + fy
-            if mountain(gx, gy) <= CRITTER_MTN_MAX:
-                self.forest_areas.append((gx, gy, R))
-            dense = any(math.hypot(fx - dx_, fy - dy_) < 1.0 for dx_, dy_, _dr in BIG_DENSE)
-            gap = BIG_FOREST_GAP_DENSE if dense else BIG_FOREST_GAP
-            placed = 0
-            for _ in range(n * 14):
-                if placed >= n:
-                    break
-                a, r = rng.uniform(0, 2 * math.pi), R * math.sqrt(rng.random())
-                x, y = gx + math.cos(a) * r, gy + math.sin(a) * r
-                br = rng.uniform(1.6, 2.6)
-                if not (6 < x < WORLD - 6 and 6 < y < WORLD - 6) or mountain(x, y) > 10.0:
-                    continue
-                if any(math.hypot(x - qx, y - qy) < rin + 1.5 for qx, qy, rin, _ro in self.flats):
-                    continue
-                if any(x0 - 4.0 < x < x1 + 4.0 and y0 - 4.0 < y < y1 + 4.0 for x0, y0, x1, y1 in self.voids):
-                    continue                                   # Tunneleingang: Treppe frei lassen
-                if self.roads:
-                    rd = self.road_dist(x, y)
-                    if rd is not None and rd[0] < rd[1] + 1.8:
-                        continue
-                if any(math.hypot(x - px, y - py) < pr * 1.6 for px, py, pr in self.ponds):
-                    continue
-                if any(math.hypot(x - p.x, y - p.y) < (gap if p.kind == "tree" else p.r + 1.5)
-                       for p in h_near(x, y)):
-                    continue
-                if not self.box_free(x - 1.2, y - 1.2, x + 1.2, y + 1.2):
-                    continue
-                self._add_tree(x, y, br, rng.choice(kinds))
-                self.props[-1].lod = True                       # Waldbaum: Low-Poly
-                h_add(self.props[-1])
-                placed += 1
-
     def props_near_xy(self, x, y, r):
         """Props in der Nähe (ohne Gitter: beim Aufbau vor build_grids)."""
         return [p for p in self.props if abs(p.x - x) < r + p.r and abs(p.y - y) < r + p.r]
 
-    def sandbags(self, x0, y0, x1, y1, h=1.15):
-        """Sandsackreihe; 9a: folgt dem Gelände (ground_boxes setzt sie auf die Bodenhöhe der Mitte)."""
-        self.follow_boxes.append(self.add_box(x0, y0, x1, y1, -1.0, h, SANDBAG))
-
-    def shed_roof(self, x0, y0, x1, y1, z, col=ROOF, t=0.35, post=0.35, posts=None):
-        """Dach auf Pfosten (offen): Deckung von oben. posts = Liste (x, y) oder automatisch an den Ecken."""
-        if posts is None:
-            posts = [(x0 + post / 2, y0 + post / 2), (x1 - post / 2, y0 + post / 2),
-                     (x0 + post / 2, y1 - post / 2), (x1 - post / 2, y1 - post / 2)]
-        for px, py in posts:
-            self.add_box(px - post / 2, py - post / 2, px + post / 2, py + post / 2, -1.0, z, WOOD_F)
-        self.add_box(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1 + 0.3, z, z + t, col, True)
-
-    def container(self, x, y, along_x, col, z0=0.0, hollow=False):
-        """Schiffscontainer 6 x 2,4 x 2,6 m. hollow: an den Enden offen (begehbar, Dach schützt von oben)."""
-        L, W, H, t = 6.0, 2.4, 2.6, 0.14
-        hx, hy = (L / 2, W / 2) if along_x else (W / 2, L / 2)
-        x0, y0, x1, y1 = x - hx, y - hy, x + hx, y + hy
-        zb = -1.0 if z0 <= 0.0 else z0
-        if not hollow:
-            self.add_box(x0, y0, x1, y1, zb, z0 + H, col, True)
-            return
-        if along_x:
-            self.add_box(x0, y0, x1, y0 + t, zb, z0 + H, col, True)
-            self.add_box(x0, y1 - t, x1, y1, zb, z0 + H, col, True)
-        else:
-            self.add_box(x0, y0, x0 + t, y1, zb, z0 + H, col, True)
-            self.add_box(x1 - t, y0, x1, y1, zb, z0 + H, col, True)
-        self.add_box(x0, y0, x1, y1, z0 + H - t, z0 + H, col)
-
-    def container_yard(self, cx, cy):
-        """Containerlager: Gassen zwischen zweistöckigen Stapeln, begehbare Container, überdachte Gasse,
-        Kistentreppe auf die Stapel (Aussichtspunkt 5,2 m)."""
-        C = CONT_COLS
-        # drei Spalten (x = -8, 0, 8) zu je vier Containern, dazwischen Gassen
-        for i, (dx, dy, stack, hollow) in enumerate((
-                (-8.0, -6.5, 2, False), (-8.0, -3.6, 1, True), (-8.0, 3.2, 2, False), (-8.0, 6.1, 1, False),
-                (0.0, -6.5, 1, False), (0.0, -0.8, 1, True), (0.0, 6.1, 2, False), (0.0, 3.2, 2, False),
-                (8.0, -6.5, 2, False), (8.0, -3.6, 2, False), (8.0, 3.2, 1, True), (8.0, 6.1, 1, False))):
-            col = C[i % len(C)]
-            self.container(cx + dx, cy + dy, True, col, 0.0, hollow)
-            if stack > 1:
-                self.container(cx + dx + 0.3, cy + dy, True, C[(i + 2) % len(C)], 2.6)
-        # Planen über der Mittelgasse: zusammen mit dem begehbaren Container in der Mitte ein von oben
-        # gedeckter Gang quer durchs Lager (Schutz vor Helikoptern)
-        tarp = (0.35, 0.42, 0.30)
-        for x0 in (cx - 11.0, cx + 5.0):
-            self.add_box(x0, cy - 2.4, x0 + 6.0, cy + 2.0, 2.48, 2.62, tarp)
-        # Kistentreppe (je 1,3 m) auf den zweistöckigen Stapel im Nordwesten: Aussichtspunkt in 5,2 m Höhe
-        for ox, h in ((-13.5, 1.3), (-12.5, 2.6), (-11.5, 3.9)):
-            self.add_box(cx + ox - 0.5, cy + 2.2, cx + ox + 0.5, cy + 4.2, -1.0, h, WOOD_F)
-        self.add_crate(cx, cy - 0.8, 0.0)                # Lootkiste im begehbaren Container in der Mitte
-        self.flats.append((cx, cy, 16.0, 26.0))
-
-    def bunker_post(self, cx, cy):
-        """Betonbunker mit Sehschlitzen Richtung Burg, dicker Decke, Eingang hinten; davor Sandsack-Stellungen."""
-        w, d, h = 9.0, 6.0, 2.8
-        x0, x1, y0, y1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
-        slit = lambda a, b: [(a, 1.3, 1.25, 1.65), (b, 1.3, 1.25, 1.65)]       # noqa: E731
-        t = 0.6
-        self.wall_y(y0 + t, y1 - t, x1 - t, x1, h, slit(cy - 1.4, cy + 1.4), CONCRETE)          # Front (Ost)
-        self.wall_y(y0 + t, y1 - t, x0, x0 + t, h, [(cy, 1.0, 0.0, 2.3)], CONCRETE)            # Eingang (West)
-        self.wall_x(x0, x1, y0, y0 + t, h, [(cx + 1.5, 1.1, 1.25, 1.65)], CONCRETE)            # Süd mit Schlitz
-        self.wall_x(x0, x1, y1 - t, y1, h, [(cx + 1.5, 1.1, 1.25, 1.65)], CONCRETE)            # Nord mit Schlitz
-        self.add_box(x0 - 0.6, y0 - 0.6, x1 + 0.6, y1 + 0.6, h, h + 0.7, CONCRETE, True)       # Betondecke
-        self.floors.append((x0, y0, x1, y1, CONCRETE))
-        self.add_crate(cx - 2.6, cy + 1.6, 0.0)
-        # Rampe/Erdhügel hinten aufs Dach (Stufen aus Sandsäcken)
-        self.stairs(x0 - 0.6 - 7 * 0.7, cy - 3.8, "E", 7, 1.4, 0, 0.5, 0.7, SANDBAG)
-        # Sandsack-Stellungen vor dem Bunker (U-Form) und seitlich
-        for oy in (-6.5, 6.5):
-            fx = x1 + 6.0
-            self.sandbags(fx, cy + oy - 2.0, fx + 0.8, cy + oy + 2.0)
-            self.sandbags(fx - 2.6, cy + oy - 2.0, fx, cy + oy - 1.3)
-            self.sandbags(fx - 2.6, cy + oy + 1.3, fx, cy + oy + 2.0)
-        self.sandbags(x1 + 9.0, cy - 1.8, x1 + 9.8, cy + 1.8, 1.0)
-        self.sandbags(x0 - 5.0, y1 + 3.0, x0 - 1.0, y1 + 3.8)
-        self.shed_roof(x1 + 3.4, cy + 5.0, x1 + 6.6, cy + 8.0, 2.3, (0.33, 0.38, 0.28))   # Tarndach über einer Stellung
-        self.flats.append((cx + 2.0, cy, 16.0, 26.0))
-
-    def barn(self, cx, cy):
-        """Offene Scheune: grosses Dach auf Pfosten, Rückwand, halbe Seitenwände, Heuboden mit Treppe,
-        Kistenstapel als Deckung; davor ein Pferch mit Zaun."""
-        w, d, h = 15.0, 10.0, 4.6
-        x0, x1, y0, y1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
-        posts = [(x0 + 0.2, y0 + 0.2), (cx - 2.5, y0 + 0.2), (cx + 2.5, y0 + 0.2), (x1 - 0.2, y0 + 0.2),
-                 (x0 + 0.2, y1 - 0.2), (cx - 2.5, y1 - 0.2), (cx + 2.5, y1 - 0.2), (x1 - 0.2, y1 - 0.2)]
-        self.shed_roof(x0, y0, x1, y1, h, ROOF, 0.45, 0.4, posts)
-        self.add_box(x1 - 0.4, y0, x1, y1, -1.0, h, WOOD_F, True)                  # Rückwand (Ost)
-        self.add_box(x0 + 5.5, y0, x1, y0 + 0.3, -1.0, 2.2, WOOD_F, True)           # halbe Seitenwände
-        self.add_box(x0 + 5.5, y1 - 0.3, x1, y1, -1.0, 2.2, WOOD_F, True)
-        self.add_box(cx + 1.0, y0 + 0.3, x1 - 0.4, y1 - 0.3, 2.2, 2.4, WOOD_F)      # Heuboden (Osthälfte)
-        self.stairs(cx + 1.0 - 6 * 0.7, y0 + 0.4, "E", 6, 1.3, 0, 0.4, 0.7, WOOD_F)
-        self.floors.append((x0, y0, x1, y1, WOOD_F))
-        hay = (0.74, 0.64, 0.36)
-        for bx, by, bw, bd, bh in ((cx - 4.5, cy + 1.5, 2.4, 1.2, 1.2), (cx - 4.5, cy + 1.5, 1.2, 1.2, 2.4),
-                                   (cx - 1.5, cy - 2.2, 1.2, 2.4, 1.2), (cx + 3.5, cy + 2.5, 2.4, 1.2, 1.2),
-                                   (cx + 4.5, cy - 1.0, 1.2, 1.2, 1.2)):
-            self.add_box(bx, by, bx + bw, by + bd, -1.0, bh, hay)                      # Heuballen
-        self.add_crate(cx + 4.0, cy + 1.0, 2.4)                                      # Lootkiste auf dem Heuboden
-        # Pferch mit Zaun westlich der Scheune (Öffnung zur Scheune)
-        px0, px1, py0, py1 = x0 - 12.0, x0 - 2.0, cy - 6.0, cy + 6.0
-        fence = (0.42, 0.31, 0.21)
-        self.add_box(px0, py0, px1, py0 + 0.15, -1.0, 1.0, fence)
-        self.add_box(px0, py1 - 0.15, px1, py1, -1.0, 1.0, fence)
-        self.add_box(px0, py0, px0 + 0.15, cy - 1.5, -1.0, 1.0, fence)
-        self.add_box(px0, cy + 1.5, px0 + 0.15, py1, -1.0, 1.0, fence)
-        self.add_box(px0 + 3.0, cy - 2.0, px0 + 4.2, cy - 0.8, -1.0, 1.2, hay)
-        self.flats.append((cx - 4.0, cy, 17.0, 27.0))
-
-    def rock_outcrop(self, cx, cy):
-        """Felsformation: Felsbogen (Überhang = Deckung von oben), grosse Blöcke, gestufter Aussichtsfelsen."""
-        R = ROCK_C
-        self.add_box(cx - 4.5, cy - 1.5, cx - 2.5, cy + 1.5, -1.0, 4.0, R, True)         # Bogen: zwei Pfeiler ...
-        self.add_box(cx + 2.5, cy - 1.0, cx + 4.3, cy + 1.6, -1.0, 4.4, R, True)
-        self.add_box(cx - 5.0, cy - 2.2, cx + 4.8, cy + 2.4, 4.0, 5.4, R, True)          # ... und Deckplatte
-        self.add_box(cx - 3.0, cy + 2.4, cx + 1.0, cy + 6.5, 3.6, 4.6, R)                # Überhang nach Norden
-        self.add_box(cx - 3.2, cy + 5.0, cx - 1.6, cy + 6.6, -1.0, 3.6, R, True)         # Stütze
-        # gestufter Aussichtsfelsen (je 1,2 m, mit Sprung erreichbar)
-        for ox, oy, hh in ((7.0, -4.0, 1.2), (8.6, -4.2, 2.4), (10.2, -4.0, 3.6)):
-            self.add_box(cx + ox - 0.9, cy + oy - 1.4, cx + ox + 0.9, cy + oy + 1.4, -1.0, hh, R, True)
-        self.add_box(cx + 9.4, cy - 6.4, cx + 11.4, cy - 2.6, -1.0, 3.6, R, True)
-        # verstreute Blöcke (geduckt / stehend Deckung)
-        for ox, oy, sx, sy, hh in ((-9.0, -3.0, 2.2, 1.6, 1.3), (-8.0, 4.5, 1.6, 2.6, 2.2), (-2.0, -7.0, 3.0, 1.4, 1.2),
-                                   (4.0, 8.0, 2.0, 2.0, 2.4), (-12.0, 1.0, 1.4, 1.4, 1.1), (1.5, -10.0, 1.8, 2.4, 2.0)):
-            self.add_box(cx + ox - sx / 2, cy + oy - sy / 2, cx + ox + sx / 2, cy + oy + sy / 2, -1.0, hh, R, True)
-        self.flats.append((cx, cy, 15.0, 25.0))
-
-    def ruin_village(self, cx, cy):
-        """Ruinendorf: zerschossene Häuser mit Teildächern, eingestürzte Mauern, ein Brunnen."""
-        P, S = PLASTER, STONE_D
-        # Haus West: Dach nur zur Hälfte, Ostwand eingestürzt
-        x0, x1, y0, y1 = cx - 19.0, cx - 10.0, cy - 4.0, cy + 3.0
-        self.wall_x(x0, x1, y0, y0 + 0.5, 3.2, [(cx - 14.5, 1.1, 0.0, 2.4)], P)
-        self.wall_x(x0, x1, y1 - 0.5, y1, 3.2, [(cx - 16.5, 0.9, 1.2, 2.2), (cx - 12.0, 0.9, 1.2, 2.2)], P)
-        self.wall_y(y0 + 0.5, y1 - 0.5, x0, x0 + 0.5, 3.2, [(cy - 0.5, 0.9, 1.2, 2.2)], P)
-        self.add_box(x1 - 0.5, y0 + 0.5, x1, cy - 1.5, -2, 1.4, P, True)                  # Mauerrest
-        self.add_box(x0 - 0.3, y0 - 0.3, cx - 13.5, y1 + 0.3, 3.2, 3.6, ROOF)              # halbes Dach
-        self.floors.append((x0, y0, x1, y1, WOOD_F))
-        # Haus Mitte: zwei Stockwerke, Obergeschoss ohne Dach (Kampfplattform), Treppe innen
-        x0, x1, y0, y1 = cx - 4.0, cx + 5.0, cy - 2.0, cy + 6.0
-        self.wall_x(x0, x1, y0, y0 + 0.5, 3.0, [(cx + 2.5, 1.1, 0.0, 2.4), (cx - 2.0, 0.9, 1.2, 2.2)], S)
-        self.wall_x(x0, x1, y1 - 0.5, y1, 3.0, [(cx, 0.9, 1.2, 2.2)], S)
-        self.wall_y(y0 + 0.5, y1 - 0.5, x0, x0 + 0.5, 3.0, [(cy + 2.0, 0.9, 1.2, 2.2)], S)
-        self.wall_y(y0 + 0.5, y1 - 0.5, x1 - 0.5, x1, 3.0, [(cy + 2.0, 0.9, 1.2, 2.2)], S)
-        self.add_box(x0, cy + 1.5, x1, y1, 3.0, 3.3, WOOD_F)                             # Zwischendecke (Nordteil)
-        self.stairs(x0 + 0.5, cy - 1.4, "E", 6, 1.2, 0, 0.5, 0.7, WOOD_F)                 # 6 Stufen = 3 m
-        self.add_box(x0 + 0.5 + 6 * 0.7, cy - 1.4, x0 + 0.5 + 6 * 0.7 + 1.2, cy + 1.5, 2.7, 3.0, WOOD_F)  # Podest
-        self.add_box(x0, y1 - 0.5, x1, y1, 3.3, 4.4, S, True)                            # Brüstung OG Nord
-        self.add_box(x0, cy + 1.5, x0 + 0.5, y1, 3.3, 4.4, S)
-        self.add_box(x1 - 0.5, cy + 1.5, x1, cy + 3.5, 3.3, 4.4, S)
-        self.floors.append((x0, y0, x1, y1, WOOD_F))
-        # Haus Ost: nur noch Grundmauern und eine Ecke
-        x0, x1, y0, y1 = cx + 11.0, cx + 19.0, cy - 3.0, cy + 4.0
-        self.add_box(x0, y0, x0 + 0.5, y1, -2, 2.8, P, True)
-        self.add_box(x0, y1 - 0.5, cx + 15.0, y1, -2, 2.8, P, True)
-        self.add_box(x0, y0, x1, y0 + 0.5, -2, 1.1, P, True)
-        self.add_box(x1 - 0.5, y0, x1, cy + 1.0, -2, 1.6, P, True)
-        self.add_box(x0 - 0.3, cy + 0.5, cx + 15.3, y1 + 0.3, 2.8, 3.1, ROOF)                # Rest vom Dach
-        self.floors.append((x0, y0, x1, y1, COBBLE))
-        # Brunnen und Mauerreste auf dem Platz
-        self.add_box(cx + 6.8, cy - 7.5, cx + 8.6, cy - 5.7, -1.0, 0.9, S, True)
-        self.add_box(cx - 8.0, cy - 8.0, cx - 4.0, cy - 7.4, -1.0, 1.2, S)
-        self.add_box(cx + 1.0, cy - 9.5, cx + 1.6, cy - 6.5, -1.0, 1.8, S)
-        self.add_crate(cx - 15.0, cy + 1.0, 0.0)
-        self.flats.append((cx, cy, 23.0, 32.0))
-
-    def hangar(self, cx, cy):
-        """Flugzeughangar am Westende der Landebahn: grosses Dach (Schutz vor Helikoptern), offen nach Osten."""
-        w, d, h = 15.0, 14.0, 6.0
-        x0, x1, y0, y1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
-        M = (0.55, 0.57, 0.60)
-        self.wall_y(y0, y1, x0, x0 + 0.4, h, [(cy, 0.9, 0.0, 2.3)], M)                    # Rückwand mit Tür
-        self.wall_x(x0, x1, y0, y0 + 0.4, h, [(cx - 3.0, 0.9, 1.6, 2.6), (cx + 3.0, 0.9, 1.6, 2.6)], M)
-        self.wall_x(x0, x1, y1 - 0.4, y1, h, [(cx - 3.0, 0.9, 1.6, 2.6), (cx + 3.0, 0.9, 1.6, 2.6)], M)
-        self.add_box(x0 - 0.4, y0 - 0.4, x1 + 0.6, y1 + 0.4, h, h + 0.5, M, True)          # Dach
-        self.floors.append((x0, y0, x1, y1, CONCRETE))
-        for bx, by, bw, bd, bh in ((cx - 4.5, cy - 4.5, 2.4, 2.4, 1.3), (cx - 4.5, cy - 4.5, 1.2, 1.2, 2.6),
-                                   (cx + 1.0, cy + 2.5, 1.2, 2.4, 1.3), (cx - 3.0, cy + 3.5, 2.4, 1.2, 1.3),
-                                   (cx + 3.5, cy - 3.0, 1.2, 1.2, 1.3)):
-            self.add_box(bx, by, bx + bw, by + bd, -1.0, bh, WOOD_F)
-        self.add_crate(cx - 5.5, cy + 4.5, 0.0)
-        # Betonbarrieren entlang der Landebahn (Nordseite)
-        for k in range(5):
-            bx = cx + 18.0 + k * 19.0
-            self.add_box(bx, cy + 9.0, bx + 3.2, cy + 9.7, -1.0, 1.1, CONCRETE)
-        self.flats.append((cx, cy, 14.0, 24.0))
-
-    def pad_walls(self, px, py, sx):
-        """Splitterschutzwände an der Aussenseite eines Helipads (mit Lücken), dazu zwei Sandsack-Nester."""
-        ox = px + sx * 11.0
-        for a, b in ((-9.0, -2.0), (2.0, 9.0)):
-            self.add_box(min(ox, ox + sx * 0.6), py + a, max(ox, ox + sx * 0.6), py + b, -1.0, 2.6, CONCRETE, True)
-        for oy in (-11.0, 11.0):
-            self.add_box(px - 4.0, py + oy - 0.3, px + 4.0, py + oy + 0.3, -1.0, 2.6, CONCRETE, True)
-        for oy in (-1, 1):                                # Sandsack-Winkel auf der Innenseite (zur Burg)
-            nx, ny = px - sx * 11.5, py + oy * 9.5
-            self.sandbags(nx - 1.4, ny - 0.4, nx + 1.4, ny + 0.4)
-            self.sandbags(nx - 1.4, min(ny, ny - oy * 2.0), nx - 0.6, max(ny, ny - oy * 2.0))
-
-    def lean_to(self, cx, cy, side):
-        """Kleiner Unterstand: Dach auf Pfosten (Deckung von oben), Sandsäcke zur Seite 'side'."""
-        self.shed_roof(cx - 2.0, cy - 1.6, cx + 2.0, cy + 1.6, 2.3, (0.33, 0.38, 0.28))
-        if side in "NS":
-            y = cy + 1.6 if side == "N" else cy - 2.4
-            self.sandbags(cx - 2.2, y, cx + 2.2, y + 0.8)
-        else:
-            x = cx + 2.0 if side == "E" else cx - 2.8
-            self.sandbags(x, cy - 1.8, x + 0.8, cy + 1.8)
-        self.flats.append((cx, cy, 5.0, 12.0))
-
-    # ------------------------------------------------------------ 11: CTF-Stützpunkte (Polytown)
-    def build_ctf_bases(self, cover=()):
-        """11: Zwei Stützpunkte in gegenüberliegenden Ecken (CTF_BASES) - gehören fest zur Karte (stören KotH/DM nicht),
-        im Capture the Flag sind sie die Teambasen. Läuft vor ground_boxes (Fundamente) und vor den Startpunkten."""
-        c = CENTER
-        for team, (dx, dy, s) in enumerate(CTF_BASES):
-            self.ctf_base(c + dx, c + dy, s, CTF_TEAM_COLS[team], cover)
-
-    def ctf_base(self, cx, cy, s, col, cover=()):
-        """11: Basislager, gut zu verteidigen. Lokale Koordinaten (u, v) mit x = cx + s*u, y = cy + s*v: Tore liegen
-        bei -v (Süd) und +u (Ost), also zur Burg; vorne (+u, -v) ein Wachturm mit Teamfahne, hinten (-u, +v) der
-        Flaggenständer unter einem Unterstand. Mauern (HESCO-Wälle) mit Schiessscharten und einem zweistufigen Auftritt
-        innen (stehend schiesst man darüber, geduckt volle Deckung), Sandsack-Stellungen innen und vor den Toren."""
-        A, H, T = CTF_BASE_A, CTF_BASE_WALL_H, 1.0
-        hesco, hesco_d, frame = (0.60, 0.54, 0.40), (0.50, 0.45, 0.33), (0.36, 0.38, 0.33)
-
-        def B(u0, v0, u1, v1, z0, z1, colr, mm=True, vis=True):
-            xa, xb, ya, yb = cx + s * u0, cx + s * u1, cy + s * v0, cy + s * v1
-            return self.add_box(min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb), z0, z1, colr, mm, vis)
-
-        def W(u0, v0, u1, v1):
-            xa, xb, ya, yb = cx + s * u0, cx + s * u1, cy + s * v0, cy + s * v1
-            return min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb)
-
-        # Platz räumen: Bäume/Felsen und Deckungsblöcke im Lager, Gelände eben (Höhe 0)
-        m = A + 3.0
-        self.props = [p for p in self.props if not (abs(p.x - cx) < m + p.r and abs(p.y - cy) < m + p.r)]
-        rout = A + 20.0                                                  # weicher Übergang ins Gelände (keine Gräben)
-        drop = {b for b in cover if math.hypot((b.x0 + b.x1) / 2 - cx, (b.y0 + b.y1) / 2 - cy) < rout + 3.0}
-        if drop:
-            self.boxes = [b for b in self.boxes if b not in drop]
-        self.flats.append((cx, cy, A + 4.0, rout))
-        self.floors.append((cx - A, cy - A, cx + A, cy + A, (0.47, 0.44, 0.37)))
-
-        def wall(along_u, a0, a1, b0, b1, ops):
-            """Mauer entlang u (bzw. v) von a0 bis a1, Dicke b0..b1; ops = (Mitte, halbe Breite, z unten, z oben)."""
-            def seg(p, q, z0, z1):
-                if along_u:
-                    B(p, b0, q, b1, z0, z1, hesco)
-                else:
-                    B(b0, p, b1, q, z0, z1, hesco)
-            cur = a0
-            for c0, hw, zl, zh in sorted(ops):
-                p0, p1 = c0 - hw, c0 + hw
-                if p0 > cur:
-                    seg(cur, p0, -2.0, H)
-                if zl > 0:
-                    seg(p0, p1, -2.0, zl)
-                if zh < H:
-                    seg(p0, p1, zh, H)
-                cur = p1
-            if cur < a1:
-                seg(cur, a1, -2.0, H)
-
-        slit = lambda c0: (c0, 0.32, 1.35, 1.85)                              # noqa: E731
-        gs, ge, gw = -1.5, 1.5, 2.4                                          # Tor Süd (Mitte u), Tor Ost (Mitte v), halbe Breite
-        wall(True, -A, A, A - T, A, [slit(-7.0), slit(-1.0), slit(5.0)])     # Nord (hinten)
-        wall(False, -A, A, -A, -A + T, [slit(-5.0), slit(1.0), slit(7.0)])   # West (hinten)
-        wall(True, -A, A, -A, -A + T, [(gs, gw, 0.0, 99.0), slit(-8.5)])     # Süd mit Tor
-        wall(False, -A, A, A - T, A, [(ge, gw, 0.0, 99.0), slit(8.5)])       # Ost mit Tor
-        for pu, pv in ((gs - gw - 0.6, -A + 0.5), (gs + gw + 0.6, -A + 0.5), (A - 0.5, ge - gw - 0.6), (A - 0.5, ge + gw + 0.6)):
-            B(pu - 0.55, pv - 0.55, pu + 0.55, pv + 0.55, -2.0, H + 0.55, hesco_d)    # Torpfeiler
-        # Auftritt innen (unten 0,45, oben CTF_BASE_STEP_H): Nord, West, Süd westlich des Tors, Ost nördlich/südlich des Tors
-        hs = CTF_BASE_STEP_H
-        B(-A + T, A - T - 0.8, A - T, A - T, -1.0, hs, hesco_d)
-        B(-A + T, A - T - 1.4, A - T, A - T - 0.8, -1.0, hs / 2, hesco_d)
-        B(-A + T, -A + T, -A + T + 0.8, A - T - 0.8, -1.0, hs, hesco_d)
-        B(-A + T + 0.8, -A + T, -A + T + 1.4, A - T - 1.4, -1.0, hs / 2, hesco_d)
-        B(-A + T + 1.4, -A + T, gs - gw - 1.3, -A + T + 0.8, -1.0, hs, hesco_d)
-        B(-A + T + 1.4, -A + T + 0.8, gs - gw - 1.3, -A + T + 1.4, -1.0, hs / 2, hesco_d)
-        for v0, v1 in ((ge + gw + 1.3, A - T - 1.4), (-A + T + 3.8, ge - gw - 1.3)):
-            B(A - T - 0.8, v0, A - T, v1, -1.0, hs, hesco_d)
-            B(A - T - 1.4, v0, A - T - 0.8, v1, -1.0, hs / 2, hesco_d)
-        # Wachturm vorne (+u, -v): Betonblock mit Treppe an der Südmauer, Brüstung über den Mauern, Teamfahne
-        tz = 3.2
-        tu0, tv1 = A - T - 3.6, -A + T + 3.6
-        B(tu0, -A + T, A - T, tv1, -2.0, tz, CONCRETE)
-        B(tu0, -A, A, -A + T, H, tz + 1.1, CONCRETE)                         # Brüstung Süd (auf der Mauer)
-        B(A - T, -A, A, tv1, H, tz + 1.1, CONCRETE)                          # Brüstung Ost
-        B(tu0, tv1 - 0.3, tu0 + 1.0, tv1, tz, tz + 1.1, CONCRETE)            # Ecke zur Lagerseite
-        n, sd = 7, 0.8
-        for i in range(n):                                                   # Treppe (steigt nach +u zum Turm)
-            u1 = tu0 - (n - 1 - i) * sd
-            B(u1 - sd, -A + T + 0.1, u1, -A + T + 1.4, -1.0, tz * (i + 1) / n, CONCRETE)
-        fx, fy, _x1, _y1 = W(A - T - 0.45, tv1 - 0.45, A - T - 0.45, tv1 - 0.45)
-        self.flagpole(fx, fy, tz, 4.2, col, 2.2, 1.3, 0.0 if s > 0 else 180.0)
-        # Unterstand über dem Flaggenständer (Deckung von oben), Sandsäcke zur Lagerseite, Ständer
-        x0, y0, x1, y1 = W(-9.5, 2.5, -2.5, 9.5)
-        self.shed_roof(x0, y0, x1, y1, 2.9, (0.33, 0.38, 0.28))
-        for u0, v0, u1, v1 in ((-9.5, 2.2, -7.2, 3.0), (-4.8, 2.2, -2.5, 3.0), (-2.5, 3.0, -1.7, 5.4), (-2.5, 7.6, -1.7, 9.5)):
-            x0, y0, x1, y1 = W(u0, v0, u1, v1)
-            self.sandbags(x0, y0, x1, y1)
-        fu, fv = CTF_FLAG_LOCAL
-        B(fu - 0.6, fv - 0.6, fu + 0.6, fv + 0.6, -0.5, 0.25, frame)          # Flaggenständer (Sockel)
-        # Sandsack-Stellungen innen vor den Toren und aussen neben den Toren
-        for u0, v0, u1, v1 in ((-4.8, -A + 4.0, 1.8, -A + 4.8), (A - 4.8, -1.8, A - 4.0, 4.8),
-                               (-8.5, -A - 3.8, -5.0, -A - 3.0), (2.0, -A - 3.8, 5.5, -A - 3.0),
-                               (A + 3.0, -5.5, A + 3.8, -2.0), (A + 3.0, 5.0, A + 3.8, 8.5)):
-            x0, y0, x1, y1 = W(u0, v0, u1, v1)
-            self.sandbags(x0, y0, x1, y1)
-        # Munitionskisten (Deko, Deckung)
-        B(6.8, 7.6, 8.2, 8.6, -0.5, 0.8, (0.36, 0.40, 0.26))
-        B(8.4, 7.6, 9.6, 8.6, -0.5, 0.8, (0.36, 0.40, 0.26))
-        B(7.4, 7.7, 8.8, 8.5, 0.8, 1.5, (0.33, 0.37, 0.24))
-
-    def add_groves(self, rng):
-        """Wäldchen (dichte Baumgruppen): Sichtschutz gegen Helikopter am Rand des Tals."""
-        c = CENTER
-        for gx, gy in ((c - 42, c - 96), (c + 46, c + 96), (c + 98, c - 70), (c - 98, c + 70),
-                       (c - 100, c - 30), (c + 100, c + 8)):
-            placed = 0
-            for _ in range(80):
-                if placed >= 13:
-                    break
-                a, r = rng.uniform(0, 2 * math.pi), 9.0 * math.sqrt(rng.random())
-                x, y = gx + math.cos(a) * r, gy + math.sin(a) * r
-                br = rng.uniform(1.8, 2.8)
-                if not (6 < x < WORLD - 6 and 6 < y < WORLD - 6) or mountain(x, y) > 12.0:
-                    continue
-                if any(math.hypot(x - fx, y - fy) < rin + 2 for fx, fy, rin, _ro in self.flats):
-                    continue
-                if any(math.hypot(x - p.x, y - p.y) < (2.6 if p.kind == "tree" else p.r + 1.5) for p in self.props):
-                    continue
-                p = Prop("tree", x, y, br, 0.45)
-                p.base_r = br
-                self.props.append(p)
-                placed += 1
-
     def add_cover(self, rng):
         """Verstreute Deckungsblöcke im Gelände (nach Bäumen und Felsen)."""
         placed = tries = 0
-        want = BIG_COVER if self.big else (30 if self.mtn else 12)
+        want = 12
         while placed < want and tries < want * 35:
             tries += 1
             x, y = rng.uniform(10, WORLD - 10), rng.uniform(10, WORLD - 10)
-            if self.mtn and mountain(x, y) > 0.3:
-                continue
             sx, sy = rng.choice((1.2, 1.6, 2.4)), rng.choice((1.2, 2.0, 3.0))
             top = rng.choice((1.1, 1.4))
             if any(math.hypot(x - fx, y - fy) < rin + 3 for fx, fy, rin, _ro in self.flats):
@@ -6148,8 +5048,6 @@ class World:
     def spawn_ok(self, x, y):
         if not (8 < x < WORLD - 8 and 8 < y < WORLD - 8):
             return False
-        if self.mtn and mountain(x, y) > 1.0:            # nicht im Gebirge starten
-            return False
         if self.height(x, y) < WATER_LEVEL + 0.6:
             return False
         if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
@@ -6162,7 +5060,7 @@ class World:
         """Viele Startpunkte (36 Sektoren um die Burg, verschiedene Radien). Die Liste ist so sortiert,
         dass die ersten Einträge möglichst weit auseinander liegen (so starten die ersten Spieler verteilt)."""
         pts = []
-        radii = (58.0, 70.0, 82.0, 64.0, 76.0) + ((92.0, 100.0) if self.mtn else ()) + ((112.0, 126.0, 140.0) if self.big else ())
+        radii = (58.0, 70.0, 82.0, 64.0, 76.0)
         given = [p for p in (self.map.get("spawns") or ()) if self.spawn_ok(*p)] if self.map else []
         if self.cm is not None and self.map.get("spawn_zs"):
             for p in given:
@@ -6201,8 +5099,6 @@ class World:
             z = self.cm.top(x, y)
             return self.cm.zmin if z is None else z
         if g is None:
-            if self.mtn:                                 # Hügel um die Burg wie auf der alten 200-m-Karte, dazu das Gebirge
-                return hills(x - CENTER + 100.0, y - CENTER + 100.0) + mountain(x, y)
             return hills(x, y)
         n, st, z = g
         fx = min(n - 1.000001, max(0.0, x / st))
@@ -6301,10 +5197,6 @@ class World:
 
     # ------------------------------------------------------------ Spawns
     def first_spawn(self, pid):
-        if self.mode == "ctf" and self.team_of.get(pid) in (0, 1):        # 11: in der eigenen Basis
-            pts = self.ctf_spawns[self.team_of[pid]]
-            if pts:
-                return pts[pid % len(pts)]
         return self.spawns[pid % len(self.spawns)]
 
     SPAWN_MIN_DEATH = 70.0       # so weit soll der neue Startpunkt vom Todesort entfernt sein
@@ -6313,16 +5205,6 @@ class World:
         """Startpunkt: weit weg vom Todesort, von lebenden Gegnern und Monstern, und nicht zweimal derselbe.
         Zufall nur unter den guten Kandidaten."""
         me = self.players.get(pid)
-        if self.mode == "ctf" and self.team_of.get(pid) in (0, 1) and self.ctf_spawns[self.team_of[pid]]:
-            pts = self.ctf_spawns[self.team_of[pid]]                       # 11: Spawn in bzw. bei der eigenen Basis
-            busy = [(p.x, p.y) for p in self.players.values() if p.pid != pid and p.hp > 0]
-            free = [q for q in pts if all(math.hypot(q[0] - bx, q[1] - by) > 2.0 for bx, by in busy)] or pts
-            last = self.last_spawn.get(pid)
-            if last is not None and len(free) > 1:
-                free = [q for q in free if q != last] or free
-            best = self.mrng.choice(free)
-            self.last_spawn[pid] = best
-            return best
         death = getattr(me, "death_pos", None)
         foes = [(p.x, p.y) for p in self.players.values() if p.pid != pid and p.hp > 0]
         foes += [(m.x, m.y) for m in self.mobs if m.state != "dead"]
@@ -6351,224 +5233,12 @@ class World:
         """Host/Einzelspiel: Figur neu aufstellen (nur mit der Pistole). Die Darstellung läuft über das
         Ereignis 'respawn'."""
         x, y = self.pick_spawn(pl.pid)
-        lo = getattr(pl, "loadout", None) if self.loot_mode == "loadout" else None   # 11: gewählte Waffen (Hauptspiel-Loadout)
-        pl.respawn(self, x, y, lo or DEFAULT_LOADOUT)
+        pl.respawn(self, x, y, DEFAULT_LOADOUT)
         self.events.append(("respawn", pl.pid, round(x, 2), round(y, 2)))
-
-    # ------------------------------------------------------------ 11: Capture the Flag
-    def ctf_cfg(self):
-        """Einstellungen des CTF fürs Netz (welcome, cfg, reload)."""
-        return {"ff": 1 if self.ctf_ff else 0, "loot": self.ctf_loot, "pl": int(self.score_limit)}
-
-    def ctf_apply_cfg(self, d):
-        if isinstance(d, dict):
-            self.ctf_ff = bool(d.get("ff", self.ctf_ff))
-            self.ctf_loot = "exp" if d.get("loot", self.ctf_loot) == "exp" else "loadout"
-            try:
-                self.score_limit = max(0, min(CTF_PTS_MAX, int(d.get("pl", self.score_limit))))
-            except (TypeError, ValueError):
-                pass
-
-    def ctf_setup_map(self):
-        """Flaggenstände der beiden Teams (ctf_bases: (x, y, z)), Startpunkte je Team (ctf_spawns) und - Polytown - die
-        möglichen Orte der neutralen Flagge in der Burg (ctf_mid). Alles aus Seed + Karte: Host und Mitspieler gleich."""
-        self.ctf_bases, self.ctf_spawns, self.ctf_mid = [], [[], []], []
-        self.ctf_neutral = bool(self.big)
-        if self.mc:
-            return
-        if self.big:
-            c = CENTER
-            fu, fv = CTF_FLAG_LOCAL
-            for team, (dx, dy, s) in enumerate(CTF_BASES):
-                bx, by = c + dx, c + dy
-                fx, fy = bx + s * fu, by + s * fv
-                self.ctf_bases.append((fx, fy, self.floor_at(fx, fy, 1.0)))
-                pts = []
-                for gu in range(-8, 9, 2):                   # Raster im Lager: frei, nicht direkt am Ständer
-                    for gv in range(-8, 9, 2):
-                        x, y = bx + s * gu, by + s * gv
-                        if math.hypot(x - fx, y - fy) < 3.0 or self.in_solid(x, y, 0.8, 0.0):
-                            continue
-                        if abs(self.floor_at(x, y, 0.3)) > 0.3 or self.ceiling_at(x, y, 0.0) < 2.2:
-                            continue
-                        pts.append((x, y))
-                self.ctf_spawns[team] = pts
-            for dx, dy, z in CTF_MID_SPOTS:                  # neutrale Flagge: nur Orte mit Boden und Kopffreiheit
-                x, y = c + dx, c + dy
-                fz = self.floor_at(x, y, z + 0.3)
-                if abs(fz - z) > 0.6 or self.ceiling_at(x, y, fz) - fz < 2.0 or self.in_solid(x, y, 0.5, fz):
-                    continue
-                self.ctf_mid.append((x, y, fz))
-            if not self.ctf_mid:
-                self.ctf_mid.append((c - 7.0, c + 7.0, self.floor_at(c - 7.0, c + 7.0, 0.5)))
-            return
-        homes = None
-        if (self.map or {}).get("name") == "Blood Gulch":
-            homes = list(CTF_BG_FLAGS)
-        elif len(self.spawns) >= 2:                          # andere Karte: die beiden weitesten Startpunkte
-            homes = list(max(((a, b) for a in self.spawns for b in self.spawns),
-                             key=lambda ab: math.hypot(ab[0][0] - ab[1][0], ab[0][1] - ab[1][1])))
-        if not homes:
-            homes = [(CENTER - 60.0, CENTER), (CENTER + 60.0, CENTER)]
-        for team, (hx, hy) in enumerate(homes[:2]):
-            self.ctf_bases.append((hx, hy, self.floor_at(hx, hy, self.spawn_z(hx, hy) + 1.2)))
-        for sx, sy in self.spawns:                           # Startpunkte: die der näheren Basis (bis 70 m)
-            d = [math.hypot(sx - hx, sy - hy) for hx, hy, _z in self.ctf_bases]
-            t = 0 if d[0] <= d[1] else 1
-            if d[t] < 70.0:
-                self.ctf_spawns[t].append((sx, sy))
-
-    def ctf_reset(self):
-        """Neue CTF-Runde: Punkte auf 0, Flaggen an ihren Platz (Polytown: neutrale Flagge an einem zufälligen Ort)."""
-        self.team_score = [0, 0]
-        self.flags = []
-        if not self.ctf_bases:
-            return
-        if self.ctf_neutral:
-            x, y, z = self.mrng.choice(self.ctf_mid)
-            self.flags.append(Flag(self.next_fid, -1, x, y, z))
-            self.next_fid += 1
-        else:
-            for team, (x, y, z) in enumerate(self.ctf_bases[:2]):
-                self.flags.append(Flag(self.next_fid, team, x, y, z))
-                self.next_fid += 1
-
-    def ctf_assign(self, pl):
-        """Automatische, ausgeglichene Teamzuteilung: ins kleinere Team (bei Gleichstand ins Team mit weniger Punkten)."""
-        if self.mode != "ctf" or pl is None:
-            return
-        n = [sum(1 for pid, t in self.team_of.items() if t == k and pid != pl.pid and pid in self.players) for k in (0, 1)]
-        t = 0 if n[0] < n[1] else 1 if n[1] < n[0] else (0 if self.team_score[0] <= self.team_score[1] else 1)
-        self.team_of[pl.pid] = t
-        pl.team = t
-
-    def ctf_balance(self):
-        """Rundenstart: alle bekommen ein Team, Unterschied höchstens 1 (die zuletzt Beigetretenen wechseln)."""
-        if self.mode != "ctf":
-            self.team_of = {}
-            for p in self.players.values():
-                p.team = None
-            return
-        self.team_of = {pid: t for pid, t in self.team_of.items() if pid in self.players and t in (0, 1)}
-        for p in sorted(self.players.values(), key=lambda q: q.pid):
-            if p.pid not in self.team_of:
-                self.ctf_assign(p)
-        while True:
-            n = [[pid for pid, t in self.team_of.items() if t == k] for k in (0, 1)]
-            if abs(len(n[0]) - len(n[1])) <= 1:
-                break
-            big = 0 if len(n[0]) > len(n[1]) else 1
-            mv = max(n[big])
-            self.team_of[mv] = 1 - big
-        for p in self.players.values():
-            p.team = self.team_of.get(p.pid)
-
-    def ctf_carried(self, pid):
-        """Flagge, die dieser Spieler trägt (oder None)."""
-        return next((f for f in self.flags if f.state == "carried" and f.carrier == pid), None)
-
-    def ctf_drop(self, f, pl=None):
-        """Träger stirbt / geht: Flagge fällt an seiner Stelle (Boden darunter) und liegt CTF_DROP_T s."""
-        x, y, z = (pl.x, pl.y, pl.z) if pl is not None else (f.x, f.y, f.z)
-        gz = self.floor_at(x, y, z + 0.3)
-        if gz < z - 40.0 or (gz < WATER_LEVEL - 0.6 and self.cm is None and not (z < -1.0 and self.tunnels and self.in_tunnel(x, y))):
-            self.ctf_return(f, -1, auto=True)                # ins Leere / ins Wasser gefallen: gleich zurück
-            return
-        f.place(x, y, gz, "dropped")
-        f.drop_t = CTF_DROP_T
-        self.events.append(("ctf", "drop", pl.pid if pl is not None else -1, f.fid, f.team))
-
-    def ctf_return(self, f, pid=-1, auto=False):
-        """Flagge kehrt zurück: Teamflagge in ihre Basis, neutrale an einen (neuen) Ort in der Burg."""
-        kind = "new" if f.state == "wait" else ("auto" if auto else "ret")
-        if f.team in (0, 1) and f.team < len(self.ctf_bases):
-            f.place(*self.ctf_bases[f.team])
-        else:
-            f.place(*self.mrng.choice(self.ctf_mid or [f.home]))
-        p = self.players.get(pid)
-        if p is not None and not auto:
-            p.stats["flag_returns"] += 1
-        self.events.append(("ctf", kind, pid, f.fid, f.team))
-
-    def ctf_on_death(self, pl, killer=None):
-        """Aus player_died: trägt der Tote eine Flagge, fällt sie; ein gegnerischer Killer bekommt 'Träger getötet'."""
-        f = self.ctf_carried(pl.pid)
-        if f is None:
-            return
-        if killer is not None and killer is not pl and not self.allied(killer.pid, pl.pid):
-            killer.stats["carrier_kills"] += 1
-        self.ctf_drop(f, pl)
-
-    def ctf_score(self, pl, f):
-        t = self.team_of.get(pl.pid)
-        self.team_score[t] += 1
-        pl.stats["flag_caps"] += 1
-        pl.score += 1.0
-        self.events.append(("ctf", "cap", pl.pid, f.fid, t))
-        if f.team in (0, 1):
-            f.place(*self.ctf_bases[f.team])                 # gegnerische Flagge zurück in ihre Basis
-        else:
-            f.place(f.x, f.y, f.z, "wait")                   # neutrale: gleich eine neue in der Mitte
-            f.drop_t = CTF_NEUTRAL_DELAY
-        if 0 < self.score_limit <= self.team_score[t]:
-            self.end_match()
-
-    def ctf_update(self, dt):
-        """Host: Flaggen aufnehmen (darüberlaufen), tragen, abgeben, zurückbringen; Rückkehr nach CTF_DROP_T."""
-        if self.mode != "ctf" or not self.flags or self.phase != "play" or self.lobby:
-            return
-        alive = [p for p in self.players.values()
-                 if p.hp > 0 and not getattr(p, "prespawn", False) and self.team_of.get(p.pid) in (0, 1)]
-        for f in self.flags:
-            if f.state == "carried":
-                c = self.players.get(f.carrier)
-                if c is None or c.hp <= 0 or self.team_of.get(c.pid) not in (0, 1):
-                    self.ctf_drop(f, c)
-                    continue
-                f.x, f.y, f.z = c.x, c.y, c.z
-                t = self.team_of[c.pid]
-                if t >= len(self.ctf_bases) or f.team == t:
-                    continue
-                hx, hy, hz = self.ctf_bases[t]
-                if math.hypot(c.x - hx, c.y - hy) <= CTF_CAP_R and abs(c.z - hz) < 3.0:
-                    own = next((q for q in self.flags if q.team == t), None)
-                    if CTF_NEED_HOME and own is not None and own.state != "home":
-                        f.hint_t -= dt
-                        if f.hint_t <= 0:
-                            f.hint_t = 3.0
-                            self.events.append(("ctf", "needhome", c.pid, own.fid, t))
-                        continue
-                    self.ctf_score(c, f)
-                continue
-            if f.state in ("dropped", "wait"):
-                f.drop_t -= dt
-                if f.drop_t <= 0:
-                    self.ctf_return(f, -1, auto=True)
-                    continue
-                if f.state == "wait":
-                    continue
-            for p in alive:                                  # darüberlaufen
-                if p.vehicle >= 0 or p.heli >= 0 or p.mount >= 0:
-                    continue
-                if math.hypot(p.x - f.x, p.y - f.y) > CTF_PICK_R or abs(p.z - f.z) > CTF_PICK_DZ:
-                    continue
-                t = self.team_of[p.pid]
-                if f.team == t:                              # eigene Flagge: liegt sie, kehrt sie sofort zurück
-                    if f.state == "dropped":
-                        self.ctf_return(f, p.pid)
-                    break
-                if self.ctf_carried(p.pid) is not None:
-                    continue
-                f.state, f.carrier, f.drop_t = "carried", p.pid, 0.0
-                f.x, f.y, f.z = p.x, p.y, p.z
-                p.protect = 0.0                              # kein Spawnschutz mit Flagge
-                self.events.append(("ctf", "take", p.pid, f.fid, f.team))
-                break
 
     # ------------------------------------------------------------ Mobs
     def populate_mobs(self):
-        k = (1.3 * BIG_MOB_K if self.big else 1.3) if self.mtn else 1.0   # grössere Standardkarte: mehr Monster
-        k *= MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
+        k = MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
         for kind, n in (("grunt", N_GRUNT), ("brute", N_BRUTE), ("huntress", N_HUNT),
                         ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER), ("titan", N_TITAN)):
             cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
@@ -6581,13 +5251,7 @@ class World:
         """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll."""
         rng = self.mrng
         home, home_i, area = None, -1, None
-        if kind == "titan" and self.big:                 # 10g: Titan spawnt in einem freien Revier
-            used = {m.home_i for m in self.mobs if m.kind == "titan" and m.state != "dead"}
-            free = [i for i in range(len(TITAN_HOMES)) if i not in used] or list(range(len(TITAN_HOMES)))
-            home_i = rng.choice(free)
-            hx, hy, hr = TITAN_HOMES[home_i]
-            home = area = (CENTER + hx, CENTER + hy, hr)
-        elif kind == "critter" and getattr(self, "forest_areas", None):
+        if kind == "critter" and getattr(self, "forest_areas", None):
             area = rng.choice(self.forest_areas)         # 10g: Hasen wohnen in den Wäldern
         for i in range(80):
             if area is not None and i < 60:
@@ -6599,9 +5263,7 @@ class World:
                 x, y = rng.uniform(6, WORLD - 6), rng.uniform(6, WORLD - 6)
             if math.hypot(x - CENTER, y - CENTER) < 40.0:          # nicht in/an der Burg
                 continue
-            if self.mtn and mountain(x, y) > 1.0:                # nicht oben im Gebirge
-                continue
-            if self.steep and not self.mtn and terrain_slope(self, x, y) > 0.45:   # Kartenhang: nur auf gutem Boden
+            if self.steep and terrain_slope(self, x, y) > 0.45:   # Kartenhang: nur auf gutem Boden
                 continue
             if any(math.hypot(x - ax, y - ay) < min_dist for ax, ay in avoid):
                 continue
@@ -6621,8 +5283,6 @@ class World:
             self.next_mid += 1
             if kind == "titan":
                 m.home, m.home_i = home, home_i
-            elif kind == "colossus" and self.big:
-                m.home = (x, y, COLOSSUS_HOME_R)
             elif kind == "critter" and area is not None:
                 m.forest = area
             self.mobs.append(m)
@@ -6719,7 +5379,7 @@ class World:
 
     def ranking(self):
         ps = list(self.players.values())
-        if self.mode in ("koth", "ctf"):                 # 11: CTF - Punkte = geholte Flaggen
+        if self.mode == "koth":
             ps.sort(key=lambda p: (-p.score, -p.kills, p.deaths))
         else:
             ps.sort(key=lambda p: (-(p.kills / max(1, p.deaths)), -p.kills, p.deaths))
@@ -6731,9 +5391,6 @@ class World:
             return
         if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
             return
-        if (self.mode == "ctf" and not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
-                and attacker != pl.pid and self.allied(attacker, pl.pid)):
-            return                                       # 11: Eigenbeschuss aus - Teamkameraden nehmen keinen Schaden
         instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
         if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
             absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
@@ -6802,8 +5459,6 @@ class World:
             if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
                 pool.append(("gren", rng.choice(gks)))
             pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
-            if self.loot_mode == "loadout":              # 11: Hauptspiel-Loadout - nur die Waffe in der Hand fällt
-                pool = []
             if pool:
                 kind, v = rng.choice(pool)
                 a = rng.uniform(0, 2 * math.pi)
@@ -6834,10 +5489,8 @@ class World:
         self.leave_heli(pl)
         self.clear_gadgets(pl.pid)                       # seine platzierten Gadgets verschwinden mit ihm
         k = self.players.get(attacker)
-        if self.mode == "ctf":
-            self.ctf_on_death(pl, k)                     # 11: Flagge fällt, "Träger getötet"
-        if k is not None and k is not pl and not (self.mode == "ctf" and self.allied(k.pid, pl.pid)):
-            k.kills += 1                                 # (11: Teamkills zählen nicht)
+        if k is not None and k is not pl:
+            k.kills += 1
             if wi == WI_TOMAHAWK:
                 k.stats["toma_kills"] += 1
             elif wi >= MELEE_WI0:
@@ -6849,7 +5502,7 @@ class World:
             if self.mode == "koth":                      # in der Zone zählt ein Kill doppelt
                 k.score += KILL_PTS * (2.0 if k.hp > 0 and self.in_zone(k) else 1.0)
             self.events.append(("reward", k.pid))        # Munition für den Schützen
-        elif not (k is not None and k is not pl):        # 11: Teamkill - im Killfeed trotzdem mit Namen
+        else:
             k = None
         self.events.append(("player_dead", pl.pid))
         self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi))
@@ -7231,9 +5884,7 @@ class World:
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(self.players.get(owner))
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if self.loot_mode != "exp":
-                pass                                     # 11: Hauptspiel-Loadout (CTF) - Monster lassen nichts fallen
-            elif (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
+            if (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
                 self.mob_loot(m, killer, extra)                         # 10d: Diebesdolch +1 (andere Kategorie)
             elif m.kind == "titan":                      # Boss erlegt: goldene Kiste an seiner Stelle
                 self.titan_loot(m)
@@ -7297,10 +5948,8 @@ class World:
 
     # ------------------------------------------------------------ Loot
     def crate_counts(self):
-        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen (grosse Karte: x BIG_CRATE_K)."""
-        if getattr(self, "big", False):
-            return {k: int(round(v * BIG_CRATE_K)) for k, v in CRATES_STD.items()}
-        return CRATES_STD if self.mtn else CRATES_MAP
+        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen."""
+        return CRATES_MAP
 
     def crate_target(self):
         return sum(self.crate_counts().values())
@@ -7331,7 +5980,7 @@ class World:
             if any(math.hypot(x - c.x, y - c.y) < gap for c in self.crates):
                 continue
             if kind == "gold" and attempt < 100:          # goldene Kisten über die ganze Karte verteilen
-                gg = CRATE_GOLD_GAP * WORLD / STD_WORLD
+                gg = CRATE_GOLD_GAP * WORLD / 300.0
                 if any(c.kind == "gold" and math.hypot(x - c.x, y - c.y) < gg for c in self.crates):
                     continue
             if any(math.hypot(x - ax, y - ay) < ad for ax, ay, ad in avoid):
@@ -7384,8 +6033,6 @@ class World:
         if x is None:
             x, y = rng.uniform(8, WORLD - 8), rng.uniform(8, WORLD - 8)
         if not (8 < x < WORLD - 8 and 8 < y < WORLD - 8):
-            return None
-        if self.mtn and mountain(x, y) > 1.0:                     # nicht im Gebirge
             return None
         h = self.height(x, y)
         if h < WATER_LEVEL + 0.6 or terrain_slope(self, x, y) > 0.5 or self.in_void(x, y, 1.0):
@@ -7573,11 +6220,6 @@ class World:
         """F gedrückt (alt = V): Kiste, Waffe, Fahrzeug (Fahrer/Schütze), Geschütz, Helikopter, Knöpfe."""
         if pl.hp <= 0 or self.phase != "play":
             return
-        if CTF_NO_VEHICLES and self.mode == "ctf" and self.ctf_carried(pl.pid) is not None:
-            r_ = None if alt else self.nearest_use(pl)       # 11: mit Flagge kein Fahrzeug, Heli, Schützensitz
-            if (alt and self.alt_seat(pl) is not None) or (r_ is not None and r_[0] in ("vehicle", "heli")):
-                self.events.append(("ctf", "noveh", pl.pid, -1, -1))
-                return
         if alt:                                          # V: Schützensitz auf dem Wagen
             if pl.mount >= 0 or pl.heli >= 0 or pl.vehicle >= 0:
                 return
@@ -8372,53 +7014,6 @@ class World:
     # ------------------------------------------------------------ Tomahawk
     def in_strike(self, x, y):
         return math.hypot(x - self.strike_x, y - self.strike_y) <= STRIKE_R      # in allen Modi kreisförmig
-
-    def build_toma_spots(self):
-        """Orte der Tomahawk-Säule (TOMA_SPOTS). Erhöhte Orte stehen fest; für Bodenorte wird in der Nähe ein
-        freier, ebener Platz gesucht (kein Baum, Fels, Teich, keine Wand). Gleiches Ergebnis bei allen Spielern."""
-        for dx, dy, z in (TOMA_SPOTS_BIG if self.big else TOMA_SPOTS):
-            x, y = CENTER + dx, CENTER + dy
-            if z is None:
-                best = None
-                for r in (0.0, 1.5, 3.0, 4.5, 6.0, 8.0, 10.0):
-                    for k in range(1 if r == 0 else 12):
-                        a = k * math.tau / 12
-                        px, py = x + math.cos(a) * r, y + math.sin(a) * r
-                        if self.toma_ground_ok(px, py):
-                            best = (px, py)
-                            break
-                    if best:
-                        break
-                if best is None:
-                    continue
-                x, y = best
-                z = self.floor_at(x, y, self.height(x, y))
-            h = math.degrees(math.atan2(-(CENTER - x), CENTER - y)) if (x, y) != (CENTER, CENTER) else 0.0
-            self.toma_spots.append((x, y, float(z), h))
-
-    def toma_ground_ok(self, x, y):
-        if self.mtn and mountain(x, y) > 0.5:
-            return False
-        rw = self.runway                                   # Rollbahn, Helipads, Fahrzeugplätze freihalten
-        if rw and rw[0] - TOMA_KEEP_FREE <= x <= rw[2] + TOMA_KEEP_FREE and \
-                rw[1] - TOMA_KEEP_FREE <= y <= rw[3] + TOMA_KEEP_FREE:
-            return False
-        if any(math.hypot(x - px, y - py) < TOMA_KEEP_FREE + 8.0 for px, py in self.pads):
-            return False
-        if any(math.hypot(x - v.x, y - v.y) < TOMA_KEEP_FREE for v in self.vehicles):
-            return False
-        for b in self.boxes_near(x - TOMA_GROUND_CLEAR, y - TOMA_GROUND_CLEAR,
-                                 x + TOMA_GROUND_CLEAR, y + TOMA_GROUND_CLEAR):
-            if b.z1 > 0.3 and b.z0 < 2.5 and math.hypot(max(b.x0 - x, 0, x - b.x1),
-                                                        max(b.y0 - y, 0, y - b.y1)) < TOMA_GROUND_CLEAR:
-                return False                               # zu nah an Wand/Deckung: keine Engstelle zustellen
-        if self.height(x, y) < WATER_LEVEL + 0.6 or terrain_slope(self, x, y) > 0.4 or self.in_void(x, y, 1.5):
-            return False
-        if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
-            return False
-        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 4.0 for p in self.solid_near(x, y, 4.0)):
-            return False
-        return not self.in_solid(x, y, 1.3)
 
     def set_toma(self, i, age=0.0):
         """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
@@ -9343,9 +7938,6 @@ class World:
 
     # ------------------------------------------------------------ Runde
     def end_match(self):
-        for f in self.flags:                             # 11: getragene Flaggen bleiben nicht am Träger hängen
-            if f.state == "carried":
-                f.state, f.carrier = "dropped", -1
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
         self.bullets, self.grenades, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
@@ -9360,8 +7952,6 @@ class World:
             st = p.stats
             out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
                         "score": round(p.score, 1), "mode": self.mode,
-                        "team": self.team_of.get(p.pid, -1) if self.mode == "ctf" else -1,     # 11: CTF
-                        "ts": list(self.team_score) if self.mode == "ctf" else None,
                         "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
         return out
 
@@ -9408,8 +7998,6 @@ class World:
             pl.death_pos = None
             pl.stats = new_stats()
             pl.ready = False
-        self.ctf_balance()                               # 11: Teams (nur im CTF), Flaggen auf Anfang
-        self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):
             if getattr(pl, "prespawn", False):
                 continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
@@ -9423,8 +8011,6 @@ class World:
             return
         self.lobby = False
         self.time_left = self.limit
-        self.ctf_balance()                               # 11: Teams vor dem ersten Spawn (Basis-Startpunkte)
-        self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):
             pl.kills = pl.deaths = 0
             pl.score = 0.0
@@ -9470,7 +8056,6 @@ class World:
         self.update_helis(dt)
         self.update_strike(dt)
         self.update_crates(dt)
-        self.ctf_update(dt)                              # 11: Flaggen
         for d in [d for d in self.drops if d.life <= dt]:
             self.drops.remove(d)
         for d in self.drops:
@@ -9624,15 +8209,6 @@ class Player:
         self.melee, self.melee_out = START_MELEE, False   # Nahkampfwaffe (Index in MELEE), gerade in der Hand?
         self.melee_cd = self.swing_t = 0.0                 # Abklingzeit, laufender Schlag (Animation)
         self.cur = self.switch_to = START_WEAPON   # Spezialwaffe hält und beide normalen Slots voll sind)
-        if getattr(world, "loot_mode", "exp") == "loadout" and len(loadout) >= 2:
-            pri, sec = loadout[0], loadout[1]             # 11: Hauptspiel-Loadout - Haupt- und Kleinwaffe, 3 Gadgets
-            if pri in PRIMARIES and sec in SECONDARIES:
-                self.slots[0], self.slots[1] = pri, sec
-                self.cur = self.switch_to = pri
-                if len(loadout) > 3 and isinstance(loadout[3], int):
-                    self.scopes[pri] = loadout[3]
-            self.gad_n = GAD_START
-        self.team = getattr(world, "team_of", {}).get(self.pid)   # 11: Team (CTF) oder None
         self.switch_t = 0.0
         self.reload_t = 0.0
         self.reload_tot = 0.0             # Gesamtdauer des laufenden Nachladens (Schrotflinte: je nach Patronenzahl)
@@ -9953,16 +8529,8 @@ def terrain_slope(world, x, y, e=0.75):
 
 
 def edge_margin(world):
-    """Abstand der unsichtbaren Wand zum Kartenrand: auf der Standardkarte (Gebirge) MTN_WALL, sonst 1 m."""
-    return MTN_WALL if getattr(world, "mtn", False) else 1.0
-
-
-def steep_uphill(world, ox, oy, x, y, z):
-    """Wäre der Schritt von (ox, oy) nach (x, y) eine Felswand hinauf (steiler als MTN_SLOPE)?"""
-    if (x == ox and y == oy) or mountain(x, y) < 0.5:
-        return False
-    h_old, h_new = world.surface_height(ox, oy), world.surface_height(x, y)
-    return h_new > h_old + 1e-4 and h_new > z - 1.3 and terrain_slope(world, x, y) > MTN_SLOPE
+    """Abstand der unsichtbaren Wand zum Kartenrand: 1 m."""
+    return 1.0
 
 
 def too_steep(pl, ox, oy, world):
@@ -9975,7 +8543,7 @@ def too_steep(pl, ox, oy, world):
     h_old = world.surface_height(ox, oy)
 
     def blocked(x, y):
-        if (x == ox and y == oy) or (world.mtn and mountain(x, y) < 0.5):
+        if x == ox and y == oy:
             return False
         h_new = world.surface_height(x, y)
         return h_new > h_old + 1e-4 and h_new > pl.z - 1.3 and terrain_slope(world, x, y) > MTN_SLOPE
@@ -10047,8 +8615,7 @@ def drive(v, throttle, steer, brake, dt, world):
 
     def passable(ax, ay):
         hh = world.height(ax, ay)
-        if (getattr(world, "mtn", False) and mountain(ax, ay) > 0.5) or (
-                getattr(world, "steep", False) and not getattr(world, "mtn", False) and getattr(world, "cm", None) is None):   # Gebirge/Klippen: zu steil für den Wagen?
+        if getattr(world, "steep", False) and getattr(world, "cm", None) is None:   # Gebirge/Klippen: zu steil für den Wagen?
             dist = math.hypot(ax - v.x, ay - v.y)
             if dist > 1e-6 and hh - h_old > VEH_SLOPE * dist:
                 return False
@@ -12951,36 +11518,6 @@ def _bark_trunk(m, x, y, z, h, r0, r1, bend, col, rng, sides=8, roots=3):
     return a, cs[-1]
 
 
-def tree_lowpoly(m, fm, x, y, z, zo, r, rng, tk=None):
-    """7c: sparsamer Baum für Wälder und den Kartenrand (Stamm als Prisma, Krone aus Kegeln bzw. Klumpen; ca. 60
-    Dreiecke). Krone im Wind-Mesh fm (Höhen relativ zu zo). -> Höhe"""
-    u = {"fir": 0.1, "oak": 0.5, "birch": 0.8, "poplar": 0.95}.get(tk, rng.random())
-    bark = (0.42 + rng.uniform(-0.04, 0.04), 0.30, 0.20)
-    if u < 0.5:                                             # Nadelbaum: drei gestapelte Kegel
-        h = rng.uniform(7.0, 11.0) * (0.85 + 0.15 * r / 2.2)
-        prism(m, x, y, z - 0.3, 0.26, h * 0.35 + 0.3, 6, bark, rng, taper=0.75)
-        g0 = (rng.uniform(0.09, 0.15), rng.uniform(0.30, 0.40), rng.uniform(0.13, 0.19))
-        fm.mat = "leaves"
-        for i, (zf, rf, hf) in enumerate(((0.22, 1.15, 0.42), (0.45, 0.9, 0.36), (0.66, 0.62, 0.34))):
-            col = (g0[0], g0[1] * (1.0 + 0.12 * i), g0[2])
-            cone(fm, x, y, z - zo + h * zf, r * rf, h * hf, 8, col, rng, 0.12)
-        fm.mat = None
-        return h
-    h1 = rng.uniform(2.4, 3.4)                              # Laubbaum: Stamm + zwei Klumpen
-    prism(m, x, y, z - 0.3, 0.3, h1 + 0.8, 6, bark if u < 0.8 else (0.85, 0.84, 0.80), rng, taper=0.7)
-    col = (rng.uniform(0.14, 0.24), rng.uniform(0.40, 0.54), rng.uniform(0.13, 0.20))
-    if rng.random() < 0.1:
-        col = (rng.uniform(0.62, 0.74), rng.uniform(0.38, 0.5), rng.uniform(0.08, 0.14))
-    tall = 1.5 if u >= 0.86 else 1.0
-    fm.mat = "leaves"
-    blob(fm, x, y, z - zo + h1 + r * 0.8 * tall, r * (0.75 if tall > 1 else 1.1), r * (0.75 if tall > 1 else 1.05),
-         r * 0.95 * tall, col, rng, jitter=0.22, subdiv=1)
-    blob(fm, x + rng.uniform(-0.6, 0.6), y + rng.uniform(-0.6, 0.6), z - zo + h1 + r * 1.5 * tall, r * 0.7, r * 0.7,
-         r * 0.6 * tall, tuple(min(1.0, c * 1.12) for c in col), rng, jitter=0.2, subdiv=1)
-    fm.mat = None
-    return h1 + r * 2.0 * tall
-
-
 def tree_conifer(m, fm, x, y, z, zo, r, rng):
     h = rng.uniform(7.5, 12.0) * (0.85 + 0.15 * r / 2.2)
     g0 = (rng.uniform(0.09, 0.15), rng.uniform(0.30, 0.40), rng.uniform(0.13, 0.19))
@@ -13193,193 +11730,7 @@ def flag_mesh(m, w, h, col, rng):
             quadf(m, p0, p3, p2, p1, cc_, (w * 0.5, 3.0, -h * 0.5), "cloth")
 
 
-# ------------------------------------------------------------ 11: CTF-Flagge mit "GB"
-CTF_GLYPHS = {"G": (".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
-              "B": ("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####.")}
-CTF_FLAG_W, CTF_FLAG_H, CTF_POLE_H = 1.55, 1.0, 2.7    # Fahnentuch (m) und Mast
-
-
-def ctf_flag_cloth(m, w, h, col, ink, seg=8, rim=None):
-    """11: Fahnentuch vom Mast (x = 0) nach +x, leicht gewellt, mit dunklem Rand und grossem "GB" (Pixelschrift) auf
-    beiden Seiten - von hinten gespiegelt gesetzt, damit es auch von dort richtig herum zu lesen ist."""
-    edge = tuple(min(1.0, c * 0.55) for c in col)
-    hi = tuple(min(1.0, c * 1.18 + 0.05) for c in col)
-
-    def P(u, v, off=0.0):                       # u = 0..1 (Breite), v = 0..1 (von oben nach unten)
-        return (w * u, math.sin(u * 5.2 + 0.5) * 0.10 * u * w * 0.5 + off, -h * v)
-
-    def quad2(u0, v0, u1, v1, c, off, front):
-        a, b, cc, d = P(u0, v0, off), P(u1, v0, off), P(u1, v1, off), P(u0, v1, off)
-        ref = (w * 0.5, -3.0 if front else 3.0, -h * 0.5)
-        if front:
-            quadf(m, a, b, cc, d, c, ref, "cloth")
-        else:
-            quadf(m, a, d, cc, b, c, ref, "cloth")
-
-    bw = 0.07                                  # Randbreite (Anteil)
-    for i in range(seg):                       # Tuch: Streifen über die Breite (für die Welle), Rand oben/unten/aussen
-        u0, u1 = i / seg, (i + 1) / seg
-        for front in (True, False):
-            quad2(u0, 0.0, u1, bw, edge, 0.0, front)
-            quad2(u0, bw, u1, 1.0 - bw, hi if (i % 2 == 0) else col, 0.0, front)
-            quad2(u0, 1.0 - bw, u1, 1.0, edge, 0.0, front)
-    for front in (True, False):
-        quad2(1.0 - bw * 0.7, bw, 1.0, 1.0 - bw, edge, 0.004 if front else -0.004, front)
-    # Schrift "GB": 2 Zeichen à 5x7 Pixel, mittig, mit einem Pixel Abstand
-    cols_n, rows_n = 11, 7
-    px_u, px_v = 0.70 / cols_n, 0.66 / rows_n
-    u_start, v_start = 0.17, 0.17
-    rim = rim or edge
-    for front, off, o2 in ((True, 0.016, 0.009), (False, -0.016, -0.009)):   # front: Fläche zeigt nach +y
-        for k, ch in enumerate("GB"):
-            for r, line in enumerate(CTF_GLYPHS[ch]):
-                for c_, bit in enumerate(line):
-                    if bit != "#":
-                        continue
-                    cc = k * 6 + c_              # Spalte, wie man sie liest
-                    if front:                    # von +y aus läuft x nach links: gespiegelt setzen, damit "GB" lesbar ist
-                        cc = cols_n - 1 - cc
-                    u0 = u_start + cc * px_u
-                    v0 = v_start + r * px_v
-                    eu, ev = px_u * 0.32, px_v * 0.30          # Kontur (deutlich lesbar, auch von weitem)
-                    quad2(u0 - eu, v0 - ev, u0 + px_u + eu, v0 + px_v + ev, rim, o2, front)
-                    quad2(u0, v0, u0 + px_u * 1.01, v0 + px_v * 1.01, ink, off, front)
-
-
-def build_ctf_flag(col, scale=1.0, base=True):
-    """11: Flagge mit Mast (Kugel oben), auf Wunsch mit Standfuss. -> (Wurzel, Tuch-Knoten zum Wehen)."""
-    root = NodePath("ctf_flagge")
-    m = Mesh()
-    rng = random.Random(11)
-    metal, gold = (0.30, 0.31, 0.34), (0.95, 0.78, 0.25)
-    prism(m, 0, 0, 0.0, 0.035, CTF_POLE_H, 8, metal, rng)
-    blob(m, 0, 0, CTF_POLE_H + 0.05, 0.075, 0.075, 0.075, gold, rng, jitter=0.0, subdiv=1)
-    if base:
-        prism(m, 0, 0, 0.0, 0.26, 0.08, 10, (0.20, 0.21, 0.23), rng)
-        prism(m, 0, 0, 0.08, 0.12, 0.10, 10, metal, rng)
-    pole = root.attachNewNode(m.node("mast"))
-    pole.setScale(scale)
-    cm = Mesh()
-    dark = sum(col) > 1.8                                # helle (neutrale) Flagge: dunkle Schrift
-    ink = (0.08, 0.10, 0.20) if dark else (1.0, 1.0, 1.0)
-    rim = (1.0, 0.97, 0.80) if dark else tuple(c * 0.35 for c in col)
-    ctf_flag_cloth(cm, CTF_FLAG_W, CTF_FLAG_H, col, ink, rim=rim)
-    cloth = root.attachNewNode(cm.node("tuch"))
-    cloth.setTwoSided(True)
-    cloth.setPos(0.03 * scale, 0, (CTF_POLE_H - 0.05) * scale)
-    cloth.setScale(scale)
-    return root, cloth
-
-
 # ------------------------------------------------------------ Terrain-Hilfen für die Stadt
-def fine_cells(world, cs, n0, n1):
-    """(fein zu unterteilende Zellen, davon Zellen mit Wegen): Wege, Graben, Plätze und Kanten von Fussböden."""
-    fine, roadc = set(), set()
-
-    def mark(x, y, rad, into):
-        for jx in range(int((x - rad) // cs), int((x + rad) // cs) + 1):
-            for jy in range(int((y - rad) // cs), int((y + rad) // cs) + 1):
-                into.add((jx, jy))
-
-    for x0, y0, x1, y1, hw, _k in world.roads:
-        ln = math.hypot(x1 - x0, y1 - y0)
-        st = max(1, int(ln / 2.0))
-        for i in range(st + 1):
-            mark(x0 + (x1 - x0) * i / st, y0 + (y1 - y0) * i / st, hw + 0.9, roadc)
-    fine |= roadc
-    for mx, my, a, o0, o1, o2, o3, _dp in world.moats:
-        rr = a + o3 + 4.0
-        for ix in range(int((mx - rr) // cs), int((mx + rr) // cs) + 1):
-            for iy in range(int((my - rr) // cs), int((my + rr) // cs) + 1):
-                o = math.hypot(max(abs((ix + 0.5) * cs - mx) - a, 0.0), max(abs((iy + 0.5) * cs - my) - a, 0.0))
-                if o0 - 3.5 < o < o3 + 3.5:
-                    fine.add((ix, iy))
-    if world.mtn and WATERFALL_COUNT > 0:            # 9a: Klippe und Becken der Wasserfälle im 1-m-Raster
-        for side, u0 in waterfall_spots():
-            for dd in range(int(WF_CLIFF_D - 4), int(wf_pool_d() + WF_POOL_R + 4), 2):
-                for uu in range(int(u0 - WF_HALF_W - 3), int(u0 + WF_HALF_W + 4), 2):
-                    wx, wy = wf_world(side, dd, uu)
-                    fine.add((int(wx // cs), int(wy // cs)))
-    if world.mtn:
-        for fx0, fy0, fx1, fy1, _fc in world.floors:
-            for ix in range(int(fx0 // cs), int(fx1 // cs) + 1):
-                for iy in range(int(fy0 // cs), int(fy1 // cs) + 1):
-                    if not (fx0 <= ix * cs and (ix + 1) * cs <= fx1 and fy0 <= iy * cs and (iy + 1) * cs <= fy1):
-                        fine.add((ix, iy))
-    return fine, roadc
-
-
-def build_waterfalls(world):
-    """9a: Wasserfälle im Gebirge -> Liste von dicts: "sheet" (GeomNode: Wasserband die Klippe hinab, Textur
-    läuft nach unten), "pool" (GeomNode: Wasserspiegel im Becken), "rock" (GeomNode: Quellfels oben), "top"/"foot"
-    (Punkte für Gischt und Rauschen), "out" (Richtung zur Kartenmitte). Nur Darstellung - Gelände/Becken stecken
-    schon in mountain() und sind auf allen Rechnern gleich."""
-    out = []
-    if (not getattr(world, "mtn", False) or world.cm is not None or world.hgrid is not None or WATERFALL_COUNT <= 0
-            or getattr(world, "mc", False)):
-        return out
-    rng = random.Random(world.seed + 91)
-    for side, u0 in waterfall_spots():
-        sh = lambda d, u: world.surface_height(*wf_world(side, d, u))       # noqa: E731
-        pd = wf_pool_d()
-        pz = min(sh(pd + WF_POOL_R * math.cos(a), u0 + WF_POOL_R * math.sin(a))
-                 for a in [i * math.pi / 6 for i in range(12)]) - 0.12      # Wasserspiegel knapp unter dem Rand
-        prof = []
-        d = WF_CLIFF_D - 3.0
-        while d < pd:
-            prof.append((d, sh(d, u0)))
-            d += 0.25
-        pts = [(d_ + (0.45 if d_ > WF_CLIFF_D - 0.6 else 0.0), z_ + 0.22) for d_, z_ in prof if z_ > pz + 0.05]
-        if len(pts) < 3:
-            continue
-        pts = pts[::2] + [(pts[-1][0] + 0.7, pz + 0.02)]
-        ztop = pts[0][1]
-        sheet = Mesh(alpha=0.82, lit=False)
-        sheet.mat = "falls"
-        vlen = 0.0
-        foam = (0.96, 0.99, 1.0)
-        for i in range(len(pts) - 1):
-            (da, za), (db, zb) = pts[i], pts[i + 1]
-            fa, fb = i / (len(pts) - 1), (i + 1) / (len(pts) - 1)
-            wa, wb = WF_WIDTH * (0.55 + 0.45 * fa), WF_WIDTH * (0.55 + 0.45 * fb)
-            seg = math.hypot(db - da, zb - za)
-            va, vb = vlen / TILE["falls"], (vlen + seg) / TILE["falls"]
-            vlen += seg
-            ca = mix((0.62, 0.80, 0.95), foam, fa)
-            cb = mix((0.62, 0.80, 0.95), foam, fb)
-            for k in range(2):                                              # zwei Bahnen nebeneinander
-                ua0, ua1 = -0.5 + 0.5 * k, 0.5 * k
-                pa0, pa1 = wf_world(side, da, u0 + wa * ua0), wf_world(side, da, u0 + wa * ua1)
-                pb0, pb1 = wf_world(side, db, u0 + wb * ua0), wf_world(side, db, u0 + wb * ua1)
-                A, B = (pa0[0], pa0[1], za), (pa1[0], pa1[1], za)
-                C, D = (pb1[0], pb1[1], zb), (pb0[0], pb0[1], zb)
-                sheet.tri(A, B, C, (ca, ca, cb), uv=((0.5 * k, -va), (0.5 * k + 0.5, -va), (0.5 * k + 0.5, -vb)))
-                sheet.tri(A, C, D, (ca, cb, cb), uv=((0.5 * k, -va), (0.5 * k + 0.5, -vb), (0.5 * k, -vb)))
-        pool = Mesh(alpha=0.78, lit=False)
-        pool.mat = "water"
-        pc = wf_world(side, pd, u0)
-        ring = [(pc[0] + WF_POOL_R * 1.02 * math.cos(2 * math.pi * i / 18), pc[1] + WF_POOL_R * 1.02 * math.sin(2 * math.pi * i / 18))
-                for i in range(18)]
-        for i in range(18):
-            a_, b_ = ring[i], ring[(i + 1) % 18]
-            pool.tri((pc[0], pc[1], pz), (a_[0], a_[1], pz), (b_[0], b_[1], pz),
-                     ((0.30, 0.52, 0.70), (0.70, 0.86, 0.95), (0.70, 0.86, 0.95)), (pc[0], pc[1], pz - 1.0))
-        rk = Mesh()                                                          # Quellfels über dem Wasseraustritt
-        sx, sy = wf_world(side, pts[0][0] - 1.2, u0)
-        blob(rk, sx, sy, ztop + 0.4, 2.2, 2.0, 1.4, (0.44, 0.43, 0.42), rng, jitter=0.25, subdiv=2, moss=0.3, mat="rock")
-        for sgn in (-1, 1):                                                  # Felsen am Klippenrand neben dem Wasser
-            bx, by = wf_world(side, WF_CLIFF_D - 0.4, u0 + sgn * (WF_WIDTH * 0.5 + 1.0))
-            blob(rk, bx, by, sh(WF_CLIFF_D - 0.4, u0 + sgn * (WF_WIDTH * 0.5 + 1.0)) + 0.2, 1.1, 1.0, 0.8,
-                 (0.42, 0.41, 0.40), rng, jitter=0.3, subdiv=1, moss=0.2, mat="rock")
-        fx, fy = wf_world(side, pts[-1][0], u0)
-        tx, ty = wf_world(side, pts[0][0], u0)
-        ox, oy = wf_world(side, 1.0, u0)
-        ix, iy = wf_world(side, 0.0, u0)
-        out.append({"sheet": sheet.node("wasserfall"), "pool": pool.node("becken"), "rock": rk.node("quellfels"),
-                    "top": (tx, ty, ztop), "foot": (fx, fy, pz), "out": (ix - ox, iy - oy), "h": ztop - pz})
-    return out
-
-
 def build_scene(world, progress=None):
     """Baut Gelände, Bäume, Felsen, Gebäude (ein Mesh) und das Wasser (zweites Mesh).
     extra = [Lampen, Gras, Schattenflächen, zweite Wasserschicht]."""
@@ -13387,7 +11738,6 @@ def build_scene(world, progress=None):
     rng = random.Random(world.seed + 1)
     m = Mesh()
     ponds = world.ponds
-    mtn = getattr(world, "mtn", False)
     shc = {}
 
     def sh(x, y):                                   # Geländehöhe mit Zwischenspeicher (Gitterpunkte kommen 4x vor)
@@ -13424,65 +11774,11 @@ def build_scene(world, progress=None):
         col = mix(col, (0.74, 0.67, 0.47), sand_w(x, y))                  # Sandufer
         if z < WATER_LEVEL + 0.4:
             col = mix(col, (0.45, 0.40, 0.28), 0.6)                       # nasser Boden
-        if mtn:
-            a = alp(x, y, z)
-            if a is not None:                                             # 9a: Alpen - Almgrün, Geröll, Fels, Schnee
-                fw, scw, rw, snw = a
-                col = mix(col, (0.17 + 0.04 * t, 0.34 + 0.06 * u, 0.14), fw)                 # Bergwald/Alm
-                col = mix(col, (0.62 + 0.04 * u, 0.58 + 0.03 * u, 0.50), scw)                # helles Geröll
-                band = 0.5 + 0.5 * math.sin(z * 0.9 + 0.6 * math.sin(x * 0.07 + y * 0.05))   # Gesteinsschichten
-                g = 0.32 + 0.11 * band + 0.05 * u
-                warm = 0.5 + 0.5 * math.sin(x * 0.021 + 1.0) * math.cos(y * 0.027)
-                rockc = mix((g * 0.98, g * 1.0, g * 1.06), (g * 1.2, g * 0.98, g * 0.76), warm)
-                col = mix(col, rockc, rw)
-                col = mix(col, (0.93 + 0.03 * u, 0.94 + 0.03 * u, 0.98), snw)              # Schnee
         return col
-
-    alc = {}
-
-    def alp(x, y, z):
-        """9a: Gewichte (Wald/Alm, Geröll, Fels, Schnee) im Gebirge oder None ausserhalb."""
-        key = (round(x, 2), round(y, 2))
-        v = alc.get(key, 0)
-        if v != 0:
-            return v
-        mz = mountain(x, y)
-        if mz <= 0.6:
-            alc[key] = None
-            return None
-        st = snormal(x, y)[2]                                             # 1 = eben, kleiner = steiler
-        n1 = math.sin(x * 0.13 + 0.7) * math.cos(y * 0.11 - 0.3)
-        fw = smoothstep(0.6, 4.0, mz) * (1.0 - smoothstep(MTN_FOREST_Z - 3.0, MTN_FOREST_Z + 3.0, z)) * 0.75
-        steep = smoothstep(0.70, 0.42, st) * (0.6 + 0.4 * smoothstep(4.0, MTN_ROCK_Z, z))   # steile Wände: Fels
-        rw = max(smoothstep(MTN_ROCK_Z - 8.0, MTN_ROCK_Z + 5.0, z + 3.0 * n1), steep) * smoothstep(1.5, 6.0, mz)
-        scw = (smoothstep(3.0, 9.0, mz) * smoothstep(0.62, 0.8, st) * (1.0 - smoothstep(MTN_ROCK_Z + 6.0, MTN_ROCK_Z + 16.0, z))
-               * smoothstep(0.1, 0.7, 0.5 + 0.5 * n1) * 0.5)
-        sl = MTN_SNOW_Z + 5.0 * n1
-        snw = smoothstep(sl - MTN_SNOW_SOFT * 0.5, sl + MTN_SNOW_SOFT * 0.5, z)
-        snw *= max(smoothstep(MTN_SNOW_STEEP - 0.12, MTN_SNOW_STEEP + 0.08, st), MTN_SNOW_THIN)
-        v = alc[key] = (fw, scw, rw, snw)
-        return v
-
-    def rock_w(x, y):
-        return smoothstep(5.0, 12.0, mountain(x, y)) if mtn else 0.0
-
-    def alp_mat(x, y, z):
-        """9a: Material im Gebirge: "snow", "rock", "dirt" (Geröll) oder None (normales Gelände)."""
-        a = alp(x, y, z) if mtn else None
-        if a is None:
-            return None
-        fw, scw, rw, snw = a
-        if snw > 0.5:
-            return "snow"
-        if rw > 0.5:
-            return "rock"
-        if scw > 0.45:
-            return "dirt"
-        return None
 
     pg(0.0, "Gelände wird geformt ...")
     # --- Gelände
-    marg = 72.0 if mtn else MARGIN                  # Standardkarte: Gebirge auch hinter dem Rand zeigen
+    marg = MARGIN
     cs = CELL
     if world.hgrid is not None and world.hgrid[1] < CELL:
         cs = world.hgrid[1]                         # Karte mit feinem Höhenraster: Zellen so fein wie das Raster
@@ -13545,9 +11841,6 @@ def build_scene(world, progress=None):
                 if rd_ is not None and rd_[0] < rd_[1]:
                     rdk = rd_[2]
             k = smoothstep(0.86, 0.72, n[2]) if n[2] < 0.86 else 0.0      # steil: Erde/Fels
-            am = alp_mat(cx_, cy_, (a[2] + b[2] + c[2]) / 3) if mtn else None
-            if am is not None:
-                k = 0.0                                                     # 9a: Gebirge färbt terrain_col selbst
             cols, nds = [], []
             for p in (a, b, c):
                 col = terrain_col(p[0], p[1], p[2])
@@ -13560,16 +11853,12 @@ def build_scene(world, progress=None):
                 nb = norm((n[0] * 0.55 + sn[0] * 0.45, n[1] * 0.55 + sn[1] * 0.45, n[2] * 0.55 + sn[2] * 0.45))
                 nds.append(dot(nb, SUN))
             sw = (sand_w(a[0], a[1]) + sand_w(b[0], b[1]) + sand_w(c[0], c[1])) / 3
-            mat = ("rock" if rock_w(cx_, cy_) > 0.5 else "dirt") if k > 0.5 else ("sand" if sw > 0.6 else "grass")
-            if mtn and mat == "grass" and rock_w(cx_, cy_) > 0.6:
-                mat = "rock"
-            if am is not None and rdk is None:
-                mat = am
+            mat = "dirt" if k > 0.5 else ("sand" if sw > 0.6 else "grass")
             if rdk is not None:
                 mat = "concrete" if rdk == "cobble" else "dirt"
             m.tri(a, b, c, cols, mat=mat, nd=nds)
 
-    fine, roadc = fine_cells(world, cs, n0, n1) if (world.mtn and (world.roads or world.moats)) else (set(), set())
+    fine, roadc = set(), set()
     kv_ = int(round(cs / 0.2)) // TERRAIN_FINE_K * TERRAIN_FINE_K or TERRAIN_FINE_K   # Eingänge: Vielfaches des 1-m-Rasters
     lvc = {}
 
@@ -13706,11 +11995,6 @@ def build_scene(world, progress=None):
                 south_tree(m, p.x, p.y, p.z, p.base_r, rng)
                 h = 7.0
             decal_disc(shadows, world, p.x - SUN[0] * h * 0.25, p.y - SUN[1] * h * 0.25, p.base_r * 1.2 + h * 0.15, 0.40)
-        elif p.kind == "tree" and getattr(world, "big", False) and (
-                getattr(p, "lod", False) or math.hypot(p.x - CENTER, p.y - CENTER) > BIG_TREE_DETAIL_R):
-            fm, zo = winds.get(p.x, p.y, p.z, "tree")          # 7c: grosse Karte, aussen/Wald: Low-Poly-Baum
-            h = tree_lowpoly(m, fm, p.x, p.y, p.z, zo, p.base_r, rng, getattr(p, "tk", None))
-            decal_disc(shadows, world, p.x - SUN[0] * h * 0.25, p.y - SUN[1] * h * 0.25, p.base_r * 1.3 + h * 0.16, 0.40)
         elif p.kind == "tree":
             r = p.base_r
             fm, zo = winds.get(p.x, p.y, p.z, "tree")
@@ -13746,8 +12030,6 @@ def build_scene(world, progress=None):
         z = world.surface_height(x, y)
         if z < WATER_LEVEL + 0.5 or snormal(x, y)[2] < 0.93 or sand_w(x, y) > 0.35:
             return None
-        if mtn and WATERFALL_COUNT > 0 and near_waterfall(x, y, 1.0):
-            return None
         if world.moats and world.near_moat(x, y, 0.8):
             return None
         if world.roads:
@@ -13774,25 +12056,6 @@ def build_scene(world, progress=None):
         fm_, zo_ = winds.get(x, y, z, "bush")
         bush(fm_, x, y, z, zo_, r, rng)
         decal_disc(shadows, world, x - SUN[0] * r * 0.3, y - SUN[1] * r * 0.3, r * 1.6, 0.35)
-
-    if getattr(world, "big", False):                   # 10g: Unterholz im Südwestwald - Sichtdeckung überall
-        urng = random.Random(7310)                     # eigener Zufall: der Rest der Deko bleibt wie gehabt
-        for ux_, uy_, ur_, un_ in BIG_UNDERGROWTH:
-            gx_, gy_ = CENTER + ux_, CENTER + uy_
-            placed_ = 0
-            for _ in range(un_ * 6):
-                if placed_ >= un_:
-                    break
-                a, rr_ = urng.uniform(0, 2 * math.pi), ur_ * math.sqrt(urng.random())
-                x, y = gx_ + math.cos(a) * rr_, gy_ + math.sin(a) * rr_
-                z = free_spot(x, y, 1.2)
-                if z is None or any(math.hypot(x - q.x, y - q.y) < (0.9 if q.kind == "tree" else q.base_r + 1.0)
-                                    for q in world.props_near(x - 4.0, y - 4.0, x + 4.0, y + 4.0)):
-                    continue
-                placed_ += 1
-                r = urng.uniform(0.8, 1.45)
-                fm_, zo_ = winds.get(x, y, z, "bush")
-                bush(fm_, x, y, z, zo_, r, urng, (urng.uniform(0.10, 0.18), urng.uniform(0.30, 0.42), urng.uniform(0.09, 0.15)))
 
     ntuft = 0
     for _ in range(9000):
@@ -13849,18 +12112,6 @@ def build_scene(world, progress=None):
             aa_ = rng.uniform(0, 2 * math.pi)
             rr_ = pr_ * rng.uniform(0.9, 1.45)
             reed_at(px_ + math.cos(aa_) * rr_, py_ + math.sin(aa_) * rr_, 1.7)
-    ng_ = 0
-    for _ in range(4200 if mtn else 0):
-        if ng_ >= 1100:
-            break
-        x, y = rng.uniform(0, WORLD), rng.uniform(0, WORLD)
-        z = free_spot(x, y, 0.6)
-        if z is None or not -0.5 < z < 0.9:
-            continue
-        gm_, zo_ = winds.get(x, y, z, "grass", False, 2.0)
-        tc_ = terrain_col(x, y, z)
-        reed_clump(gm_, x, y, z, zo_, rng, rng.uniform(0.6, 1.1), (tc_[0] * 1.05, tc_[1] * 1.1, tc_[2] * 0.95))
-        ng_ += 1
 
     pg(0.82, "Gebäude werden errichtet ...")
     # --- Gebäude (Burg, Türme, Häuser, Treppen, Deckung)
@@ -13868,7 +12119,7 @@ def build_scene(world, progress=None):
         if not b.vis:
             continue
         cx_, cy_ = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
-        box(chunk(cx_, cy_) if mtn else m, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
+        box(m, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
             mat=mat_for_color(b.col))
         dx, dy = b.x1 - b.x0, b.y1 - b.y0
         gz = world.surface_height(cx_, cy_)
@@ -14609,12 +12860,12 @@ def _with_bar(built):
     return (root, torso, bar, fg) + tuple(legs)
 
 
-def prewarm_mob_models(mtn=True):
+def prewarm_mob_models():
     """12: Alle Monster-Modelle einmal im Ladebildschirm bauen (füllt _MOB_TPL / _MOB_GEOM). Vorher passierte das beim
     ersten Auftauchen jeder Art mitten im Spiel - der Koloss allein brauchte dafür über eine halbe Sekunde."""
     for kind in MOB_KINDS:
         try:
-            look = {"fur": CRITTER_COLORS["standard" if mtn else "karte"]} if kind == "critter" else None
+            look = {"fur": CRITTER_COLORS["karte"]} if kind == "critter" else None
             build_mob(kind, look)[0].removeNode()
         except Exception:                                      # Vorwärmen darf nie den Spielstart verhindern
             pass
@@ -14711,16 +12962,13 @@ def look_random(rng):
     return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
 
 
-def soldier_look(code, pid=0, team=None):
-    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer).
-    11: team (CTF) färbt die Armbinde/Akzentfarbe in der Teamfarbe."""
+def soldier_look(code, pid=0):
+    """Look-Code -> Aussehen für build_soldier (ungültiger Code: Standard nach Spieler-Nummer)."""
     if not look_valid(code):
         code = look_default(pid)
     v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
     ak = v["akzent"]
     acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
-    if team in (0, 1):
-        acc = CTF_TEAM_COLS[team]
     skin = SOLDIER_SKINS[v["haut"]]
     glove = SOLDIER_GLOVES[v["handschuh"]] or skin
     return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
@@ -18317,7 +16565,7 @@ def json_map_preview(path, n=192):
              tuple(min(1.0, v * 1.15) for v in hs["c"]))
     for t in md.get("towers") or ():
         rect(t["x"] - 2.5, t["y"] - 2.5, t["x"] + 2.5, t["y"] + 2.5, (0.62, 0.60, 0.55))
-    if cm is not None:                                        # Netzkarte (Blood Gulch): auf die Fläche zuschneiden, 16:9
+    if cm is not None:                                        # Netzkarte: auf die Fläche zuschneiden, 16:9
         void = (0.09, 0.10, 0.12)
         vb = bytes(int(c * 255) for c in void)
         xs, ys = [], []
@@ -18420,7 +16668,7 @@ class SetupPage:
         return next((i for i, e in enumerate(self.ents) if e[1] == p), 0)
 
     def mode_off(self, k):
-        return self.g.cfg_is_mc() and MODES[k] == "koth"      # (11: CTF wechselt auf Polytown)
+        return self.g.cfg_is_mc() and MODES[k] != "dm"
 
     def vx(self, v):
         return self.SL0 + (v - LIMIT_MIN) / float(LIMIT_MAX - LIMIT_MIN) * (self.SL1 - self.SL0)
@@ -18498,14 +16746,11 @@ class SetupPage:
                          lambda a=act: g.setup_turn(a))
         # --- Modus
         self.text(None, "MODUS", X0, -0.205, 0.034, self.GREY, "l")
-        nm_ = len(MODES)                                                # 11: drei Modi nebeneinander
-        bw_ = (X1 - X0 - 0.04 * (nm_ - 1)) / nm_
         for k, mode in enumerate(MODES):
-            x0 = X0 + k * (bw_ + 0.04)
-            x1 = x0 + bw_
+            x0, x1 = (X0, -0.02) if k == 0 else (0.02, X1)
             self.rect(f"mf{k}", x0 - 0.008, x1 + 0.008, -0.343, -0.237)
             self.rect(f"mb{k}", x0, x1, -0.335, -0.245)
-            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.045 if nm_ > 2 else 0.055)
+            self.text(f"mt{k}", MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.055)
             self.hit(f"mode{k}", x0, x1, -0.335, -0.245, lambda m=mode: g.setup_mode(m))
         # --- Zeitlimit-Slider
         v = int(g.cfg["limit"])
@@ -18524,25 +16769,15 @@ class SetupPage:
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         else:
-            self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    "
-                      + ("C = CTF-Regeln    " if g.cfg.get("mode") == "ctf" else "") + "Enter = Start",
+            self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    Enter = Start",
                       0, -0.885, 0.028, self.GREY)
 
     def title_label(self):
         return "Einzelspieler" if self.g.setup_for == "single" else "Spiel hosten"
 
-    def more_buttons(self, X0, X1, more):
-        """'Weitere Einstellungen' - im CTF geteilt mit 'CTF-Regeln' (11)."""
-        g = self.g
-        if g.cfg.get("mode") == "ctf":
-            self.button("more", X0, -0.02, -0.69, -0.605, "Weitere   (W)", 0.048, more)
-            self.button("ctf", 0.02, X1, -0.69, -0.605, "CTF-Regeln   (C)", 0.048, g.setup_ctf)
-        else:
-            self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, more)
-
     def bottom_buttons(self, X0, X1):
         g = self.g
-        self.more_buttons(X0, X1, g.setup_more)
+        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
         self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.start_game(g.setup_for))
 
@@ -18564,7 +16799,7 @@ class SetupPage:
         nd = self.g.aspect2d.attachNewNode(cm.generate())
         nd.setColor(*col)
         nd.setTransparency(TransparencyAttrib.MAlpha)
-        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb", "fb", "ob")):
+        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb")):
             btn3d(nd)
         if (i or "").endswith("fill"):
             nd.setPos(x0, 0, 0)
@@ -18654,7 +16889,7 @@ class EndSetupPage(SetupPage):
 
     def bottom_buttons(self, X0, X1):
         g = self.g
-        self.more_buttons(X0, X1, g.end_cfg_more)
+        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.end_cfg_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Abbrechen   (Esc)", 0.052, g.end_cfg_cancel)
         self.button("go", 0.02, X1, -0.805, -0.72, "Übernehmen", 0.052, g.end_cfg_apply)
 
@@ -18987,122 +17222,6 @@ class MorePage(SetupPage):
         self.g.set_cfg(key, int(v) if key != "regen" else float(v))
 
 
-def plim_label(v):
-    v = int(v)
-    return "aus (nur Zeitlimit)" if v <= 0 else (f"{v} Punkt" if v == 1 else f"{v} Punkte")
-
-
-class CtfPage(SetupPage):
-    """11: CTF-Regeln einer Runde (Host-Menü): Eigenbeschuss an/aus, Ausrüstung (Hauptspiel-Loadout oder
-    Experimental-Loot) und Punktelimit (0 = aus, dann zählt nur das Zeitlimit)."""
-    PL_Z = -0.20
-
-    def ff_on(self):
-        return bool(self.g.cfg.get("ff", CTF_FF_DEFAULT))
-
-    def loot(self):
-        return "exp" if self.g.cfg.get("loot", CTF_LOOT_DEFAULT) == "exp" else "loadout"
-
-    def plim(self):
-        return max(0, min(CTF_PTS_MAX, int(self.g.cfg.get("plim", 0) or 0)))
-
-    def px(self, v):
-        return self.SL0 + v / float(CTF_PTS_MAX) * (self.SL1 - self.SL0)
-
-    def style(self, i):
-        hov = self.hover
-        tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
-        for pre, cur in (("f", 1 if self.ff_on() else 0), ("o", 0 if self.loot() == "loadout" else 1)):
-            if tag in (pre + "f", pre + "b", pre + "t"):
-                k = int(num)
-                on, h = k == cur, hov == pre + "h" + num
-                if tag == pre + "f":
-                    return self.SEL if on else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
-                if tag == pre + "b":
-                    return self.MODE_ON if on else (self.BTN_H if h else self.BTN)
-                return self.YELLOW if on else (Hot.ON if h else Hot.BASE)
-        if i == "pl_fill":
-            return (1.0, 0.62, 0.14, 1.0) if self.plim() > 0 else (0.35, 0.37, 0.40, 1.0)
-        if i == "pl_knob":
-            return (1.0, 1.0, 0.78, 1.0) if (hov == "sl_pl" or self.g.slider_drag == "plim") else (1.0, 0.85, 0.4, 1.0)
-        if i == "pl_val":
-            return self.YELLOW if self.plim() > 0 else self.DIM
-        if i.startswith(("b_", "t_")):
-            h = hov == "btn_" + i[2:]
-            return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
-        return self.WHITE
-
-    def layout(self):
-        g, X0, X1 = self.g, self.X0, self.X1
-        self.text("title", "CTF-Regeln", 0, 0.80, 0.075, (1.0, 0.78, 0.3, 1.0))
-        rows = (("f", "EIGENBESCHUSS  (Teamkameraden verletzen)", ("Aus", "An"), 0.64,
-                 lambda k: g.set_cfg("ff", k == 1)),
-                ("o", "AUSRÜSTUNG", ("Hauptspiel-Loadout", "Experimental-Loot"), 0.33,
-                 lambda k: g.set_cfg("loot", "loadout" if k == 0 else "exp")))
-        for pre, label, opts, z, act in rows:
-            self.text(None, label, X0, z, 0.034, self.GREY, "l")
-            for k, name in enumerate(opts):
-                x0, x1 = (X0, -0.01) if k == 0 else (0.01, X1)
-                self.rect(f"{pre}f{k}", x0 - 0.008, x1 + 0.008, z - 0.155, z - 0.045)
-                self.rect(f"{pre}b{k}", x0, x1, z - 0.147, z - 0.053)
-                self.text(f"{pre}t{k}", name, (x0 + x1) / 2, z - 0.125, 0.046)
-                self.hit(f"{pre}h{k}", x0, x1, z - 0.147, z - 0.053, lambda k=k, act=act: act(k))
-        self.text(None, "Hauptspiel-Loadout: Haupt- und Kleinwaffe, Visier und Gadget vor jedem Spawn wählen (wie bei Sinan),",
-                  0, 0.115, 0.027, self.GREY)
-        self.text(None, "keine Monster-Beute.   Experimental-Loot: Start mit der Pistole, Beute von Monstern.",
-                  0, 0.08, 0.027, self.GREY)
-        z = self.PL_Z
-        self.text(None, "PUNKTELIMIT  (Runde endet sofort, wenn ein Team es erreicht)", X0, z, 0.034, self.GREY, "l")
-        v = self.plim()
-        self.text("pl_val", plim_label(v), X1, z, 0.045, self.style("pl_val"), "r")
-        zl = z - 0.07
-        self.rect(None, self.SL0, self.SL1, zl - 0.007, zl + 0.007, (0.16, 0.22, 0.30, 1.0))
-        for tv in range(0, CTF_PTS_MAX + 1, 2):
-            tx = self.px(tv)
-            self.rect(None, tx - 0.002, tx + 0.002, zl - 0.032, zl - 0.014, (0.45, 0.52, 0.60, 1.0))
-            self.text(None, "aus" if tv == 0 else str(tv), tx, zl - 0.07, 0.027, self.GREY)
-        self.rect("pl_fill", self.SL0, self.px(v), zl - 0.007, zl + 0.007)
-        self.rect("pl_knob", self.px(v) - 0.026, self.px(v) + 0.026, zl - 0.026, zl + 0.026, rot=45.0)
-        self.hit("sl_pl", self.SL0 - 0.05, self.SL1 + 0.05, zl - 0.06, zl + 0.06, lambda: g.slider_begin("plim"))
-        self.text(None, "Teams werden automatisch ausgeglichen.  Mit Flagge: keine Fahrzeuge.  Gefallene Flagge: "
-                  f"{int(CTF_DROP_T)} s liegen, dann zurück.", 0, -0.47, 0.027, self.GREY)
-        self.rect("b_done", X0, X1, -0.745, -0.66)
-        self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
-        self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
-        self.text(None, "Tasten:  F = Eigenbeschuss    L = Ausrüstung    Pfeile = Punktelimit    Esc = zurück",
-                  0, -0.84, 0.028, self.GREY)
-
-    def update(self, force=False):
-        key = (self.ff_on(), self.loot(), self.plim(), self.hover, self.g.slider_drag)
-        if force or key != self.key:
-            self.key = key
-            self.sync()
-
-    def sync(self):
-        for i, nd in self.nodes.items():
-            if i in ("title",) or i.endswith(("_fill", "_knob")):
-                continue
-            col = self.style(i)
-            if i in self.txts:
-                nd.setFg(col)
-            else:
-                nd.setColor(*col)
-        v = self.plim()
-        zl = self.PL_Z - 0.07
-        if "pl_fill" in self.nodes:
-            self.nodes["pl_fill"].setSx(max(0.001, self.px(v) - self.SL0))
-            self.nodes["pl_fill"].setColor(*self.style("pl_fill"))
-        if "pl_knob" in self.nodes:
-            self.nodes["pl_knob"].setPos(self.px(v), 0, zl)
-            self.nodes["pl_knob"].setColor(*self.style("pl_knob"))
-        if "pl_val" in self.nodes:
-            self.nodes["pl_val"].setText(plim_label(v))
-
-    def follow(self, key, mx):
-        t = max(0.0, min(1.0, (mx - self.SL0) / (self.SL1 - self.SL0)))
-        self.g.set_cfg("plim", int(round(t * CTF_PTS_MAX)))
-
-
 
 # ------------------------------------------------------------------ Netzwerk
 # Alles nur mit der Standardbibliothek (socket, json, threading), nicht blockierend,
@@ -19316,7 +17435,6 @@ class JoinAttempt:
         self.limit = 600.0
         self.mobs_on = True
         self.tomahawk = True
-        self.ctf = {}                  # 11: CTF-Einstellungen des Hosts (Eigenbeschuss, Loot, Punktelimit)
         self.map_raw = None            # Kartendatei des Hosts (None = Standardkarte)
         self.extra = []                # Nachrichten, die schon nach dem welcome eintrafen
 
@@ -19343,7 +17461,6 @@ class JoinAttempt:
                         self.limit = clampf(float(m.get("limit", 600)), 30.0, 7200.0)
                         self.mobs_on = bool(m.get("mobs", 1))
                         self.tomahawk = bool(m.get("tomahawk", 1))
-                        self.ctf = m.get("ctf") if isinstance(m.get("ctf"), dict) else {}
                         self.map_raw = m.get("map") if isinstance(m.get("map"), dict) else None
                         self.state = "ready"
                         netlog(f"Client: welcome von {self.host} nach {time.time() - self.t0:.2f}s (Id {self.my_id}, "
@@ -19515,8 +17632,7 @@ class HostSession:
     def cfg_msg(self):
         w = self.world
         return {"t": "cfg", "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
-                "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate,
-                "ctf": w.ctf_cfg()}
+                "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate}
 
     def send_cfg(self):
         """Neue Rundeneinstellungen an alle Mitspieler (gleiche Karte, keine Neuverbindung)."""
@@ -19547,8 +17663,7 @@ class HostSession:
             c.last_rx = time.time()
             c.send({"t": "reload", "id": c.pid, "seed": world.seed, "props": world.prop_count(),
                     "mode": world.mode, "limit": world.limit, "mobs": 1 if world.mobs_on else 0,
-                    "tomahawk": 1 if world.tomahawk_on else 0, "ctf": world.ctf_cfg(),
-                    "map": getattr(world, "map_raw", None)})
+                    "tomahawk": 1 if world.tomahawk_on else 0, "map": getattr(world, "map_raw", None)})
             c.flush()
         netlog(f"Host: Welt gewechselt (Karte {'eigene' if getattr(world, 'map_raw', None) else 'Standard'}, "
                f"Modus {world.mode}), {len(world.players)} Spieler")
@@ -19621,12 +17736,11 @@ class HostSession:
             npl = w.players[pid]
             npl.hp, npl.dead_age, npl.prespawn = 0.0, 1e9, True      # noch nicht gespawnt: wartet im Ausrüstungsbildschirm
             npl.ready = bool(w.phase == "over" and not w.lobby)       # im Rundenende beigetreten: kein Bereit nötig
-            w.ctf_assign(npl)                                         # 11: CTF - ins kleinere Team
             c.pid = pid
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
-                    "tomahawk": 1 if w.tomahawk_on else 0, "ctf": w.ctf_cfg(),
+                    "tomahawk": 1 if w.tomahawk_on else 0,
                     "map": getattr(w, "map_raw", None)})
             return
         pl = w.players.get(c.pid)
@@ -19771,15 +17885,8 @@ class HostSession:
             if finite(d) and pl.hp > 0 and pl.vehicle < 0 and pl.heli < 0:
                 w.damage_player(pl, clampf(float(d), 0.0, PLAYER_HP * 2), -1, WI_FALL)
         elif t == "respawn":
-            lo = loadout_valid(m.get("lo"))       # 11: gewähltes Loadout (Hauptspiel-Loadout im CTF)
-            if lo is not None:
-                pl.loadout = lo
             if w.can_respawn(pl):
                 w.respawn_player(pl)              # Ereignis 'respawn' sagt dem Client, wohin
-        elif t == "lo":                           # 11: Loadout geändert (gilt beim nächsten Spawn, auch Rundenstart)
-            lo = loadout_valid(m.get("v"))
-            if lo is not None:
-                pl.loadout = lo
         elif t == "ready":                        # 'Bereit' in der Lobby / im Rundenendmenü
             if w.lobby or w.phase == "over":
                 pl.ready = bool(m.get("v"))
@@ -19851,12 +17958,7 @@ class HostSession:
                        r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
-            snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
-        if w.mode == "ctf":                              # 11: Teampunkte, Flaggen, Teams
-            snap["ctf"] = [list(w.team_score),
-                           [[f.fid, f.team, FLAG_STATES.index(f.state), f.carrier, r2(f.x), r2(f.y), r2(f.z),
-                             r1(f.drop_t)] for f in w.flags],
-                           [[pid, t] for pid, t in w.team_of.items() if pid in w.players]]
+            snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
         line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
         self.events = []
         ev_now = snap["ev"]
@@ -20047,9 +18149,6 @@ class ClientSession:
                 w.tomahawk_on = bool(m.get("tomahawk", w.tomahawk_on))
                 w.strike_cd = float(m.get("cd", w.strike_cd))
                 w.regen_rate = float(m.get("regen", w.regen_rate))
-                w.ctf_apply_cfg(m.get("ctf"))           # 11
-                if w.mode != "ctf":
-                    w.team_of, w.flags = {}, []
                 self.cfg_changed = True
             elif m.get("t") == "reload":
                 self.reload = m
@@ -20125,9 +18224,6 @@ class ClientSession:
             q = w.players.get(row[0])
             if q is not None and len(row) >= 4:
                 q.sb = tuple(int(v) for v in row[1:4])
-                if len(row) >= 7:
-                    q.sb_ctf = tuple(int(v) for v in row[4:7])      # 11: Flaggen geholt / zurück / Träger getötet
-        self.apply_ctf(m.get("ctf"))                     # 11: Teampunkte, Flaggen, Teams
 
         seen = set()
         for row in m["mb"]:
@@ -20444,37 +18540,8 @@ class ClientSession:
         self.conn.send({"t": "fall", "d": round(float(dmg), 1)})
         self.conn.flush()
 
-    def request_respawn(self, lo=None):
-        self.conn.send({"t": "respawn", "lo": list(lo)} if lo else {"t": "respawn"})
-
-    def send_loadout(self, lo):
-        """11: gewähltes Loadout an den Host (gilt beim nächsten Spawn, auch beim Rundenstart)."""
-        self.conn.send({"t": "lo", "v": [list(v) if isinstance(v, tuple) else v for v in lo]})
-        self.conn.flush()
-
-    def apply_ctf(self, c):
-        """11: CTF-Block des Snapshots: [Teampunkte, Flaggen, Teams]."""
-        w = self.world
-        if not isinstance(c, list) or len(c) < 3:
-            if w.mode != "ctf" and (w.flags or w.team_of):
-                w.flags, w.team_of = [], {}
-                for p in w.players.values():
-                    p.team = None
-            return
-        w.team_score = [int(c[0][0]), int(c[0][1])]
-        old = {f.fid: f for f in w.flags}
-        flags = []
-        for row in c[1]:
-            fid, team, st, car, x, y, z, dt_ = row[:8]
-            f = old.get(fid) or Flag(fid, team, x, y, z)
-            f.team, f.carrier, f.drop_t = team, car, dt_
-            f.state = FLAG_STATES[st] if isinstance(st, int) and 0 <= st < len(FLAG_STATES) else "home"
-            f.x, f.y, f.z = x, y, z
-            flags.append(f)
-        w.flags = flags
-        w.team_of = {int(pid): int(t) for pid, t in c[2] if t in (0, 1)}
-        for pid, p in w.players.items():
-            p.team = w.team_of.get(pid)
+    def request_respawn(self):
+        self.conn.send({"t": "respawn"})
 
     def send_ready(self, v):
         self.conn.send({"t": "ready", "v": 1 if v else 0})
@@ -20592,9 +18659,7 @@ class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
 
     def __init__(self, p):
-        self.team = getattr(p, "team", None)                             # 11: Teamfarbe der Armbinde (CTF)
-        self.look_code = getattr(p, "look", "")
-        look = soldier_look(self.look_code, p.pid, self.team)
+        look = soldier_look(getattr(p, "look", ""), p.pid)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
          self.armL, self.armR) = build_soldier(look)
         gc = (0.13, 0.13, 0.15)
@@ -21299,19 +19364,6 @@ def synth_sounds():
                                                            for i in range(n)]), 1.2)), 0.85)
     n = int(0.12 * SR)                                              # Granate: Sicherungsstift (kleines Klicken)
     out["pin"] = norm(mix((mul(sweep(n, 2400, 1500, 40), env(n, 60)), 1.0), (mul(noise(n), env(n, 120)), 0.4)), 0.5)
-    # 11: CTF - Fanfare (Punkt) und Zwei-Ton-Signal (Flagge genommen / zurück)
-    fan = []
-    for f, d in ((523.0, 0.12), (659.0, 0.12), (784.0, 0.12), (1047.0, 0.42)):
-        k = int(d * SR)
-        e_ = [min(1.0, i / (0.01 * SR)) * math.exp(-2.5 * i / k) for i in range(k)]
-        fan += mul(mix((tone(k, f), 1.0), (tone(k, f * 2.0), 0.3), (tone(k, f * 3.0), 0.12)), e_)
-    out["ctf_cap"] = norm(delay(fan, int(0.09 * SR), 0.25), 0.8)
-    al = []
-    for f in (880.0, 660.0):
-        k = int(0.16 * SR)
-        al += mul(mix((tone(k, f), 1.0), (tone(k, f * 2.01), 0.25)), [min(1.0, i / (0.006 * SR)) * math.exp(-6 * i / k)
-                                                                     for i in range(k)])
-    out["ctf_alert"] = norm(al, 0.7)
     return out
 
 
@@ -116966,7 +115018,6 @@ class Game(ShowBase):
         self.sky_root = self.sky_clouds = self.sun_np = self.filters = None
         self.vignette = self.land_np = None
         self.water_nps = []
-        self.falls = []                        # 9a: Wasserfälle (Knoten, Gischt, Punkte fürs Rauschen)
         self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.shadows = {}
@@ -116995,8 +115046,7 @@ class Game(ShowBase):
         self.ip_edited = False
         self.lost_text = None
         self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
-                        resp=RESPAWN_DEFAULT, map=None, ff=CTF_FF_DEFAULT, loot=CTF_LOOT_DEFAULT,
-                        plim=0)   # Host-Einstellungen (11: ff/loot/plim = CTF: Eigenbeschuss, Loot-System, Punktelimit)
+                        resp=RESPAWN_DEFAULT, map=None)   # Host-Einstellungen
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
         self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
         self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
@@ -117290,10 +115340,10 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "char"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "char"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
-        if state not in ("loadout", "loadconf", "setup2", "setup3"):
+        if state not in ("loadout", "loadconf", "setup2"):
             self.menu_items.append(OnscreenText(text="Polybash Alpha v0.8", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
@@ -117370,10 +115420,10 @@ class Game(ShowBase):
             else:
                 self.setup_page.update()
             return
-        if self.menu_state in ("setup2", "setup3"):       # Weitere Einstellungen / 11: CTF-Regeln
+        if self.menu_state == "setup2":                   # Weitere Einstellungen: eigene Seite mit Schiebereglern
             if self.setup_page is None or self.menu_last is None:
-                self.menu_last = (self.menu_state, self.menu_msg)
-                self.setup_page = MorePage(self) if self.menu_state == "setup2" else CtfPage(self)
+                self.menu_last = ("setup2", self.menu_msg)
+                self.setup_page = MorePage(self)
             else:
                 self.setup_page.update()
             return
@@ -117509,12 +115559,6 @@ class Game(ShowBase):
         if self.quit_box is None and self.loadscreen is not None:
             self.loadscreen.click(self.mouse_2d())
             return
-        if (self.mode == "play" and self.quit_box is None and getattr(self, "end_cfg", None) is not None
-                and getattr(self, "end", None) is None):
-            hit, _card = self.update_hover()        # 11: Rundeneinstellungen in der Lobby
-            if hit is not None:
-                hit.action()
-            return
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
             return
@@ -117626,25 +115670,10 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         return bool(p) and str(p).lower().endswith(".mcmap")
 
-    def ctf_cfg_dict(self):
-        """11: CTF-Regeln aus den Host-Einstellungen (für World und Netz)."""
-        c = self.cfg
-        return {"ff": 1 if c.get("ff") else 0, "loot": "exp" if c.get("loot") == "exp" else "loadout",
-                "pl": max(0, min(CTF_PTS_MAX, int(c.get("plim", 0) or 0)))}
-
-    @staticmethod
-    def is_bg_map(name, path):
-        """11: Blood Gulch (nur im CTF wählbar)."""
-        return name == "Blood Gulch" or (bool(path) and os.path.basename(str(path)).lower().startswith("blood_gulch"))
-
     def setup_entries(self):
-        """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown.
-        11: Im Capture the Flag nur Polytown und Blood Gulch; Blood Gulch gibt es nur dort."""
-        ctf = self.cfg.get("mode") == "ctf"
-        ents = [(STD_MAP_NAME, None, "Standardkarte" + (" - zwei Stützpunkte" if ctf else ""), "polytown")]
+        """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown."""
+        ents = [(STD_MAP_NAME, None, "Standardkarte", "polytown")]
         for name, path in self.map_list:
-            if ctf != self.is_bg_map(name, path):
-                continue
             if path.lower().endswith(".mcmap"):
                 try:
                     key = MAP_PREVIEW_IDS.get(mc_read_header(path).get("id")) or ("mm", path)
@@ -117652,8 +115681,7 @@ class Game(ShowBase):
                     key = ("mm", path)
                 ents.append((name, path, "Aus GarrysMod" if name == "Minecraft Insel" else "Minecraft 1:1 · Deathmatch", key))
             else:
-                ents.append((name, path, ("Aus Halo: CE - nur CTF" if ctf else "Aus Halo: CE") if name == "Blood Gulch"
-                             else "Eigene Karte", "blood_gulch" if name == "Blood Gulch" else ("jm", path)))
+                ents.append((name, path, "Eigene Karte", ("jm", path)))
         return ents
 
     def setup_pick(self, gi):
@@ -117672,27 +115700,9 @@ class Game(ShowBase):
         self.menu_refresh()
 
     def setup_mode(self, mode):
-        if mode not in MODES or (self.cfg_is_mc() and mode == "koth"):
-            return                                    # Minecraft-Karten kennen nur Deathmatch (11: CTF wechselt die Karte)
-        c, old = self.cfg, self.cfg.get("mode")
-        if mode == old:
-            return
-        if mode == "ctf":                             # 11: CTF-Standard - Monster und Tomahawk aus (im Menü änderbar)
-            self.ctf_prev = (c.get("mobs"), c.get("tomahawk"))
-            c["mobs"], c["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
-        elif old == "ctf" and getattr(self, "ctf_prev", None) is not None:
-            c["mobs"], c["tomahawk"] = self.ctf_prev
-            self.ctf_prev = None
-        c["mode"] = mode
-        if c.get("map") is not None and c.get("map") not in [e[1] for e in self.setup_entries()]:
-            c["map"] = None                           # 11: Karte gibt es im neuen Modus nicht -> Polytown
-            self.map_page = 0
-        if self.setup_page is not None and self.mode == "menu" and self.menu_state == "setup":
-            self.show_menu("setup")                   # Kartenliste hat sich geändert: Seite neu aufbauen
-            return
-        if getattr(self, "end_cfg", None) == "setup":
-            self.end_cfg_show()
-            return
+        if self.cfg_is_mc() or mode not in MODES:
+            return                                    # Minecraft-Karten kennen nur Deathmatch
+        self.cfg["mode"] = mode
         self.menu_refresh()
 
     def set_limit(self, v):
@@ -117749,13 +115759,6 @@ class Game(ShowBase):
     def setup_more(self):
         self.show_menu("setup2")
 
-    def setup_ctf(self):
-        """11: Seite mit den CTF-Regeln."""
-        if getattr(self, "end_cfg", None) is not None:
-            self.end_cfg_ctf()
-        else:
-            self.show_menu("setup3")
-
     def on_w(self):
         if self.mode == "menu" and self.menu_state == "setup" and self.quit_box is None:
             self.setup_more()
@@ -117764,16 +115767,11 @@ class Game(ShowBase):
 
     def on_arrow(self, dx, dy):
         if getattr(self, "end_cfg", None) is not None:      # Rundeneinstellungen im Endbildschirm
-            if self.end_cfg == "ctf" and self.quit_box is None and dx:          # 11: Punktelimit
-                self.set_cfg("plim", max(0, min(CTF_PTS_MAX, int(self.cfg.get("plim", 0) or 0) + dx)))
             if self.end_cfg == "setup" and self.quit_box is None:
                 if dx:
                     self.set_limit(self.cfg["limit"] + dx)
                 elif dy and not self.cfg_is_mc():
                     self.setup_mode(MODES[(MODES.index(self.cfg["mode"]) + 1) % len(MODES)])
-            return
-        if self.mode == "menu" and self.menu_state == "setup3" and self.quit_box is None and dx:
-            self.set_cfg("plim", max(0, min(CTF_PTS_MAX, int(self.cfg.get("plim", 0) or 0) + dx)))   # 11
             return
         if self.mode != "menu" or self.menu_state != "setup" or self.quit_box is not None:
             return
@@ -117860,9 +115858,7 @@ class Game(ShowBase):
                     self.set_cfg("mobs", d - 1)
         elif self.mode == "play":
             if self.player.hp <= 0:
-                if self.LOBBY_EQUIP and self.loadscreen is None:   # 11: Hauptspiel-Loadout - Ziffern wie im Hauptspiel
-                    self.pick_loadout(d)
-                # (sonst keine Ausrüstungswahl: Robins Regel - Start mit Pistole)
+                pass                               # tot: keine Ausrüstungswahl (Robins Regel: Start mit Pistole)
             elif 1 <= d <= N_SLOTS:
                 self.request_weapon(d - 1)
             elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
@@ -117875,15 +115871,6 @@ class Game(ShowBase):
         if self.menu_state == "setup2":
             if ch in "tT":
                 self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
-            return
-        if self.menu_state == "setup3":                   # 11: CTF-Regeln
-            if ch in "fF":
-                self.set_cfg("ff", not self.cfg.get("ff", CTF_FF_DEFAULT))
-            elif ch in "lL":
-                self.set_cfg("loot", "exp" if self.cfg.get("loot", CTF_LOOT_DEFAULT) != "exp" else "loadout")
-            return
-        if self.menu_state == "setup" and ch in "cC" and self.cfg.get("mode") == "ctf":
-            self.setup_ctf()
             return
         if self.menu_state == "name" and len(self.my_name) < 16:
             self.my_name += ch
@@ -117924,7 +115911,7 @@ class Game(ShowBase):
                 self.menu_msg = "Bitte einen Namen eingeben."
         elif st == "setup":
             self.start_game(self.setup_for)
-        elif st in ("setup2", "setup3"):
+        elif st == "setup2":
             self.show_menu("setup")
         elif st == "join":
             ip = self.current_ip().strip()
@@ -117949,15 +115936,6 @@ class Game(ShowBase):
             self.lobby_click(m)
             return
         rb = self.right_btn_rect()
-        if self.LOBBY_EQUIP:                        # 11: Hauptspiel-Loadout - Waffenkarten und 'Loadout konfigurieren'
-            card = self.death_picker.hit(m[0], m[1])
-            b = self.DEAD_BTN
-            if card is not None:
-                self.set_loadout_card(card[0], card[1])
-                return
-            if b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
-                self.open_loadscreen()
-                return
         if rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             self.do_respawn()
 
@@ -117979,8 +115957,6 @@ class Game(ShowBase):
     def can_edit_round(self):
         """Nur der Host (bzw. im Einzelspiel der Spieler) ändert im Rundenende die Einstellungen."""
         w = self.world
-        if self.net_mode == "host" and w is not None and getattr(w, "lobby", False) and w.phase == "play":
-            return True                                   # 11: auch in der Lobby (Host aus dem Hauptspiel: CTF wählen)
         return self.net_mode in ("host", "single") and w is not None and w.phase == "over" and getattr(self, "end", None) is not None
 
     def end_note(self, text, secs=6.0):
@@ -117992,14 +115968,12 @@ class Game(ShowBase):
     def end_cfg_open(self):
         """Host: 'Rundeneinstellungen ändern' - dieselbe Seite wie beim Hosten, mit den Werten der laufenden Runde."""
         w, e = self.world, self.end
-        if not self.can_edit_round():
+        if e is None or not self.can_edit_round():
             return
         c = self.cfg
         self.cfg_backup = dict(c)
         c["map"] = getattr(w, "map_path", c.get("map"))
         c["mode"] = w.mode if w.mode in MODES else c["mode"]
-        c["ff"], c["loot"], c["plim"] = bool(w.ctf_ff), w.ctf_loot, int(w.score_limit)     # 11
-        c["mobs"] = int(w.mob_level)
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
@@ -118008,8 +115982,7 @@ class Game(ShowBase):
             c["map"] = None
         self.setup_for = self.net_mode
         self.map_page, self.prev_mode, self.menu_msg = 0, None, ""
-        if e is not None:
-            e["root"].hide()
+        e["root"].hide()
         self.end_cfg = "setup"
         self.end_cfg_show()
 
@@ -118021,20 +115994,14 @@ class Game(ShowBase):
         bg.setColor(0.05, 0.07, 0.11, 1.0)
         self.menu_items.append(Deco(bg))
         self.menu_last = (self.end_cfg, "")
-        self.setup_page = (EndSetupPage(self) if self.end_cfg == "setup" else
-                           CtfPage(self) if self.end_cfg == "ctf" else MorePage(self))
+        self.setup_page = EndSetupPage(self) if self.end_cfg == "setup" else MorePage(self)
 
     def end_cfg_more(self):
         self.end_cfg = "more"
         self.end_cfg_show()
 
-    def end_cfg_ctf(self):
-        """11: CTF-Regeln (Eigenbeschuss, Loot-System, Punktelimit) der nächsten Runde."""
-        self.end_cfg = "ctf"
-        self.end_cfg_show()
-
     def end_cfg_back(self):
-        if self.end_cfg in ("more", "ctf"):
+        if self.end_cfg == "more":
             self.end_cfg = "setup"
             self.end_cfg_show()
         else:
@@ -118072,33 +116039,16 @@ class Game(ShowBase):
             self.reload_world()
             return
         lvl = mob_level_of(c["mobs"])
-        mode = c["mode"] if c["mode"] in MODES else w.mode
-        old_mode = w.mode
+        mode = c["mode"] if c["mode"] in ("koth", "dm") else w.mode
         w.mode = "dm" if w.mc else mode
-        w.ctf_apply_cfg(self.ctf_cfg_dict())            # 11: CTF-Regeln
-        if w.mode != old_mode:                          # 11: Teams/Flaggen passen zum neuen Modus (gilt ab der nächsten Runde)
-            w.ctf_balance()
-            if w.mode == "ctf":
-                w.ctf_reset()
-            else:
-                w.flags.clear()
         w.limit = float(c["limit"]) * 60.0
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
-        if (w.mob_level, w.mobs_on) != (lvl, lvl > 0 and not w.mc) and getattr(w, "lobby", False):
-            w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
-            w.mobs.clear()                              # 11: Lobby - die Monster passen sofort zur Einstellung
-            w.pending.clear()
-            if w.mobs_on:
-                w.populate_mobs()
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
         if self.host is not None:
             self.host.send_cfg()
         netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
-        if getattr(w, "lobby", False):
-            self.toast("Rundeneinstellungen übernommen", (0.6, 1.0, 0.6), 2.5)
-        else:
-            self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
+        self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
 
     def reload_world(self):
         w = self.world
@@ -118114,7 +116064,6 @@ class Game(ShowBase):
                                   mode=m.get("mode") if m.get("mode") in MODES else "koth",
                                   limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
                                   mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
-                                  ctf=m.get("ctf") if isinstance(m.get("ctf"), dict) else {},
                                   map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
                                   close=lambda: cs.conn.close("abgebrochen"))
         except (KeyError, TypeError, ValueError):
@@ -118168,13 +116117,7 @@ class Game(ShowBase):
         return (a - 0.08 - self.big_btn_w(), a - 0.08, -0.94, -0.76)
 
     LOBBY_EQ_BTN = (-0.60, 0.60, -0.90, -0.76)
-    LOBBY_CFG_BTN = (-0.60, 0.60, -0.70, -0.56)   # 11: Host - "Rundeneinstellungen" in der Lobby (Modus, Karte, CTF)
-
-    @property
-    def LOBBY_EQUIP(self):
-        """Ausrüstungsmenü in der Lobby benutzbar: nur mit Hauptspiel-Loadout (11: CTF), sonst Start mit der Pistole."""
-        w = getattr(self, "world", None)
-        return w is not None and getattr(w, "loot_mode", "exp") == "loadout"
+    LOBBY_EQUIP = False          # Ausrüstungsmenü in der Lobby benutzbar (im Experimental nicht: immer Pistole)
     LOBBY_EQ_LOCKED = True       # Knopf trotzdem zeigen, aber ausgegraut; beim Darüberfahren erscheint der Hinweis
     LOBBY_EQ_TIP = "In diesem Spielmodus nicht verfügbar."
 
@@ -118187,10 +116130,6 @@ class Game(ShowBase):
         e = self.LOBBY_EQ_BTN
         bb = self.back_btn_rect()
         equip = self.LOBBY_EQUIP and getattr(self, "lobby_equip", False)
-        cb = self.LOBBY_CFG_BTN
-        if (not equip and self.net_mode == "host" and cb[0] <= m[0] <= cb[1] and cb[2] <= m[1] <= cb[3]):
-            self.end_cfg_open()                     # 11: Rundeneinstellungen (Modus Capture the Flag, Karte ...)
-            return
         if bb[0] <= m[0] <= bb[1] and bb[2] <= m[1] <= bb[3]:
             if equip:
                 self.lobby_equip = False            # zurück zur Lobby
@@ -118250,14 +116189,6 @@ class Game(ShowBase):
         btn3d(eq)
         eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
                             shadow=(0, 0, 0, 0.8), mayChange=True)
-        cm.setFrame(*self.LOBBY_CFG_BTN)                    # 11: Host - Rundeneinstellungen
-        cfgb = root.attachNewNode(cm.generate())
-        cfgb.setColor(*BTN_C)
-        cfgb.setTransparency(TransparencyAttrib.MAlpha)
-        btn3d(cfgb)
-        cfg_t = OnscreenText(text="RUNDENEINSTELLUNGEN  (Modus, Karte, CTF)", parent=root,
-                             pos=(0, (self.LOBBY_CFG_BTN[2] + self.LOBBY_CFG_BTN[3]) / 2 - 0.018), scale=0.045,
-                             font=BOLD_FONT, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), mayChange=True)
         tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
                            bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
         tip.setColorScale(1, 1, 1, 1)
@@ -118267,7 +116198,7 @@ class Game(ShowBase):
         tip.hide()
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
-                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip, "cfg": cfgb, "cfg_t": cfg_t}
+                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip}
 
     def update_lobby_ui(self, show, mpos):
         ui = getattr(self, "lobby_ui", None)
@@ -118326,12 +116257,6 @@ class Game(ShowBase):
             else:
                 ui["start"].setColor(*START_BTN_HOT) if hov_c else ui["start"].setColor(*START_BTN)
                 self.set_text(ui["start_t"], "BEREIT")
-        cb = self.LOBBY_CFG_BTN                             # 11: Rundeneinstellungen (nur der Host)
-        for nd in (ui["cfg"], ui["cfg_t"]):
-            (nd.show if host else nd.hide)()
-        if host:
-            hov_c = mpos is not None and cb[0] <= mpos[0] <= cb[1] and cb[2] <= mpos[1] <= cb[3]
-            ui["cfg"].setColor(*(BTN_HC if hov_c else BTN_C))
         e = self.LOBBY_EQ_BTN
         over_e = mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
         hov_e = self.LOBBY_EQUIP and over_e
@@ -118390,7 +116315,7 @@ class Game(ShowBase):
             self.end_cfg_back()                    # Rundeneinstellungen: Weitere -> Seite 1 -> Abbrechen
         elif self.mode == "menu" and self.menu_state == "quit":
             self.show_menu(getattr(self, "quit_back", None) or "main")
-        elif self.mode == "menu" and self.menu_state in ("setup2", "setup3"):
+        elif self.mode == "menu" and self.menu_state == "setup2":
             self.show_menu("setup")
         elif self.mode == "menu" and self.menu_state == "setup":
             self.show_menu("main")
@@ -118884,9 +116809,7 @@ class Game(ShowBase):
 
     def refresh_fp_arms(self):
         """Hände und Ärmel in der Ego-Ansicht im gewählten Aussehen (Tarnmuster, Handschuhe) neu aufbauen."""
-        w_ = getattr(self, "world", None)
-        tm_ = w_.team_of.get(getattr(self, "my_id", 0) or 0) if w_ is not None and getattr(w_, "mode", "") == "ctf" else None
-        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0, tm_)
+        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0)
         if getattr(self, "fp_key", None) == L["key"]:
             return
         self.fp_key = L["key"]
@@ -119082,14 +117005,12 @@ class Game(ShowBase):
         self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # 10e: Blendung vorbei, Ton normal
         self.apply_volume()
         self.water_nps = []
-        self.falls = []
         self.town_np = None
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
         self.intel_reset()
-        self.ctf_ui = None                   # 11: CTF-Anzeige (Knoten sind mit HUD und Szene schon weg)
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
         self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
@@ -119282,7 +117203,7 @@ class Game(ShowBase):
                 return
             self.loading_step(0.08, "Welt wird erzeugt ...")
             world = World(attempt.seed, spawn_mobs=False, mode=attempt.mode, limit=attempt.limit, mapdata=mapdata,
-                          tomahawk=getattr(attempt, "tomahawk", True), ctf=getattr(attempt, "ctf", None))
+                          tomahawk=getattr(attempt, "tomahawk", True))
             if attempt.props != world.prop_count():
                 attempt.close()
                 netlog(f"Client: Weltprüfung fehlgeschlagen: Host {attempt.props} Props, lokal {world.prop_count()}")
@@ -119317,7 +117238,7 @@ class Game(ShowBase):
             world = World(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict())
+                          tomahawk=bool(self.cfg.get("tomahawk", True)))
         world.map_raw = raw
         world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
@@ -119349,7 +117270,6 @@ class Game(ShowBase):
         self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
-            self.lo_sent = None                    # 11: Loadout beim ersten Frame an den (neuen) Host
             world.shot_sink = self.client.send_shot
             world.gren_sink = self.client.send_grenade
             world.melee_sink = self.client.send_melee
@@ -119362,7 +117282,7 @@ class Game(ShowBase):
                                     build_pt_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)) if world.pt else
                                     build_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)))
         self.loading_step(0.78, "Szene wird eingerichtet ...")
-        prewarm_mob_models(getattr(world, "mtn", True))   # 12: Monster-Modelle jetzt bauen, nicht beim ersten Auftauchen
+        prewarm_mob_models()   # 12: Monster-Modelle jetzt bauen, nicht beim ersten Auftauchen
         self.land_np = self.render.attachNewNode(land)
         if world.mc:
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
@@ -119435,7 +117355,6 @@ class Game(ShowBase):
             if k:
                 wn.setTexScale(TextureStage.getDefault(), 1.7, 1.7)
             self.water_nps.append(wn)
-        self.setup_falls()
         if self.sky_root is None:
             self.build_sky_nodes()
         self.sky_root.show()
@@ -119447,7 +117366,7 @@ class Game(ShowBase):
             zp.setFogOff()
         fog = Fog("nebel")
         fog.setColor(*SKY)
-        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 and not world.mtn else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
+        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
@@ -119483,10 +117402,6 @@ class Game(ShowBase):
         if cs.cfg_changed:
             cs.cfg_changed = False
             self.end_note("Der Host hat die Rundeneinstellungen geändert")
-        lo = tuple(tuple(v) if isinstance(v, (list, tuple)) else v for v in self.loadout)
-        if lo != getattr(self, "lo_sent", None):          # 11: gewähltes Loadout dem Host melden (Rundenstart, Respawn)
-            self.lo_sent = lo
-            cs.send_loadout(self.loadout)
         pl = self.player
         if cs.hp is not None:
             pl.hp = cs.hp                      # Lebenspunkte entscheidet der Host
@@ -120497,7 +118412,7 @@ class Game(ShowBase):
         if self.net_mode == "client":
             waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
             if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
-                self.client.request_respawn(self.loadout if self.LOBBY_EQUIP else None)   # der Host sucht den Startpunkt aus
+                self.client.request_respawn()       # der Host sucht den Startpunkt aus
         elif self.world.can_respawn(pl):
             self.world.respawn_player(pl)           # Einzelspiel/Host: Ereignis 'respawn' folgt
 
@@ -120795,7 +118710,6 @@ class Game(ShowBase):
         root = a2.attachNewNode("endscreen")
         root.setBin("gui-popup", 0)                       # über allem, was das HUD noch einblendet
         koth = bool(data) and data[0].get("mode") == "koth"
-        ctf = bool(data) and data[0].get("mode") == "ctf"        # 11
         cm = CardMaker("endbg")
         cm.setFrame(-3, 3, -1, 1)
         bg = root.attachNewNode(cm.generate())
@@ -120805,27 +118719,9 @@ class Game(ShowBase):
                      shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
         cm.setFrame(-0.62, 0.62, 0.83, 0.838)
         root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        if ctf:                                           # 11: Teamergebnis statt Siegerpodest
-            ts = data[0].get("ts") or [0, 0]
-            for t, x in ((0, -0.42), (1, 0.42)):
-                col = CTF_TEAM_COLS[t]
-                win = ts[t] > ts[1 - t]
-                h = 0.26 if win else 0.17
-                cm.setFrame(x - 0.3, x + 0.3, 0.3, 0.3 + h)
-                blk = root.attachNewNode(cm.generate())
-                blk.setColor(col[0] * 0.6, col[1] * 0.6, col[2] * 0.6, 1)
-                OnscreenText(text=str(ts[t]), parent=root, pos=(x, 0.3 + h * 0.3), scale=0.1, font=BOLD_FONT,
-                             fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
-                OnscreenText(text=f"TEAM {CTF_TEAM_NAMES[t].upper()}", parent=root, pos=(x, 0.3 + h + 0.035),
-                             scale=0.06 if win else 0.05, fg=tuple(min(1.0, c * 1.2 + 0.2) for c in col) + (1,),
-                             shadow=(0, 0, 0, 0.9), mayChange=False)
-            res = ("UNENTSCHIEDEN" if ts[0] == ts[1] else
-                   f"TEAM {CTF_TEAM_NAMES[0 if ts[0] > ts[1] else 1].upper()} GEWINNT")
-            OnscreenText(text=res, parent=root, pos=(0, 0.70), scale=0.065, font=BOLD_FONT, fg=(1.0, 0.85, 0.3, 1),
-                         shadow=(0, 0, 0, 0.9), mayChange=False)
         # Siegerpodest: 2. links, 1. Mitte, 3. rechts
-        for place, x, h, col in (() if ctf else ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
-                                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25)))):
+        for place, x, h, col in ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
+                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25))):
             if place > len(data):
                 continue
             e = data[place - 1]
@@ -120839,9 +118735,9 @@ class Game(ShowBase):
                          fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
             OnscreenText(text=val, parent=root, pos=(x, 0.3 + h + 0.025), scale=0.035, fg=col + (1,),
                          mayChange=False)
-        tabs = end_tabs(koth, ctf)
+        tabs = end_tabs(koth)
         self.end = {"root": root, "data": data, "tabs": tabs, "tab": 0, "cells": [], "hidden": hidden,
-                    "koth": koth, "ctf": ctf, "rects": []}
+                    "koth": koth, "rects": []}
         labels = [f"{i + 1} {t[0]}" for i, t in enumerate(tabs)]
         widths = [len(lb) * 0.042 * 0.52 + 0.09 for lb in labels]   # Reiter nebeneinander, nach Textlänge
         x = -sum(widths) / 2
@@ -120913,11 +118809,7 @@ class Game(ShowBase):
                 e["cells"].append(OnscreenText(text=str(v), parent=root, pos=(xs[j + 1], z), scale=0.042,
                                                fg=(1.0, 0.78, 0.2, 1) if gold else (0.92, 0.94, 1, 1),
                                                mayChange=False))
-        if best_f is None and e.get("ctf"):               # 11: CTF - Siegerteam
-            ts = (data[0].get("ts") if data else None) or [0, 0]
-            txt = ("Unentschieden" if ts[0] == ts[1] else
-                   f"Sieger: Team {CTF_TEAM_NAMES[0 if ts[0] > ts[1] else 1]}   ({ts[0]} : {ts[1]})")
-        elif best_f is None:                              # Übersicht: Sieger
+        if best_f is None:                                # Übersicht: Sieger
             txt = f"Sieger: {data[0]['name']}" if data else ""
         else:
             top = max(data, key=best_f) if data else None
@@ -121445,23 +119337,9 @@ class Game(ShowBase):
         t = max(0.0, world.time_left)
         self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}")
         koth = world.mode == "koth"
-        if world.mode == "ctf":                      # 11: Team, Flaggen geholt / zurück / Träger getötet
-            s0, s1 = world.team_score[0], world.team_score[1]
-            self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}"
-                                          f"      BLAU {s0} : {s1} ROT")
-            heads = ["#", "Spieler", "Team", "Kills", "Tode", "Flaggen", "Zurück", "Träger"]
-            rows = sorted(world.ranking()[:8], key=lambda p: (world.team_of.get(p.pid, 9),))
-            cols = [[] for _ in heads]
-            for i, p in enumerate(rows):
-                fc, fr, ck = ctf_summary(p)
-                tm = world.team_of.get(p.pid)
-                for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")),
-                                       CTF_TEAM_NAMES[tm] if tm in (0, 1) else "-", p.kills, p.deaths, fc, fr, ck)):
-                    cols[c].append(str(v))
-        else:
-            heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
-            cols = [[] for _ in heads]
-        for i, p in enumerate(world.ranking()[:8] if world.mode != "ctf" else ()):
+        heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
+        cols = [[] for _ in heads]
+        for i, p in enumerate(world.ranking()[:8]):
             mk, cr, bf = stat_summary(p)
             val = f"{int(p.score)}" if koth else f"{p.kills / max(1, p.deaths):.2f}"
             for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")), val,
@@ -121873,8 +119751,6 @@ class Game(ShowBase):
         for i, wn in enumerate(self.water_nps):
             wn.setTexOffset(TextureStage.getDefault(), t * (0.021 if i == 0 else -0.016),
                             t * (0.012 if i == 0 else 0.019))
-        if self.falls:
-            self.update_falls(t, cp)
         if getattr(self, "slash_fx", None):
             self.update_slash_fx()
         self.update_wind(t, (self.player.x, self.player.y))
@@ -121885,59 +119761,6 @@ class Game(ShowBase):
             self.sun_np.lookAt(pl.x, pl.y, pl.z)
 
     WIND_AMP = {"tree": 0.022, "bush": 0.03, "reed": 0.12, "grass": 0.14}
-
-    def setup_falls(self):
-        """9a: Wasserfälle aufbauen (Wasserband, Becken, Quellfels, Gischtflocken)."""
-        self.falls = []
-        for wf in build_waterfalls(self.world):
-            sn = self.render.attachNewNode(wf["sheet"])
-            sn.setTransparency(TransparencyAttrib.MAlpha)
-            sn.setDepthWrite(False)
-            sn.setTwoSided(True)
-            sn.setLightOff()
-            sn.setBin("transparent", 12)
-            pn = self.render.attachNewNode(wf["pool"])
-            pn.setTransparency(TransparencyAttrib.MAlpha)
-            pn.setDepthWrite(False)
-            pn.setLightOff()
-            pn.setBin("transparent", 10)
-            self.render.attachNewNode(wf["rock"])
-            spray = []
-            tex = get_tex("blob")
-            for k in range(WF_SPRAY):
-                cm = CardMaker("gischt")
-                cm.setFrame(-0.5, 0.5, -0.5, 0.5)
-                c = self.render.attachNewNode(cm.generate())
-                c.setBillboardPointEye()
-                c.setTransparency(TransparencyAttrib.MAlpha)
-                c.setDepthWrite(False)
-                c.setLightOff()
-                c.setBin("transparent", 13)
-                if tex is not None:
-                    c.setTexture(tex)
-                spray.append((c, k / WF_SPRAY, 0.6 + 0.8 * ((k * 37) % 11) / 10.0, (k * 2.399) % (2 * math.pi)))
-            wf.update({"sn": sn, "pn": pn, "spray": spray})
-            self.falls.append(wf)
-
-    def update_falls(self, t, cp):
-        """9a: Wasser läuft nach unten (Textur), Gischt steigt am Fuss auf und verweht (nur in der Nähe)."""
-        for wf in self.falls:
-            fx, fy, fz = wf["foot"]
-            near = abs(fx - cp[0]) < 160 and abs(fy - cp[1]) < 160
-            wf["sn"].setTexOffset(TextureStage.getDefault(), 0.0, (t * WF_SPEED) % 1.0)      # % 1: genau bleiben
-            wf["pn"].setTexOffset(TextureStage.getDefault(), (t * 0.05) % 1.0, (t * 0.11) % 1.0)
-            ox, oy = wf["out"]
-            for c, ph, sz, ang in wf["spray"]:
-                if not near:
-                    c.hide()
-                    continue
-                c.show()
-                u = (t * 0.45 + ph) % 1.0                            # Lebenslauf einer Flocke 0..1
-                r = 0.4 + 2.2 * u
-                c.setPos(fx + math.cos(ang) * r * 0.8 + ox * u * 1.5, fy + math.sin(ang) * r * 0.8 + oy * u * 1.5,
-                         fz + 0.2 + 2.4 * u * (1.2 - u))
-                c.setScale(sz * (0.6 + 1.6 * u))
-                c.setColorScale(0.92, 0.96, 1.0, 0.42 * (1.0 - u) * min(1.0, u * 6.0))
 
     def spawn_slash_fx(self, kind, pos, heading):
         """10d: Katana: weisser Slash-Ring, der sich vom Spieler bis KATANA_SPIN_R ausbreitet. Schwert: weisser
@@ -122654,43 +120477,6 @@ class Game(ShowBase):
     def feed_add(self, text):
         self.feed.append((text, time.time()))
 
-    def ctf_event(self, e):
-        """11: CTF-Ereignis ("ctf", Art, Spieler-ID, Flaggen-ID, Team) -> Killfeed, Hinweis, Ton."""
-        if len(e) < 5:
-            return
-        kind, pid, _fid, team = e[1], e[2], e[3], e[4]
-        w = self.world
-        me = pid == self.my_id
-        my_t = w.team_of.get(self.my_id)
-        who = self.pname(pid) if pid is not None and pid >= 0 else ""
-        fl = self.ctf_flag_name(team)
-        col = tuple(min(1.0, c * 1.2 + 0.2) for c in self.ctf_flag_col(team))
-        if kind == "take":
-            self.feed_add(f"{who} hat {fl} genommen")
-            if me:
-                self.toast("DU HAST DIE FLAGGE!  Bring sie in deine Basis", col, 3.0)
-            self.sfx.play("ctf_alert", None, 0.8, 1.0 if me or w.team_of.get(pid) == my_t else 0.85)
-        elif kind == "drop":
-            self.feed_add(f"{who} hat {fl} verloren" if who else f"{fl[0].upper()}{fl[1:]} ist gefallen")
-        elif kind == "ret":
-            self.feed_add(f"{who} hat {fl} zurückgebracht")
-            self.sfx.play("ctf_alert", None, 0.6, 1.25)
-        elif kind == "auto":
-            self.feed_add(f"{fl[0].upper()}{fl[1:]} ist zurück" + (" in der Basis" if team in (0, 1) else " in der Burg"))
-        elif kind == "new":
-            self.feed_add("Neue Flagge in der Burg")
-        elif kind == "cap":
-            t = team if team in (0, 1) else w.team_of.get(pid)
-            tn = CTF_TEAM_NAMES[t] if t in (0, 1) else "?"
-            self.feed_add(f"{who} punktet für Team {tn}!")
-            tc = tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[t]) if t in (0, 1) else (1, 1, 1)
-            self.toast(f"TEAM {tn.upper()} PUNKTET!   BLAU {w.team_score[0]} : {w.team_score[1]} ROT", tc, 3.0)
-            self.sfx.play("ctf_cap", None, 0.9 if t == my_t else 0.6, 1.0 if t == my_t else 0.8)
-        elif kind == "needhome" and me:
-            self.toast("Eure eigene Flagge muss in der Basis sein!", (1.0, 0.6, 0.4), 2.5)
-        elif kind == "noveh" and me:
-            self.toast("Mit der Flagge kein Fahrzeug", (1.0, 0.6, 0.4), 1.6)
-
     def handle_events(self):
         for e in self.world.events:
             kind = e[0]
@@ -123158,8 +120944,6 @@ class Game(ShowBase):
             elif kind == "buffend":
                 if e[1] == self.my_id:
                     self.toast("Buff abgelaufen", (0.85, 0.85, 0.9), 1.5)
-            elif kind == "ctf":                # 11: Capture the Flag - (Art, Spieler, Flagge, Team)
-                self.ctf_event(e)
             elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
                 self.open_end_screen(e[1])
             elif kind == "newmatch":
@@ -123557,7 +121341,7 @@ class Game(ShowBase):
         for m in world.mobs:
             v = self.mob_views.get(m)
             if v is None:
-                v = self.mob_views[m] = MobView(m, getattr(world, "mtn", True))
+                v = self.mob_views[m] = MobView(m)
                 v.root.reparentTo(self.render)
             n = getattr(m, "upd_n", None)                  # 12: gestaffelt nicht gerechnet -> Bild bleibt gleich, nichts tun
             if n is not None:                              # (Mitspieler: Monster aus dem Netz haben keinen Zähler)
@@ -123574,16 +121358,12 @@ class Game(ShowBase):
         for pid in others:
             p = world.players[pid]
             v = self.player_views.get(pid)
-            if v is not None and (v.team != getattr(p, "team", None) or v.look_code != getattr(p, "look", "")):
-                self.player_views.pop(pid).root.removeNode()     # 11: Team (Armbinde) oder Aussehen gewechselt
-                v = None
             if v is None:
                 v = self.player_views[pid] = PlayerView(p)
                 v.root.reparentTo(self.render)
             v.update(p, dt)
         for pid in [pid for pid in self.player_views if pid not in others]:
             self.player_views.pop(pid).root.removeNode()
-        self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
 
         # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände
         keep = []
@@ -124467,40 +122247,11 @@ class Game(ShowBase):
         equip_view = lobby and self.LOBBY_EQUIP and getattr(self, "lobby_equip", False) and self.loadscreen is None
         if not lobby:
             self.lobby_equip = False
-        cfg_open = getattr(self, "end_cfg", None) is not None and getattr(self, "end", None) is None   # 11: Lobby-Einstellungen
-        if cfg_open and dead_screen and self.quit_box is None:
-            if self.slider_drag:
-                self.slider_follow()
-            self.update_hover()
-        show_dead = (dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
-                     and not cfg_open)
-        loadout = self.LOBBY_EQUIP                        # 11: Hauptspiel-Loadout (CTF) - Waffenwahl vor dem Spawn
+        show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
         self.set_text(self.dead_hint, hint if show_dead else "")
-        if loadout:
-            txt = ("AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:"
-                   if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:")
-        else:
-            txt = ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False)
-                   else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.")
-        if show_dead and self.world.mode == "ctf" and self.world.team_of.get(self.my_id) in (0, 1):
-            txt = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt
-        self.set_text(self.dead_text, txt if show_dead else "")
+        self.set_text(self.dead_text, ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        if show_dead and loadout:
-            card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
-            self.death_picker.update(self.loadout, card)
-            self.death_picker.show()
-            self.tip_show(card, mpos)
-            b = self.DEAD_BTN
-            hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
-            self.dead_btn.setColor(*(BTN_HC if hov else BTN_C))
-            self.dead_btn.show()
-            self.dead_btn_text.show()
-        else:
-            self.tip_hide()
-            self.death_picker.hide()
-            self.dead_btn.hide()
-            self.dead_btn_text.hide()
+        self.tip_hide()
         rb = self.right_btn_rect()
         if show_dead and not lobby:                       # grüner Respawn-Knopf unten rechts (kein R mehr)
             ready = wait <= 0
@@ -124515,9 +122266,8 @@ class Game(ShowBase):
         else:
             self.resp_btn.hide()
             self.resp_btn_text.hide()
-        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None
-                             and not cfg_open, mpos)
-        if lobby and self.loadscreen is None and self.quit_box is None and not cfg_open:   # Knopf unten links
+        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None, mpos)
+        if lobby and self.loadscreen is None and self.quit_box is None:       # Knopf unten links
             bb = self.back_btn_rect()
             hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
             self.back_btn.setPos(bb[0], 0, bb[2])
@@ -124590,23 +122340,6 @@ class Game(ShowBase):
                     img.setXel(xx, yy, *col)
 
         rect(0, 0, WORLD, WORLD, (0.20, 0.34, 0.17))
-        if getattr(world, "mtn", False):                            # Gebirge: grob (2 m) berechnen, dann hochskalieren
-            n = int((WORLD + 2 * M) / 2.0)
-            sm = PNMImage(n, n, 3)
-            for j in range(n):
-                wy = (n - 1 - j + 0.5) * 2.0 - M
-                for i in range(n):
-                    wx = (i + 0.5) * 2.0 - M
-                    inside = 0.0 <= wx <= WORLD and 0.0 <= wy <= WORLD
-                    col = (0.20, 0.34, 0.17) if inside else (0.11, 0.15, 0.11)
-                    hm = mountain(wx, wy)
-                    if hm > 0.3:
-                        k = min(1.0, hm / 8.0)
-                        b = 0.30 + 0.38 * min(1.0, hm / 50.0)
-                        rock = (b * 1.02, b * 0.98, b * 0.90) if inside else (b * 0.7, b * 0.68, b * 0.63)
-                        col = tuple(cc + (rr - cc) * k for cc, rr in zip(col, rock))
-                    sm.setXel(i, j, *col)
-            img.quickFilterFrom(sm)
         if getattr(world, "pt", None):                              # Polytown aus Blender: fertige Draufsicht aus der Kartendatei
             n = int((WORLD + 2 * M) / 2.0)
             sm = PNMImage(n, n, 3)
@@ -124921,7 +122654,6 @@ class Game(ShowBase):
         self.bm_me.setPos(p[0], 0, p[1])
         self.bm_me.setR(-pl.heading)
         self.draw_intel_big()                       # 10h: Lärm-Pings und Sichtkontakte wie auf der Minimap
-        self.update_ctf_map(True)                   # 11: CTF
         for v in self.world.vehicles:
             n = self.bm_vehs.get(v.id)
             if n is not None:
@@ -125007,7 +122739,7 @@ class Game(ShowBase):
 
     PING_SEG = 40
 
-    def ping_geom(self, parent, sort, col=None):
+    def ping_geom(self, parent, sort):
         """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
         wird er am Rand abgeschnitten)."""
         n = self.PING_SEG
@@ -125016,7 +122748,7 @@ class Game(ShowBase):
         vd.setNumRows(1 + 2 * n)
         cw = GeomVertexWriter(vd, "color")
         vw = GeomVertexWriter(vd, "vertex")
-        r_, g_, b_ = col or ENEMY_PING_COL                 # 11: eigene Farbe (Kreis um den Flaggenträger)
+        r_, g_, b_ = ENEMY_PING_COL
         cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
         vw.addData3(0, 0, 0)
         for i in range(n):
@@ -125128,15 +122860,14 @@ class Game(ShowBase):
         keep = []
         for pg in self.enemy_pings:
             age = now - pg["t0"]
-            life = pg.get("life", ENEMY_PING_T)
-            if age > life:
+            if age > ENEMY_PING_T:
                 for key in ("mm", "bm"):
                     if pg[key] is not None:
                         pg[key][0].removeNode()
                 continue
             keep.append(pg)
             if pg["mm"] is None:
-                pg["mm"] = self.ping_geom(self.mm_root, 22, pg.get("col"))
+                pg["mm"] = self.ping_geom(self.mm_root, 22)
             np_, vd = pg["mm"]
             c = self.mm_xy(pg["x"], pg["y"], False)
             if c is None:                                         # Mitte ausserhalb: Lage trotzdem rechnen
@@ -125160,7 +122891,7 @@ class Game(ShowBase):
             cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
             self.ping_fill(vd, pts, cc)
             np_.show()
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(life * 0.4, life, age))
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, age))
         self.enemy_pings = keep
 
     def draw_intel_big(self):
@@ -125171,7 +122902,7 @@ class Game(ShowBase):
         k = 2 * H / WORLD
         for pg in self.enemy_pings:
             if pg["bm"] is None:
-                pg["bm"] = self.ping_geom(self.bm_root, 62, pg.get("col"))
+                pg["bm"] = self.ping_geom(self.bm_root, 62)
             np_, vd = pg["bm"]
             c = self.bm_xy(pg["x"], pg["y"])
             rr = pg["r"] * k
@@ -125180,8 +122911,7 @@ class Game(ShowBase):
                 a = 2 * math.pi * i / self.PING_SEG
                 pts.append((max(-H, min(H, c[0] + math.cos(a) * rr)), max(-H, min(H, c[1] + math.sin(a) * rr))))
             self.ping_fill(vd, pts, c)
-            life = pg.get("life", ENEMY_PING_T)
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(life * 0.4, life, now - pg["t0"]))
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, now - pg["t0"]))
         shown = set()
         for tid, (t, x, y) in getattr(self, "intel_seen", {}).items():
             tg = w.players.get(tid)
@@ -125199,265 +122929,6 @@ class Game(ShowBase):
             shown.add(tid)
         for tid, n in self.bm_dots.items():
             if tid not in shown:
-                n.hide()
-
-    # ------------------------------------------------------------ 11: Capture the Flag (Anzeige)
-    @staticmethod
-    def ctf_flag_col(team):
-        return CTF_TEAM_COLS[team] if team in (0, 1) else CTF_NEUTRAL_COL
-
-    @staticmethod
-    def ctf_flag_name(team):
-        """'die blaue Flagge' / 'die rote Flagge' / 'die Flagge' (neutral)."""
-        return {0: "die blaue Flagge", 1: "die rote Flagge"}.get(team, "die Flagge")
-
-    def ctf_ui_build(self):
-        """HUD und Minimap-Marker des CTF (einmal je Spiel; cleanup_scene räumt die Knoten mit dem HUD ab)."""
-        ui = {}
-        tc = self.a2dTopCenter
-        for key, x, al in (("s0", -0.035, TextNode.ARight), ("sep", 0.0, TextNode.ACenter), ("s1", 0.035, TextNode.ALeft)):
-            ui[key] = OnscreenText(text="", parent=tc, pos=(x, -0.165), scale=0.056, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                                   shadow=(0, 0, 0, 0.9), align=al, mayChange=True)
-        ui["s0"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[0]) + (1,))
-        ui["s1"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[1]) + (1,))
-        ui["status"] = OnscreenText(text="", parent=tc, pos=(0, -0.222), scale=0.036, fg=(0.9, 0.92, 0.95, 1),
-                                    shadow=(0, 0, 0, 0.9), mayChange=True)
-        ui["team"] = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.08), scale=0.05, font=BOLD_FONT,
-                                  fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
-        am = Mesh(lit=False)                               # Pfeil zur eigenen Basis (nur für den Flaggenträger)
-        for sz, c in ((0.062, (0, 0, 0)), (0.048, (1, 1, 1))):
-            tip, lft, nt, rgt = (0, 0, sz), (-0.62 * sz, 0, -0.72 * sz), (0, 0, -0.30 * sz), (0.62 * sz, 0, -0.72 * sz)
-            am.tri(tip, lft, nt, c)
-            am.tri(tip, nt, rgt, c)
-        arrow = tc.attachNewNode(am.node("ctf_pfeil"))
-        arrow.setTwoSided(True)
-        arrow.setPos(0, 0, -0.33)
-        arrow.hide()
-        ui["arrow"] = arrow
-        ui["carry"] = OnscreenText(text="", parent=tc, pos=(0, -0.43), scale=0.044, font=BOLD_FONT, fg=(1, 0.88, 0.35, 1),
-                                   shadow=(0, 0, 0, 0.9), mayChange=True)
-        ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"] = {}, {}, {}, {}, {}
-        ui["ping_t"], ui["myteam"] = 0.0, -2
-        self.ctf_ui = ui
-        return ui
-
-    def ctf_ring(self, r, col, alpha=0.45):
-        """Leuchtender Ring am Boden (Flaggenstand, Abgabezone)."""
-        m = Mesh(lit=False)
-        n = 40
-        for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            p = lambda rr, a: (math.cos(a) * rr, math.sin(a) * rr, 0.0)     # noqa: E731
-            m.tri(p(r * 0.86, a0), p(r, a0), p(r, a1), col + (alpha,), ref=(0, 0, -1))
-            m.tri(p(r * 0.86, a0), p(r, a1), p(r * 0.86, a1), col + (alpha,), ref=(0, 0, -1))
-            m.tri((0, 0, 0), p(r * 0.86, a0), p(r * 0.86, a1), col + (alpha * 0.22,), ref=(0, 0, -1))
-        nd = self.render.attachNewNode(m.node("ctf_ring"))
-        nd.setTransparency(TransparencyAttrib.MAlpha)
-        nd.setDepthWrite(False)
-        nd.setLightOff()
-        nd.setTwoSided(True)
-        nd.setBin("transparent", 3)
-        return nd
-
-    def ctf_clear(self):
-        """CTF-Anzeige abbauen (anderer Modus / neue Runde ohne CTF)."""
-        ui = getattr(self, "ctf_ui", None)
-        if ui is None:
-            return
-        for d in (ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"]):
-            for v in d.values():
-                for nd in (v if isinstance(v, (list, tuple)) else (v,)):
-                    if hasattr(nd, "removeNode"):
-                        nd.removeNode()
-            d.clear()
-        for key in ("s0", "sep", "s1", "status", "carry", "team"):
-            self.set_text(ui[key], "")
-        ui["arrow"].hide()
-
-    def update_ctf(self, dt):
-        """11: Flaggen in der Welt (am Ständer, am Boden, am Rücken des Trägers), Ringe, HUD (Teampunkte, Status,
-        Pfeil zur Basis für den Träger) und alle CTF_PING_T s ein grober Kreis um jeden Flaggenträger auf der Minimap."""
-        w, pl = self.world, self.player
-        ui = getattr(self, "ctf_ui", None)
-        if w is None or pl is None or w.mode != "ctf" or not w.ctf_bases:
-            if ui is not None and (ui["views"] or ui["rings"] or ui["mm"]):
-                self.ctf_clear()
-            return
-        if ui is None:
-            ui = self.ctf_ui_build()
-        now = time.time()
-        my_t = w.team_of.get(self.my_id)
-        if my_t != ui["myteam"]:
-            ui["myteam"] = my_t
-            self.refresh_fp_arms()                         # Armbinde in der Ego-Ansicht in der Teamfarbe
-        # --- Abgabezonen / Flaggenstände (Ringe am Boden)
-        for t, (bx, by, bz) in enumerate(w.ctf_bases[:2]):
-            if t not in ui["rings"]:
-                rg = self.ctf_ring(CTF_CAP_R if w.ctf_neutral else CTF_PICK_R * 1.25, CTF_TEAM_COLS[t])
-                rg.setPos(bx, by, bz + 0.04)
-                ui["rings"][t] = rg
-            ui["rings"][t].setColorScale(1, 1, 1, 0.75 + 0.25 * math.sin(now * 2.4 + t))
-        # --- Flaggen
-        seen = set()
-        for f in w.flags:
-            seen.add(f.fid)
-            col = self.ctf_flag_col(f.team)
-            v = ui["views"].get(f.fid)
-            if v is None:
-                root, cloth = build_ctf_flag(col, 1.0, base=True)
-                root.reparentTo(self.render)
-                glow = self.ctf_ring(CTF_PICK_R, col, 0.55)
-                v = ui["views"][f.fid] = (root, cloth, glow)
-            root, cloth, glow = v
-            if f.state in ("carried", "wait"):
-                root.hide()
-                glow.hide()
-            else:
-                root.show()
-                glow.show()
-                root.setPos(f.x, f.y, f.z)
-                glow.setPos(f.x, f.y, f.z + 0.03)
-                if f.state == "dropped":                   # liegt: schräg, blinkt leicht
-                    root.setHpr((f.fid * 47) % 360, 0, 28.0)
-                    glow.setColorScale(1, 1, 1, 0.5 + 0.5 * math.sin(now * 6.0))
-                else:
-                    root.setHpr(0, 0, 0)
-                    glow.setColorScale(1, 1, 1, 0.8)
-                cloth.setH(12.0 * math.sin(now * 2.2 + f.fid) + 6.0 * math.sin(now * 4.7 + f.fid * 1.3))
-        for fid in [k for k in ui["views"] if k not in seen]:
-            for nd in ui["views"].pop(fid):
-                nd.removeNode()
-        # --- Flagge am Rücken des Trägers (andere Spieler; die eigene sieht man in der Ego-Ansicht nicht)
-        carried = {f.carrier: f for f in w.flags if f.state == "carried" and f.carrier != self.my_id}
-        for pid in list(ui["back"]):
-            pv = self.player_views.get(pid)
-            nd, key = ui["back"][pid]
-            if pid not in carried or pv is None or key != (id(pv), carried[pid].team):
-                nd.removeNode()
-                del ui["back"][pid]
-        for pid, f in carried.items():
-            pv = self.player_views.get(pid)
-            if pv is None or pid in ui["back"]:
-                if pid in ui["back"]:
-                    cl = ui["back"][pid][0].find("**/tuch")
-                    if not cl.isEmpty():
-                        cl.setH(15.0 * math.sin(now * 3.1 + pid))
-                continue
-            holder = pv.torso.attachNewNode("ctf_ruecken")
-            holder.setPos(0.12, -0.24, -0.28)
-            holder.setP(14.0)                              # leicht nach hinten geneigt
-            root, cloth = build_ctf_flag(self.ctf_flag_col(f.team), 0.62, base=False)
-            root.reparentTo(holder)
-            root.setH(-90.0)                               # Tuch weht nach hinten
-            ui["back"][pid] = (holder, (id(pv), f.team))
-        # --- Grober Kreis um jeden Träger (alle sehen ihn, alle CTF_PING_T s; Mitte zufällig versetzt)
-        if now - ui["ping_t"] >= CTF_PING_T:
-            ui["ping_t"] = now
-            if not hasattr(self, "enemy_pings"):
-                self.intel_reset()
-            for f in w.flags:
-                if f.state != "carried" or f.carrier == self.my_id:
-                    continue
-                c = w.players.get(f.carrier)
-                if c is None or c.hp <= 0:
-                    continue
-                a, d = self.prng.uniform(0, 2 * math.pi), CTF_PING_R * 0.85 * math.sqrt(self.prng.random())
-                self.enemy_pings.append(dict(pid=-100 - f.fid, x=c.x + math.cos(a) * d, y=c.y + math.sin(a) * d,
-                                             r=CTF_PING_R, t0=now, mm=None, bm=None, col=self.ctf_flag_col(f.team),
-                                             life=CTF_PING_LIFE))
-        # --- HUD: Teampunkte, Flaggenstatus, eigene Rolle
-        s0, s1 = w.team_score[0], w.team_score[1]
-        lim = f"   (bis {w.score_limit})" if w.score_limit > 0 else ""
-        self.set_text(ui["s0"], f"BLAU {s0}")
-        self.set_text(ui["sep"], ":")
-        self.set_text(ui["s1"], f"{s1} ROT" + lim)
-        parts = []
-        for f in w.flags:
-            nm = ("Blaue Flagge" if f.team == 0 else "Rote Flagge") if f.team in (0, 1) else "Flagge"
-            if f.state == "home":
-                st = "in der Basis" if f.team in (0, 1) else "in der Burg"
-            elif f.state == "carried":
-                c = w.players.get(f.carrier)
-                ct = w.team_of.get(f.carrier)
-                st = ("getragen von " + (c.name[:12] if c is not None else "?")
-                      + (f" ({CTF_TEAM_NAMES[ct]})" if ct in (0, 1) and f.team not in (0, 1) else ""))
-            elif f.state == "dropped":
-                st = f"liegt  ({int(math.ceil(max(0.0, f.drop_t)))} s)"
-            else:
-                st = f"neue in {int(math.ceil(max(0.0, f.drop_t)))} s"
-            parts.append(f"{nm}: {st}")
-        self.set_text(ui["status"], "     ".join(parts))
-        if my_t in (0, 1):
-            self.set_text(ui["team"], f"TEAM {CTF_TEAM_NAMES[my_t].upper()}")
-            ui["team"].setFg(tuple(min(1.0, c * 1.15 + 0.15) for c in CTF_TEAM_COLS[my_t]) + (1,))
-        else:
-            self.set_text(ui["team"], "")
-        mine = w.ctf_carried(self.my_id) if pl.hp > 0 else None
-        if mine is not None and my_t in (0, 1) and my_t < len(w.ctf_bases):
-            bx, by, _bz = w.ctf_bases[my_t]
-            h = math.radians(pl.heading)
-            dx, dy = bx - pl.x, by - pl.y
-            fwd = dx * -math.sin(h) + dy * math.cos(h)
-            rgt = dx * math.cos(h) + dy * math.sin(h)
-            ui["arrow"].setR(math.degrees(math.atan2(rgt, fwd)))
-            ui["arrow"].setColorScale(*(tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1.0,)))
-            ui["arrow"].setScale(1.0 + 0.08 * math.sin(now * 6.0))
-            ui["arrow"].show()
-            own = next((q for q in w.flags if q.team == my_t), None)
-            extra = ("   -   EIGENE FLAGGE ZURÜCKHOLEN!" if CTF_NEED_HOME and own is not None and own.state != "home" else "")
-            self.set_text(ui["carry"], f"DU HAST DIE FLAGGE  -  ZUR BASIS  {int(math.hypot(dx, dy))} m{extra}")
-        else:
-            ui["arrow"].hide()
-            self.set_text(ui["carry"], "")
-
-    def update_ctf_map(self, big=False):
-        """11: Minimap (bzw. grosse Karte): Basen (eigene deutlich, als Träger pulsierend), sichtbare Flaggen (am Ständer,
-        am Boden) und die Mitspieler des eigenen Teams als Pfeile in der Teamfarbe."""
-        w, pl, ui = self.world, self.player, getattr(self, "ctf_ui", None)
-        if ui is None or w is None or w.mode != "ctf":
-            return
-        store = ui["bm"] if big else ui["mm"]
-        dotf = self.bm_dot_factory if big else self.mm_dot_factory
-        arrf = self.bm_arrow if big else self.mm_arrow_factory
-        xy = (lambda x, y: self.bm_xy(x, y)) if big else (lambda x, y: self.mm_xy(x, y))
-        now = time.time()
-        my_t = w.team_of.get(self.my_id)
-        carrying = w.ctf_carried(self.my_id) is not None and pl.hp > 0
-        shown = set()
-
-        def put(key, x, y, size, col, pulse=False):
-            n = store.get(key)
-            if n is None:
-                n = store[key] = dotf(size, col + (1,))
-                n.setR(45.0)                               # Raute
-            p = xy(x, y)
-            n.setPos(p[0], 0, p[1])
-            n.setScale(1.0 + (0.35 + 0.35 * math.sin(now * 7.0) if pulse else 0.0))
-            n.show()
-            shown.add(key)
-
-        for t, (bx, by, _bz) in enumerate(w.ctf_bases[:2]):
-            own = t == my_t
-            put(("base", t), bx, by, (0.016 if own else 0.011) * (1.4 if big else 1.0), CTF_TEAM_COLS[t],
-                pulse=own and carrying)
-        for f in w.flags:
-            if f.state in ("home", "dropped"):
-                put(("flag", f.fid), f.x, f.y, 0.009 * (1.4 if big else 1.0),
-                    tuple(min(1.0, c * 1.2 + 0.25) for c in self.ctf_flag_col(f.team)), pulse=f.state == "dropped")
-        for pid, p in w.players.items():                   # Teamkameraden
-            if pid == self.my_id or p.hp <= 0 or my_t not in (0, 1) or w.team_of.get(pid) != my_t:
-                continue
-            key = ("ally", pid)
-            n = store.get(key)
-            if n is None:
-                n = store[key] = arrf(0.016 if not big else 0.022, tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1,))
-            q = xy(p.x, p.y)
-            n.setPos(q[0], 0, q[1])
-            n.setR(-(p.heading - (0.0 if big else pl.heading)))
-            n.show()
-            shown.add(key)
-        for key, n in store.items():
-            if key not in shown:
                 n.hide()
 
     def mm_xy(self, x, y, clamp=True):
@@ -125585,7 +123056,6 @@ class Game(ShowBase):
             self.mm_strike_edge.hide()
         self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
         self.update_bigmap()
-        self.update_ctf_map()                       # 11: Basen, Flaggen, Teamkameraden
         # Funkbaken: eigene Baken als Punkte, alle Spieler in ihrem Radius als Pfeile
         mine = [g for g in self.world.gadgets if g.kind == GAD_BEACON and g.owner == self.my_id]
         ids = {g.gid for g in mine}
@@ -125839,8 +123309,7 @@ class Game(ShowBase):
         fr = getattr(self, "gear_set_frame", None)
         if fr is not None:                                      # 10h: Rahmen in der Spielerfarbe
             if full is not None:
-                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0,
-                                   getattr(pl, "team", None))["acc"]
+                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0)["acc"]
                 fr.setColor(acc[0], acc[1], acc[2], 1.0)
                 fr.setColorScale(1, 1, 1, 0.8 + 0.2 * math.sin(time.time() * 3.0))
                 fr.show()
@@ -126253,10 +123722,10 @@ class HeliView:
 class MobView:
     """Darstellung eines Mobs: Modell, Lauf-/Angriffsanimation, Trefferblitz, Lebensbalken."""
 
-    def __init__(self, mob, mtn=True):
+    def __init__(self, mob):
         look = None
         if mob.kind == "critter":                            # Fellfarbe passend zur Karte (alle gleich)
-            look = {"fur": CRITTER_COLORS["standard" if mtn else "karte"]}
+            look = {"fur": CRITTER_COLORS["karte"]}
         parts = build_mob(mob.kind, look)
         self.root, self.torso, self.legL, self.legR, self.bar, self.fg = parts[:6]
         self.rotors = parts[6] if len(parts) > 6 else []
@@ -126382,8 +123851,7 @@ def save_settings(d):
 
 
 # Vorschaubilder der Karten (256x144, 6 Bit, zlib + base64)
-MAP_PREVIEWS = {
-    "blood_gulch": (320, 180, "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"),
+MAP_PREVIEWS = {
     "polytown": (256, 144, "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"),
     "mc_ttt": (256, 144, "eNrtvSuY40qWLfx9BQokSJDAwMDAwEBAQEBAIEAAAQEBAYEAAgICAgICAgICBgYGAgIGBgkSFEhQ4IACBQoUKHDAAQ0aNBjQYMCAAQMaNOjvrh1bUurprP7/O/fe6rFPlI/Sb8tr7732M+ov/1Xf133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d1329t85f/nY/Cff1P3Zdv/7lfhLu63/i+vo3rObStMf3E3Jf/yMID9Z/AvDVy58CFbueF6f56fUvuIVuv5+i+/oXV/t/b7794/LjH8X1h20ZQgjPldXz7833f9Tf/n43BPf1r6v5Se2X1x9pdU2KGspfSgn8u64LE5BVl+ry9fz5r/cTdV//qmwfaj8pr5axdxzbsW2A33EcXPu+53ue74r8/AmG4Hw/Xff1L6b8f/sPaP7q5Q+VlMC8HFyIAvm+iqIgCJLiBF9AW4q/30/aff1LeLv/BcIP2AvHEqTtSeHzxdEX27YhBUF78cMwiOIkP73cPeL7+uU5D7m0xPz9MLEti2HPOp8PcHH1RSlYgAjXYah8Dx5B0XnEd0NwX7+e2gdujy9/UkkexpkfBJ6++CD6g+vhnwB/mqaJvsRxnCRZVtZF/Xp8+eN+Pu/rl8M/OA8IvxSO110Y8FD1EAdaGvZD/AP5JAJaCkgE4iiOFG6D73CPi97XL6b/v/29ev7dA9p9Uv4AfEgURwXgNxGojvIo6OP30hHrS5bnUPxpnuMgZmOQZnf839cvqP//Dv3vuZLUu+sC/FhJXkIC4tCNfUeFnuZFPluGFv9FgX8sLLgxveP/vn5l/IPtgOng2vNwEBTN57Q84YbAs6MoJPUv7Mh3It8uYpHGflJU2fkaQFbiWGmPIM2KO/7v69db3/5xfP6hPCv2LQVtn1XZ6Xr+/KesrAKxj1xTiYNyDSWN2DeVZxSRXcVOVh7D/Cg93yVuJKJAlnl8/u3f7/i/r18P/9dvkdzGvpEpu/76nzoc+resOCpnB9gr14xIOmyAP/LNLHKK0DjVl/PXv5+//GfZfJHWJnT3p8y94/++fsU6t9PLH0kEti/gzgLDRIq+/yOv6sDehmIfkP43A2Ekvp0GVhG7WWCWVQ3B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"),
 }
@@ -126415,19 +123883,11 @@ def _exp_autostart(g):
     do = spec.get("do")
     if do == "host":
         cfg = spec.get("cfg") if isinstance(spec.get("cfg"), dict) else {}
-        if cfg.get("mode") == "ctf":                  # 11: Capture the Flag aus dem Hauptmenü - CTF-Standards
-            g.cfg["mobs"], g.cfg["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
-        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map", "ff", "loot", "plim"):
+        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map"):
             if k in cfg:
                 g.cfg[k] = cfg[k]
-        if g.cfg.get("mode") not in MODES:
+        if g.cfg.get("mode") not in ("koth", "dm"):
             g.cfg["mode"] = "koth"
-        p_ = g.cfg.get("map")
-        if g.cfg["mode"] == "ctf" and p_ and not Game.is_bg_map("", p_):
-            g.cfg["map"] = None                       # 11: CTF nur auf Polytown und Blood Gulch
-        elif g.cfg["mode"] != "ctf" and p_ and Game.is_bg_map("", p_):
-            g.cfg["mode"] = "ctf"                     # 11: Blood Gulch gibt es nur im CTF
-            g.cfg["mobs"], g.cfg["tomahawk"] = CTF_MOBS_DEFAULT, CTF_TOMA_DEFAULT
         g.start_game("host")
     elif do == "join":
         g.show_menu("join")
