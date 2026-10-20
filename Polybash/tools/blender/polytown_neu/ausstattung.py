@@ -134,7 +134,8 @@ def bushaltestelle(b, x, y, zb, th):
     sx_, sy_, _ = g.P((-2.9, -0.7, 0.0))
     fx, fy = _dir(th)
     face = FRONT[th % 360]
-    b.prism(sx_, sy_, zb, 0.05, 2.3, 6, "Schild Pfosten")
+    fn = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[face]
+    b.prism(sx_ - fn[0] * 0.14, sy_ - fn[1] * 0.14, zb, 0.05, 2.3, 6, "Schild Pfosten")                   # Pfosten hinter der Tafel
     SC.schild(b, sx_, sy_ + 0.0, face, [("bus", "H", None)], pfosten=False, unten=1.75)
     return b
 
@@ -262,9 +263,12 @@ def wegweiser(b, x, y, zb, face, eintraege):
     n = len(eintraege)
     for i, (text, pfeil) in enumerate(eintraege):
         SC.schild(b, x, y, face, [("richtung", text, pfeil)], pfosten=False, unten=1.15 + 0.95 * (n - 1 - i), zb=zb)
-    h = 1.15 + 0.95 * n + 0.15
-    b.prism(x, y, zb - 0.5, 0.06, h + 0.5, 6, "Schild Pfosten")
-    b.bx.append((x - 0.06, y - 0.06, zb - 0.5, x + 0.06, y + 0.06, zb + h))
+    k = SC.SCHILD_SKALA
+    h = (1.15 + 0.95 * (n - 1) + SC.TAFEL_H - 0.1) * k
+    nx, ny = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[face]
+    px, py = x - nx * 0.16 * k, y - ny * 0.16 * k                          # Pfosten hinter den Tafeln (Tafeldicke 0,08 m, Pfosten dahinter)
+    b.prism(px, py, zb - 0.5, 0.06, h + 0.5, 6, "Schild Pfosten")
+    b.bx.append((px - 0.06, py - 0.06, zb - 0.5, px + 0.06, py + 0.06, zb + h))
 
 
 def _wegweiser_orte():

@@ -73,7 +73,7 @@ def _tafel_breite(text, pfeil):
     return text_breite(text) + 0.36 + (0.55 if pfeil else 0.0)
 
 
-def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN, zb=0.0):
+def _schild_roh(b, x, y, face, tafeln, pfosten=True, unten=UNTEN, zb=0.0):
     """Schild bei (x, y) mit Blickrichtung face ('N','S','E','W' = Richtung, in die die Vorderseite zeigt).
 
     tafeln: Liste (art, text, pfeil) von links nach rechts aus Sicht des Betrachters; art 'standort'|'richtung'|'halt',
@@ -140,12 +140,29 @@ def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN, zb=0.0):
             _flat(b, [W(ua, wf, vc), W(kopf, wf, vc + 0.17), W(kopf, wf, vc - 0.17)], schrift, nv)
             _flat(b, [W(kopf, wf, vc - 0.045), W(ub, wf, vc - 0.045), W(ub, wf, vc + 0.045), W(kopf, wf, vc + 0.045)], schrift, nv)
         u += bw + 0.04
-    if pfosten == "mitte":
-        lbox(-0.05, 0.05, -0.05, 0.05, zb, v0 + 0.02, "Schild Pfosten")
+    if pfosten == "mitte":                                        # Pfosten hinter der Tafel (w < -0.04), reicht bis knapp unter die Oberkante
+        lbox(-0.05, 0.05, -0.14, -0.04, zb, v1 - 0.08, "Schild Pfosten")
     elif pfosten:
         for pu in (-gesamt / 2 + 0.25, gesamt / 2 - 0.25):
-            lbox(pu - 0.04, pu + 0.04, -0.04, 0.04, zb, v0 + 0.02, "Schild Pfosten")
+            lbox(pu - 0.045, pu + 0.045, -0.135, -0.04, zb, v1 - 0.08, "Schild Pfosten")
     return gesamt
+
+
+SCHILD_SKALA = 0.8                                                # alle Schilder 20 % kleiner
+
+
+def schild(b, x, y, face, tafeln, pfosten=True, unten=UNTEN, zb=0.0):
+    """Wie _schild_roh, aber um den Fusspunkt (x, y, zb) auf SCHILD_SKALA verkleinert (Flaechen und Hindernisquader). Rueckgabe: Breite."""
+    n0, nb0 = len(b.v), len(b.bx)
+    g = _schild_roh(b, x, y, face, tafeln, pfosten, unten, zb)
+    k = SCHILD_SKALA
+    for i in range(n0, len(b.v)):
+        vx, vy, vz = b.v[i]
+        b.v[i] = (x + (vx - x) * k, y + (vy - y) * k, zb + (vz - zb) * k)
+    for i in range(nb0, len(b.bx)):
+        x0, y0, z0, x1, y1, z1 = b.bx[i]
+        b.bx[i] = (x + (x0 - x) * k, y + (y0 - y) * k, zb + (z0 - zb) * k, x + (x1 - x) * k, y + (y1 - y) * k, zb + (z1 - zb) * k)
+    return g * k
 
 
 # ------------------------------------------------------------------ Pistennummern

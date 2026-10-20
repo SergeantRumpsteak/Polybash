@@ -183,3 +183,10 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - Hochsitz bei der Muehle entfernt; neuer Standort in der oestlichen Sattelsenke der Burgruine (94,5 / 264).
 - Burgruine: die drei Steintreppen enden in begehbaren Plattformen (Suedtreppe am Eckbastion, Nordtreppe hinter dem Palas, Turmtreppe auf der Nordmauerkrone) mit Bruestung; Treppen haben Bruchsteinbruestungen an der offenen Seite.
 - Tests sind reine Mock-Tests (kein echtes Blender).
+
+### Korrekturen: Schilder, Hotel, Bankweg, offene Fenster, Ringbaeume, Bahnhofsuhr
+- Schilder: Pfosten sitzen hinter den Tafeln (Wegweiser, Haltestellen-, Flughafen- und Pistenschilder), alle Schilder 20 % kleiner (`schilder.SCHILD_SKALA`, Skalierung um den Fusspunkt, auch fuer Hindernisquader).
+- Hotel um 180 Grad gedreht (Eingang zur Spange Nord, Gebaeude dafuer etwas zum Ring hin verschoben); Zugangswege zu Hotel und Bank enden am naechsten Punkt einer Strassenlinie (`stadt._naechster_strassenpunkt`) und kreuzen nie das Gebaeude (Bank: gerader Weg von der Tuer zur Werkstrasse).
+- Offene Fenster haben keine Laeden und keine Bretter. Alle Haeuser mit offenem Fenster (Stadthaus, Bauernhaus, Hotel) sind per Treppe bis ins Obergeschoss begehbar (Test).
+- Einzelne Laubbaeume (`wald.ring_baeume`, 10 Stueck) auf den Gruenflaechen zwischen Burg und Kreisstrasse.
+- Bahnhofsuhr sitzt jetzt auf dem Giebeldreieck vor dem Dachrand und ist komplett sichtbar (vorher verdeckte die Dachkante die obere Haelfte).

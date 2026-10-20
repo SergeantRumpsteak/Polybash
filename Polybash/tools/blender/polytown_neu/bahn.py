@@ -217,15 +217,16 @@ def empfangsgebaeude(b, cx, cy, lvl=1):
     g.box(-1.3, -hd - 1.5, -0.6, 1.3, -hd - 0.9, 0.1, "Beton")
     g.box(-1.3, -hd + WD, F0, -1.25, -hd + WD + 0.65, F0 + 3.1, "Tuer gruen")
     g.box(1.25, -hd + WD, F0, 1.3, -hd + WD + 0.65, F0 + 3.1, "Tuer gruen")
-    zu = F0 + 5.1
+    zu = F0 + 6.4                                                       # Uhr auf dem Giebeldreieck (Dachrand), ueber dem Portal: dort verdeckt sie nichts
+    yu = -hd - 0.55                                                     # Vorderkante des Daches (Dachueberstand e = 0,55 m)
     n = 16
-    P = [(1.0 * math.cos(2 * math.pi * k / n), -hd - 0.09, zu + 1.0 * math.sin(2 * math.pi * k / n)) for k in range(n)]
+    P = [(1.0 * math.cos(2 * math.pi * k / n), yu - 0.09, zu + 1.0 * math.sin(2 * math.pi * k / n)) for k in range(n)]
     g.poly(P, (0.0, -1.0, 0.0), "Uhr")
     for hh in range(12):
         a = 2 * math.pi * hh / 12
-        g.box(0.82 * math.cos(a) - 0.04, -hd - 0.11, zu + 0.82 * math.sin(a) - 0.04, 0.82 * math.cos(a) + 0.04, -hd - 0.09, zu + 0.82 * math.sin(a) + 0.04, "Schrift schwarz")
-    g.box(-0.04, -hd - 0.12, zu, 0.04, -hd - 0.09, zu + 0.65, "Schrift schwarz")
-    g.box(0.0, -hd - 0.12, zu - 0.04, 0.48, -hd - 0.09, zu + 0.04, "Schrift schwarz")
+        g.box(0.82 * math.cos(a) - 0.04, yu - 0.11, zu + 0.82 * math.sin(a) - 0.04, 0.82 * math.cos(a) + 0.04, yu - 0.09, zu + 0.82 * math.sin(a) + 0.04, "Schrift schwarz")
+    g.box(-0.04, yu - 0.12, zu, 0.04, yu - 0.09, zu + 0.65, "Schrift schwarz")
+    g.box(0.0, yu - 0.12, zu - 0.04, 0.48, yu - 0.09, zu + 0.04, "Schrift schwarz")
     fensterschmuck(g, "x", -hd, -1, -4.2, F0 + 2.25, 1.6, 2.7, "Laden gruen alt" if lvl else "Laden gruen")
     fensterschmuck(g, "x", -hd, -1, 4.2, F0 + 2.25, 1.6, 2.7, "Laden gruen alt" if lvl else "Laden gruen")
     fensterschmuck(g, "x", hd, 1, -4.2, F0 + 2.25, 1.6, 2.7, None)

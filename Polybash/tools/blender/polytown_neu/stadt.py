@@ -290,7 +290,7 @@ def fensterschmuck(g, ach, aussen, sg, ac, zc, w, h, laden, zustand="ok", lz=("o
         for k, zz in enumerate((zl + 0.1, zc - 0.1, zh - 0.35)):
             da = 0.12 * (k - 1)
             pb(al - 0.15 + da, ah + 0.15 - 0.1 * (k % 2), 0.05, 0.09, zz, zz + 0.2, "Holz alt")
-    if laden:
+    if laden and zustand != "offen":                                                    # offenes Fenster: keine Laeden und keine Bretter davor
         for k, (lo, hi) in enumerate(((al - t - 0.52, al - t - 0.02), (ah + t + 0.02, ah + t + 0.52))):
             if lz[k] == "ok":
                 pb(lo, hi, 0.0, 0.05, zl - t, zh + t, laden)
@@ -1077,6 +1077,34 @@ def _flaeche_frei(belegt, rc, ignoriere=(), ring_extra=8.0):
 
 
 
+def _naechster_strassenpunkt(strs, p, haus, max_d=30.0):
+    """Naechster Punkt auf einer Strassen-Mittellinie (Projektion auf die Teilstuecke, nicht nur Stuetzpunkte), dessen Verbindung zu p das (gedrehte)
+    Gebaeude haus = (cx, cy, theta, w, d) nicht kreuzt (Zugangsweg fuehrt nie durch das Haus). Rueckgabe: (Punkt, Abstand) oder (None, 1e9)."""
+    hc, hs = math.cos(haus[2]), math.sin(haus[2])
+
+    def innen(x, y):
+        lx, ly = (x - haus[0]) * hc + (y - haus[1]) * hs, -(x - haus[0]) * hs + (y - haus[1]) * hc
+        return abs(lx) < haus[3] / 2 + 0.5 and abs(ly) < haus[4] / 2 + 0.5
+
+    best, bd = None, 1e9
+    for st_ in strs:
+        pts = st_["pts"]
+        for (a, b) in zip(pts[:-1], pts[1:]):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            ln2 = dx * dx + dy * dy
+            if ln2 < 1e-9:
+                continue
+            t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / ln2))
+            q = (a[0] + dx * t, a[1] + dy * t)
+            dd = math.hypot(q[0] - p[0], q[1] - p[1])
+            if dd >= bd or dd > max_d:
+                continue
+            if any(innen(p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f) for f in [k / 20.0 for k in range(0, 21)]):
+                continue
+            best, bd = q, dd
+    return best, bd
+
+
 def setze_ringhotel(strs, belegt, haeuser, pfade, spezial):
     """Hotel (Stadthaus, 12 x 10 m) auf der Gruenflaeche im Nordwest-Quartal des Kreises: ersetzt das mittlere Ringhaus, steht wie die Ringhaeuser tangential zum
     Ringweg (Tuer zur Burgmitte, Portikus, Treppe, Pfad zum Ring); schraeg gedrehte Hindernisse werden als Kacheln gebaut (Lok.kachel)."""
@@ -1099,18 +1127,33 @@ def setze_ringhotel(strs, belegt, haeuser, pfade, spezial):
             cx, cy = C + (rad + d / 2) * math.cos(a), C + (rad + d / 2) * math.sin(a)
             c_, s_ = math.cos(th), math.sin(th)
             pts = [(cx + lx * c_ - ly * s_, cy + lx * s_ + ly * c_) for lx in [-w / 2 - 0.3 + 1.0 * i for i in range(int(w + 0.6) + 2)] for ly in [-d / 2 - vor + 1.0 * j for j in range(int(d + vor + 0.6) + 2)]]
-            if _punkte_frei(belegt, pts, ring_extra=0.3, burgquadrat=False):
-                zb = sum(U.gelaende_hoehe(*p) for p in pts[::7]) / len(pts[::7])
-                pf = ((C + (rr + U.BREITE_WEG / 2 - 0.3) * math.cos(a), C + (rr + U.BREITE_WEG / 2 - 0.3) * math.sin(a)),
-                      (C + (rad + 0.1) * math.cos(a), C + (rad + 0.1) * math.sin(a)))
-                for gx in range(-int(w / 2) - 1, int(w / 2) + 2, 2):                  # Grundriss als Rechteckkacheln (fuer Baeume/Gras/Laternen)
+            if not _punkte_frei(belegt, pts, ring_extra=0.3, burgquadrat=False):
+                continue
+            # Hotel um 180 Grad gedreht: Eingang zeigt vom Ring weg (zur Spange Nord); ggf. nach aussen verschoben, damit der Vorbau frei bleibt
+            ra_, rs_ = math.cos(a), math.sin(a)
+            for shift in (-3.4, -3.0, -2.6, -2.2, -1.8, -1.4, -1.0, -0.5, 0.0, 1.0):
+                hx_, hy_ = cx + shift * ra_, cy + shift * rs_
+                th2 = th + math.pi
+                c2, s2 = math.cos(th2), math.sin(th2)
+                pts2 = [(hx_ + lx * c2 - ly * s2, hy_ + lx * s2 + ly * c2) for lx in [-w / 2 - 0.3 + 1.0 * i for i in range(int(w + 0.6) + 2)] for ly in [-d / 2 - vor + 1.0 * j for j in range(int(d + vor + 0.6) + 2)]]
+                if not _punkte_frei(belegt, pts2, ring_extra=0.3, burgquadrat=False, hoehe_tol=0.4):
+                    continue
+                fuss = (hx_ + (d / 2 + vor + 0.1) * s2, hy_ - (d / 2 + vor + 0.1) * c2)               # Fusspunkt der Treppe (lokal x = 0, y = -d/2 - vor)
+                ecken2 = [(hx_ + lx * c2 - ly * s2, hy_ + lx * s2 + ly * c2) for lx, ly in ((-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2))]
+                rc2 = (min(p[0] for p in ecken2), min(p[1] for p in ecken2), max(p[0] for p in ecken2), max(p[1] for p in ecken2))
+                best, bd = _naechster_strassenpunkt(strs, fuss, (hx_, hy_, th2, w, d))
+                if best is None:
+                    continue
+                zb = sum(U.gelaende_hoehe(*p) for p in pts2[::7]) / len(pts2[::7])
+                pf = (best, fuss)
+                for gx in range(-int(w / 2) - 1, int(w / 2) + 2, 2):
                     for gy in range(-int(d / 2) - 3, int(d / 2) + 2, 2):
-                        px, py = cx + gx * c_ - gy * s_, cy + gx * s_ + gy * c_
+                        px, py = hx_ + gx * c2 - gy * s2, hy_ + gx * s2 + gy * c2
                         belegt.rechtecke.append((px - 1.4, py - 1.4, px + 1.4, py + 1.4))
                 pfade.append(pf)
-                ecken = [(cx + lx * c_ - ly * s_, cy + lx * s_ + ly * c_) for lx, ly in ((-w / 2, -d / 2 - vor), (w / 2, -d / 2 - vor), (w / 2, d / 2), (-w / 2, d / 2))]
+                ecken = [(hx_ + lx * c2 - ly * s2, hy_ + lx * s2 + ly * c2) for lx, ly in ((-w / 2, -d / 2 - vor), (w / 2, -d / 2 - vor), (w / 2, d / 2), (-w / 2, d / 2))]
                 rc = (min(p[0] for p in ecken), min(p[1] for p in ecken), max(p[0] for p in ecken), max(p[1] for p in ecken))
-                spezial.append({"art": "hotel", "x": cx, "y": cy, "theta": th, "zb": zb, "rc": rc, "pfade": [pf], "kreise": []})
+                spezial.append({"art": "hotel", "x": hx_, "y": hy_, "theta": th2, "zb": zb, "rc": rc, "pfade": [pf], "kreise": []})
                 return
     haeuser.insert(i0, alt[0])                                   # kein Platz: Wohnhaus bleibt
     pfade.insert(i0, alt[1])
@@ -1142,13 +1185,10 @@ def setze_bank_sw(strs, belegt, haeuser, pfade, spezial):
                 continue
             zb = sum(U.gelaende_hoehe(*p) for p in pts[::5]) / len(pts[::5])
             tuer_fuss = (cx + (d / 2 + vor + 0.1) * s_, cy - (d / 2 + vor + 0.1) * c_)       # Fusspunkt der Treppe (lokal x = 0, y = -d/2 - vor)
-            best, bd = None, 1e9
-            for st_ in strs:
-                for (qx, qy) in st_["pts"]:
-                    dd = math.hypot(qx - tuer_fuss[0], qy - tuer_fuss[1])
-                    if dd < bd:
-                        best, bd = (qx, qy), dd
-            if bd > 24.0:
+            ecken_ = [(cx + lx * c_ - ly * s_, cy + lx * s_ + ly * c_) for lx, ly in ((-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2))]
+            rc_ = (min(p[0] for p in ecken_), min(p[1] for p in ecken_), max(p[0] for p in ecken_), max(p[1] for p in ecken_))
+            best, bd = _naechster_strassenpunkt(strs, tuer_fuss, (cx, cy, th, w, d), 24.0)
+            if best is None:
                 continue
             pf = (best, tuer_fuss)
             for gx in range(-int(w / 2) - 1, int(w / 2) + 2, 2):

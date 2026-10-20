@@ -109,6 +109,27 @@ def _zone_nah(x, y, m=3.5):
 _CACHE = {}
 
 
+def ring_baeume(M):
+    """Einzelne Laubbaeume auf den Gruenflaechen zwischen Burg (Quadrat 110..190) und Kreisstrasse (Ringweg): Raster 4 m mit Jitter, 45 % belegt, mindestens 1,8 m
+    Abstand zu Weg, Graben und Bauten (gleiche Maske wie das Gras), mindestens 5,5 m zu anderen Ringbaeumen."""
+    out = []
+    for ix in range(24, 76):
+        for iy in range(24, 76):
+            x = ix * 4.0 + (_h(ix, iy, 21) - 0.5) * 3.0
+            y = iy * 4.0 + (_h(ix, iy, 22) - 0.5) * 3.0
+            a = math.atan2(y - U.C, x - U.C)
+            if math.hypot(x - U.C, y - U.C) > U.ring_r(a) - U.BREITE_WEG / 2 - 2.5 or max(abs(x - U.C), abs(y - U.C)) < 42.0:
+                continue
+            if _h(ix, iy, 23) > 0.45:
+                continue
+            if not all(M.ok(x + dx, y + dy) for dx, dy in ((0, 0), (1.8, 0), (-1.8, 0), (0, 1.8), (0, -1.8))) or abs(U.gelaende_hoehe(x, y)) > 1.5:
+                continue
+            if any(math.hypot(x - ox, y - oy) < 5.5 for (ox, oy, _k) in out):
+                continue
+            out.append((x, y, 5 + int(_h(ix, iy, 24) * 3)))
+    return out
+
+
 def alle_baeume(P):
     """Alle Waldbaeume (x, y, Art) der Map: Wald an der Bahn und rauschartige Bebaumung der angrenzenden Gruenflaechen (ohne Burgberg: ruine.berghang)."""
     if _CACHE.get("P") is P:
@@ -133,6 +154,7 @@ def alle_baeume(P):
             if fw < 0.5 and k < 5:                                                      # ausserhalb mehr Laubbaeume
                 k = 5 + k % 3
             out.append((x, y, k))
+    out.extend(ring_baeume(M))
     _CACHE["P"], _CACHE["l"] = P, out
     return out
 
