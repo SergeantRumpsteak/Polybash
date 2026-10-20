@@ -785,10 +785,10 @@ def gasthaus(b, cx, cy, theta):
 
 
 def laden(b, cx, cy, theta):
-    """Laden (8 x 10 m) mit Markise ueber dem Schaufenster."""
+    """Laden (8 x 7,6 m) mit Markise ueber dem Schaufenster; steht zwischen Marktring-Strasse und Platz auf der Gruenflaeche."""
     g = Lok(b, cx, cy, 0.0, theta)
-    w, d, h, rh = 8.0, 10.0, 4.4, 2.4
-    g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, "Putz blau" if (round(cx) % 2) else "Putz weiss")
+    w, d, h, rh = 8.0, 7.6, 4.4, 2.4
+    g.box(-w / 2, -d / 2, -1.0, w / 2, d / 2, h, "Putz blau")
     satteldach(g, w, d, h, rh, "Dach grau", "Putz weiss")
     g.box(-w / 2 + 1.0, -d / 2 - 0.05, 0.9, w / 2 - 1.0, -d / 2, 2.6, "Fenster")
     g.box(-0.5, -d / 2 - 0.08, 0.0, 0.5, -d / 2, 2.1, "Tuer")
@@ -1287,10 +1287,10 @@ def plane_stadt():
     zentrum = [
         ("rathaus", 55.0, 171.0, 0.0, (44.0, 165.0, 66.0, 177.0)),                         # Nordseite, Fassade zum Platz (-y)
         ("gasthaus", 55.0, 130.0, math.pi, (46.0, 125.0, 64.0, 135.0)),                     # Suedseite, Fassade nach Norden
-        ("laden", 35.0, 142.0, math.pi / 2, (30.0, 137.0, 40.0, 147.0)),                    # Westseite, Fassade nach Osten (+x)
-        ("laden", 35.0, 158.0, math.pi / 2, (30.0, 153.0, 40.0, 163.0)),
-        ("laden", 75.0, 142.0, -math.pi / 2, (70.0, 137.0, 80.0, 147.0)),                   # Ostseite, Fassade nach Westen
-        ("laden", 75.0, 158.0, -math.pi / 2, (70.0, 153.0, 80.0, 163.0)),
+        ("laden", 36.0, 142.0, math.pi / 2, (32.0, 137.0, 40.0, 147.0)),                    # Westseite, Fassade nach Osten (+x)
+        ("laden", 36.0, 158.0, math.pi / 2, (32.0, 153.0, 40.0, 163.0)),
+        ("laden", 74.0, 142.0, -math.pi / 2, (70.0, 137.0, 78.0, 147.0)),                   # Ostseite, Fassade nach Westen
+        ("laden", 74.0, 158.0, -math.pi / 2, (70.0, 153.0, 78.0, 163.0)),
     ]
     for _, _, _, _, rc in zentrum:
         belegt.rechtecke.append(rc)

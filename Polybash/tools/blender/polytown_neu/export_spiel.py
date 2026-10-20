@@ -53,9 +53,31 @@ for _n in ("Wasser", "Teichwasser", "Brunnenwasser"):
     TEXMAP[_n] = ("pt_water", 8.0)
 for _n in ("Mauerwerk", "Mauerwerk dunkel", "Hof", "Stufen", "Treppensaeule", "Burgstein", "Burgstein dunkel", "Burgstein warm"):
     TEXMAP[_n] = ("pt_fort", 4.0)
+for _n in ("Putz weiss", "Putz gelb", "Putz rot", "Putz blau", "Putz gruen", "Putz grau", "Putz sand", "Putz weiss alt", "Putz gelb alt",
+           "Putz rot alt", "Putz gruen alt", "Putz grau alt", "Putz sand alt", "Putz creme alt", "Rathaus alt", "Innenwand", "Hangar Wand"):
+    TEXMAP[_n] = ("pt_plaster", 3.0)
+for _n in ("Ziegel", "Ziegel alt", "Ziegel dunkel", "Ziegel dunkel alt", "Klinker", "Klinker alt"):
+    TEXMAP[_n] = ("pt_brick", 3.0)
+for _n in ("Stein", "Stein alt", "Stein dunkel"):
+    TEXMAP[_n] = ("pt_rubble", 3.0)
+for _n in ("Dach rot", "Dach rot alt", "Dach rot dunkel", "Dach rot hell", "Dach rot braun", "Dach rot orange", "Dach rot grau", "Dach ocker"):
+    TEXMAP[_n] = ("pt_tile", 2.5)
+for _n in ("Dach grau", "Dach grau alt", "Dach grau dunkel", "Dach grau hell", "Dach grau braun", "Dach grau gruen", "Dach schwarz", "Dach Schiefer",
+           "Dach Schiefer dunkel", "Dach Schiefer hell"):
+    TEXMAP[_n] = ("pt_slate", 2.5)
+for _n in ("Holz", "Holz alt", "Holz dunkel", "Dielen", "Laden braun", "Laden braun alt", "Laden gruen", "Laden gruen alt", "Tuer", "Tuer gruen", "Tuer rot",
+           "Tuer blau", "Tuer grau"):
+    TEXMAP[_n] = ("pt_wood", 2.0)
+for _n in ("Schild gelb", "Schild weiss", "Schild rot", "Schild gruen", "Schild Pfosten"):
+    TEXMAP[_n] = ("pt_sign", 1.0)
+# Die Burgruine: ALLE Steinteile tragen die Burgstein-Textur (sonst fielen "Stein alt", "Stein dunkel" und "Felsen Burg" heraus)
+TEXPART = {("burgruine", _n): ("pt_fort", 4.0) for _n in ("Stein alt", "Stein dunkel", "Felsen Burg", "Burgstein", "Burgstein dunkel", "Burgstein warm")}
 WASSER_ALPHA = 0.9                                # Wasser ist leicht durchsichtig
 KIND_KLIPP, KIND_ZWEI, KIND_DACH, KIND_EIN = 1, 2, 4, 8       # wie TriMesh in spiel.py
 DACH_NZ = 0.3                                     # Dachflaechen: nach oben zeigend (Neigung < ca. 73 Grad)
+
+FLUEGEL_TEMPO = {"nord_muehle_fluegel": 22.0, "nord2_muehle_fluegel": 16.0}      # Muehlenfluegel: Grad pro Sekunde (um die Welle)
+SPIN_ACHSEN = {}                                  # Name -> (Drehpunkt, waagerechte Wellenrichtung); wird in szene_bauen gefuellt
 
 WEGLASSEN = ("umgebung_heli",)                    # im Spiel eigenes Fahrzeug (HeliView), nicht Teil der Karte
 
@@ -119,6 +141,10 @@ def szene_bauen():
     import polytown_neu as P
     P.main()
     B.Bau.__init__ = _bau_init
+    import muehle
+    import muehle2
+    SPIN_ACHSEN.update(muehle.FLUEGEL_ACHSE)
+    SPIN_ACHSEN.update(muehle2.FLUEGEL_ACHSE)
 
 
 # ------------------------------------------------------------------ Hilfen
@@ -157,12 +183,20 @@ def teile_umrechnen():
             lx = ly = lz = rz = 0.0
         spin = SPIN_NAMEN.get(t["name"])
         v = [tuple(p) for p in t["v"]]
-        if (lx or ly or lz or rz) and spin is None:
+        achse = SPIN_ACHSEN.get(t["name"])
+        if achse is not None:                                    # Muehlenfluegel: lokal um den Drehpunkt, Welle = +y des Knotens
+            (px, py, pz), (dx, dy) = achse
+            spin = FLUEGEL_TEMPO[t["name"]]
+            v = [((x - px) * dy - (y - py) * dx, (x - px) * dx + (y - py) * dy, z - pz) for x, y, z in v]
+        elif (lx or ly or lz or rz) and spin is None:
             cs, sn = math.cos(rz), math.sin(rz)
             v = [(lx + x * cs - y * sn, ly + x * sn + y * cs, lz + z) for x, y, z in v]
             t["verschoben"] = True
         t["w"] = v
-        t["spin"] = None if spin is None else dict(x=lx, y=ly, z=lz, h0=math.degrees(rz), speed=spin)
+        if achse is not None:
+            t["spin"] = dict(x=achse[0][0], y=achse[0][1], z=achse[0][2], h0=math.degrees(math.atan2(-achse[1][0], achse[1][1])), speed=spin, roll=True)
+        else:
+            t["spin"] = None if spin is None else dict(x=lx, y=ly, z=lz, h0=math.degrees(rz), speed=spin)
         namen = t["mats"]
         t["fm"] = [namen[i] for i in t["idx"]] if t["idx"] is not None else [namen[0]] * len(t["f"])
         out.append(t)
@@ -223,6 +257,16 @@ def ausrichten(v, faces, zaehl):
     return out
 
 
+def uv_koord(p, nrm, tile):
+    """Texturkoordinaten (u, v) in Kacheln: waagerechte Flaechen von oben (x, y); Waende und Daecher: u entlang der waagerechten Tangente,
+    v = Streckenlaenge in Hangrichtung (Hoehe / sin der Neigung), damit Ziegelreihen auch auf Schraegdaechern nicht gestaucht sind."""
+    if abs(nrm[2]) >= 0.7:
+        return p[0] / tile, p[1] / tile
+    hl = math.hypot(nrm[0], nrm[1])
+    tx_, ty_ = -nrm[1] / hl, nrm[0] / hl
+    return (p[0] * tx_ + p[1] * ty_) / tile, p[2] / (tile * math.sqrt(max(0.05, 1.0 - nrm[2] * nrm[2])))
+
+
 def darstellung(teile):
     sun, amb, dif = licht_konstanten()
     gruppen = {}
@@ -256,7 +300,7 @@ def darstellung(teile):
                 zaehl["entartet"] += 1
                 continue
             rgb, _rauh, emit, alpha = MATS[mn]
-            tx = TEXMAP.get(mn)
+            tx = TEXPART.get((t["name"], mn)) or TEXMAP.get(mn)
             if tx and tx[0] == "pt_water":
                 alpha = min(alpha, WASSER_ALPHA)
             if emit >= 1.0:
@@ -275,6 +319,8 @@ def darstellung(teile):
                         break
             col = bytes((min(255, int(rgb[0] * f3[0] * 255 + 0.5)), min(255, int(rgb[1] * f3[1] * 255 + 0.5)),
                          min(255, int(rgb[2] * f3[2] * 255 + 0.5)), min(255, int(alpha * 255 + 0.5))))
+            vrgb = t.get("vrgb")                                  # Randstreifen: Farbe und Alpha je Vertex
+
             if t["spin"]:
                 key = ("spin", t["name"])
             else:
@@ -288,17 +334,17 @@ def darstellung(teile):
                 g = gruppe(cls, key, t["spin"], txn)
             base = g.nv
             code = oct_code(nrm)
-            for p in pts:
+            for p, vi in zip(pts, fc):
                 g.P.extend(p)
                 g.N.append(code)
-                g.C += col
-                if txn:                                           # Texturkoordinaten: Ebene, die zur Flaechenrichtung passt (in Kacheln)
-                    if abs(nrm[2]) >= 0.7:
-                        g.UV.extend((p[0] / tx[1], p[1] / tx[1]))
-                    elif abs(nrm[0]) > abs(nrm[1]):
-                        g.UV.extend((p[1] / tx[1], p[2] / tx[1]))
-                    else:
-                        g.UV.extend((p[0] / tx[1], p[2] / tx[1]))
+                if vrgb is not None:
+                    cr, cg, cb, ca = vrgb[vi]
+                    g.C += bytes((min(255, int(cr * f3[0] * 255 + 0.5)), min(255, int(cg * f3[1] * 255 + 0.5)),
+                                  min(255, int(cb * f3[2] * 255 + 0.5)), min(255, int(ca * 255 + 0.5))))
+                else:
+                    g.C += col
+                if txn:                                           # Texturkoordinaten in Kacheln, Reihen waagerecht (auch bei gedrehten Waenden/Daechern)
+                    g.UV.extend(uv_koord(p, nrm, tx[1]))
             for i in range(1, len(pts) - 1):
                 g.I.extend((base, base + i, base + i + 1))
             g.nv += len(pts)
@@ -307,6 +353,94 @@ def darstellung(teile):
     fertig.sort(key=lambda g: (g.key or [-9999, -9999], g.cls, g.tx or ""))
     print("[Export] Darstellung:", dict(zaehl), "Gruppen", len(fertig), "Vertices", sum(g.nv for g in fertig))
     return fertig
+
+
+# ------------------------------------------------------------------ weicher Uebergang Strasse -> Gras
+HART = ("Strasse", "Weg", "Pfad", "Pflaster", "Piste", "Vorfeld", "Fahrbahn", "Schotterstrasse", "Hofboden", "Bahnsteig", "Schotterbett", "Hof", "Fahrspur",
+        "Schotter", "Schotter dunkel", "Brueckenbeton", "Insel", "Hangar Boden", "Markierung weiss", "Markierung gelb", "Markierung")
+RAND_BREITE = 1.4                                  # Breite des Verlaufs (m)
+RAND_MATS = ("Strasse", "Weg")
+
+
+def strassenraender(teile, R):
+    """Randstreifen entlang der Strassenkanten (Strasse, Weg) zum Rasen: eine durchsichtig auslaufende Flaeche (Alpha 0,8 an der Kante, 0 aussen),
+    damit der Uebergang Asphalt -> Gras nicht schlagartig ist. Nur dort, wo aussen Wiese liegt (nicht Platz, Pflaster, Haus, Wasser, andere Strasse)."""
+    n, S = R.n, R.S
+    gras = [[False] * n for _ in range(n)]
+    for t in teile:
+        if t["name"] in ("wiese", "burg_gelaende"):
+            for fc, mn in zip(t["f"], t["fm"]):
+                if mn == "Wiese":
+                    ps = [t["w"][i] for i in fc]
+                    for i in range(1, len(ps) - 1):
+                        R._dreieck(ps[0], ps[i], ps[i + 1], None, gras, False, True)
+    for t in teile:
+        for fc, mn in zip(t["f"], t["fm"]):
+            if mn in HART:
+                ps = [t["w"][i] for i in fc]
+                for i in range(1, len(ps) - 1):
+                    R._dreieck(ps[0], ps[i], ps[i + 1], None, gras, False, False)
+    for j in range(n):
+        for i in range(n):
+            if R.sperr[j][i] or R.wasser[j][i]:
+                gras[j][i] = False
+    V, F, M, VC = [], [], [], []
+    anzahl = 0
+    for t in teile:
+        if t["name"] not in ("stadt_wege", "umgebung_wege"):
+            continue
+        w = t["w"]
+        key = [(round(p[0] * 1000), round(p[1] * 1000), round(p[2] * 1000)) for p in w]
+        kanten = collections.Counter()
+        for fc, mn in zip(t["f"], t["fm"]):
+            if mn in RAND_MATS:
+                for i in range(len(fc)):
+                    a, b = key[fc[i]], key[fc[(i + 1) % len(fc)]]
+                    kanten[(a, b) if a < b else (b, a)] += 1
+        for fc, mn in zip(t["f"], t["fm"]):
+            if mn not in RAND_MATS:
+                continue
+            cx = sum(w[i][0] for i in fc) / len(fc)
+            cy = sum(w[i][1] for i in fc) / len(fc)
+            for i in range(len(fc)):
+                ia, ib = fc[i], fc[(i + 1) % len(fc)]
+                a, b = key[ia], key[ib]
+                if kanten[(a, b) if a < b else (b, a)] != 1:
+                    continue
+                A, B = w[ia], w[ib]
+                ex, ey = B[0] - A[0], B[1] - A[1]
+                ln = math.hypot(ex, ey)
+                if ln < 0.05:
+                    continue
+                nx, ny = ey / ln, -ex / ln
+                mx, my = (A[0] + B[0]) / 2, (A[1] + B[1]) / 2
+                if (cx - mx) * nx + (cy - my) * ny > 0:
+                    nx, ny = -nx, -ny
+                ok = True
+                for d in (0.5, RAND_BREITE):
+                    for fr in (0.15, 0.5, 0.85):
+                        qx, qy = A[0] + ex * fr + nx * d, A[1] + ey * fr + ny * d
+                        ii, jj = int(qx / S), int(qy / S)
+                        if not (0 <= ii < n and 0 <= jj < n) or not gras[jj][ii]:
+                            ok = False
+                if not ok:
+                    continue
+                o = len(V)
+                zi = (A[2] + 0.015, B[2] + 0.015)
+                za = R.h(A[0] + nx * RAND_BREITE, A[1] + ny * RAND_BREITE)
+                zb = R.h(B[0] + nx * RAND_BREITE, B[1] + ny * RAND_BREITE)
+                if za < -50 or zb < -50 or abs(za - A[2]) > 0.6 or abs(zb - B[2]) > 0.6:
+                    continue
+                V.extend(((A[0], A[1], zi[0]), (B[0], B[1], zi[1]), (B[0] + nx * RAND_BREITE, B[1] + ny * RAND_BREITE, zb + 0.03),
+                          (A[0] + nx * RAND_BREITE, A[1] + ny * RAND_BREITE, za + 0.03)))
+                inner, outer = (0.30, 0.29, 0.26, 0.80), (0.33, 0.35, 0.22, 0.0)
+                VC.extend((inner, inner, outer, outer))
+                F.append((o, o + 1, o + 2, o + 3) if ex * ny - ey * nx > 0 else (o, o + 3, o + 2, o + 1))   # Normale nach oben
+                M.append("Strassenrand")
+                anzahl += 1
+    print("[Export] Strassenraender:", anzahl, "Streifen")
+    MATS["Strassenrand"] = ((1.0, 1.0, 1.0), 1.0, 0.0, 0.99)
+    return dict(name="strassenrand", w=V, f=F, fm=M, spin=None, vrgb=VC, bau=None, idx=None, mats=["Strassenrand"], v=V, ob=None)
 
 
 # ------------------------------------------------------------------ Kollision
@@ -460,7 +594,7 @@ class Raster:
                     if z1 > g + 0.4 and z0 < g + 1.8:
                         self.sperr[j][i] = True
 
-    def _dreieck(self, a, b, c, hoehe, flag, nur_oben):
+    def _dreieck(self, a, b, c, hoehe, flag, nur_oben, wert=True):
         S, n = self.S, self.n
         x0, x1 = min(a[0], b[0], c[0]), max(a[0], b[0], c[0])
         y0, y1 = min(a[1], b[1], c[1]), max(a[1], b[1], c[1])
@@ -483,7 +617,7 @@ class Raster:
                     if z > hoehe[j][i]:
                         hoehe[j][i] = z
                 if flag is not None:
-                    flag[j][i] = True
+                    flag[j][i] = wert
 
     def h(self, x, y):
         i, j = min(self.n - 1, max(0, int(x / self.S))), min(self.n - 1, max(0, int(y / self.S)))
@@ -602,7 +736,18 @@ def minimap(teile, R, px=2.0):
 
 
 # ------------------------------------------------------------------ Schreiben
-def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm):
+def rauchquellen():
+    """Aus einem Teil der Schornsteine (Kaminoeffnungen aus rustik.kamin) steigt im Spiel Rauch auf: deterministische Auswahl."""
+    import rustik
+    out = []
+    for k, (x, y, z) in enumerate(rustik.SCHORNSTEINE):
+        if 0 <= x <= WELT and 0 <= y <= WELT and (int(x * 7.3 + y * 3.1 + k * 5.0) % 2) == 0:
+            out.append([x, y, z])
+    print("[Export] Rauch aus", len(out), "von", len(rustik.SCHORNSTEINE), "Schornsteinen")
+    return out
+
+
+def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm, rauch=()):
     little = sys.byteorder == "little"
 
     def b(a):
@@ -612,7 +757,7 @@ def schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeug
         return a.tobytes()
     meta = dict(name="Polytown", id=PT_ID, size=WELT, groups=[], ncm=[len(verts), len(tris)], nbox=len(boxes), mm=mm[0],
                 spawns=spawns, crates=crates, vehicles=fahrzeuge, pads=[[240.0, 184.0, 110.0]],
-                gras_hoehe=None, ver=2, wm=int(WELT / Raster.S), ws=Raster.S)
+                gras_hoehe=None, ver=2, wm=int(WELT / Raster.S), ws=Raster.S, smoke=[list(r) for r in rauch])
     blob = bytearray()
     for g in gruppen:
         meta["groups"].append(dict(c=g.cls, nv=g.nv, ni=len(g.I), sp=g.spin, k=g.key, tx=g.tx))
@@ -643,14 +788,15 @@ def main():
     pfad = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO, "maps", "polytown.ptmap")
     szene_bauen()
     teile = teile_umrechnen()
-    gruppen = darstellung(teile)
-    verts, tris, kinds = gelaende_dreiecke(teile)
     boxes = quader_verschmelzen(quader_sammeln(teile))
     R = Raster(teile, boxes)
+    rand = strassenraender(teile, R)
+    gruppen = darstellung(teile + [rand])
+    verts, tris, kinds = gelaende_dreiecke(teile)                 # braucht die ausgerichteten Flaechen aus darstellung
     wm = wasser_maske(teile, R)
     spawns, crates, fahrzeuge = spiel_daten(R)
     mm = minimap(teile, R)
-    schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm)
+    schreiben(pfad, gruppen, verts, tris, kinds, boxes, spawns, crates, fahrzeuge, mm, wm, rauchquellen())
 
 
 if __name__ == "__main__":

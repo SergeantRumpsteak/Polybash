@@ -252,7 +252,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 155               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 156               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -6249,6 +6249,183 @@ def _t_pt_fort(S):
     return _finish(S, cols, h, 0.5)
 
 
+def _t_pt_plaster(S):
+    """Polytown: rustikaler Putz - Kellenwolken, Regenstreifen, feines Korn, abgeplatzte Stellen mit Ziegel darunter."""
+    big, mid = _fbm(S, 251, 3, 4), _fbm(S, 252, 14, 3, 0.55)
+    streak, fine = _fbm(S, 253, 4, 3, px=44, py=4), _fbm(S, 254, 96, 2, 0.6)
+    flake, edge = _fbm(S, 255, 4, 3), _fbm(S, 256, 40, 3, 0.6)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            v = (0.84 + 0.30 * (big[y][x] - 0.5) + 0.22 * (mid[y][x] - 0.5) + 0.20 * (streak[y][x] - 0.5)
+                 + 0.16 * (fine[y][x] - 0.5) + 0.10 * (_hash01(x * 31 + y * 977 + 5) - 0.5))
+            t = (1.0, 1.0, 1.0)
+            f = flake[y][x] + 0.18 * (edge[y][x] - 0.5)
+            if f > 0.70:                                          # Putz abgeplatzt: Ziegel/Mauerwerk darunter
+                m = _sstep(0.70, 0.74, f)
+                v = v * (1.0 - 0.22 * m)
+                t = (1.0, 1.0 - 0.16 * m, 1.0 - 0.24 * m)
+            row.append(_rgb(v, t))
+        out.append(row)
+    return out
+
+
+def _t_pt_brick(S):
+    """Polytown: alter Backstein - 16 Reihen, unregelmäßige Steintöne, helle Fugen, Ruß und Abplatzungen."""
+    n1, n2, n3 = _fbm(S, 261, 5, 4), _fbm(S, 262, 40, 3, 0.6), _fbm(S, 263, 100, 2)
+    bh, bw = S // 16, S // 8
+    cols, h = [], []
+    for y in range(S):
+        r, ly = y // bh, y % bh
+        off = bw // 2 if r % 2 else 0
+        crow, hrow = [], []
+        for x in range(S):
+            xo = (x + off) % S
+            c, lx = xo // bw, xo % bw
+            e = min(lx, ly, bw - 1 - lx, bh - 1 - ly)
+            if e < 2 and not (lx >= 2 and ly >= 2 and lx < bw - 2 and ly < bh - 2):
+                v, t = 0.78 + 0.18 * (n3[y][x] - 0.5), (1.0, 0.97, 0.9)     # Mörtelfuge
+                hv = -1.0
+            else:
+                tone = _hash01(r * 91 + c * 13 + 261)
+                v = 0.74 + 0.36 * (tone - 0.5) + 0.30 * (n1[y][x] - 0.5) + 0.20 * (n2[y][x] - 0.5) + 0.1 * (n3[y][x] - 0.5)
+                if n2[y][x] > 0.74:
+                    v *= 0.78                                      # Sinterhaut / Ruß
+                t = (1.0, 0.92 - 0.06 * tone, 0.86 - 0.10 * tone)
+                hv = 0.8 + 0.5 * n2[y][x]
+            crow.append(_rgb(v, t))
+            hrow.append(hv)
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.45)
+
+
+def _t_pt_rubble(S):
+    """Polytown: Bruchsteinmauer - unregelmäßige Feldsteine (Zellen) mit dunklen Fugen, Kantenabrundung, Flechten."""
+    vor = _voronoi(S, 7, 271)
+    n1, n2, lich = _fbm(S, 272, 6, 4), _fbm(S, 273, 50, 3, 0.6), _fbm(S, 274, 8, 3)
+    cols, h = [], []
+    for y in range(S):
+        crow, hrow = [], []
+        for x in range(S):
+            d1, d2, cid = vor[y][x]
+            e = d2 - d1
+            tone = _hash01(cid * 7 + 271)
+            if e < 0.10:
+                v, t, hv = 0.34 + 0.12 * (n2[y][x] - 0.5), (1.0, 0.97, 0.9), -1.0 + 6.0 * e
+            else:
+                v = 0.80 + 0.34 * (tone - 0.5) + 0.26 * (n1[y][x] - 0.5) + 0.20 * (n2[y][x] - 0.5)
+                li = _sstep(0.60, 0.74, lich[y][x])
+                t = (1.0 - 0.05 * li, 1.0 + 0.02 * li, 1.0 - 0.10 * li)
+                hv = min(1.0, (e - 0.10) * 3.0) + 0.4 * n2[y][x]
+            crow.append(_rgb(v, t))
+            hrow.append(hv)
+        cols.append(crow)
+        h.append(hrow)
+    return _finish(S, cols, h, 0.5)
+
+
+def _t_pt_tile(S):
+    """Polytown: Tonziegeldach - versetzte Hohlziegel-Reihen mit Schattenkante, Tonwechsel, Moos und dunklen Stellen."""
+    n1, n2, moos = _fbm(S, 281, 6, 3), _fbm(S, 282, 60, 2), _fbm(S, 283, 5, 4)
+    rh, tw = S // 12, S // 8
+    out = []
+    for y in range(S):
+        r, ly = y // rh, y % rh
+        off = tw // 2 if r % 2 else 0
+        row = []
+        for x in range(S):
+            xo = (x + off) % S
+            c, lx = xo // tw, xo % tw
+            tone = _hash01(r * 53 + c * 17 + 281)
+            prof = 0.10 * math.cos(2 * math.pi * lx / tw)             # gewölbter Ziegel
+            v = (0.72 + 0.28 * (ly / rh) ** 1.5 + prof + 0.30 * (tone - 0.5) + 0.26 * (n1[y][x] - 0.5) + 0.12 * (n2[y][x] - 0.5))
+            if lx < 1 or ly >= rh - 1:
+                v *= 0.55                                          # Fuge / Schatten unter der Reihe darüber
+            m = _sstep(0.62, 0.76, moos[y][x])
+            row.append(_rgb(v, (1.0 - 0.07 * m, 1.0 + 0.01 * m, 1.0 - 0.11 * m)))
+        out.append(row)
+    return out
+
+
+def _t_pt_slate(S):
+    """Polytown: Schieferdach - rechteckige Platten in versetzten Reihen, bläulich-graue Töne, helle Bruchkanten."""
+    n1, n2 = _fbm(S, 291, 6, 3), _fbm(S, 292, 70, 2)
+    rh, sw = S // 14, S // 6
+    out = []
+    for y in range(S):
+        r, ly = y // rh, y % rh
+        off = sw // 2 if r % 2 else 0
+        row = []
+        for x in range(S):
+            xo = (x + off) % S
+            c, lx = xo // sw, xo % sw
+            tone = _hash01(r * 41 + c * 7 + 291)
+            v = 0.66 + 0.18 * ly / rh + 0.30 * (tone - 0.5) + 0.24 * (n1[y][x] - 0.5) + 0.12 * (n2[y][x] - 0.5)
+            if lx < 1 or ly >= rh - 1:
+                v *= 0.5
+            elif lx == 1 or ly == rh - 2:
+                v += 0.07
+            row.append(_rgb(v, (0.95, 0.99, 1.04)))
+        out.append(row)
+    return out
+
+
+def _t_pt_wood(S):
+    """Polytown: verwittertes Holz - waagerechte Bretter mit Maserung, Astlöchern, Fugen und grauen Wetterstellen."""
+    grain, n1 = _fbm(S, 301, 3, 3, px=3, py=70), _fbm(S, 302, 5, 3)
+    fine = _fbm(S, 303, 4, 2, px=6, py=120)
+    pl = S // 8
+    knots = [(int(_hash01(i * 3 + 301) * S), int(_hash01(i * 3 + 302) * S), 5 + int(_hash01(i * 3 + 303) * 5)) for i in range(7)]
+    out = []
+    for y in range(S):
+        b, ly = y // pl, y % pl
+        row = []
+        for x in range(S):
+            xo = (x + int(_hash01(b + 301) * S)) % S
+            tone = _hash01(b * 19 + 301)
+            v = 0.74 + 0.22 * (tone - 0.5) + 0.36 * (grain[y][x] - 0.5) + 0.22 * (fine[y][x] - 0.5) + 0.20 * (n1[y][x] - 0.5)
+            for kx, ky, kr in knots:
+                dx, dy = min(abs(x - kx), S - abs(x - kx)), min(abs(y - ky), S - abs(y - ky))
+                d = math.hypot(dx * 0.6, dy * 1.5) / kr
+                if d < 1.0:
+                    v -= 0.28 * (1.0 - d) * (0.6 + 0.4 * math.sin(d * 18))
+            if ly < 2:
+                v *= 0.45                                          # Fuge zwischen den Brettern
+            elif ly < 4:
+                v += 0.05
+            gr = _sstep(0.55, 0.75, n1[y][x])                       # ausgeblichene graue Stellen
+            row.append(_rgb(v, (1.0 - 0.03 * gr, 1.0, 1.0 + 0.02 * gr)))
+        out.append(row)
+    return out
+
+
+def _t_pt_sign(S):
+    """Polytown: lackiertes Blechschild - glatter Lack mit Kratzern, Rostpunkten, Tropfspuren und abgestoßenem Rand."""
+    n1, scr = _fbm(S, 311, 4, 3), _fbm(S, 312, 4, 2, px=90, py=3)
+    drip = _fbm(S, 313, 4, 2, px=60, py=3)
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            g = _hash01(x * 131 + y * 17 + 311)
+            v = 0.96 + 0.10 * (n1[y][x] - 0.5) + 0.06 * (g - 0.5)
+            if scr[y][x] > 0.66:
+                v -= 0.20 * _sstep(0.66, 0.78, scr[y][x])         # Kratzer
+            if drip[y][x] > 0.64:
+                v *= 1.0 - 0.09 * _sstep(0.64, 0.76, drip[y][x])  # Regenspur
+            t = (1.0, 1.0, 1.0)
+            if g > 0.985:                                          # Rostpunkte
+                v, t = v * 0.7, (1.0, 0.7, 0.45)
+            edge = min(x, y, S - 1 - x, S - 1 - y)
+            if edge < 5 and n1[y][x] > 0.45:
+                v *= 0.82 + 0.03 * edge                           # Lack am Rand abgestoßen
+            row.append(_rgb(v, t))
+        out.append(row)
+    return out
+
+
 def _t_fire(S):
     a, b = _fbm(S, 161, 4, 4), _fbm(S, 162, 12, 2)
     return [[_rgb(0.62 + 0.9 * (a[y][x] - 0.5) + 0.5 * (b[y][x] - 0.5) + 0.3) for x in range(S)]
@@ -6327,7 +6504,11 @@ TEXGEN = {
     "metal": (128, _t_metal, False, True, 2.0), "cloth": (32, _t_cloth, False, True, 0.4),
     "water": (128, _t_water, False, True, 6.0),
     "pt_grass": (256, _t_pt_grass, False, True, 6.0), "pt_asphalt": (256, _t_pt_asphalt, False, True, 6.0),
-    "pt_water": (256, _t_pt_water, False, True, 8.0), "pt_fort": (256, _t_pt_fort, False, True, 4.0), "fire": (64, _t_fire, False, True, 3.0),
+    "pt_water": (256, _t_pt_water, False, True, 8.0), "pt_fort": (256, _t_pt_fort, False, True, 4.0),
+    "pt_plaster": (256, _t_pt_plaster, False, True, 3.0), "pt_brick": (256, _t_pt_brick, False, True, 3.0),
+    "pt_rubble": (256, _t_pt_rubble, False, True, 3.0), "pt_tile": (256, _t_pt_tile, False, True, 2.5),
+    "pt_slate": (256, _t_pt_slate, False, True, 2.5), "pt_wood": (256, _t_pt_wood, False, True, 2.0),
+    "pt_sign": (128, _t_pt_sign, False, True, 1.0), "fire": (64, _t_fire, False, True, 3.0),
     "cloud": (128, _t_cloud, True, True, 200.0), "blob": (64, _t_blob, True, False, 1.0),
     "glow": (64, _t_glow, True, False, 1.0), "edge": (64, _t_edge, True, False, 1.0),
     "vignette": (96, _t_vignette, True, False, 1.0),
@@ -7007,6 +7188,10 @@ def _pt_geom(g):
     return geom
 
 
+SMOKE_PUFFS = 7              # Puffs je rauchendem Schornstein
+SMOKE_PERIOD = 7.0           # Sekunden, bis ein Puff aufgestiegen und verblasst ist
+
+
 def _pt_state(base, tx):
     """Zustand der Gruppe: Klassen-Zustand plus Textur (falls vorhanden und verfügbar)."""
     if not tx:
@@ -7038,7 +7223,8 @@ def build_pt_scene(world, progress=None):
         if sp:
             node = GeomNode("pt_spin")
             node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
-            spins.append({"node": node, "x": sp["x"], "y": sp["y"], "z": sp["z"], "h0": sp["h0"], "speed": sp["speed"]})
+            spins.append({"node": node, "x": sp["x"], "y": sp["y"], "z": sp["z"], "h0": sp["h0"], "speed": sp["speed"],
+                          "roll": bool(sp.get("roll"))})
             continue
         k = tuple(g.get("k") or (0, 0))
         node = chunks.get(k)
@@ -7048,7 +7234,8 @@ def build_pt_scene(world, progress=None):
     zone = []
     if world.mode == "koth":
         zone = _koth_zone()
-    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], list(chunks.values()), spins]
+    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], list(chunks.values()), spins,
+             [tuple(q) for q in (pt["meta"].get("smoke") or [])]]
     return GeomNode("leer_land"), GeomNode("leer_wasser"), zone, extra
 
 
@@ -111268,7 +111455,7 @@ class Game(ShowBase):
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
         lamps, grass, decals, water2 = extra[:4]
         self.town_np = None
-        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
+        self.wind_nodes, self.flag_nodes, self.spin_nodes, self.smoke = [], [], [], []
         if len(extra) >= 7:
             self.town_np = self.render.attachNewNode("stadt")
             for bn in extra[6]:
@@ -111287,7 +111474,25 @@ class Game(ShowBase):
                 snp.setTwoSided(True)
                 snp.setPos(sd["x"], sd["y"], sd["z"])
                 snp.setH(sd["h0"])
-                self.spin_nodes.append((snp, sd["speed"], sd["h0"], sd["x"], sd["y"]))
+                self.spin_nodes.append((snp, sd["speed"], sd["h0"], sd["x"], sd["y"], bool(sd.get("roll"))))
+            self.smoke = []                                       # Rauch aus Schornsteinen (Polytown): Qualm-Puffs, die aufsteigen
+            for (qx, qy, qz) in (extra[8] if len(extra) > 8 else ()):
+                puffs = []
+                st = mat_state("blob")
+                for k in range(SMOKE_PUFFS):
+                    cm_ = CardMaker("rauch")
+                    cm_.setFrame(-0.5, 0.5, -0.5, 0.5)
+                    pn = self.town_np.attachNewNode(cm_.generate())
+                    pn.setBillboardPointEye()
+                    if st is not None:
+                        pn.setState(st)
+                    pn.setTransparency(TransparencyAttrib.MAlpha)
+                    pn.setLightOff()
+                    pn.setDepthWrite(False)
+                    pn.setTwoSided(True)
+                    pn.setColorScale(0.42, 0.41, 0.40, 0.0)
+                    puffs.append(pn)
+                self.smoke.append((qx, qy, qz, puffs))
             for fd in extra[5]:
                 fnp = self.town_np.attachNewNode(fd["node"])
                 fnp.setTwoSided(True)
@@ -113017,8 +113222,24 @@ class Game(ShowBase):
 
     def update_wind(self, t, cp):
         """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe)."""
-        for snp, spd, h0, sx_, sy_ in self.spin_nodes:                 # Radarantennen drehen sich immer (auch weit weg: sichtbar bis 400 m)
-            snp.setH(h0 + (t * spd) % 360.0)
+        for snp, spd, h0, sx_, sy_, roll in self.spin_nodes:           # Radarantennen und Muehlenfluegel drehen sich immer (auch weit weg)
+            if roll:
+                snp.setHpr(h0, 0.0, (t * spd) % 360.0)                 # Muehlenfluegel: Welle zeigt nach vorn (+y), Drehung um sie
+            else:
+                snp.setH(h0 + (t * spd) % 360.0)
+        for qx, qy, qz, puffs in getattr(self, "smoke", ()):            # Schornsteinrauch: steigt auf, weht mit dem Wind, wird grösser und verblasst
+            if abs(qx - cp[0]) > 110 or abs(qy - cp[1]) > 110:
+                for pn in puffs:
+                    pn.hide()
+                continue
+            for k, pn in enumerate(puffs):
+                ph = (t / SMOKE_PERIOD + k / len(puffs) + (qx + qy) * 0.37) % 1.0
+                a = min(1.0, ph * 6.0) * (1.0 - ph) ** 1.3 * 0.55
+                drift = 4.0 * ph * ph
+                pn.show()
+                pn.setPos(qx + 0.82 * drift + 0.25 * math.sin(ph * 9.0 + qx), qy + 0.57 * drift + 0.25 * math.cos(ph * 7.0 + qy), qz + 0.2 + 6.0 * ph)
+                pn.setScale(0.55 + 2.4 * ph)
+                pn.setColorScale(0.42, 0.41, 0.40, a)
         if not self.wind_nodes and not self.flag_nodes:
             return
         cx, cy = cp[0], cp[1]

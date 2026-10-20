@@ -220,8 +220,11 @@ def galerie(g):
             _bm(g, (sx, yy, Z_GAL * (k + 1) / n), (sx, yy, Z_GAL * (k + 1) / n + 0.9), 0.06, 0.06, "Holz dunkel")
 
 
+FLUEGEL_ACHSE = {}                          # Name des Fluegelobjekts -> (Drehpunkt (x, y, z), waagerechte Wellenrichtung (dx, dy)); fuer den Spiel-Export
+
+
 def kappe(g):
-    """Drehbare Kappe mit Haube, Windwelle, vier Gatterfluegeln und Steert."""
+    """Drehbare Kappe mit Haube, Windwelle, vier Gatterfluegeln und Steert. Die Gatterfluegel sind ein eigenes Objekt (nord2_muehle_fluegel)."""
     deko = altbau.Deko(g)
     n = 16
     ring = lambda r, z: [g.P((r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n), z)) for k in range(n)]
@@ -239,23 +242,28 @@ def kappe(g):
     hz, hx = HT + 1.3, -3.45
     _bm(g, (1.2, 0.0, hz), (hx, 0.0, hz), 0.42, 0.42, "Holz dunkel")
     deko.box(hx - 0.55, -0.4, hz - 0.4, hx + 0.1, 0.4, hz + 0.4, "Eisen")                     # Fluegelkopf
+    fl = Bau("nord2_muehle_fluegel")
+    g.b.fluegel = fl
+    th = math.atan2(g.s, g.c)
+    gf = Lok(fl, g.cx, g.cy, g.zb, th)
+    FLUEGEL_ACHSE["nord2_muehle_fluegel"] = (gf.P((hx, 0.0, hz)), (math.cos(th), math.sin(th)))
     ph = math.radians(20.0)
     for k in range(4):
         a = ph + k * math.pi / 2
         ur, uz = math.cos(a), math.sin(a)                                                    # radial in (y, z)
         wr, wz = -math.sin(a), math.cos(a)                                                   # quer
         P = lambda r, o, dx=0.0: (hx + dx, ur * r + wr * o, hz + uz * r + wz * o)
-        _bm(g, P(0.3, 0.0), P(7.4, 0.0), 0.26, 0.2, "Holz dunkel")                           # Rute
-        _bm(g, P(1.2, 0.18, -0.12), P(7.3, 0.18, -0.12), 0.1, 0.045, "Windbrett")           # Windbrett (Vorderseite)
-        _bm(g, P(1.2, 1.7, 0.0), P(7.3, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")              # hintere Latte
-        _bm(g, P(1.2, 0.5, 0.0), P(1.2, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")
-        _bm(g, P(7.3, 0.18, 0.0), P(7.3, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")
+        _bm(gf, P(0.3, 0.0), P(7.4, 0.0), 0.26, 0.2, "Holz dunkel")                           # Rute
+        _bm(gf, P(1.2, 0.18, -0.12), P(7.3, 0.18, -0.12), 0.1, 0.045, "Windbrett")           # Windbrett (Vorderseite)
+        _bm(gf, P(1.2, 1.7, 0.0), P(7.3, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")              # hintere Latte
+        _bm(gf, P(1.2, 0.5, 0.0), P(1.2, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")
+        _bm(gf, P(7.3, 0.18, 0.0), P(7.3, 1.7, 0.0), 0.08, 0.08, "Rahmen weiss")
         r = 1.6
         while r < 7.3:
-            _bm(g, P(r, 0.18), P(r, 1.7), 0.05, 0.05, "Rahmen weiss")                        # Querrippen (Gatter)
+            _bm(gf, P(r, 0.18), P(r, 1.7), 0.05, 0.05, "Rahmen weiss")                        # Querrippen (Gatter)
             r += 0.5
         for oo in (0.9, 1.3):
-            _bm(g, P(1.2, oo), P(7.6, oo), 0.04, 0.04, "Rahmen weiss")                       # Laengslatten
+            _bm(gf, P(1.2, oo), P(7.6, oo), 0.04, 0.04, "Rahmen weiss")                       # Laengslatten
     # Steert (Schwanzbalken) nach Osten, schraeg zum Boden mit Windenrad
     _bm(g, (2.7, 0.0, HT + 0.6), (7.4, 0.0, 2.2), 0.28, 0.2, "Holz dunkel")
     _bm(g, (7.4, 0.0, 2.2), (7.6, 0.0, 0.0), 0.22, 0.22, "Holz")
@@ -432,7 +440,7 @@ def bauen_ne():
     a, c = Bau("nord2_muehle"), Bau("nord2_schaefer")
     muehle(a)
     wagen(c)
-    return [a, c]
+    return [a, a.fluegel, c]
 
 
 from stadt import wand  # noqa: E402

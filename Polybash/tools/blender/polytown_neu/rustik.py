@@ -132,8 +132,15 @@ def ziegelreihen(g, x0, x1, ye, ze, yr, zr, nrm, rnd, mats=None):
             a += w
 
 
+SCHORNSTEINE = []                          # Weltkoordinaten der Kaminoeffnungen (x, y, z); der Spiel-Export laesst aus einigen Rauch aufsteigen
+
+
 def kamin(g, x, y, z0, z1, rnd, breit=0.9):
     """Ziegelkamin mit Absatz, ausgebrochener Krone und Kappe."""
+    try:
+        SCHORNSTEINE.append(tuple(round(c, 2) for c in g.P((x, y, z1 + 0.1))))
+    except Exception:
+        pass
     g.box(x - breit / 2, y - breit / 2, z0, x + breit / 2, y + breit / 2, z1, "Ziegel dunkel alt")
     g.box(x - breit / 2 - 0.08, y - breit / 2 - 0.08, z1 - 0.2, x + breit / 2 + 0.08, y + breit / 2 + 0.08, z1, "Stein alt")
     for (dx, dy) in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
