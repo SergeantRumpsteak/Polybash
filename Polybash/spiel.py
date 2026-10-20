@@ -252,7 +252,7 @@ NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
 EXP_NET_VERSION = 38    # NET_VERSION von experimental/robin_experimental.py (dort ändern -> hier mitziehen)
 NET_VERSION = 17         # Protokollversion: nur gleiche Versionen spielen zusammen
-BUILD = 157               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
+BUILD = 158               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
 INPUT_RATE = 30.0        # Zustandsmeldungen pro Sekunde (Mitspieler -> Host)
@@ -10358,6 +10358,54 @@ def build_rocket(lit=True):
     return NodePath(m.node("rocket")), NodePath(f.node("flame"))
 
 
+def _build_wheel(tm):
+    """Geschlossenes Rad (Achse = z, Radius 0,4, Breite 0,3): Lauffläche mit Profil, Flanken, Felge mit fünf Speichen,
+    Nabe und Radmuttern - alle Seiten geschlossen, die Speichen machen die Drehung sichtbar."""
+    O = (0.0, 0.0, 0.0)
+    rub, flank, rim, hub, nut = (0.07, 0.07, 0.08), (0.11, 0.11, 0.12), (0.72, 0.72, 0.76), (0.30, 0.30, 0.33), (0.85, 0.85, 0.88)
+    n = 16
+    P = lambda r, k, z: (r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n), z)
+    for k in range(n):                                              # Lauffläche (abwechselnd Stollen/Rille) mit Aussenreferenz
+        r = 0.4 if k % 2 == 0 else 0.385
+        r2 = 0.4 if (k + 1) % 2 == 0 else 0.385
+        a, b = P(r, k, -0.15), P(r2, k + 1, -0.15)
+        c, d = P(r2, k + 1, 0.15), P(r, k, 0.15)
+        tm.tri(a, b, c, rub, O)
+        tm.tri(a, c, d, rub, O)
+    for sz in (-1, 1):                                              # beide Flanken
+        z = 0.15 * sz
+        for k in range(n):
+            a, b = P(0.4, k, z), P(0.4, k + 1, z)
+            c, d = P(0.27, k + 1, z), P(0.27, k, z)
+            tm.tri(a, b, c, flank, O)
+            tm.tri(a, c, d, flank, O)
+            e, f = P(0.27, k, z + 0.012 * sz), P(0.27, k + 1, z + 0.012 * sz)      # Felgenhorn
+            g, h = P(0.2, k + 1, z + 0.012 * sz), P(0.2, k, z + 0.012 * sz)
+            tm.tri(e, f, g, rim, O)
+            tm.tri(e, g, h, rim, O)
+            i, j = P(0.2, k, z + 0.004 * sz), P(0.2, k + 1, z + 0.004 * sz)        # dunkle Felgenschüssel
+            tm.tri(O[:2] + (z + 0.004 * sz,), i, j, hub, O)
+        for sp in range(5):                                         # fünf Speichen
+            ang = 2 * math.pi * sp / 5
+            ca, sa = math.cos(ang), math.sin(ang)
+            w = 0.045
+            pts = [(ca * 0.06 - sa * w, sa * 0.06 + ca * w), (ca * 0.2 - sa * w, sa * 0.2 + ca * w),
+                   (ca * 0.2 + sa * w, sa * 0.2 - ca * w), (ca * 0.06 + sa * w, sa * 0.06 - ca * w)]
+            q = [(p[0], p[1], z + 0.02 * sz) for p in pts]
+            tm.tri(q[0], q[1], q[2], rim, O)
+            tm.tri(q[0], q[2], q[3], rim, O)
+            ln = (ca * 0.15, sa * 0.15, z + 0.03 * sz)              # Radmutter je Speiche
+            for t in range(6):
+                a0, a1 = 2 * math.pi * t / 6, 2 * math.pi * (t + 1) / 6
+                p0 = (ln[0] + 0.022 * math.cos(a0), ln[1] + 0.022 * math.sin(a0), ln[2])
+                p1 = (ln[0] + 0.022 * math.cos(a1), ln[1] + 0.022 * math.sin(a1), ln[2])
+                tm.tri((ln[0], ln[1], ln[2]), p0, p1, nut, O)
+        for k in range(8):                                          # Nabenkappe
+            a0, a1 = 2 * math.pi * k / 8, 2 * math.pi * (k + 1) / 8
+            tm.tri((0.0, 0.0, z + 0.035 * sz), (0.06 * math.cos(a0), 0.06 * math.sin(a0), z + 0.025 * sz),
+                   (0.06 * math.cos(a1), 0.06 * math.sin(a1), z + 0.025 * sz), nut, O)
+
+
 def build_vehicle_model():
     """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück."""
     rng = random.Random(5)
@@ -10399,9 +10447,9 @@ def build_vehicle_model():
         piv = root.attachNewNode("wheel")
         piv.setPos(sx * 0.95, sy, 0.4)
         tm = Mesh()
-        prism(tm, 0, 0, -0.15, 0.4, 0.3, 8, (0.08, 0.08, 0.09), rng)
-        prism(tm, 0, 0, -0.17, 0.2, 0.34, 6, (0.62, 0.62, 0.66), rng)
+        _build_wheel(tm)
         tire = piv.attachNewNode(tm.node("tire"))
+        tire.setTwoSided(True)
         tire.setR(90)                                                # Achse = x
         wheels.append(piv)
     bar = root.attachNewNode("bar")
