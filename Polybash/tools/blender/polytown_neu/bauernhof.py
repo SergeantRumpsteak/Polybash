@@ -66,6 +66,23 @@ def halle(b, cx, cy, theta, w, d, H, rh, wm, dm, tor, fenster, rnd, zusatz=None)
     return g
 
 
+def _holm(g, xa, za, xb, zb, y0, y1, h, mat):
+    """Schraeger Holm (Quader mit Neigung in der x-z-Ebene) von (xa, za) nach (xb, zb), Hoehe h senkrecht, Breite y0..y1; Kollision als duenne Stufen-Quader."""
+    ln = math.hypot(xb - xa, zb - za)
+    nx_, nz_ = -(zb - za) / ln, (xb - xa) / ln                                              # Normale in der x-z-Ebene
+    if nz_ < 0:
+        nx_, nz_ = -nx_, -nz_
+    a0 = (xa - nx_ * h / 2, za - nz_ * h / 2); a1 = (xa + nx_ * h / 2, za + nz_ * h / 2)
+    b0 = (xb - nx_ * h / 2, zb - nz_ * h / 2); b1 = (xb + nx_ * h / 2, zb + nz_ * h / 2)
+    P = lambda q, y: (q[0], y, q[1])
+    g.poly([P(a0, y0), P(b0, y0), P(b1, y0), P(a1, y0)], (0, -1, 0), mat)
+    g.poly([P(a0, y1), P(b0, y1), P(b1, y1), P(a1, y1)], (0, 1, 0), mat)
+    g.poly([P(a1, y0), P(b1, y0), P(b1, y1), P(a1, y1)], (nx_, 0, nz_), mat)
+    g.poly([P(a0, y0), P(b0, y0), P(b0, y1), P(a0, y1)], (-nx_, 0, -nz_), mat)
+    g.poly([P(a0, y0), P(a1, y0), P(a1, y1), P(a0, y1)], (xa - xb, 0, za - zb), mat)
+    g.poly([P(b0, y0), P(b1, y0), P(b1, y1), P(b0, y1)], (xb - xa, 0, zb - za), mat)
+
+
 def scheune_zusatz(g, ix0, ix1, iy0, iy1):
     # Heuboden ueber der Osthaelfte, Treppe an der Nordwand, Gelaender zur offenen Seite, Heu
     x0 = 2.4
@@ -79,11 +96,22 @@ def scheune_zusatz(g, ix0, ix1, iy0, iy1):
     for k in range(n):
         xa = x0 - (n - k) * run
         g.box(xa, iy1 - 1.1, F0, xa + run + 0.02, iy1 + 0.1, F0 + (k + 1) * rise, "Holz")
+    # Gelaender an der offenen Seite: zwei durchgehende, schraege Holme (Handlauf + Knieholm) vom Treppenfuss bis zum Heuboden, Pfosten alle 3 Stufen
+    xs, zs_ = x0 - n * run + run * 0.5, F0 + rise                                          # Fusspunkt (Stufenmitte der ersten Stufe)
+    xe, ze = x0, zl
+    yy0, yy1 = iy1 - 1.17, iy1 - 1.10
+    for dz_, hh in ((0.92, 0.07), (0.45, 0.05)):
+        _holm(g, xs, zs_ + dz_, xe, ze + dz_, yy0, yy1, hh, "Holz alt")
+    for k in range(0, n, 3):
+        xa = x0 - (n - k) * run
         zt = F0 + (k + 1) * rise
-        g.box(xa, iy1 - 1.17, zt + 0.45, xa + run, iy1 - 1.1, zt + 0.5, "Holz alt")                # Gelaender an der offenen Seite
-        g.box(xa, iy1 - 1.17, zt + 0.92, xa + run, iy1 - 1.1, zt + 0.97, "Holz alt")
-        if k % 3 == 0:
-            g.box(xa + 0.1, iy1 - 1.18, zt, xa + 0.17, iy1 - 1.1, zt + 0.97, "Holz alt")
+        g.box(xa + 0.1, yy0 - 0.01, zt, xa + 0.17, yy1, zt + 0.95, "Holz alt")
+    g.box(x0 - 0.17, yy0 - 0.01, zl, x0 - 0.10, yy1, zl + 0.95, "Holz alt")
+    for k in range(n):                                                                      # unsichtbare Kollision des Gelaenders (nur Spieler), stufenweise
+        xa = x0 - (n - k) * run
+        zt = F0 + (k + 1) * rise
+        q = [g.P(c) for c in ((xa, yy0, zt), (xa + run, yy1, zt + 0.95))]
+        g.b.kol.append((min(a[0] for a in q), min(a[1] for a in q), min(a[2] for a in q), max(a[0] for a in q), max(a[1] for a in q), max(a[2] for a in q)))
     for (ya, yb) in ((iy0, iy1 - 1.1),):                                                      # Gelaender an der offenen Westkante
         g.box(x0 - 0.07, ya, zl + 0.45, x0 + 0.05, yb, zl + 0.55, "Holz alt")
         g.box(x0 - 0.07, ya, zl + 0.95, x0 + 0.05, yb, zl + 1.05, "Holz alt")
@@ -216,7 +244,7 @@ def bauen_hof():
     de.box(51.0, 79.9, 0.45, 52.8, 80.0, 0.8, "Holz alt")
     de.box(51.0, 79.7, 0.4, 52.8, 79.9, 0.5, "Teichwasser")
     # Ackerwagen
-    wx, wy = 53.2, 70.0
+    wx, wy = 48.0, 68.0
     de.box(wx - 1.3, wy - 0.8, 0.55, wx + 1.3, wy + 0.8, 0.7, "Holz alt")
     for sy in (-1, 1):
         de.box(wx - 1.3, wy + sy * 0.8 - 0.04, 0.7, wx + 1.3, wy + sy * 0.8 + 0.04, 1.15, "Holz alt")
@@ -231,7 +259,7 @@ def bauen_hof():
     zaun(de, 64.0, 63.5, 64.0, 66.0)
     zaun(de, 35.0, 92.5, 35.0, 83.5)
     for k in range(3):                                                                       # Obstbaeume (Staemme mit breiter Krone)
-        x, y = 37.0 + 3.0 * k, 92.0 - 0.3 * k
+        x, y = 40.0 + 4.0 * k, 96.5 - 0.3 * k
         BM.obstbaum(de, x, y, 0.0, lambda i, k=k: TK._h01(k + 3, i, 515))
     return [bo, ha, sc, de, gewaechshaus()]
 
