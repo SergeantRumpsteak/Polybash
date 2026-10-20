@@ -239,3 +239,8 @@ Neueste Änderungen oben.
 - MTN_CLIMB / MTN_WALL unverändert.
 - NET_VERSION 27 -> 28 (Gelände hat sich geändert).
 
+
+## Neues Polytown überall (Merge von main)
+- `main` in diesen Branch gemergt (neues Polytown aus Blender: `maps/polytown.ptmap`, Texturen, Rauch, Brücken, Dach-/Treppenkollision u. a.).
+- Die Standardkarte ist im Experimental-Modus jetzt immer das neue Polytown. Die alte, im Code erzeugte 450-m-Karte wird nicht mehr gestartet (fehlt die Datei, kommt eine Fehlermeldung statt der alten Karte). Kartensuche findet `../maps/polytown.ptmap`.
+- Beide Spiel-Stände (Autoräder von 10f bleiben, Versionsnummer 42 bleibt). Nur mit Attrappen getestet (Welt baut in Koth/DM/CTF), nicht gerendert.
