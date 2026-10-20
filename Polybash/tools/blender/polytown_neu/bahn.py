@@ -73,6 +73,7 @@ def kegel(b, cx, cy, z0, r, h, mat, n=8, rot=0.0):
 
 def gleis_gerade(b, y, x0, x1, ballast=True, sleeper_dx=0.7, bett_breite=3.4):
     """Gerades Gleis in x-Richtung bei y von x0 bis x1: Schotterbett, Schwellen (alle 0,7 m), zwei Schienen."""
+    n_bx = len(b.bx)                                                  # Gleisteile sind nur Optik: keine Kollision (sonst wackelt man ueber Schwellen/Schienen)
     if ballast:
         b.box(x0, y - bett_breite / 2, 0.0, x1, y + bett_breite / 2, BALLAST_H, "Schotterbett")
     n = int((x1 - x0) / sleeper_dx)
@@ -82,6 +83,7 @@ def gleis_gerade(b, y, x0, x1, ballast=True, sleeper_dx=0.7, bett_breite=3.4):
     for sg in (-1, 1):
         yy = y + sg * SPUR / 2
         b.box(x0, yy - 0.035, BALLAST_H + 0.1, x1, yy + 0.035, BALLAST_H + 0.24, "Schiene")
+    del b.bx[n_bx:]                                                   # man laeuft auf einer Ebene (Gelaendehoehe) ueber das ganze Gleis
 
 
 def gleis_kurve(b, pts, bett_breite=3.4):
@@ -217,15 +219,16 @@ def empfangsgebaeude(b, cx, cy, lvl=1):
     g.box(-1.3, -hd - 1.5, -0.6, 1.3, -hd - 0.9, 0.1, "Beton")
     g.box(-1.3, -hd + WD, F0, -1.25, -hd + WD + 0.65, F0 + 3.1, "Tuer gruen")
     g.box(1.25, -hd + WD, F0, 1.3, -hd + WD + 0.65, F0 + 3.1, "Tuer gruen")
-    zu = F0 + 5.1
+    zu = F0 + 6.4                                                       # Uhr auf dem Giebeldreieck (Dachrand), ueber dem Portal: dort verdeckt sie nichts
+    yu = -hd - 0.55                                                     # Vorderkante des Daches (Dachueberstand e = 0,55 m)
     n = 16
-    P = [(1.0 * math.cos(2 * math.pi * k / n), -hd - 0.09, zu + 1.0 * math.sin(2 * math.pi * k / n)) for k in range(n)]
+    P = [(1.0 * math.cos(2 * math.pi * k / n), yu - 0.09, zu + 1.0 * math.sin(2 * math.pi * k / n)) for k in range(n)]
     g.poly(P, (0.0, -1.0, 0.0), "Uhr")
     for hh in range(12):
         a = 2 * math.pi * hh / 12
-        g.box(0.82 * math.cos(a) - 0.04, -hd - 0.11, zu + 0.82 * math.sin(a) - 0.04, 0.82 * math.cos(a) + 0.04, -hd - 0.09, zu + 0.82 * math.sin(a) + 0.04, "Schrift schwarz")
-    g.box(-0.04, -hd - 0.12, zu, 0.04, -hd - 0.09, zu + 0.65, "Schrift schwarz")
-    g.box(0.0, -hd - 0.12, zu - 0.04, 0.48, -hd - 0.09, zu + 0.04, "Schrift schwarz")
+        g.box(0.82 * math.cos(a) - 0.04, yu - 0.11, zu + 0.82 * math.sin(a) - 0.04, 0.82 * math.cos(a) + 0.04, yu - 0.09, zu + 0.82 * math.sin(a) + 0.04, "Schrift schwarz")
+    g.box(-0.04, yu - 0.12, zu, 0.04, yu - 0.09, zu + 0.65, "Schrift schwarz")
+    g.box(0.0, yu - 0.12, zu - 0.04, 0.48, yu - 0.09, zu + 0.04, "Schrift schwarz")
     fensterschmuck(g, "x", -hd, -1, -4.2, F0 + 2.25, 1.6, 2.7, "Laden gruen alt" if lvl else "Laden gruen")
     fensterschmuck(g, "x", -hd, -1, 4.2, F0 + 2.25, 1.6, 2.7, "Laden gruen alt" if lvl else "Laden gruen")
     fensterschmuck(g, "x", hd, 1, -4.2, F0 + 2.25, 1.6, 2.7, None)
@@ -363,7 +366,7 @@ def stellwerk(b, lvl=1):
     for k in range(n):                                                                           # Treppengelaender zur Raumseite (Fuellung)
         xk = -2.6 + 0.26 * k
         g.box(xk, 0.93, F0 + rise * (k + 1), xk + 0.26, 1.07, max(F0 + rise * (k + 1) + 1.0, zf2 + 1.0 if xk >= -1.9 else 0.0), "Holz")
-    ox0, ox1, oy0, oy1 = -1.9, 0.5, 1.0, hd - WD
+    ox0, ox1, oy0, oy1 = -2.6, 0.5, 1.0, hd - WD                                              # Loch beginnt am Treppenfuss (sonst Kopf an der Decke beim Abstieg)
     sl = [(-hw + WD, -hd + WD, ox0, hd - WD), (ox0, -hd + WD, ox1, oy0), (ox1, -hd + WD, hw - WD, hd - WD)]
     for (a, c, d, e) in sl:
         g.box(a, c, zf2 - 0.25, d, e, zf2, "Decke")

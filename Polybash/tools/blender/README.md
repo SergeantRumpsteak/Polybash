@@ -170,3 +170,68 @@ Norden ist +y (Blickrichtung beim Betreten der Kirche), der Steinbruch liegt als
 - Bankgebaeude (`oeffentlich.bankhaus`) auf der NW-Gruenflaeche im Kreis; Eckhaus an der Strassenbiegung zur Feuerwehr (45 Grad).
 - Bauernhof-Zufahrt als geschwungener Feldweg; Getreidefelder gerade ausgerichtet; mehr Baeume im Nordosten.
 - Tests sind reine Mock-Tests (kein echtes Blender).
+
+### Wegweiser, hohes Gras, Gewaechshaus, Kampfhubschrauber, neue Baeume, Ruinenplattformen (ausstattung.py, gras.py, bauernhof.py, flugzeug.py, baumarten.py, ruine.py, muehle.py, stadt.py, oeffentlich.py)
+- Wegweiser (gelbe Tafeln, Pfeile) an den Ringabzweigen: RATHAUS, BAHNHOF, FLUGPLATZ, KREISEL (= Nordkreisel), dazu STEINBRUCH am Abzweig nach Westen.
+- Hoehere Graeser (35..90 cm, `gras._mittel`) per Streuraster mit Rauschen ueber alle Gruenflaechen (an der Piste niedriger). Gras auf Asphalt: Fahrbahnhoehe beruecksichtigt die Nachbarschaft des Wiesennetzes (`umgebung._z_auf`), quer mehrere Stuetzpunkte; Test: kein Wiesendreieck durchstoesst eine Fahrbahn.
+- NW-Gruenflaeche im Kreis: Hotel (`oeffentlich.hotel`, begehbar, Rezeption, Zimmer; ein offenes Fenster) statt Bank. Die Bank steht jetzt auf der Zwischengruenflaeche im SW des Kreises, Eingang zum Bauernhof.
+- Neues Wohnhaus am NW-Eck des Marktrings zwischen Feuerwehr und Kirche.
+- Offene Fenster (`fensterschmuck(..., "offen")`, keine Scheibe, Fluegel aufgeschwenkt) im OG von etwa jedem dritten begehbaren Zweigeschosshaus. Treppenloch im OG beginnt jetzt eine Stufe frueher (Kopffreiheit bei schraeg gedrehten Haeusern).
+- Kampfhubschrauber (`flugzeug.kampfhubschrauber`, ca. 17 m, Vierblattrotor, Stummelfluegel mit vier 19-Rohr-Raketenbehaeltern und zwei Lenkflugkoerpern, sechslaeufige Minigun am Kinn) auf dem Helipad.
+- Gewaechshaus am Bauernhof (`bauernhof.gewaechshaus`): Halbzylinder 16 x 6,8 m aus durchsichtigem Glas (Material mit Alpha: `FARBEN`-Eintrag mit 4. Wert, `talkessel.material(..., alpha)`), Steinsockel, Rippen, Tuer zum Hof, innen begehbar mit Beeten und Pflanztisch.
+- Neue Baumarten (`baumarten.py`, 230..430 Flaechen je Baum): Eiche, Birke, Fichte, Waldkiefer, Pappel, Obstbaum. `wald.tanne/laubbaum`, Ortsbaeume und Hofobstbaeume nutzen sie; der dichte Randguertel behaelt die einfachen Baeume (`tanne_alt/laubbaum_alt`).
+- Hochsitz bei der Muehle entfernt; neuer Standort in der oestlichen Sattelsenke der Burgruine (94,5 / 264).
+- Burgruine: die drei Steintreppen enden in begehbaren Plattformen (Suedtreppe am Eckbastion, Nordtreppe hinter dem Palas, Turmtreppe auf der Nordmauerkrone) mit Bruestung; Treppen haben Bruchsteinbruestungen an der offenen Seite.
+- Tests sind reine Mock-Tests (kein echtes Blender).
+
+### Korrekturen: Schilder, Hotel, Bankweg, offene Fenster, Ringbaeume, Bahnhofsuhr
+- Schilder: Pfosten sitzen hinter den Tafeln (Wegweiser, Haltestellen-, Flughafen- und Pistenschilder), alle Schilder 20 % kleiner (`schilder.SCHILD_SKALA`, Skalierung um den Fusspunkt, auch fuer Hindernisquader).
+- Hotel um 180 Grad gedreht (Eingang zur Spange Nord, Gebaeude dafuer etwas zum Ring hin verschoben); Zugangswege zu Hotel und Bank enden am naechsten Punkt einer Strassenlinie (`stadt._naechster_strassenpunkt`) und kreuzen nie das Gebaeude (Bank: gerader Weg von der Tuer zur Werkstrasse).
+- Offene Fenster haben keine Laeden und keine Bretter. Alle Haeuser mit offenem Fenster (Stadthaus, Bauernhaus, Hotel) sind per Treppe bis ins Obergeschoss begehbar (Test).
+- Einzelne Laubbaeume (`wald.ring_baeume`, 10 Stueck) auf den Gruenflaechen zwischen Burg und Kreisstrasse.
+- Bahnhofsuhr sitzt jetzt auf dem Giebeldreieck vor dem Dachrand und ist komplett sichtbar (vorher verdeckte die Dachkante die obere Haelfte).
+
+### Uebertragung ins Spiel: Polytown neu ist jetzt die Standardkarte (export_spiel.py, ../../maps/polytown.ptmap, spiel.py)
+- `python3 export_spiel.py` (reines Python, ohne Blender; baut dieselbe Szene mit einer bpy-Attrappe, ca. 45 s) schreibt `Polybash/maps/polytown.ptmap` (18,8 MB). Nach jeder Aenderung an der Karte neu ausfuehren und die Datei mit einchecken.
+- Inhalt: 792k Flaechen in 32-m-Bloecken (je Block vier Klassen: opak, zweiseitig, durchsichtig, leuchtend; Licht wie `Mesh.tri` in die Vertexfarben eingebacken, Normalen fuer die Echtzeit-Schatten), 70k Gelaende-Dreiecke fuer die Kollision (`TriMesh` der Engine: Wiese, Berge, Burggelaende, Steinbruchgrube, Wege, Piste ...), 80k Kollisionsquader (`Bau.bx`, Kacheln gedrehter Waende verschmolzen), 61 Startpunkte, 12 Kisten, 2 Fahrzeuge, Helipad (240/184), Minimap und Menue-Vorschau.
+- `spiel.py`: `pt_find`/`load_ptmap`/`pt_mapdata` laden die Datei, `World.build_pt` setzt die Quader (Raster 4 m), `build_pt_scene` baut die Grafik direkt aus den fertigen Vertex-Feldern. Fehlt `maps/polytown.ptmap`, startet die alte, im Code erzeugte Polytown-Karte. Mitspieler bekommen vom Host nur die Kopfzeile und laden die Datei aus ihrem Ordner `maps` (wie bei der Minecraft-Karte).
+- Der flugfaehige Spiel-Hubschrauber steht auf dem Helipad; der statische Kampfhubschrauber der Blender-Szene wird dafuer nicht exportiert. Die Radarantenne auf dem Tower dreht sich (144 Grad/s wie in Blender).
+- Tomahawk: Code, Zustand und Einstellungen bleiben unveraendert; der Knopf liegt ausser Reichweite, bis der Kontrollraum nachgebaut ist (`World.build_pt`, `button`/`timer_panel`).
+- Tests: nur Spiellogik mit Panda3D-Attrappen (Weltaufbau, keine Luecken im Gelaende, Startpunkte, Haeuser betreten, Heli, Auto, Netz-Pruefsumme). Die Grafik (echte Panda3D-Geometrie, Schatten) konnte hier nicht gerendert werden.
+
+#### Nachbesserung: Zaeune, Heli, Daecher, Wasser, Texturen (Format `ver` 2)
+- **Zaeune**: `Bau.kol` (nur Kollision) liefert durchgehende, 0,6 m dicke Zaunwaende (Flugplatz `zaunstrecke`, Weidezaun in `bauernhof.zaun`) - vorher standen nur 0,12-m-Pfosten und duenne Holme, durch die man bei niedriger Bildrate (und zwischen den Pfosten) hindurchkam. `spiel.step` zerlegt lange Bilder ausserdem in Schritte von hoechstens 0,05 s. Im Nord- und im Suedzaun des Flugplatzes ist bei x = 247..253 (`ZAUN_LUECKE`, `zaun_umgeknickt`) eine durchgebogene Stelle ohne Kollision, durch die man gehen kann.
+- **Hubschrauber**: der statische Kampfhubschrauber ist jetzt ein eigenes Objekt `umgebung_heli` (`umgebung.hubschrauber()`), das der Export weglaesst (`WEGLASSEN`); vorher blieben Rotor, Mast und Streben (Material "Flug ...") am Boden stehen, wenn der Spiel-Heli abhob.
+- **Daecher**: alle nach oben zeigenden Flaechen mit "dach" im Materialnamen (16978 Dreiecke) kommen als Kollisionsdreiecke dazu (`kind` 6 = Dach + zweiseitig; `TriMesh` nimmt sie nicht in die Gelaendehoehe "ups" auf). Man laeuft auf dem Schraegdach des Feuerwehrhauses (und aller Haeuser), solange es flacher als ca. 50 Grad ist.
+- **Wasser**: `wasser_maske` schreibt eine 0,5-m-Maske der tiefen Zellen (Burggraben, Teiche) in die Datei; `World.water_at` verhindert, dass Spieler und Fahrzeuge von Land aus hineingehen (Bruecken ab 1,5 m ueber dem Spiegel nicht; wer drin ist, kommt heraus). Wasser ist leicht durchsichtig (Alpha 0,9).
+- **Texturen**: `export_spiel.TEXMAP` ordnet Blender-Materialien den Spiel-Texturen zu (`pt_grass`: Wiese; `pt_asphalt`: Strasse/Weg/Piste/Vorfeld/Fahrbahn; `pt_water`: Wasser; `pt_fort`: Mauerwerk/Hof/Stufen/Burgstein). Die Gruppen tragen dafuer Texturkoordinaten (Ebene passend zur Flaechenrichtung, in Kacheln) und `tx`; `spiel.py` erzeugt die Texturen selbst (`_t_pt_*`, `TEXGEN`, je 256 x 256 px, nahtlos) und multipliziert sie mit den Vertexfarben.
+- Tests (nur Attrappen, **keine** echte Grafik): Zaun-Durchlauf bei 60/30/10 fps (nur die Luecken sind passierbar), Fallen und Laufen auf Daechern, Wasser (197 Anlaeufe von Land: 0 im tiefen Wasser; 120 von 120 kommen heraus), alte Polytown-Tests. Die Texturen wurden als PNG geprueft, ihr Aussehen im Spiel nicht.
+- Mitspieler brauchen die neue `maps/polytown.ptmap` (gleiche Kennung, neues Format).
+
+#### Nachbesserung 2: Marktplatz-Laeden, Ruine, Haustexturen, Strassenrand, Muehlen, Rauch
+- **Laeden am Marktplatz** (`stadt.laden`, `plane_stadt`): 8 x 7,6 m statt 8 x 10 m, Mittelpunkte x = 36 (West) und 74 (Ost) - sie stehen jetzt zwischen Marktring-Strasse (Kante x = 31 / 79) und Platz (x = 40 / 70) auf der Gruenflaeche (Raster-Pruefung: keine Strassenzellen im Grundriss). Alle vier sind blau.
+- **Burgruine**: `TEXPART` ordnet fuer das Teil `burgruine` alle Steinmaterialien ("Stein alt", "Stein dunkel", "Felsen Burg", "Burgstein ...") der Burgstein-Textur `pt_fort` zu; vorher fielen "Stein alt" (6546 Flaechen) und "Felsen Burg" heraus.
+- **Haeuser/Daecher/Schilder** (`TEXMAP`): `pt_plaster` (Putz, abgeplatzt), `pt_brick` (Backstein/Klinker), `pt_rubble` (Bruchstein: "Stein ...", ausser an der Ruine), `pt_tile` (rote Tondaecher mit Moos), `pt_slate` (graue/schwarze Daecher, Schiefer), `pt_wood` (Holz, Dielen, Laeden, Tueren), `pt_sign` (lackiertes Blech: Schilder bleiben gelb/weiss/rot/gruen, bekommen Kratzer und Rost). Texturkoordinaten: `uv_koord` (u entlang der waagerechten Tangente, v in Hangrichtung, Reihen bleiben auch auf Schraegdaechern waagerecht).
+- **Strassenrand**: `strassenraender` legt an den Kanten von "Strasse"/"Weg" einen 1,4 m breiten, durchsichtig auslaufenden Streifen (Alpha 0,8 -> 0, Farbe Asphalt -> Verge) auf den Rasen - nur wo aussen Wiese liegt (Rasterpruefung gegen Platz/Pflaster, Haeuser, Wasser, andere Wege). 1737 Streifen, eigene Gruppen der Klasse 2.
+- **Muehlen**: die Fluegel beider Muehlen sind eigene Objekte (`nord_muehle_fluegel`, `nord2_muehle_fluegel`, Drehpunkt/Wellenrichtung in `FLUEGEL_ACHSE`). Im Export liegen ihre Vertices lokal um die Nabe (Welle = +y); das Spiel dreht den Knoten um diese Achse (`roll`: `setHpr(h0, 0, t * speed)`), 22 bzw. 16 Grad/s.
+- **Rauch**: `rustik.kamin` merkt sich jede Kaminoeffnung (`SCHORNSTEINE`); der Export laesst aus 13 von 25 Schornsteinen Rauch aufsteigen (`meta.smoke`). Im Spiel steigen je 7 weiche, grauer werdende Puffs auf, wachsen, driften mit dem Wind und verblassen (nur im Umkreis von 110 m berechnet).
+- Test: nur Attrappen (Weltaufbau, Kollision, Szenenaufbau); die Nabenlage der Fluegel wurde rechnerisch geprueft (Radius 4,5 / 7,7 m, Achsversatz < 1 m). Rauch, Strassenrand und Texturen im echten Spiel nicht gesehen.
+
+
+#### Nachbesserung 3: Treppen, Schienen, Fenster, Kollision, Boeden, Teiche, Rauch
+- **Treppen**: Das Treppenloch der Haeuser (`stadt.haus`, `oeffentlich`) beginnt jetzt schon bei der 2. Stufe (vorher 4.), und `push_out` ignoriert Quader, in die nur der Kopf (`HEAD_TOL` 0,35 m) hineinragt - sonst blieb man beim Abstieg am OG-Geländer/an der Decke haengen.
+- **Schienen**: Gleisteile (Bett, Schwellen, Schienen) sind nur Optik, ohne Kollisionsquader - man laeuft auf Gelaendehoehe ohne Wackeln.
+- **Fenster**: Die Scheibe sitzt buendig an der Wandflaeche (vorher 17 cm tief in vollen Kernen = "zugemauert", v. a. Rathaus/Gasthaus am Markt).
+- **Schuesse durch Zaeune**: Zaunpfosten/-holme sind nur Optik; die Spielerkollision macht die Zaunwand (`kol`), die im `.ptmap` als `meta.nclip` letzte Quader steht und als `Box.clip` Schuesse (`seg_box`) durchlaesst.
+- **Fahrzeuge**: niedrige senkrechte Kanten (< 0,3 m, z. B. Pistenmarkierungen) sind keine Kollisionswaende mehr; Schranken und Torstuetzen am Flughafen haben keine Kollision mehr (Spur war enger als der Wagen).
+- **Hangars**: die Rundbogenhallen haben Kollision an den steilen Bogenteilen und der Rueckwand.
+- **Unsichtbare Waende**: schraeg gedrehte Quader (`Lok.kachel`) werden immer als Kacheln (0,6 m) erfasst statt als ausgerichteter Rahmen.
+- **Boeden**: neue Texturen `pt_gravel` (Pfad, Schotter, Schotterbett, Bruch Erde), `pt_cobble` (Pflaster, Bahnsteig), `pt_dirt` (Hofboden, Acker, Schlamm), `concrete` (Beton, Hangar Boden).
+- **Bankweg**: Pfade enden an der Strassenkante statt mitten auf dem Asphalt.
+- **Teiche**: Wasserflaeche reicht bis `tr + 3,2` (Mulde endet bei `tr + 3,5`), keine Luecke zum Ufer.
+- **Rauch**: 14 Puffs, 16 m hoch, dunkel (0,09) und dichter (Alpha 0,92).
+- **Raketenwerfer**: Beim Nachladen kommt die Rakete von links unten ins Bild, die Hand fasst sie von der Seite.
+- Test: nur Attrappen (kein Blender, kein Panda3D-Rendering).
+- Weitere Punkte dieser Runde: Wasserpruefung (`water_at`) zaehlt Brueckenplanken nicht als Wasser, Nordbruecke hat eine durchgehende Fahrbahn-Kollision; Dachdreiecke sind bis ca. 73 Grad immer begehbar (kein Durchfallen); Marktbrunnen/Dorfbrunnen haben Kollision (`kreis_sperre`); Laternen stehen nicht auf Umlandwegen; Boeschung der Festungsinsel traegt die Gras-Textur; Stellwerk-Treppenloch beginnt am Treppenfuss; Steinbruch-Wegweiser siehe unten.
+- **Auto-Raeder**: `_build_wheel` (spiel.py) baut geschlossene Raeder (Lauffläche mit Profil, Flanken, Felge mit fünf Speichen, Nabe, Radmuttern); vorher waren die Prismen offene Röhren (durchsichtig). Die Speichen machen die vorhandene Raddrehung (`VehicleView.update`) sichtbar. Nur Attrappen-Test (Dreiecke gezaehlt), nicht gerendert.
+- **Bauernhof**: Scheunentreppe hat jetzt zwei durchgehende, schraege Holme (Handlauf + Knieholm, `_holm`) statt gestufter Einzelbalken, Pfosten alle 3 Stufen, Kollision des Gelaenders unsichtbar stufenweise. Ackerwagen steht frei bei (48, 68) (vorher im Stall). Obstbaeume nach Norden (y ~96) verschoben - einer stand im Wohnhaus. Nur Attrappen-Test.

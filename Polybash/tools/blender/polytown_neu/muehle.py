@@ -37,11 +37,11 @@ MUEHLE = (270.0, 284.0, -45.0)           # Mitte, Drehung in Grad (-45: Fluegel 
 KOEHLER = (279.5, 264.0, 90.0)           # Huette, Tuer nach Osten zum Meiler
 MEILER = (288.5, 264.0)
 JAGD = (255.3, 263.5, 0.0)               # Blockhaus, Tuer nach Sueden
-HOCHSITZ = (246.0, 288.0, -90.0)         # Treppe zeigt nach Westen
+HOCHSITZ = (94.5, 264.0, -90.0)          # Hochsitz in der oestlichen Sattelsenke der Burgruine (flach, 2,9 m); Treppe zeigt nach Westen zur Ruine
 FUTTER = (240.0, 272.0, 0.0)             # Futterkrippe am Waldrand
 ZELT = (290.0, 290.0)                     # Zeltplatz mit Feuerstelle in der Nordostecke
 HOCHSITZ_WALD = (250.0, 43.0, -90.0)     # zweiter Hochsitz im Wald suedlich des Flugplatzes
-BAUPLAETZE = ((270.0, 284.0, 15.0), (257.0, 262.0, 10.0), (285.0, 264.0, 12.0), (246.0, 288.0, 7.0), (290.0, 290.0, 9.0), (240.0, 272.0, 4.0), (250.0, 43.0, 7.0))
+BAUPLAETZE = ((270.0, 284.0, 15.0), (257.0, 262.0, 10.0), (285.0, 264.0, 12.0), (94.5, 264.0, 7.0), (290.0, 290.0, 9.0), (240.0, 272.0, 4.0), (250.0, 43.0, 7.0))
 
 
 def _wr(cx, cy, th, x0, y0, x1, y1, m=0.4):
@@ -76,6 +76,9 @@ def _belegt():
 
 
 BELEGT = tuple(_belegt())
+
+
+FLUEGEL_ACHSE = {}                          # Name des Fluegelobjekts -> (Drehpunkt (x, y, z), waagerechte Wellenrichtung (dx, dy)); fuer den Spiel-Export
 
 
 def _bm(g, a, b, w, h, mat):
@@ -150,27 +153,31 @@ def muehle(b):
     g.prism(1.35, 1.7, ZF, 0.35, 0.9, 8, "Holz alt")
     g.box(1.0, 1.35, ZF + 0.9, 1.7, 2.05, ZF + 0.95, "Holz dunkel")
     g.box(1.15, -2.0, ZF, 1.7, -1.1, ZF + 0.45, "Holz")                                      # Mehlkasten
-    # Fluegelkreuz an der Welle
+    # Fluegelkreuz an der Welle (eigenes Objekt, im Spiel drehbar um die Welle)
+    fl = Bau("nord_muehle_fluegel")
+    b.fluegel = fl
+    gf = Lok(fl, cx, cy, zb, math.radians(th))
+    FLUEGEL_ACHSE["nord_muehle_fluegel"] = (gf.P((0.0, -hd - 0.9, zh)), (-math.sin(math.radians(th)), math.cos(math.radians(th))))
     yh = -hd - 0.9
-    g.box(-0.28, yh - 0.45, zh - 0.28, 0.28, -hd - 0.05, zh + 0.28, "Holz dunkel")
+    gf.box(-0.28, yh - 0.45, zh - 0.28, 0.28, -hd - 0.05, zh + 0.28, "Holz dunkel")
     ph = math.radians(22.0)
     for k in range(4):
         a = ph + k * math.pi / 2
         u = (math.cos(a), 0.0, math.sin(a))
         w = (-math.sin(a), 0.0, math.cos(a))
         P = lambda r, o, dy=0.0: (u[0] * r + w[0] * o, yh + dy, zh + u[2] * r + w[2] * o)
-        _bm(g, P(0.3, 0.0), P(4.4, 0.0), 0.22, 0.2, "Holz dunkel")
-        _bm(g, P(0.9, 1.15), P(4.3, 1.15), 0.09, 0.09, "Holz")
-        _bm(g, P(0.9, 0.0), P(0.9, 1.15), 0.09, 0.09, "Holz")
-        _bm(g, P(4.3, 0.0), P(4.3, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(0.3, 0.0), P(4.4, 0.0), 0.22, 0.2, "Holz dunkel")
+        _bm(gf, P(0.9, 1.15), P(4.3, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(0.9, 0.0), P(0.9, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(4.3, 0.0), P(4.3, 1.15), 0.09, 0.09, "Holz")
         r = 1.3
         while r < 4.3:
-            _bm(g, P(r, 0.0, 0.02), P(r, 1.15, 0.02), 0.07, 0.07, "Holz alt")
+            _bm(gf, P(r, 0.0, 0.02), P(r, 1.15, 0.02), 0.07, 0.07, "Holz alt")
             r += 0.45
         if k % 2 == 0 or k == 3:                                                           # Segeltuch (zwei Sichtseiten)
             for dy, nz in ((0.05, 1), (0.03, -1)):
                 vs = [P(1.0, 0.1, dy), P(4.2, 0.1, dy), P(4.2, 1.1, dy), P(1.0, 1.1, dy)]
-                g.poly(vs, (0.0, nz, 0.0), "Segel")
+                gf.poly(vs, (0.0, nz, 0.0), "Segel")
     # Wetterfahne am First
     g.box(-0.04, -0.04, H + 1.9, 0.04, 0.04, H + 2.5, "Eisen")
 
@@ -355,27 +362,31 @@ def muehle(b):
     g.prism(1.35, 1.7, ZF, 0.35, 0.9, 8, "Holz alt")
     g.box(1.0, 1.35, ZF + 0.9, 1.7, 2.05, ZF + 0.95, "Holz dunkel")
     g.box(1.15, -2.0, ZF, 1.7, -1.1, ZF + 0.45, "Holz")                                      # Mehlkasten
-    # Fluegelkreuz an der Welle
+    # Fluegelkreuz an der Welle (eigenes Objekt, im Spiel drehbar um die Welle)
+    fl = Bau("nord_muehle_fluegel")
+    b.fluegel = fl
+    gf = Lok(fl, cx, cy, zb, math.radians(th))
+    FLUEGEL_ACHSE["nord_muehle_fluegel"] = (gf.P((0.0, -hd - 0.9, zh)), (-math.sin(math.radians(th)), math.cos(math.radians(th))))
     yh = -hd - 0.9
-    g.box(-0.28, yh - 0.45, zh - 0.28, 0.28, -hd - 0.05, zh + 0.28, "Holz dunkel")
+    gf.box(-0.28, yh - 0.45, zh - 0.28, 0.28, -hd - 0.05, zh + 0.28, "Holz dunkel")
     ph = math.radians(22.0)
     for k in range(4):
         a = ph + k * math.pi / 2
         u = (math.cos(a), 0.0, math.sin(a))
         w = (-math.sin(a), 0.0, math.cos(a))
         P = lambda r, o, dy=0.0: (u[0] * r + w[0] * o, yh + dy, zh + u[2] * r + w[2] * o)
-        _bm(g, P(0.3, 0.0), P(4.4, 0.0), 0.22, 0.2, "Holz dunkel")
-        _bm(g, P(0.9, 1.15), P(4.3, 1.15), 0.09, 0.09, "Holz")
-        _bm(g, P(0.9, 0.0), P(0.9, 1.15), 0.09, 0.09, "Holz")
-        _bm(g, P(4.3, 0.0), P(4.3, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(0.3, 0.0), P(4.4, 0.0), 0.22, 0.2, "Holz dunkel")
+        _bm(gf, P(0.9, 1.15), P(4.3, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(0.9, 0.0), P(0.9, 1.15), 0.09, 0.09, "Holz")
+        _bm(gf, P(4.3, 0.0), P(4.3, 1.15), 0.09, 0.09, "Holz")
         r = 1.3
         while r < 4.3:
-            _bm(g, P(r, 0.0, 0.02), P(r, 1.15, 0.02), 0.07, 0.07, "Holz alt")
+            _bm(gf, P(r, 0.0, 0.02), P(r, 1.15, 0.02), 0.07, 0.07, "Holz alt")
             r += 0.45
         if k % 2 == 0 or k == 3:                                                           # Segeltuch (zwei Sichtseiten)
             for dy, nz in ((0.05, 1), (0.03, -1)):
                 vs = [P(1.0, 0.1, dy), P(4.2, 0.1, dy), P(4.2, 1.1, dy), P(1.0, 1.1, dy)]
-                g.poly(vs, (0.0, nz, 0.0), "Segel")
+                gf.poly(vs, (0.0, nz, 0.0), "Segel")
     # Wetterfahne am First
     g.box(-0.04, -0.04, H + 1.9, 0.04, 0.04, H + 2.5, "Eisen")
 
@@ -698,7 +709,7 @@ def bauen_nord():
     zeltplatz(e)
     hochsitz(f, HOCHSITZ_WALD)
     import muehle2 as M2
-    return [a, c, d, e, f] + M2.bauen_ne()
+    return [a, a.fluegel, c, d, e, f] + M2.bauen_ne()
 
 import muehle2 as _M2  # noqa: E402  (zweite Muehle und Schaeferhuette: Belegung und Lichtungen)
 BELEGT = BELEGT + _M2.BELEGT

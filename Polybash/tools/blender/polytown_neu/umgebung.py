@@ -344,24 +344,36 @@ def _wiesenrauschen(x, y):
 
 
 def _z_auf(x, y, z0, hf):
+    """Hoehe der Fahrbahn: Wiese am Punkt, dazu die hoechste Wiesenhoehe der Nachbarschaft (das Wiesennetz hat nur 2,5 m Gitterweite und kann zwischen
+    den Stuetzpunkten ueber der exakten Hoehe liegen), um hoechstens 0,22 m, und ein kleiner Zuschlag - so schauen keine Gruenflecken durch die Fahrbahn."""
     h = hf(x, y) if hf else 0.0
-    return h + z0 + 0.03 * min(1.0, abs(h) / 0.05)                     # kleiner Zuschlag, damit die Wiese nicht durchsticht
+    if hf:
+        hn = max(hf(x + 1.25, y), hf(x - 1.25, y), hf(x, y + 1.25), hf(x, y - 1.25))
+        h += min(0.22, max(0.0, hn - h))
+    return h + z0 + 0.04 * min(1.0, abs(h) / 0.02)
 
 
 # ------------------------------------------------------------------ flache Wegstuecke (Oberflaechen)
-def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=3.0):
+def _quer(w):
+    """Zahl der Stuetzpunkte quer zur Fahrbahn (etwa alle 1,6 m): so durchstoesst keine schmale Bodenwelle in der Wegmitte die Fahrbahn."""
+    return max(2, int(math.ceil(w / 1.6)) + 1)
+
+
+def streifen(b, p0, p1, w, z, mat, hf=gelaende_hoehe, schritt=1.5):
     """Gerades Wegstueck von p0 nach p1 (Breite w), dem Gelaende folgend (Hoehe z ueber der Wiese), Normale nach oben."""
     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
     ln = math.hypot(dx, dy)
-    nx, ny = -dy / ln * w / 2, dx / ln * w / 2
+    nx, ny = -dy / ln, dx / ln
     n = max(1, int(math.ceil(ln / schritt)))
+    K = _quer(w)
     v = []
     for i in range(n + 1):
         cx, cy = p0[0] + dx * i / n, p0[1] + dy * i / n
-        for sg in (1, -1):
-            x, y = cx + sg * nx, cy + sg * ny
+        for c in range(K):
+            o = w / 2 - w * c / (K - 1)
+            x, y = cx + o * nx, cy + o * ny
             v.append((x, y, _z_auf(x, y, z, hf)))
-    f = [(2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2) for i in range(n)]
+    f = [(i * K + c, i * K + c + 1, (i + 1) * K + c + 1, (i + 1) * K + c) for i in range(n) for c in range(K - 1)]
     b.add(v, f, mat)
 
 
@@ -395,8 +407,8 @@ def rund(pts, r, geschlossen=False, n=8):
     return out
 
 
-def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=3.0):
-    """Weg (Breite w) entlang eines Linienzugs, dem Gelaende folgend; zu lange Stuecke werden unterteilt. Normale nach oben."""
+def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=1.5):
+    """Weg (Breite w) entlang eines Linienzugs, dem Gelaende folgend; zu lange Stuecke werden unterteilt, quer mehrere Stuetzpunkte. Normale nach oben."""
     q = []
     m = len(pts)
     for i in range(m if geschlossen else m - 1):
@@ -408,32 +420,37 @@ def pfad(b, pts, w, z, mat, geschlossen=False, hf=gelaende_hoehe, schritt=3.0):
         q.append(tuple(pts[-1]))
     v = []
     M = len(q)
+    K = _quer(w)
     for i in range(M):
         a = q[(i - 1) % M] if (geschlossen or i > 0) else q[i]
         c = q[(i + 1) % M] if (geschlossen or i < M - 1) else q[i]
         dx, dy = c[0] - a[0], c[1] - a[1]
         ln = math.hypot(dx, dy) or 1.0
-        nx, ny = -dy / ln * w / 2, dx / ln * w / 2
-        for sg in (1, -1):
-            x, y = q[i][0] + sg * nx, q[i][1] + sg * ny
+        nx, ny = -dy / ln, dx / ln
+        for k in range(K):
+            o = w / 2 - w * k / (K - 1)
+            x, y = q[i][0] + o * nx, q[i][1] + o * ny
             v.append((x, y, _z_auf(x, y, z, hf)))
-    f = [(2 * i, 2 * i + 1, 2 * ((i + 1) % M) + 1, 2 * ((i + 1) % M)) for i in range(M if geschlossen else M - 1)]
+    f = [(i * K + k, i * K + k + 1, ((i + 1) % M) * K + k + 1, ((i + 1) % M) * K + k) for i in range(M if geschlossen else M - 1) for k in range(K - 1)]
     b.add(v, f, mat)
 
 
-def ring(b, w, z, mat, n=180, hf=gelaende_hoehe):
-    """Ringweg (Breite w) um die Burgmitte mit schwankendem Mittelradius ring_r(a), dem Gelaende folgend; n Vierecke."""
+def ring(b, w, z, mat, n=240, hf=gelaende_hoehe):
+    """Ringweg (Breite w) um die Burgmitte mit schwankendem Mittelradius ring_r(a), dem Gelaende folgend; n Teilstuecke, quer mehrere Stuetzpunkte."""
     v = []
+    K = _quer(w)
     for i in range(n):
         a = 2 * math.pi * i / n
         r = ring_r(a)
-        for rr in (r - w / 2, r + w / 2):
+        for k in range(K):
+            rr = r - w / 2 + w * k / (K - 1)
             x, y = C + rr * math.cos(a), C + rr * math.sin(a)
             v.append((x, y, _z_auf(x, y, z, hf)))
     f = []
     for i in range(n):
         j = (i + 1) % n
-        f.append((2 * i, 2 * i + 1, 2 * j + 1, 2 * j))                 # innen, aussen, aussen weiter, innen weiter
+        for k in range(K - 1):
+            f.append((i * K + k, i * K + k + 1, j * K + k + 1, j * K + k))
     b.add(v, f, mat)
 
 
@@ -678,6 +695,13 @@ def tonnenreihe(b, x0, x1, ycs, R, dicke=0.4, n=12, mat="Hangar Dach", mat_boden
                 pts = pts[:-1]
             if len(pts) >= 3:
                 _quad_orient(b, pts, d, mat)
+    for k in range(len(ao) - 1):                                                  # Kollision: die steilen Teile der Rundbogenwand (flache Teile = Dach, begehbar) und die Rueckwand
+        (y0, z0), (y1, z1) = ao[k], ao[k + 1]
+        (iy0, iz0), (iy1, iz1) = ai[k], ai[k + 1]
+        if abs(z1 - z0) > 0.8 * abs(y1 - y0):
+            ys_ = (y0, y1, iy0, iy1)
+            b.bx.append((x0, min(ys_), min(z0, z1, iz0, iz1), x1, max(ys_), max(z0, z1, iz0, iz1)))
+    b.bx.append((x1 - t, ao[0][0], 0.0, x1, ao[-1][0], max(z for _y, z in ao)))
     for xr in (x0 + 0.3, x0 + (x1 - x0) / 2, x1 - t - 0.2):                      # Dachrippen innen (sichtbare Bogenbinder)
         for k in range(len(ai) - 1):
             a = (xr, ai[k][0], max(0.0, ai[k][1] - 0.15))
@@ -857,6 +881,9 @@ def tower():
 
 
 # ------------------------------------------------------------------ Zaun, Tore, Checkpoint
+ZAUN_LUECKE = (247.0, 253.0)                                                                # durchgebogene Zaunstelle (Nord- und Suedzaun): x von .. bis
+
+
 def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
     """Zaun entlang einer Achse ('x': y = fest, von x = t0 bis t1; 'y': x = fest); in den 'luecken' (a, c) steht kein Zaun.
     Pfosten (0,12 m) alle <= 3 m, zwei Querholme; an den Luecken ein Endpfosten."""
@@ -873,6 +900,7 @@ def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
                 neu.append((c, s1))
         spans = neu
     for s0, s1 in spans:
+        n_bx = len(b.bx)
         n = max(1, int(math.ceil((s1 - s0) / abstand)))
         for i in range(n + 1):
             p = s0 + (s1 - s0) * i / n
@@ -885,11 +913,34 @@ def zaunstrecke(b, achse, fest, t0, t1, luecken=(), abstand=3.0):
                 b.box(s0, fest - 0.03, zr0, s1, fest + 0.03, zr1, "Metall")
             else:
                 b.box(fest - 0.03, s0, zr0, fest + 0.03, s1, zr1, "Metall")
+        del b.bx[n_bx:]                                                                       # Pfosten/Holme: nur Optik, Schuesse gehen durch (Kollision macht die Zaunwand unten)
+        if achse == "x":                                                                      # Spiel: durchgehende, dicke Zaunwand
+            b.kol.append((s0 - 0.25, fest - 0.3, 0.0, s1 + 0.25, fest + 0.3, 2.0))
+        else:
+            b.kol.append((fest - 0.3, s0 - 0.25, 0.0, fest + 0.3, s1 + 0.25, 2.0))
+
+
+def zaun_umgeknickt(b, fest, a, c, richtung):
+    """Durchgebogene Stelle im Zaun (x-Achse, y = fest, von x = a bis c): die Pfosten liegen nach aussen (richtung -1/+1 in y) fast am
+    Boden, die Querholme haengen durch. Keine Kollisionsquader: man geht darueber hinweg. Die Endpfosten (zaunstrecke, Luecke) stehen."""
+    mitte = (a + c) / 2.0
+    for k, p in enumerate((a + 1.4, mitte - 0.9, mitte + 0.9, c - 1.4)):                     # umgeknickte Pfosten
+        ja = (-0.15, 0.2, -0.25, 0.1)[k]
+        b.beam((p, fest, 0.05), (p + ja, fest + richtung * 1.85, 0.32 + 0.06 * (k % 2)), 0.12, 0.12, "Metall")
+    for zr, tief, aus in ((0.33, 0.16, 0.5), (1.03, 0.22, 1.2), (1.93, 0.30, 1.7)):          # Querholme: vom stehenden Pfosten zur Mulde
+        pa = (a, fest, zr)
+        pm = (mitte, fest + richtung * aus, tief)
+        pc = (c, fest, zr)
+        b.beam(pa, (a + (mitte - a) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), 0.06, 0.06, "Metall")
+        b.beam((a + (mitte - a) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), pm, 0.06, 0.06, "Metall")
+        b.beam(pm, (mitte + (c - mitte) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), 0.06, 0.06, "Metall")
+        b.beam((mitte + (c - mitte) * 0.5, fest + richtung * aus * 0.55, (zr + tief) / 2.0 + 0.05), pc, 0.06, 0.06, "Metall")
 
 
 def schranke(b, px, py, hx, hy, laenge, winkel=80.0):
     """Offene Schranke: Pfosten bei (px, py), der Baum (rot-weiss, Laenge 'laenge') steht um 'winkel' Grad aufgerichtet und neigt
     sich in Richtung (hx, hy) ueber die Fahrbahn; am anderen Ende ein Auflager."""
+    n_bx = len(b.bx)                                                  # Schranken: nur Optik (Fahrzeuge muessen durch die schmalen Torspuren passen)
     n = math.hypot(hx, hy)
     hx, hy = hx / n, hy / n
     b.box(px - 0.2, py - 0.2, 0.0, px + 0.2, py + 0.2, 1.1, "Metall")
@@ -901,6 +952,7 @@ def schranke(b, px, py, hx, hy, laenge, winkel=80.0):
         pa = (px + hx * a0 * math.cos(w), py + hy * a0 * math.cos(w), z0 + a0 * math.sin(w))
         pb = (px + hx * a1 * math.cos(w), py + hy * a1 * math.cos(w), z0 + a1 * math.sin(w))
         b.beam(pa, pb, 0.14, 0.14, "Schranke rot" if k % 2 == 0 else "Schranke weiss")
+    del b.bx[n_bx:]
 
 
 def zaun():
@@ -915,8 +967,10 @@ def zaun():
     lw = BREITE_WEG / math.sqrt(0.5) / 2.0 + 0.9                                             # halbe Torbreite entlang des Zauns
     luecken = [yz] + [(y - lw, y + lw) for y in yb]
     zaunstrecke(b, "y", x0, y0, y1, luecken)                                                 # Westzaun mit den drei Toren
-    zaunstrecke(b, "x", y0, x0, x1)                                                          # Suedzaun
-    zaunstrecke(b, "x", y1, x0, x1)                                                          # Nordzaun
+    zaunstrecke(b, "x", y0, x0, x1, luecken=[ZAUN_LUECKE])                                   # Suedzaun mit durchgebogener Stelle
+    zaunstrecke(b, "x", y1, x0, x1, luecken=[ZAUN_LUECKE])                                   # Nordzaun mit durchgebogener Stelle
+    zaun_umgeknickt(b, y0, ZAUN_LUECKE[0], ZAUN_LUECKE[1], -1)
+    zaun_umgeknickt(b, y1, ZAUN_LUECKE[0], ZAUN_LUECKE[1], 1)
     zaunstrecke(b, "y", x1, y0, y1)                                                          # Ostzaun (an den Bergen)
     # ---- Checkpoint am Zubringer: Mittelinsel mit Wachhaus, Vordach ueber beide Fahrstreifen, je Richtung eine Schranke
     gx = GATE_X
@@ -928,8 +982,10 @@ def zaun():
         B.fenster(b, gx + sx * 1.6, C, 1.7, 1.2, 1.0, sx, 0)
     b.box(gx - 2.6, C - 4.8, 3.6, gx + 2.6, C + 4.8, 3.9, "Tower Dach")                     # Vordach
     b.box(gx - 1.6, C - 1.1, 2.7, gx + 1.6, C + 1.1, 3.6, "Tower Beton")                    # Aufsatz zwischen Haus und Dach
+    n_st = len(b.bx)
     for sy in (-1, 1):
         b.box(gx - 0.15, C + sy * 4.55 - 0.15, 0.0, gx + 0.15, C + sy * 4.55 + 0.15, 3.6, "Tower Beton")      # Stuetzen am Fahrbahnrand
+    del b.bx[n_st:]                                                                          # Stuetzen am Rand: keine Kollision (Fahrzeugspur)
     # Einfahrt (nach Osten): Fahrstreifen y 146..148,7; Schranke vor dem Dach, Baum neigt sich zum Fahrbahnrand
     schranke(b, gx - 3.4, C - 1.5, 0.0, -1.0, 2.9)
     # Ausfahrt (nach Westen): Fahrstreifen y 151,3..154; Schranke hinter dem Dach
@@ -1079,7 +1135,14 @@ def flugzeuge():
         FL.stuka(b, STUKA_X, yy, 225.0)
     for yc, typ in zip(REIHE_YC, ("bf109", "fw190", "spitfire")):
         FL.jaeger(b, REIHE_X0 + 7.6, yc, 180.0, typ, Z_BODEN)
-    FL.hubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)                       # Hubschrauber auf dem Helipad
+    return b
+
+
+def hubschrauber():
+    """Kampfhubschrauber auf dem Helipad - eigenes Objekt, damit der Spiel-Export ihn weglassen kann (im Spiel ist er ein eigenes,
+    flugfaehiges Fahrzeug; sonst blieben Rotor und Teile am Boden stehen)."""
+    b = Bau("umgebung_heli")
+    FL.kampfhubschrauber(b, HELI[0], HELI[1], 200.0, 0.09)
     return b
 
 
@@ -1109,7 +1172,7 @@ FARBEN.update(SC.FARBEN)
 
 def baue_alles():
     """Gibt die Baugruppen zurueck (ohne bpy aufrufbar)."""
-    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad(), flugzeuge(), rollwegschilder()]
+    return [wege(), landebahn(), hangar(), hangarreihe(), tower(), zaun(), windsaecke(), tankstelle(), helipad(), flugzeuge(), hubschrauber(), rollwegschilder()]
 
 
 def bauen():

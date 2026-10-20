@@ -300,23 +300,31 @@ def clear_scene():
         bpy.data.meshes.remove(me)
 
 
-def material(name, rgb, rauh=0.95, emit=0.0):
-    """Material mit Farbe (Solid-Ansicht und Base Color); emit > 0 laesst es leuchten (Lampen)."""
+def material(name, rgb, rauh=0.95, emit=0.0, alpha=1.0):
+    """Material mit Farbe (Solid-Ansicht und Base Color); emit > 0 laesst es leuchten (Lampen); alpha < 1 macht es durchsichtig (Glas, Folie)."""
     if name in _MATS:
         return _MATS[name]
     m = bpy.data.materials.new(name)
-    m.diffuse_color = (rgb[0], rgb[1], rgb[2], 1.0)       # Farbe der Solid-Ansicht
+    m.diffuse_color = (rgb[0], rgb[1], rgb[2], alpha)     # Farbe der Solid-Ansicht
     try:
         m.use_nodes = True
         bsdf = m.node_tree.nodes.get("Principled BSDF")
         if bsdf is not None:
             bsdf.inputs["Base Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)   # Material Preview / Export
             bsdf.inputs["Roughness"].default_value = rauh
+            if alpha < 1.0:
+                bsdf.inputs["Alpha"].default_value = alpha
             if emit > 0.0:
                 bsdf.inputs["Emission Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
                 bsdf.inputs["Emission Strength"].default_value = emit
     except Exception:
         pass
+    if alpha < 1.0:                                       # durchsichtige Darstellung (Blender 4.2+: surface_render_method, aelter: blend_method)
+        for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND"), ("use_backface_culling", False)):
+            try:
+                setattr(m, attr, val)
+            except Exception:
+                pass
     _MATS[name] = m
     return m
 

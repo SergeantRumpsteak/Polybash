@@ -9,7 +9,7 @@ Polybash/
 ├── spiel.py                          Hauptspiel (Sinan)
 ├── experimental/
 │   └── robin_experimental.py         Modus "Experimental" = Robins Spielversion
-├── maps/                             Karten (.json, .mcmap)
+├── maps/                             Karten (.json, .mcmap; polytown.ptmap = Standardkarte aus Blender)
 └── installer/                        Windows-Installer (Inno Setup)
 .github/workflows/build-installer.yml baut den Installer auf GitHub (Actions)
 ```

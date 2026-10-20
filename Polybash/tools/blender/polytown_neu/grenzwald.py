@@ -14,7 +14,7 @@ import burg as B
 import stadt as S
 import talkessel as T
 from burg import Bau
-from wald import tanne, laubbaum
+from wald import tanne_alt as tanne, laubbaum_alt as laubbaum
 
 S.FARBEN.update({"Fels Block": ((0.47, 0.44, 0.41), 0.95, 0.0), "Fels Block dunkel": ((0.33, 0.31, 0.31), 0.95, 0.0),
                  "Fels Block hell": ((0.58, 0.55, 0.50), 0.95, 0.0)})
