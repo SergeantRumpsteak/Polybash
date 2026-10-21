@@ -2,6 +2,13 @@
 
 Neueste Änderungen oben.
 
+## Refactor: alles in einer spiel.py (2026-10-22)
+- GEÄNDERT `experimental/robin_experimental.py` gibt es nicht mehr. Robins Regeln stecken in `spiel.py` in den Klassen/Konstanten mit Präfix `Exp` / `EXP_` / `exp_` (ExpGame, ExpWorld, ExpPlayer, EXP_WEAPONS ...) und gelten nur im Modus Experimental.
+- GEÄNDERT Monster (alle 9 Arten inkl. Drohnen, Koloss, Titan) sind jetzt in **allen** Modi (KotH, DM, CTF, Experimental) Robins Version; die alten Hauptspiel-Monster sind entfernt.
+- GEÄNDERT Netzwerk ist vereinheitlicht: ein Protokoll (`NET_VERSION`), der Host meldet mit `exp`, ob Experimental läuft; `EXP_NET_VERSION` entfällt.
+- GEÄNDERT Grafik, Texturen und Karte kommen vom Hauptspiel; Robins Waffen-/Granaten-/Nahkampfmodelle bleiben in Experimental.
+- Änderungen an Robins Regeln künftig direkt in den `Exp*`-Teilen von `spiel.py`.
+
 ## Drohnen fliegen nicht mehr durch Gebäude und Wände (2026-10-21)
 - GEFIXT Alle Drohnen (Elektro-, Spieler- und Abwehrdrohne) werden jetzt von Wänden und Gebäuden (Quader und Karten-Kollision) gestoppt (`push_out(..., air=True)` mit der Flughöhe der Drohne). Über Dächern, Bäumen und Fahrzeugen fliegen sie weiterhin frei. Hängen sie an einer Wand fest, suchen sie wie Titan/Koloss einen Umweg.
 
