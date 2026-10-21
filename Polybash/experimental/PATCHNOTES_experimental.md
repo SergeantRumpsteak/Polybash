@@ -243,3 +243,11 @@ Neueste Änderungen oben.
 - `main` in diesen Branch gemergt (neues Polytown aus Blender: `maps/polytown.ptmap`, Texturen, Rauch, Brücken, Dach-/Treppenkollision u. a.).
 - Die Standardkarte ist im Experimental-Modus jetzt immer das neue Polytown. Die alte, im Code erzeugte 450-m-Karte wird nicht mehr gestartet (fehlt die Datei, kommt eine Fehlermeldung statt der alten Karte). Kartensuche findet `../maps/polytown.ptmap`.
 - Beide Spiel-Stände (Autoräder von 10f bleiben, Versionsnummer 42 bleibt). Nur mit Attrappen getestet (Welt baut in Koth/DM/CTF), nicht gerendert.
+
+
+## T-Menü, Aufsatz-Inventar und Beute in allen Modi
+- Das T-Menü (Waffe inspizieren, Aufsätze wählen) und das Aufsatz-Inventar gibt es jetzt in allen Modi. Das Inventar ist beim Spawn leer und enthält nur Aufsätze; Waffen liegen weiter in den Slots unten.
+- Das Bonuskistensystem aus dem Experimental-Modus gilt überall, das alte System ist gelöscht.
+- Zombies und tote Spieler lassen Waffen und Aufsätze fallen (Aufsätze/Waffen mit ihren Aufsätzen und Visier).
+- Neue Checkboxen unter "Weitere Einstellungen": Bonuskisten und Bonushasen an/aus (auch im Pausenmenü für den Host, wirkt ab der nächsten Runde). Standard: Kisten an (im Experimental-Modus aus), Hasen an.
+- Experimental bleibt ein eigener Modus. Nur mit Attrappen getestet, nicht gerendert.

@@ -1172,8 +1172,6 @@ LOOT_ATT_TABLES = {
 }
 
 # --- 10b: Kisten pausiert, Beute kommt von Monstern
-CRATES_ON_MAP = False          # verteilte Kisten auf der Karte (Code bleibt, später für Airdrops)
-
 MOB_LOOT = {"grunt": ("common", 2), "huntress": ("common", 2), "brute": ("rare", 2), "drone": ("rare", 2),
             "colossus": ("gold", 2), "titan": ("gold", 6),
             "critter": ("gold", 1)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl); 10g: Hase 1 Teil gold + Buff
@@ -4050,10 +4048,14 @@ def decode_mesh(raw, size):
 
 class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
+    loot_cats = ("weapon", "att")      # was Monster und Kisten hergeben (Experimental: dazu Nahkampf, Granaten, Ausrüstung)
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None):
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
         ctf = ctf if isinstance(ctf, dict) else {}
+        bonus = bonus if isinstance(bonus, dict) else {}
+        self.bonus_crates = bool(bonus.get("crates", True))      # Bonuskisten (Kisten auf der Karte, Titan-Kiste)
+        self.bonus_hares = bool(bonus.get("hares", True))        # Bonushasen (Fluchttiere mit Beute)
         self.ctf_ff = bool(ctf.get("ff", CTF_FF_DEFAULT))                  # Eigenbeschuss im CTF
         self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # Punktelimit (0 = aus)
         if mob_level is None:
@@ -4091,7 +4093,10 @@ class World:
         self.boxes = []
         self.flats = []   # (x, y, r_innen, r_aussen): hier ist das Gelände eben (Höhe 0)
         self.floors = []  # (x0, y0, x1, y1, Farbe): Bodenfarbe in Gebäuden
-        self.crates = []
+        self.crates = []      # Kisten, die gerade auf der Karte liegen (beim Client: aus den Snapshots)
+        self.crate_spots = [] # (x, y, z): gute Kistenplätze an Bauwerken (Türme, Häuser, Aussenposten ...)
+        self.crate_wait = []  # [Restzeit, Art, x, y]: geöffnete Kisten, die woanders neu auftauchen
+        self.next_cid = 1
         self.voids = []   # (x0, y0, x1, y1): Löcher im Gelände = Tunneltreppen (Boden bei TUN_Z)
         self.tunnels = [] # (x0, y0, x1, y1): Tunnelgänge (ein Stockwerk unter dem Gelände)
         self.decor = []   # (x0, y0, x1, y1, z0, z1, Farbe, beleuchtet): nur Darstellung, nicht fest
@@ -4239,7 +4244,8 @@ class World:
         return b
 
     def add_crate(self, x, y, z):
-        self.crates.append(Crate(len(self.crates), x, y, z))
+        """Merkt einen guten Kistenplatz an einem Bauwerk vor (die Kisten selbst verteilt reset_crates zufällig)."""
+        self.crate_spots.append((x, y, z))
 
     def stairs(self, x, y, d, n, w, base, sh=0.5, sd=0.8, col=STONE_D):
         """Treppe aus n Stufen (Höhe sh, Tiefe sd, Breite w). Die Stufe i steigt in
@@ -5263,7 +5269,8 @@ class World:
     def populate_mobs(self):
         k = MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
         for kind, n in (("grunt", N_GRUNT), ("brute", N_BRUTE), ("huntress", N_HUNT),
-                        ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER), ("titan", N_TITAN)):
+                        ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER if self.bonus_hares else 0),
+                        ("titan", N_TITAN)):
             cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
             if kind == "drone":                          # 9b: feste Zahl, unabhängig von Kartengrösse und Dichte
                 cnt = DRONE_COUNT if k > 0 else 0
@@ -5428,12 +5435,12 @@ class World:
         else:
             air = pl.z - self.floor_at(pl.x, pl.y, pl.z) > 1.5 and pl.mount < 0 \
                 and not (self.ladders and self.on_ladder(pl.x, pl.y, pl.z))
-        if WEAPONS[act].kind == "loot" and pl.loot == act and not air:
-            pl.loot = -1                                 # Kistenwaffe: liegt jetzt auf dem Boden
-        else:
-            self.drop_loot(pl)                           # sonst (oder in der Luft) geht sie zurück in eine Kiste
+        if pl.loot == act:
+            pl.loot = -1                                 # Kistenwaffe: liegt jetzt auf dem Boden (oder ist weg)
         if not air:                                      # wer in der Luft stirbt, lässt keine Waffe zum Aufheben fallen
-            self.add_drop(pl.x, pl.y, pl.z, act)
+            self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
+        pl.loot_history, pl.last_loot, pl.last_by = {}, None, {}     # Beute-Gedächtnis gilt nur für ein Leben
+        pl.att_store = []                                # Aufsatz-Lager wird beim Tod geleert
         self.leave_vehicle(pl)
         self.leave_turret(pl)
         self.leave_heli(pl)
@@ -5503,6 +5510,10 @@ class World:
                 killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
             self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
             self.events.append(("reward", owner))        # Munition für den Schützen
+            if m.kind in MOB_LOOT:                       # Beute: Waffen und Aufsätze fallen aus dem Monster
+                self.mob_loot(m, killer)
+            if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
+                self.titan_loot(m)
 
     def explode(self, pos, owner, r, dmg, wi):
         """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
@@ -5555,28 +5566,23 @@ class World:
 
     # ------------------------------------------------------------ Loot
     def reset_crates(self):
-        vals = [LOOT_WEAPONS[i % len(LOOT_WEAPONS)] for i in range(len(self.crates))]
-        self.mrng.shuffle(vals)
-        for c, v in zip(self.crates, vals):
-            c.content = v
-
-    def drop_loot(self, pl):
-        """Stirbt ein Spieler mit Kistenwaffe, taucht sie in einer zufälligen leeren Kiste wieder auf."""
-        w = pl.loot
-        pl.loot = -1
-        if w < 0:
+        """Rundenstart: alle Kisten neu und zufällig verteilen (Anzahl je Art: CRATES_STD / CRATES_MAP).
+        Die wertvollsten zuerst, damit sie sicher einen Platz bekommen."""
+        self.crates = []
+        self.crate_wait = []
+        if not self.bonus_crates:                        # Bonuskisten aus (Einstellung): keine verteilten Kisten
             return
-        empties = [c for c in self.crates if c.content < 0] or list(self.crates)
-        if empties:
-            self.mrng.choice(empties).content = w
+        cnt = self.crate_counts()
+        kinds = [k for k in reversed(CRATE_KINDS) for _ in range(int(cnt.get(k, 0)))]
+        for k in kinds:
+            if self.spawn_crate(k) is None:
+                self.crate_wait.append([1.0, k, -999.0, -999.0])     # kein Platz gefunden: gleich nochmal
 
     def use_crate(self, pl, c):
-        """Kiste öffnen; eine getragene Spezialwaffe wird gegen den Inhalt getauscht."""
-        pl.stats["crates"] += 1
-        new = c.content
-        c.content = pl.loot if pl.loot >= 0 else -1
-        pl.loot = new
-        self.events.append(("loot", pl.pid, new))
+        """Kiste öffnen: Waffe und Aufsatz fallen vor den Spieler (aufheben mit F), die Kiste taucht später woanders
+        wieder auf. Die Kistenart bestimmt die Qualität."""
+        if c in self.crates:
+            self.open_crate_triple(pl, c)
 
     def nearest_use(self, pl):
         """Was würde F jetzt tun? -> (Art, Objekt) oder None.
@@ -5596,7 +5602,7 @@ class World:
                 t = self.car_turret(v)
                 if v.driver < 0 or (t is not None and t.op < 0):
                     vehs.append(v)
-        for kind, objs, rng in (("crate", [c for c in self.crates if c.content >= 0], 3.2),
+        for kind, objs, rng in (("crate", self.crates, 3.2),
                                 ("drop", self.drops, 2.6),
                                 ("vehicle", vehs, 3.6),
                                 ("heli", [q for q in self.helis if q.hp > 0 and q.driver < 0 and q.ground], 6.0),
@@ -5604,8 +5610,9 @@ class World:
             for o in objs:
                 d = math.hypot(pl.x - o.x, pl.y - o.y) / rng
                 oz = o.z - o.seat if kind == "turret" else o.z
-                if d < bs and abs(pl.z - oz) < 2.5:
-                    best, bs = (kind, o), d
+                if d < bs and abs(pl.z - oz) < 2.5 and (kind not in ("crate", "drop") or
+                                                        self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
+                    best, bs = (kind, o), d                   # nicht durch Decken/Wände (Kisten, Drops)
         if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
             for kind, b in (("button", self.button), ("timer", self.timer_panel)):
                 d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
@@ -5717,33 +5724,362 @@ class World:
         return True
 
     # ------------------------------------------------------------ Waffen am Boden
-    def add_drop(self, x, y, z, wi):
-        while len(self.drops) >= MAX_DROPS:
+    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
+                 gk="frag"):
+        while len(self.drops) >= EXP_MAX_DROPS:
             self.drops.pop(0)
-        d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi)
+        d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
+                 scope, gren, gk)
         self.next_did += 1
         self.drops.append(d)
         return d
 
     def pickup_drop(self, pl, d):
-        """Waffe vom Boden aufheben: ersetzt den passenden Slot; eine getragene
-        Kistenwaffe, die dabei verdrängt wird, fällt auf den Boden."""
-        if d in self.drops:
-            self.drops.remove(d)
+        """Waffe oder Aufsatz vom Boden aufheben. Eine Waffe tauscht mit der in der Hand (die verdrängte fällt mit ihren
+        Aufsätzen auf den Boden), ein Aufsatz geht an den Spieler (sein Spiel steckt ihn an oder legt ihn ins Lager).
+        Kistenbeute gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
+        if d not in self.drops:
+            return
+        if d.lock > 0 and d.owner >= 0 and d.owner != pl.pid and d.owner in self.players:
+            self.events.append(("droplock", pl.pid, d.owner, round(d.lock, 1)))
+            return
+        if d.att >= 0:                                   # Aufsatz: das Spiel des Spielers entscheidet (Waffe/Lager)
+            si, v = divmod(d.att, ATT_CODE)
+            if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
+                self.drops.remove(d)
+                self.events.append(("attgain", pl.pid, si, v))
+            return
+        self.drops.remove(d)
+        if not 0 <= d.wi < len(WEAPONS):
+            return
         held = pl.cur
+
+        def put(wi):                                     # verdrängte Waffe fällt mit ihren Aufsätzen
+            self.add_drop(pl.x, pl.y, pl.z, wi, atts=pl.att.get(wi), scope=pl.scopes.get(wi, -1))
         if WEAPONS[d.wi].kind == "loot":
             old = pl.loot
             pl.loot = d.wi
             if old >= 0 and old != d.wi:
-                self.add_drop(pl.x, pl.y, pl.z, old)           # die bisherige Kistenwaffe wird ersetzt
+                put(old)                                 # die bisherige Kistenwaffe wird ersetzt
             elif old < 0 and held != d.wi:
-                self.add_drop(pl.x, pl.y, pl.z, held)          # sonst: Tausch gegen die Waffe in der Hand
+                put(held)                                # sonst: Tausch gegen die Waffe in der Hand
         else:
             if pl.loot == held:
                 pl.loot = -1
             if held != d.wi:
-                self.add_drop(pl.x, pl.y, pl.z, held)
-        self.events.append(("pickup", pl.pid, d.wi))
+                put(held)
+        self.events.append(("pickup", pl.pid, d.wi, list(d.atts), d.scope))
+
+    # ------------------------------------------------------------ Kisten und Beute
+    def crate_counts(self):
+        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen."""
+        return CRATES_MAP
+
+    def crate_target(self):
+        return sum(self.crate_counts().values())
+
+    def spawn_crate(self, kind, avoid=(), mid_round=False):
+        """Neue Kiste an einer zufälligen gültigen Stelle. avoid: [(x, y, Abstand)].
+        mid_round: nicht direkt neben einem lebenden Spieler auftauchen lassen."""
+        rng = self.mrng
+        for attempt in range(120):
+            p = self.crate_spot(rng)
+            if p is None:
+                continue
+            x, y, z = p
+            gap = CRATE_GAP if attempt < 80 else CRATE_GAP * 0.5      # notfalls etwas dichter
+            if any(math.hypot(x - c.x, y - c.y) < gap for c in self.crates):
+                continue
+            if kind == "gold" and attempt < 100:          # goldene Kisten über die ganze Karte verteilen
+                gg = CRATE_GOLD_GAP * WORLD / 300.0
+                if any(c.kind == "gold" and math.hypot(x - c.x, y - c.y) < gg for c in self.crates):
+                    continue
+            if any(math.hypot(x - ax, y - ay) < ad for ax, ay, ad in avoid):
+                continue
+            if mid_round and any(q.hp > 0 and math.hypot(x - q.x, y - q.y) < CRATE_PLAYER_GAP
+                                 for q in self.players.values()):
+                continue
+            c = Crate(self.next_cid, x, y, z, kind)
+            self.next_cid += 1
+            self.crates.append(c)
+            return c
+        return None
+
+    def crate_spot(self, rng):
+        """Zufällige gültige Kistenstelle (x, y, z) oder None (dann nochmal würfeln)."""
+        if self.mc:
+            return self.mc_crate_spot(rng)
+        r = rng.random()
+        if r < CRATE_SPOT_SHARE:                                  # an einem Bauwerk:
+            if self.crate_spots and rng.random() < 0.5:
+                return rng.choice(self.crate_spots)               # fest vorgesehene Plätze (Turm, Heuboden ...)
+            return self.wall_crate_spot(rng)                      # oder an einer Mauer, Wand, Deckung
+        if r < CRATE_SPOT_SHARE + CRATE_TUNNEL_SHARE and self.tunnels:
+            x0, y0, x1, y1 = rng.choices(self.tunnels, weights=[(c - a) * (d - b) for a, b, c, d in self.tunnels])[0]
+            x = rng.uniform(x0 + 0.7, x1 - 0.7) if x1 - x0 > 1.4 else (x0 + x1) / 2
+            y = rng.uniform(y0 + 0.7, y1 - 0.7) if y1 - y0 > 1.4 else (y0 + y1) / 2
+            z = self.floor_at(x, y, TUN_Z + 0.1)
+            if self.in_void(x, y, 1.0) or self.in_solid(x, y, 0.6, z):
+                return None
+            return (x, y, z)
+        return self.ground_crate_spot(rng)
+
+    def wall_crate_spot(self, rng):
+        """Direkt neben einer Wand oder Deckung (drinnen oder draussen) auf dem Boden."""
+        b = rng.choice(self.boxes) if self.boxes else None
+        if b is None or b.z1 - max(b.z0, 0.0) < 0.9 or b.z0 > 2.5 or b.z1 < 0.8:
+            return None                                           # Böden, Dächer, Tunnelteile: nein
+        off = rng.choice((-0.95, 0.95))
+        if rng.random() < 0.5:
+            x, y = rng.uniform(b.x0, b.x1), (b.y0 - 0.95 if off < 0 else b.y1 + 0.95)
+        else:
+            x, y = (b.x0 - 0.95 if off < 0 else b.x1 + 0.95), rng.uniform(b.y0, b.y1)
+        p = self.ground_crate_spot(rng, x, y)
+        if p is not None and p[2] > self.height(x, y) + 0.7:      # nicht oben auf etwas anderem
+            return None
+        return p
+
+    def ground_crate_spot(self, rng, x=None, y=None):
+        """Freies Gelände: nicht im Wasser, nicht in Wänden, Bäumen oder Felsen, nicht am steilen Hang."""
+        if x is None:
+            x, y = rng.uniform(8, WORLD - 8), rng.uniform(8, WORLD - 8)
+        if not (8 < x < WORLD - 8 and 8 < y < WORLD - 8):
+            return None
+        h = self.height(x, y)
+        if h < WATER_LEVEL + 0.6 or terrain_slope(self, x, y) > 0.5 or self.in_void(x, y, 1.0):
+            return None
+        if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
+            return None
+        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.0 for p in self.solid_near(x, y, 1.0)):
+            return None
+        if self.in_solid(x, y, 0.6):
+            return None
+        return (x, y, self.floor_at(x, y, h))
+
+    def mc_crate_spot(self, rng):
+        """Minecraft-Karte: in der Nähe eines Startpunkts auf derselben Ebene (kein Dach, kein Loch, kein Wasser)."""
+        if not self.spawns:
+            return None
+        sx, sy = rng.choice(self.spawns)
+        sz = self.spawn_z(sx, sy)
+        a, r = rng.uniform(0.0, 2.0 * math.pi), rng.uniform(0.0, 7.0)
+        x, y = sx + math.cos(a) * r, sy + math.sin(a) * r
+        if not (2.0 < x < WORLD - 2.0 and 2.0 < y < WORLD - 2.0):
+            return None
+        z = self.floor_at(x, y, sz + 0.3)
+        if abs(z - sz) > 1.2 or self.in_solid(x, y, 0.5, z) or self.ceiling_at(x, y, z) < z + 2.0:
+            return None
+        return (x, y, z)
+
+    def update_crates(self, dt):
+        """Geöffnete Kisten tauchen nach CRATE_RESPAWN an einer anderen Stelle wieder auf."""
+        for e in self.crate_wait[:]:
+            e[0] -= dt
+            if e[0] > 0:
+                continue
+            if self.spawn_crate(e[1], ((e[2], e[3], CRATE_REUSE_GAP),), True) is not None:
+                self.crate_wait.remove(e)
+            else:
+                e[0] = 1.0                                       # gerade kein Platz frei: gleich nochmal
+
+    def loot_spot(self, pl, side=0.0):
+        """7b: Wohin fällt Kistenbeute? LOOT_DROP_DIST m vor den Spieler (Blickrichtung, egal wie er steht), side m
+        seitlich versetzt; ist dort eine Wand oder ein Loch, näher heran, notfalls direkt vor die Füsse. -> (x, y, z)"""
+        h = math.radians(pl.heading)
+        fx, fy = -math.sin(h), math.cos(h)
+        rx, ry = math.cos(h), math.sin(h)
+        d = LOOT_DROP_DIST
+        while d >= LOOT_DROP_MIN - 1e-6:
+            x, y = pl.x + fx * d + rx * side, pl.y + fy * d + ry * side
+            z = self.floor_at(x, y, pl.z + 0.5)
+            if (not self.in_solid(x, y, 0.25, pl.z) and not self.in_void(x, y, 0.3) and abs(z - pl.z) < 1.0
+                    and self.los((pl.x, pl.y, pl.z + 0.8), (x, y, z + 0.4))):
+                return x, y, z
+            d -= 0.45
+        return pl.x + fx * 0.3 + rx * side * 0.4, pl.y + fy * 0.3 + ry * side * 0.4, pl.z
+
+    def loot_drop(self, pl, c, wi=-1, gear=-1, melee=-1, att=-1, side=0.0):
+        """7b: Inhalt der Kiste c "ploppt" heraus und fällt vor den Spieler (aufheben mit F); side = seitlich (m)."""
+        x, y, z = self.loot_spot(pl, side)
+        d = self.add_drop(x, y, z, wi, gear, melee, att, None, pl.pid, LOOT_OWNER_T)
+        ki = CRATE_KINDS.index(c.kind) if c.kind in CRATE_KINDS else 0
+        self.events.append(("lootpop", pl.pid, d.did, ki, round(c.x, 2), round(c.y, 2), round(c.z + 0.7, 2)))
+        return d
+
+    def open_crate_triple(self, pl, c):
+        """7b: Kiste öffnen -> Waffe ODER Nahkampfwaffe + Ausrüstungsteil + Aufsatz, alles als Drops vor dem Spieler.
+        Die Kistenart bestimmt die Tabelle (Qualität); Kisten-Gedächtnis je Art (Ausgleich, zuletzt gezogen)."""
+        rng = self.mrng
+        last = getattr(pl, "last_by", None)
+        if last is None:
+            last = pl.last_by = {}
+        worn = worn_names(pl)
+
+        def draw(art):
+            ch = loot_chances(c.kind, pl.slots, pl.loot_history, last.get(art), art, worn)
+            if art == "weapon":
+                ch = {n: v for n, v in ch.items() if WEAPON_IDX.get(n) != START_WEAPON}
+            if not ch:
+                return None
+            names = list(ch)
+            return rng.choices(names, weights=[ch[n] for n in names])[0]
+        cats = LOOT_CATEGORIES.get(c.kind) or {"weapon": 1.0}
+        wm = {a: cats.get(a, 0.0) for a in ("weapon", "melee") if cats.get(a, 0.0) > 0 and a in self.loot_cats}
+        first = rng.choices(list(wm), weights=list(wm.values()))[0] if wm else "weapon"
+        items = []
+        n1 = draw(first) or (draw("weapon") if first != "weapon" else None)
+        if n1:
+            items.append((LOOT_ITEMS.get(n1, "weapon"), n1))
+        if "gear" in self.loot_cats and rng.random() >= LOOT_GEAR_MISS:
+            n2 = draw("gear")
+            if n2:
+                items.append(("gear", n2))
+        if "att" in self.loot_cats and rng.random() >= LOOT_ATT_MISS:
+            n3 = draw("att")
+            if n3:
+                items.append(("att", n3))
+        if LOOT_DEBUG and hasattr(self, "loot_debug"):
+            self.loot_debug(pl, c.kind)
+        for art, name in items:
+            pl.loot_history[name] = pl.loot_history.get(name, 0) + 1
+            last[art] = name
+            if art == "weapon":
+                pl.last_loot = name
+        if isinstance(pl.stats.get("crate"), dict):
+            pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
+        else:
+            pl.stats["crates"] = pl.stats.get("crates", 0) + 1
+        self.crates.remove(c)
+        if not c.bonus and not c.air:                    # 10e: Airdrop-Kiste wird nicht ersetzt
+            self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
+        n = len(items)
+        for i, (art, name) in enumerate(items):
+            side = (i - (n - 1) / 2.0) * LOOT_DROP_SPREAD
+            if art == "gear":
+                self.loot_drop(pl, c, gear=GEAR_IDX[name], side=side)
+            elif art == "melee":
+                self.loot_drop(pl, c, melee=MELEE_IDX[name], side=side)
+            elif art == "att":
+                si, v = ATT_BY_NAME[name]
+                self.loot_drop(pl, c, att=si * ATT_CODE + v, side=side)
+            else:
+                self.loot_drop(pl, c, wi=WEAPON_IDX[name], side=side)
+
+    def mob_loot(self, m, pl, extra=0):
+        """10b: Ein getötetes Monster lässt Beute fallen: MOB_LOOT[Art] = (Qualitätsstufe, Anzahl), jedes Teil aus
+        einer anderen Kategorie (LOOT_CATS; ab 6 Teilen jede Kategorie mindestens einmal, keine Doppelten).
+        Kategorie-Gedächtnis (cat_mul) und Kisten-Gedächtnis des Schützen gelten, Ausrüstung mit Set-Affinität.
+        extra: so viele Teile zusätzlich (Diebesdolch, 10d). -> Liste der Drops."""
+        tier, n = MOB_LOOT.get(m.kind, ("common", 0))
+        n += extra
+        if n <= 0:
+            return []
+        rng = self.mrng
+        hist = pl.loot_history if pl is not None else {}
+        last = getattr(pl, "last_by", {}) if pl is not None else {}
+        slots = pl.slots if pl is not None else ()
+        worn = worn_names(pl) if pl is not None else ()
+        mul = getattr(pl, "cat_mul", None) if pl is not None else None
+        items, used, names = [], [], set()
+        cats = self.loot_cats
+        must = list(cats) if n >= len(cats) else []
+        rng.shuffle(must)
+        for k in range(n):
+            if must:
+                pool = [must.pop()]
+            else:
+                pool = [c for c in cats if c not in used] or list(cats)
+            got, tried = None, set()
+            for stage in (pool, [c for c in cats if c not in used], list(cats)):
+                tries = [c for c in stage if c not in tried]
+                while tries and got is None:
+                    ws = [LOOT_CAT_BASE[c] * (mul.get(c, 1.0) if mul else 1.0) for c in tries]
+                    cat = rng.choices(tries, weights=ws)[0]
+                    tries.remove(cat)
+                    tried.add(cat)
+                    got = self.loot_pick(cat, tier, pl, hist, last, slots, worn, names)
+                if got is not None:
+                    break
+            if got is None:
+                continue
+            items.append(got)
+            used.append(got[0])
+            if got[1]:
+                names.add(got[1])
+            if mul is not None:                          # Kategorie-Gedächtnis: gezogene seltener, andere häufiger
+                for c in cats:
+                    mul[c] = clampf(mul.get(c, 1.0) * (LOOT_CAT_DOWN if c == got[0] else LOOT_CAT_UP), LOOT_CAT_MIN, LOOT_CAT_MAX)
+            if pl is not None and got[1]:
+                hist[got[1]] = hist.get(got[1], 0) + 1
+                last[got[0]] = got[1]
+        out = []
+        R = MOB_LOOT_R * (2.0 if m.kind == "titan" else 1.0)
+        a0 = rng.uniform(0, 2 * math.pi)
+        for i, (cat, name, cnt) in enumerate(items):
+            a = a0 + 2 * math.pi * i / max(1, len(items))
+            x, y = m.x + math.cos(a) * R, m.y + math.sin(a) * R
+            if self.in_solid(x, y, 0.3, m.gz) or not self.los((m.x, m.y, m.gz + 0.6), (x, y, m.gz + 0.6)):
+                x, y = m.x + math.cos(a) * 0.3, m.y + math.sin(a) * 0.3
+            z = self.floor_at(x, y, m.gz + 0.5)
+            kw = {}
+            if cat == "weapon":
+                kw["wi"] = WEAPON_IDX[name]
+            elif cat == "melee":
+                kw["melee"] = MELEE_IDX[name]
+            elif cat == "gear":
+                kw["gear"] = GEAR_IDX[name]
+            elif cat == "att":
+                si, v = ATT_BY_NAME[name]
+                kw["att"] = si * ATT_CODE + v
+            else:
+                kw["gren"] = cnt
+                kw["gk"] = name[3:] if name.startswith("gk:") else "frag"      # 10e: Granatenart
+            d = self.add_drop(x, y, z, kw.get("wi", -1), kw.get("gear", -1), kw.get("melee", -1), kw.get("att", -1),
+                              None, pl.pid if pl is not None else -1, LOOT_OWNER_T if pl is not None else 0.0,
+                              gren=kw.get("gren", 0), gk=kw.get("gk", "frag"))
+            d.life = MOB_LOOT_LIFE
+            out.append(d)
+            ki = CRATE_KINDS.index(tier) if tier in CRATE_KINDS else 0
+            self.events.append(("lootpop", pl.pid if pl is not None else -1, d.did, ki, round(m.x, 2), round(m.y, 2),
+                                round(m.gz + min(2.0, m.height * 0.5), 2)))
+        return out
+
+    def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude):
+        """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None."""
+        rng = self.mrng
+        if cat == "grenade":                             # 10e: eine Granatenart nach Stufe (GREN_LOOT_W), Anzahl je Art
+            ws = {k: w for k, w in GREN_LOOT_W.get(tier, GREN_LOOT_W["common"]).items()
+                  if w > 0 and "gk:" + k not in exclude}
+            if not ws:
+                return None
+            ks = list(ws)
+            k = rng.choices(ks, weights=[ws[q] for q in ks])[0]
+            return ("grenade", "gk:" + k, GREN_LOOT_N.get(k, 1))
+        ch = loot_chances(tier, slots, hist, last.get(cat), cat, worn)
+        if cat == "weapon":
+            ch = {nm: v for nm, v in ch.items() if WEAPON_IDX.get(nm) != START_WEAPON}
+        if cat == "gear" and pl is not None:
+            ch = set_affinity(pl, ch)
+        ch = {nm: v for nm, v in ch.items() if nm not in exclude and v > 0}
+        if not ch:
+            return None
+        nm = list(ch)
+        return (cat, rng.choices(nm, weights=[ch[k] for k in nm])[0], 1)
+
+    def titan_loot(self, m):
+        """Titan erlegt: an seiner Stelle eine goldene Kiste (gleicher Inhalt wie jede goldene Kiste, Kisten-
+        Gedächtnis des Öffnenden gilt). Sie wird nach dem Öffnen nicht ersetzt."""
+        x, y = m.x, m.y
+        for _ in range(12):                                # nicht in einer Wand
+            if not self.in_solid(x, y, 0.8):
+                break
+            x, y = x + self.mrng.uniform(-3, 3), y + self.mrng.uniform(-3, 3)
+        z = self.floor_at(x, y, m.gz + 0.5)
+        c = Crate(self.next_cid, x, y, z, "gold")
+        c.bonus = True
+        self.next_cid += 1
+        self.crates.append(c)
+        self.events.append(("titanloot", c.cid, round(x, 2), round(y, 2), round(z, 2)))
 
     # ------------------------------------------------------------ Fahrzeuge
     def damage_vehicle(self, v, dmg, attacker):
@@ -6773,10 +7109,13 @@ class World:
         self.update_turrets(dt)
         self.update_helis(dt)
         self.update_strike(dt)
+        self.update_crates(dt)
         for d in [d for d in self.drops if d.life <= dt]:
             self.drops.remove(d)
         for d in self.drops:
             d.life -= dt
+            if d.lock > 0:
+                d.lock = max(0.0, d.lock - dt)
         self.update_noise(dt, players)
         self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
         if self.rocks:
@@ -7079,9 +7418,13 @@ class World:
 
 class ExpWorld(World):
     """World im Modus Experimental (Robins Regeln)."""
+    loot_cats = LOOT_CATS
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True):
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
+        bonus = bonus if isinstance(bonus, dict) else {}
+        self.bonus_crates = bool(bonus.get("crates", False))     # (Experimental: Kisten auf der Karte wie bisher aus)
+        self.bonus_hares = bool(bonus.get("hares", True))
         self.ctf_ff, self.score_limit = False, 0          # CTF gibt es in Experimental nicht: neutrale Felder fürs gemeinsame Netzprotokoll
         self.team_of, self.team_score, self.flags, self.next_fid = {}, [0, 0], [], 1
         self.ctf_bases, self.ctf_spawns = [], [[], []]
@@ -7258,10 +7601,6 @@ class ExpWorld(World):
         self.place_toma()        # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
         if spawn_mobs:           # der Client bekommt die Monster vom Host
             self.populate_mobs()
-
-    def add_crate(self, x, y, z):
-        """Merkt einen guten Kistenplatz an einem Bauwerk vor (die Kisten selbst verteilt reset_crates zufällig)."""
-        self.crate_spots.append((x, y, z))
 
     # ------------------------------------------------------------ Geheime Tunnel
     def build_tunnels(self):
@@ -8156,121 +8495,6 @@ class ExpWorld(World):
         self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
         return True
 
-    def mob_loot(self, m, pl, extra=0):
-        """10b: Ein getötetes Monster lässt Beute fallen: MOB_LOOT[Art] = (Qualitätsstufe, Anzahl), jedes Teil aus
-        einer anderen Kategorie (LOOT_CATS; ab 6 Teilen jede Kategorie mindestens einmal, keine Doppelten).
-        Kategorie-Gedächtnis (cat_mul) und Kisten-Gedächtnis des Schützen gelten, Ausrüstung mit Set-Affinität.
-        extra: so viele Teile zusätzlich (Diebesdolch, 10d). -> Liste der Drops."""
-        tier, n = MOB_LOOT.get(m.kind, ("common", 0))
-        n += extra
-        if n <= 0:
-            return []
-        rng = self.mrng
-        hist = pl.loot_history if pl is not None else {}
-        last = getattr(pl, "last_by", {}) if pl is not None else {}
-        slots = pl.slots if pl is not None else ()
-        worn = worn_names(pl) if pl is not None else ()
-        mul = getattr(pl, "cat_mul", None) if pl is not None else None
-        items, used, names = [], [], set()
-        must = list(LOOT_CATS) if n >= len(LOOT_CATS) else []
-        rng.shuffle(must)
-        for k in range(n):
-            if must:
-                pool = [must.pop()]
-            else:
-                pool = [c for c in LOOT_CATS if c not in used] or list(LOOT_CATS)
-            got, tried = None, set()
-            for stage in (pool, [c for c in LOOT_CATS if c not in used], list(LOOT_CATS)):
-                tries = [c for c in stage if c not in tried]
-                while tries and got is None:
-                    ws = [LOOT_CAT_BASE[c] * (mul.get(c, 1.0) if mul else 1.0) for c in tries]
-                    cat = rng.choices(tries, weights=ws)[0]
-                    tries.remove(cat)
-                    tried.add(cat)
-                    got = self.loot_pick(cat, tier, pl, hist, last, slots, worn, names)
-                if got is not None:
-                    break
-            if got is None:
-                continue
-            items.append(got)
-            used.append(got[0])
-            if got[1]:
-                names.add(got[1])
-            if mul is not None:                          # Kategorie-Gedächtnis: gezogene seltener, andere häufiger
-                for c in LOOT_CATS:
-                    mul[c] = clampf(mul.get(c, 1.0) * (LOOT_CAT_DOWN if c == got[0] else LOOT_CAT_UP), LOOT_CAT_MIN, LOOT_CAT_MAX)
-            if pl is not None and got[1]:
-                hist[got[1]] = hist.get(got[1], 0) + 1
-                last[got[0]] = got[1]
-        out = []
-        R = MOB_LOOT_R * (2.0 if m.kind == "titan" else 1.0)
-        a0 = rng.uniform(0, 2 * math.pi)
-        for i, (cat, name, cnt) in enumerate(items):
-            a = a0 + 2 * math.pi * i / max(1, len(items))
-            x, y = m.x + math.cos(a) * R, m.y + math.sin(a) * R
-            if self.in_solid(x, y, 0.3, m.gz) or not self.los((m.x, m.y, m.gz + 0.6), (x, y, m.gz + 0.6)):
-                x, y = m.x + math.cos(a) * 0.3, m.y + math.sin(a) * 0.3
-            z = self.floor_at(x, y, m.gz + 0.5)
-            kw = {}
-            if cat == "weapon":
-                kw["wi"] = WEAPON_IDX[name]
-            elif cat == "melee":
-                kw["melee"] = MELEE_IDX[name]
-            elif cat == "gear":
-                kw["gear"] = GEAR_IDX[name]
-            elif cat == "att":
-                si, v = ATT_BY_NAME[name]
-                kw["att"] = si * ATT_CODE + v
-            else:
-                kw["gren"] = cnt
-                kw["gk"] = name[3:] if name.startswith("gk:") else "frag"      # 10e: Granatenart
-            d = self.add_drop(x, y, z, kw.get("wi", -1), kw.get("gear", -1), kw.get("melee", -1), kw.get("att", -1),
-                              None, pl.pid if pl is not None else -1, LOOT_OWNER_T if pl is not None else 0.0,
-                              gren=kw.get("gren", 0), gk=kw.get("gk", "frag"))
-            d.life = MOB_LOOT_LIFE
-            out.append(d)
-            ki = CRATE_KINDS.index(tier) if tier in CRATE_KINDS else 0
-            self.events.append(("lootpop", pl.pid if pl is not None else -1, d.did, ki, round(m.x, 2), round(m.y, 2),
-                                round(m.gz + min(2.0, m.height * 0.5), 2)))
-        return out
-
-    def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude):
-        """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None."""
-        rng = self.mrng
-        if cat == "grenade":                             # 10e: eine Granatenart nach Stufe (GREN_LOOT_W), Anzahl je Art
-            ws = {k: w for k, w in GREN_LOOT_W.get(tier, GREN_LOOT_W["common"]).items()
-                  if w > 0 and "gk:" + k not in exclude}
-            if not ws:
-                return None
-            ks = list(ws)
-            k = rng.choices(ks, weights=[ws[q] for q in ks])[0]
-            return ("grenade", "gk:" + k, GREN_LOOT_N.get(k, 1))
-        ch = loot_chances(tier, slots, hist, last.get(cat), cat, worn)
-        if cat == "weapon":
-            ch = {nm: v for nm, v in ch.items() if WEAPON_IDX.get(nm) != START_WEAPON}
-        if cat == "gear" and pl is not None:
-            ch = set_affinity(pl, ch)
-        ch = {nm: v for nm, v in ch.items() if nm not in exclude and v > 0}
-        if not ch:
-            return None
-        nm = list(ch)
-        return (cat, rng.choices(nm, weights=[ch[k] for k in nm])[0], 1)
-
-    def titan_loot(self, m):
-        """Titan erlegt: an seiner Stelle eine goldene Kiste (gleicher Inhalt wie jede goldene Kiste, Kisten-
-        Gedächtnis des Öffnenden gilt). Sie wird nach dem Öffnen nicht ersetzt."""
-        x, y = m.x, m.y
-        for _ in range(12):                                # nicht in einer Wand
-            if not self.in_solid(x, y, 0.8):
-                break
-            x, y = x + self.mrng.uniform(-3, 3), y + self.mrng.uniform(-3, 3)
-        z = self.floor_at(x, y, m.gz + 0.5)
-        c = Crate(self.next_cid, x, y, z, "gold")
-        c.bonus = True
-        self.next_cid += 1
-        self.crates.append(c)
-        self.events.append(("titanloot", c.cid, round(x, 2), round(y, 2), round(z, 2)))
-
     def give_buff(self, pl):
         """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank)."""
         if pl is None or pl.hp <= 0:
@@ -8343,9 +8567,9 @@ class ExpWorld(World):
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(self.players.get(owner))
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if (m.kind in MOB_LOOT or extra) and not CRATES_ON_MAP:   # 10b: Beute von Monstern (Titan: 6 Teile)
-                self.mob_loot(m, killer, extra)                         # 10d: Diebesdolch +1 (andere Kategorie)
-            elif m.kind == "titan":                      # Boss erlegt: goldene Kiste an seiner Stelle
+            if m.kind in MOB_LOOT or extra:              # 10b: Beute von Monstern (Titan: 6 Teile)
+                self.mob_loot(m, killer, extra)          # 10d: Diebesdolch +1 (andere Kategorie)
+            if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
                 self.titan_loot(m)
 
     def explode(self, pos, owner, r, dmg, wi):
@@ -8406,130 +8630,6 @@ class ExpWorld(World):
         return any(self.los(p0, t) for t in targets)
 
     # ------------------------------------------------------------ Loot
-    def crate_counts(self):
-        """So viele Kisten je Art sollen gleichzeitig auf der Karte liegen."""
-        return CRATES_MAP
-
-    def crate_target(self):
-        return sum(self.crate_counts().values())
-
-    def reset_crates(self):
-        """Rundenstart: alle Kisten neu und zufällig verteilen (Anzahl je Art: CRATES_STD / CRATES_MAP).
-        Die wertvollsten zuerst, damit sie sicher einen Platz bekommen."""
-        self.crates = []
-        self.crate_wait = []
-        if not CRATES_ON_MAP:                            # 10b: keine verteilten Kisten (Beute von Monstern)
-            return
-        cnt = self.crate_counts()
-        kinds = [k for k in reversed(CRATE_KINDS) for _ in range(int(cnt.get(k, 0)))]
-        for k in kinds:
-            if self.spawn_crate(k) is None:
-                self.crate_wait.append([1.0, k, -999.0, -999.0])     # kein Platz gefunden: gleich nochmal
-
-    def spawn_crate(self, kind, avoid=(), mid_round=False):
-        """Neue Kiste an einer zufälligen gültigen Stelle. avoid: [(x, y, Abstand)].
-        mid_round: nicht direkt neben einem lebenden Spieler auftauchen lassen."""
-        rng = self.mrng
-        for attempt in range(120):
-            p = self.crate_spot(rng)
-            if p is None:
-                continue
-            x, y, z = p
-            gap = CRATE_GAP if attempt < 80 else CRATE_GAP * 0.5      # notfalls etwas dichter
-            if any(math.hypot(x - c.x, y - c.y) < gap for c in self.crates):
-                continue
-            if kind == "gold" and attempt < 100:          # goldene Kisten über die ganze Karte verteilen
-                gg = CRATE_GOLD_GAP * WORLD / 300.0
-                if any(c.kind == "gold" and math.hypot(x - c.x, y - c.y) < gg for c in self.crates):
-                    continue
-            if any(math.hypot(x - ax, y - ay) < ad for ax, ay, ad in avoid):
-                continue
-            if mid_round and any(q.hp > 0 and math.hypot(x - q.x, y - q.y) < CRATE_PLAYER_GAP
-                                 for q in self.players.values()):
-                continue
-            c = Crate(self.next_cid, x, y, z, kind)
-            self.next_cid += 1
-            self.crates.append(c)
-            return c
-        return None
-
-    def crate_spot(self, rng):
-        """Zufällige gültige Kistenstelle (x, y, z) oder None (dann nochmal würfeln)."""
-        if self.mc:
-            return self.mc_crate_spot(rng)
-        r = rng.random()
-        if r < CRATE_SPOT_SHARE:                                  # an einem Bauwerk:
-            if self.crate_spots and rng.random() < 0.5:
-                return rng.choice(self.crate_spots)               # fest vorgesehene Plätze (Turm, Heuboden ...)
-            return self.wall_crate_spot(rng)                      # oder an einer Mauer, Wand, Deckung
-        if r < CRATE_SPOT_SHARE + CRATE_TUNNEL_SHARE and self.tunnels:
-            x0, y0, x1, y1 = rng.choices(self.tunnels, weights=[(c - a) * (d - b) for a, b, c, d in self.tunnels])[0]
-            x = rng.uniform(x0 + 0.7, x1 - 0.7) if x1 - x0 > 1.4 else (x0 + x1) / 2
-            y = rng.uniform(y0 + 0.7, y1 - 0.7) if y1 - y0 > 1.4 else (y0 + y1) / 2
-            z = self.floor_at(x, y, TUN_Z + 0.1)
-            if self.in_void(x, y, 1.0) or self.in_solid(x, y, 0.6, z):
-                return None
-            return (x, y, z)
-        return self.ground_crate_spot(rng)
-
-    def wall_crate_spot(self, rng):
-        """Direkt neben einer Wand oder Deckung (drinnen oder draussen) auf dem Boden."""
-        b = rng.choice(self.boxes) if self.boxes else None
-        if b is None or b.z1 - max(b.z0, 0.0) < 0.9 or b.z0 > 2.5 or b.z1 < 0.8:
-            return None                                           # Böden, Dächer, Tunnelteile: nein
-        off = rng.choice((-0.95, 0.95))
-        if rng.random() < 0.5:
-            x, y = rng.uniform(b.x0, b.x1), (b.y0 - 0.95 if off < 0 else b.y1 + 0.95)
-        else:
-            x, y = (b.x0 - 0.95 if off < 0 else b.x1 + 0.95), rng.uniform(b.y0, b.y1)
-        p = self.ground_crate_spot(rng, x, y)
-        if p is not None and p[2] > self.height(x, y) + 0.7:      # nicht oben auf etwas anderem
-            return None
-        return p
-
-    def ground_crate_spot(self, rng, x=None, y=None):
-        """Freies Gelände: nicht im Wasser, nicht in Wänden, Bäumen oder Felsen, nicht am steilen Hang."""
-        if x is None:
-            x, y = rng.uniform(8, WORLD - 8), rng.uniform(8, WORLD - 8)
-        if not (8 < x < WORLD - 8 and 8 < y < WORLD - 8):
-            return None
-        h = self.height(x, y)
-        if h < WATER_LEVEL + 0.6 or terrain_slope(self, x, y) > 0.5 or self.in_void(x, y, 1.0):
-            return None
-        if any(math.hypot(x - px, y - py) < r * 1.8 for px, py, r in self.ponds):
-            return None
-        if any(math.hypot(x - p.x, y - p.y) < p.solid_r + 1.0 for p in self.solid_near(x, y, 1.0)):
-            return None
-        if self.in_solid(x, y, 0.6):
-            return None
-        return (x, y, self.floor_at(x, y, h))
-
-    def mc_crate_spot(self, rng):
-        """Minecraft-Karte: in der Nähe eines Startpunkts auf derselben Ebene (kein Dach, kein Loch, kein Wasser)."""
-        if not self.spawns:
-            return None
-        sx, sy = rng.choice(self.spawns)
-        sz = self.spawn_z(sx, sy)
-        a, r = rng.uniform(0.0, 2.0 * math.pi), rng.uniform(0.0, 7.0)
-        x, y = sx + math.cos(a) * r, sy + math.sin(a) * r
-        if not (2.0 < x < WORLD - 2.0 and 2.0 < y < WORLD - 2.0):
-            return None
-        z = self.floor_at(x, y, sz + 0.3)
-        if abs(z - sz) > 1.2 or self.in_solid(x, y, 0.5, z) or self.ceiling_at(x, y, z) < z + 2.0:
-            return None
-        return (x, y, z)
-
-    def update_crates(self, dt):
-        """Geöffnete Kisten tauchen nach CRATE_RESPAWN an einer anderen Stelle wieder auf."""
-        for e in self.crate_wait[:]:
-            e[0] -= dt
-            if e[0] > 0:
-                continue
-            if self.spawn_crate(e[1], ((e[2], e[3], CRATE_REUSE_GAP),), True) is not None:
-                self.crate_wait.remove(e)
-            else:
-                e[0] = 1.0                                       # gerade kein Platz frei: gleich nochmal
-
     def use_crate(self, pl, c):
         """Kiste öffnen: Inhalt würfeln, Kiste verschwindet, später taucht woanders eine neue auf."""
         if c not in self.crates:
@@ -8900,111 +9000,9 @@ class ExpWorld(World):
         self.events.append(("melee", pl.pid, mi, crate))
         return True
 
-    def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
-                 gk="frag"):
-        while len(self.drops) >= EXP_MAX_DROPS:
-            self.drops.pop(0)
-        d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
-                 scope, gren, gk)
-        self.next_did += 1
-        self.drops.append(d)
-        return d
-
-    def loot_spot(self, pl, side=0.0):
-        """7b: Wohin fällt Kistenbeute? LOOT_DROP_DIST m vor den Spieler (Blickrichtung, egal wie er steht), side m
-        seitlich versetzt; ist dort eine Wand oder ein Loch, näher heran, notfalls direkt vor die Füsse. -> (x, y, z)"""
-        h = math.radians(pl.heading)
-        fx, fy = -math.sin(h), math.cos(h)
-        rx, ry = math.cos(h), math.sin(h)
-        d = LOOT_DROP_DIST
-        while d >= LOOT_DROP_MIN - 1e-6:
-            x, y = pl.x + fx * d + rx * side, pl.y + fy * d + ry * side
-            z = self.floor_at(x, y, pl.z + 0.5)
-            if (not self.in_solid(x, y, 0.25, pl.z) and not self.in_void(x, y, 0.3) and abs(z - pl.z) < 1.0
-                    and self.los((pl.x, pl.y, pl.z + 0.8), (x, y, z + 0.4))):
-                return x, y, z
-            d -= 0.45
-        return pl.x + fx * 0.3 + rx * side * 0.4, pl.y + fy * 0.3 + ry * side * 0.4, pl.z
-
-    def open_crate_triple(self, pl, c):
-        """7b: Kiste öffnen -> Waffe ODER Nahkampfwaffe + Ausrüstungsteil + Aufsatz, alles als Drops vor dem Spieler.
-        Die Kistenart bestimmt die Tabelle (Qualität); Kisten-Gedächtnis je Art (Ausgleich, zuletzt gezogen)."""
-        rng = self.mrng
-        last = getattr(pl, "last_by", None)
-        if last is None:
-            last = pl.last_by = {}
-        worn = worn_names(pl)
-
-        def draw(art):
-            ch = loot_chances(c.kind, pl.slots, pl.loot_history, last.get(art), art, worn)
-            if art == "weapon":
-                ch = {n: v for n, v in ch.items() if WEAPON_IDX.get(n) != START_WEAPON}
-            if not ch:
-                return None
-            names = list(ch)
-            return rng.choices(names, weights=[ch[n] for n in names])[0]
-        cats = LOOT_CATEGORIES.get(c.kind) or {"weapon": 1.0}
-        wm = {a: cats.get(a, 0.0) for a in ("weapon", "melee") if cats.get(a, 0.0) > 0}
-        first = rng.choices(list(wm), weights=list(wm.values()))[0] if wm else "weapon"
-        items = []
-        n1 = draw(first) or (draw("weapon") if first != "weapon" else None)
-        if n1:
-            items.append((LOOT_ITEMS.get(n1, "weapon"), n1))
-        if rng.random() >= LOOT_GEAR_MISS:
-            n2 = draw("gear")
-            if n2:
-                items.append(("gear", n2))
-        if rng.random() >= LOOT_ATT_MISS:
-            n3 = draw("att")
-            if n3:
-                items.append(("att", n3))
-        if LOOT_DEBUG:
-            self.loot_debug(pl, c.kind)
-        for art, name in items:
-            pl.loot_history[name] = pl.loot_history.get(name, 0) + 1
-            last[art] = name
-            if art == "weapon":
-                pl.last_loot = name
-        pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
-        self.crates.remove(c)
-        if not c.bonus and not c.air:                    # 10e: Airdrop-Kiste wird nicht ersetzt
-            self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
-        n = len(items)
-        for i, (art, name) in enumerate(items):
-            side = (i - (n - 1) / 2.0) * LOOT_DROP_SPREAD
-            if art == "gear":
-                self.loot_drop(pl, c, gear=GEAR_IDX[name], side=side)
-            elif art == "melee":
-                self.loot_drop(pl, c, melee=MELEE_IDX[name], side=side)
-            elif art == "att":
-                si, v = ATT_BY_NAME[name]
-                self.loot_drop(pl, c, att=si * ATT_CODE + v, side=side)
-            else:
-                self.loot_drop(pl, c, wi=WEAPON_IDX[name], side=side)
-
-    def loot_drop(self, pl, c, wi=-1, gear=-1, melee=-1, att=-1, side=0.0):
-        """7b: Inhalt der Kiste c "ploppt" heraus und fällt vor den Spieler (aufheben mit F); side = seitlich (m)."""
-        x, y, z = self.loot_spot(pl, side)
-        d = self.add_drop(x, y, z, wi, gear, melee, att, None, pl.pid, LOOT_OWNER_T)
-        ki = CRATE_KINDS.index(c.kind) if c.kind in CRATE_KINDS else 0
-        self.events.append(("lootpop", pl.pid, d.did, ki, round(c.x, 2), round(c.y, 2), round(c.z + 0.7, 2)))
-        return d
-
     def set_att_value(self, pl, wi, si, v):
         """Aufsatz-Platz si der Waffe wi auf v setzen. -> vorheriger Wert."""
-        if si == ATT_SCOPE:
-            old = pscope(pl, wi)
-            pl.scopes[wi] = v
-            return old
-        cur = list(pl.att.get(wi) or ATT_NONE)
-        old = cur[si]
-        cur[si] = v
-        if tuple(cur) == ATT_NONE:
-            pl.att.pop(wi, None)
-        else:
-            pl.att[wi] = tuple(cur)
-        clamp_ammo(pl, wi)
-        return old
+        return att_set_value(pl, wi, si, v)
 
     def att_state_event(self, pl, msg=0, code=-1, wi=-1):
         """7b: Aufsätze, Visiere und Aufsatz-Lager des Spielers an alle (der Spieler übernimmt sie)."""
@@ -9012,40 +9010,16 @@ class ExpWorld(World):
                             {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi))
 
     def give_attachment(self, pl, si, v):
-        """7b: Aufsatz aufheben. Passt er auf die Waffe in der Hand, kommt er sofort darauf (ein dort steckender
-        Aufsatz desselben Platzes wandert ins Aufsatz-Lager); sonst (Nahkampf, Spezialwaffe, passt nicht) ins Lager.
-        -> True (wird immer genommen)."""
-        wi = pl.cur
-        code = si * ATT_CODE + v
-        if not pl.melee_out and not getattr(pl, "gad_out", False) and wi in pl.slots and att_fits(wi, si):
-            old = self.set_att_value(pl, wi, si, v)
-            if old:                                      # der bisherige Aufsatz (auch ein Visier ab Werk) ins Lager
-                pl.att_store.append(si * ATT_CODE + old)
-            self.att_state_event(pl, 1, code, wi)
-        else:
-            pl.att_store.append(code)
-            self.att_state_event(pl, 2, code, wi)
+        """7b: Aufsatz aufheben (siehe att_give). -> True (wird immer genommen)."""
+        msg, code, wi = att_give(pl, si, v)
+        self.att_state_event(pl, msg, code, wi)
         return True
 
     def equip_att(self, pl, wi, si, v):
-        """7b: Aufsatz aus dem Lager an die Waffe wi stecken (Tab-Fenster); v = 0: Standard. Der bisherige geht ins
-        Lager. -> True, wenn geändert."""
-        if pl.hp <= 0 or wi not in pl.slots or not att_fits(wi, si):
+        """7b: Aufsatz aus dem Lager an die Waffe wi stecken (siehe att_equip_local). -> True, wenn geändert."""
+        code = att_equip_local(pl, wi, si, v)
+        if code is None:
             return False
-        n = len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)
-        if not (isinstance(v, int) and 0 <= v < n):
-            return False
-        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
-        if cur == v:
-            return False
-        code = si * ATT_CODE + v
-        if v and code not in pl.att_store:
-            return False
-        if v:
-            pl.att_store.remove(code)
-        old = self.set_att_value(pl, wi, si, v)
-        if old:
-            pl.att_store.append(si * ATT_CODE + old)
         self.att_state_event(pl, 3, code, wi)
         return True
 
@@ -10000,6 +9974,7 @@ class Player:
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
         self.ext_fields()
+        self.scopes = {pri: self.scope} if isinstance(pri, int) else {}   # 7b: Visier je Waffe (Hauptwaffe: gewähltes)
 
     def ext_fields(self):
         """Zusätzliche Spielerfelder (Betäubung, Ausrüstung, Granaten, Nahkampf ...): im Netzprotokoll immer vorhanden,
@@ -10163,6 +10138,57 @@ def clamp_ammo(pl, wi):
     w, g = pl.wp(wi), pl.guns[wi]
     g.mag = min(g.mag, w.mag)
     g.reserve = min(g.reserve, w.max_reserve)
+
+def att_set_value(pl, wi, si, v):
+    """Aufsatz-Platz si der Waffe wi auf v setzen (si == ATT_SCOPE: Visier). -> vorheriger Wert."""
+    if si == ATT_SCOPE:
+        old = pscope(pl, wi)
+        pl.scopes[wi] = v
+        return old
+    cur = list(pl.att.get(wi) or ATT_NONE)
+    old = cur[si]
+    cur[si] = v
+    if tuple(cur) == ATT_NONE:
+        pl.att.pop(wi, None)
+    else:
+        pl.att[wi] = tuple(cur)
+    clamp_ammo(pl, wi)
+    return old
+
+def att_give(pl, si, v):
+    """7b: Aufsatz aufgehoben. Passt er auf die Waffe in der Hand, kommt er sofort darauf (ein dort steckender
+    Aufsatz desselben Platzes wandert ins Aufsatz-Lager); sonst (Nahkampf, Gadget, Spezialwaffe, passt nicht) ins
+    Lager. -> (Meldung 1 = angesteckt / 2 = Lager, Code, Waffe)"""
+    wi = pl.cur
+    code = si * ATT_CODE + v
+    if not getattr(pl, "melee_out", False) and not getattr(pl, "gad_out", False) and wi in pl.slots and att_fits(wi, si):
+        old = att_set_value(pl, wi, si, v)
+        if old:                                          # der bisherige Aufsatz (auch ein Visier ab Werk) ins Lager
+            pl.att_store.append(si * ATT_CODE + old)
+        return 1, code, wi
+    pl.att_store.append(code)
+    return 2, code, wi
+
+def att_equip_local(pl, wi, si, v):
+    """7b: Aufsatz aus dem Lager an die Waffe wi stecken (Tab-Fenster); v = 0: Standard. Der bisherige geht ins
+    Lager. -> Code des Aufsatzes oder None (nichts geändert)."""
+    if pl.hp <= 0 or wi not in pl.slots or not att_fits(wi, si):
+        return None
+    n = len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)
+    if not (isinstance(v, int) and 0 <= v < n):
+        return None
+    cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+    if cur == v:
+        return None
+    code = si * ATT_CODE + v
+    if v and code not in pl.att_store:
+        return None
+    if v:
+        pl.att_store.remove(code)
+    old = att_set_value(pl, wi, si, v)
+    if old:
+        pl.att_store.append(si * ATT_CODE + old)
+    return code
 
 def stock_ammo(pl, wi):
     """Waffe aufgehoben, die man schon trägt: Reserve auffüllen statt eines zweiten Exemplars."""
@@ -19747,6 +19773,10 @@ class MorePage(SetupPage):
     def tm_on(self):
         return bool(self.g.cfg.get("tomahawk", True))
 
+    def bonus_on(self, k):
+        """Ankreuzfeld k (0 = Bonuskisten, 1 = Bonushasen) angekreuzt?"""
+        return bool(self.g.bonus_cfg()["crates" if k == 0 else "hares"])
+
     def lvl(self):
         return mob_level_of(self.g.cfg["mobs"])
 
@@ -19775,6 +19805,18 @@ class MorePage(SetupPage):
             if tag == "tb":
                 return self.MODE_ON if on else (self.BTN_H if h else self.BTN)
             return self.YELLOW if on else (Hot.ON if h else Hot.BASE)
+        if tag in ("kb", "kx", "kk", "kt", "kv"):             # Bonuskisten / Bonushasen (Ankreuzfelder)
+            k = int(num)
+            on, h = self.bonus_on(k), hov == "bonus" + num
+            if tag == "kb":
+                return self.BTN_H if h else self.BTN
+            if tag == "kx":
+                return (0.62, 0.68, 0.75, 1.0)
+            if tag == "kk":
+                return self.YELLOW if on else (0.05, 0.07, 0.10, 1.0)
+            if tag == "kt":
+                return Hot.ON if h else Hot.BASE
+            return self.YELLOW if on else self.DIM
         for key in self.sl:
             if i.startswith(key + "_"):
                 dim = key == "cd" and not self.tm_on()
@@ -19831,6 +19873,17 @@ class MorePage(SetupPage):
             self.rect(key + "_knob", self.sx(key, v) - 0.026, self.sx(key, v) + 0.026, zl - 0.026, zl + 0.026, rot=45.0)
             self.hit("sl_" + key, self.SL0 - 0.05, self.SL1 + 0.05, zl - 0.06, zl + 0.06,
                      lambda key=key: g.slider_begin(key))
+        self.text(None, "BONUS", X0, -0.472, 0.034, self.GREY, "l")
+        for k, (name, key) in enumerate((("Bonuskisten", "bcr"), ("Bonushasen", "bha"))):
+            x0 = X0 + k * (X1 - X0 + 0.02) / 2.0
+            x1 = x0 + (X1 - X0 - 0.02) / 2.0
+            self.rect(f"kb{k}", x0, x1, -0.595, -0.505)
+            self.rect(f"kx{k}", x0 + 0.03, x0 + 0.115, -0.577, -0.523)
+            self.rect(f"kk{k}", x0 + 0.039, x0 + 0.106, -0.568, -0.532)
+            self.text(f"kt{k}", name, x0 + 0.15, -0.563, 0.046, al="l")
+            self.text(f"kv{k}", "An" if self.bonus_on(k) else "Aus", x1 - 0.03, -0.563, 0.046, al="r")
+            self.hit(f"bonus{k}", x0, x1, -0.595, -0.505,
+                     lambda k=k, key=key: g.set_cfg(key, not self.bonus_on(k)))
         self.rect("b_done", X0, X1, -0.745, -0.66)
         self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
         self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
@@ -19839,7 +19892,8 @@ class MorePage(SetupPage):
     # ---- Aktualisieren
     def update(self, force=False):
         c = self.g.cfg
-        key = (self.lvl(), self.tm_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag, self.g.cfg_is_mc())
+        key = (self.lvl(), self.tm_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag, self.g.cfg_is_mc(),
+               tuple(self.g.bonus_cfg().values()))
         if force or key != self.key:
             self.key = key
             self.sync()
@@ -19862,6 +19916,8 @@ class MorePage(SetupPage):
             self.nodes[key + "_knob"].setPos(x, 0, zl)
             self.nodes[key + "_knob"].setColor(*self.style(key + "_knob"))
             self.nodes[key + "_val"].setText(fmt(v))
+        for k in (0, 1):
+            self.nodes[f"kv{k}"].setText("An" if self.bonus_on(k) else "Aus")
 
     def follow(self, key, mx):
         _k, _l, lo, hi, step = self.sl[key][:5]
@@ -20532,6 +20588,20 @@ class HostSession:
             if isinstance(cur, int) and 0 <= cur < len(WEAPONS) and pl.hp > 0:
                 pl.cur = cur
                 note_hand(pl)
+                if not isinstance(w, ExpWorld):          # hier gehört die Ausrüstung dem Mitspieler: Host merkt sich das,
+                    sl = m.get("sl")                     # was er für Beute und Tod braucht (Slots, Aufsätze der Hand)
+                    if isinstance(sl, list) and len(sl) == 3:
+                        pl.slots = [q if isinstance(q, int) and not isinstance(q, bool) and 0 <= q < len(WEAPONS)
+                                    else None for q in sl]
+                        pl.loot = next((q for q in pl.slots[:2] if q is not None and WEAPONS[q].kind == "loot"), -1)
+                    ca = att_valid(m.get("ca"))
+                    if ca is not None and ca != ATT_NONE and att_fits(cur):
+                        pl.att[cur] = ca
+                    else:
+                        pl.att.pop(cur, None)
+                    cs = m.get("cs")
+                    if isinstance(cs, int) and not isinstance(cs, bool) and 0 <= cs < len(ATT_SCOPE_NAMES):
+                        pl.scopes[cur] = cs
             ln = m.get("ln", 0.0)
             pl.lean = clampf(float(ln), -LEAN_MAX, LEAN_MAX) if finite(ln) else 0.0
             cr = m.get("cr", 0.0)
@@ -21254,7 +21324,9 @@ class ClientSession:
                "jt": 1 if getattr(pl, "jet_on", False) else (2 if getattr(pl, "cling", False) else 0),
                "mo": 1 if getattr(pl, "melee_out", False) else 0,
                "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1,
-               "gc": getattr(pl, "gren_hold", -1)}
+               "gc": getattr(pl, "gren_hold", -1),
+               "sl": [-1 if q is None else q for q in pl.slots[:3]],             # Slots, Aufsätze und Visier der Waffe in
+               "ca": list(pl.att.get(pl.cur) or ATT_NONE), "cs": pscope(pl, pl.cur)}   # der Hand (Beute, Tod: Host)
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
             msg["vh"] = [v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed)]
@@ -118117,7 +118189,7 @@ class Game(ShowBase):
         self.lost_text = None
         self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
                         resp=RESPAWN_DEFAULT, map=None, ff=CTF_FF_DEFAULT,
-                        plim=0)   # Host-Einstellungen (ff/plim = CTF: Eigenbeschuss, Punktelimit)
+                        plim=0, bcr=None, bha=None)   # Host-Einstellungen (ff/plim = CTF: Eigenbeschuss, Punktelimit; bcr/bha = Bonuskisten/-hasen, None = Standard des Modus)
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
         self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
         self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
@@ -118140,7 +118212,9 @@ class Game(ShowBase):
         self.hud_dead_hidden = False
         self.melee_t = 0.0                    # laufende Schlaganimation (Sekunden bis zum Ende)
         self.melee_next = 0.0
-        self.crate_views = []
+        self.crate_views = {}
+        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
+        self.insp_on, self.insp_t = False, 0.0           # 9b: Waffen-Inspektion (T) offen / Überblendung
         self._txt = {}
         self.quit_box = None                  # Sicherheitsabfrage beim Beenden (Text + Hintergrund)
         self.menu_picker = None               # Waffenwahl mit Bildern im Menü
@@ -118211,6 +118285,7 @@ class Game(ShowBase):
         self.accept("tab-up", self.tab_up)
         self.accept("q", self.on_q)          # im Spiel lehnt Q (wird per Tastenabfrage gelesen)
         self.accept("f", self.on_use)
+        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
         self.accept("f3", self.toggle_fps)
         self.accept("f11", self.toggle_fullscreen)
         self.accept("c", self.toggle_duck)
@@ -118634,6 +118709,9 @@ class Game(ShowBase):
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
             return
+        if self.mode == "play" and self.quit_box is None and getattr(self, "insp_on", False):
+            self.insp_click(self.mouse_2d())                 # 9b: Inspektion - Markierung/Aufsatz anklicken
+            return
         if self.mode != "menu" and self.quit_box is None:
             return
         hit, card = self.update_hover()
@@ -118817,8 +118895,16 @@ class Game(ShowBase):
         self.slider_drag = which
         self.slider_follow()
 
+    def bonus_cfg(self):
+        """Bonuskisten (Kisten auf der Karte, goldene Titan-Kiste) und Bonushasen (Fluchttiere mit Beute) an/aus.
+        Nicht gewählt (None): Kisten an, in Experimental wie bisher aus; Hasen an."""
+        c = self.cfg
+        exp = isinstance(self, ExpGame) or c.get("mode") == "experimental"
+        bc, bh = c.get("bcr"), c.get("bha")
+        return {"crates": (not exp) if bc is None else bool(bc), "hares": True if bh is None else bool(bh)}
+
     def set_cfg(self, key, v):
-        """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen)."""
+        """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus)."""
         if key == "mobs" and self.cfg_is_mc():
             return
         self.cfg[key] = v
@@ -119130,6 +119216,7 @@ class Game(ShowBase):
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
+        c["bcr"], c["bha"] = bool(w.bonus_crates), bool(w.bonus_hares)
         self.map_list = list_maps()
         if c.get("map") not in [pp for _n, pp in self.map_list]:
             c["map"] = None
@@ -119217,6 +119304,8 @@ class Game(ShowBase):
         w.limit = float(c["limit"]) * 60.0
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
+        b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
+        w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
         if self.host is not None:
             self.host.send_cfg()
@@ -119451,6 +119540,9 @@ class Game(ShowBase):
         self.back_btn_text.hide()
 
     def on_escape(self):
+        if getattr(self, "insp_on", False) and self.quit_box is None:
+            self.close_inspect()                             # 9b: Esc schliesst die Inspektion
+            return
         if self.loadscreen is not None and self.quit_box is None:
             self.close_loadscreen()
             return
@@ -119900,9 +119992,21 @@ class Game(ShowBase):
                     w.tomahawk_on = not w.tomahawk_on
                     self.cfg["tomahawk"] = w.tomahawk_on
 
+                def set_bonus(which):
+                    if which == "crates":
+                        w.bonus_crates = not w.bonus_crates
+                        self.cfg["bcr"] = w.bonus_crates
+                    else:
+                        w.bonus_hares = not w.bonus_hares
+                        self.cfg["bha"] = w.bonus_hares
+
                 items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
                                  lambda k: (set_mobs(k), self.show_pause(kind))),
                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
+                         (f"Bonuskisten:  {'an' if w.bonus_crates else 'aus'}   (ab der nächsten Runde)",
+                          do(lambda: set_bonus("crates"))),
+                         (f"Bonushasen:  {'an' if w.bonus_hares else 'aus'}   (ab der nächsten Runde)",
+                          do(lambda: set_bonus("hares"))),
                          SliderSpec("Tomahawk-Abklingzeit", 0, 600, 10, lambda: int(w.strike_cd), set_cd,
                                     strike_cd_label, enabled=w.tomahawk_on),
                          SliderSpec("Respawn-Zeit", 0, 30, 1, lambda: int(w.respawn_delay), set_resp, respawn_label),
@@ -120099,6 +120203,7 @@ class Game(ShowBase):
 
     def cleanup_scene(self):
         """Alles entfernen, was zu einem laufenden Spiel gehört (Szene, HUD, Effekte)."""
+        self.close_inspect(False)                            # 9b
         ui = getattr(self, "ctf_ui", None)
         if ui is not None:
             self.ctf_clear()
@@ -120124,7 +120229,8 @@ class Game(ShowBase):
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
         self.gad_views = {}
-        self.tur_views, self.heli_views, self.crate_views = {}, {}, []
+        self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
+        self.drop_pop = {}
         for nd in (getattr(self, "rock_views", None) or {}).values():
             nd.removeNode()
         self.rock_views = None
@@ -120306,7 +120412,7 @@ class Game(ShowBase):
         """Start im Modus Experimental: Robins Spielversion mit den hier gewählten Einstellungen."""
         c, mc = self.cfg, self.cfg_is_mc()
         cfg = {"mode": "dm" if mc else "koth", "limit": int(c["limit"]), "map": c.get("map")}
-        for k in ("mobs", "tomahawk", "cd", "regen", "resp"):
+        for k in ("mobs", "tomahawk", "cd", "regen", "resp", "bcr", "bha"):
             if isinstance(c.get(k), (int, float)):
                 cfg[k] = c[k]
         self.launch_experimental({"do": "host", "cfg": cfg})
@@ -120400,7 +120506,7 @@ class Game(ShowBase):
             world = World(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict())
+                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict(), bonus=self.bonus_cfg())
         world.map_raw = raw
         world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
@@ -120615,6 +120721,34 @@ class Game(ShowBase):
             if mp_ is not None:
                 build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
             self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
+        self.att_drop_models = {}             # 7b: Aufsatz am Boden - das Teil gross, auf einer grünen Plakette
+        for si_ in range(len(ATT_SLOTS)):
+            for v_ in range(1, len(ATTACHMENTS[si_])):
+                am = Mesh()
+                prts = att_parts("Sturmgewehr", si_, v_)
+                if prts:
+                    cx_ = sum(q[0] for q in prts) / len(prts)
+                    cy_ = sum(q[1] for q in prts) / len(prts)
+                    cz_ = sum(q[2] for q in prts) / len(prts)
+                    k_ = 0.42 / max(max(q[3], q[4], q[5]) for q in prts)
+                    k_ = min(k_, 7.0)
+                    for q in prts:
+                        box(am, (q[0] - cx_) * k_, (q[1] - cy_) * k_, 0.12 + (q[2] - cz_) * k_,
+                            max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
+                box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
+                self.att_drop_models[si_ * ATT_CODE + v_] = NodePath(am.node("att_drop"))
+        for v_ in range(1, len(ATT_SCOPE_NAMES)):             # 7b: Visiere am Boden
+            am = Mesh()
+            prts = scope_parts(v_, "Sturmgewehr", rel=True)
+            if prts:
+                k_ = 0.5 / max(max(q[3], q[4], q[5]) for q in prts)
+                cy_ = sum(q[1] for q in prts) / len(prts)
+                cz_ = sum(q[2] for q in prts) / len(prts)
+                for q in prts:
+                    box(am, q[0] * k_, (q[1] - cy_) * k_, 0.15 + (q[2] - cz_) * k_,
+                        max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
+            box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
+            self.att_drop_models[ATT_SCOPE * ATT_CODE + v_] = NodePath(am.node("scope_drop"))
         m = Mesh(lit=False)                   # Granaten-Symbol im HUD
         for i in range(14):
             a0, a1 = 2 * math.pi * i / 14, 2 * math.pi * (i + 1) / 14
@@ -120689,7 +120823,7 @@ class Game(ShowBase):
                         mag = nd
             self.vm_mags.append((mag, ej, magp))
             an = {}
-            if w.kind in ("primary", "secondary"):            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
+            if w.name in PRIMARY_NAMES or w.name in SECONDARY_NAMES:            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
                 for si_ in (0, 2):
                     for v_ in (1, 2, 3):
                         am_ = Mesh()
@@ -120718,7 +120852,7 @@ class Game(ShowBase):
             self.gun_models.append(model)
             self.gun_flash.append(fl)
             sn = {}
-            if w.kind == "primary":
+            if w.name in PRIMARY_NAMES:
                 for sc in range(4):
                     sp = scope_parts(sc, w.name)
                     if not sp:
@@ -121312,8 +121446,442 @@ class Game(ShowBase):
             return
         self.tab_held = False
         self.tab_root.hide()
-        if self.mode == "play" and self.quit_box is None:
+        if self.mode == "play" and self.quit_box is None and not getattr(self, "insp_on", False):
             self.set_capture(True)
+
+    # ------------------------------------------------------------ 7b/9b: Aufsatz-Fenster (Inspektion mit T)
+    ATT_PANEL_W, ATT_PANEL_Z0, ATT_PANEL_Z1 = 0.86, -0.64, -0.06   # Grösse/Lage des Fensters (aspect2d)
+
+    def att_notice(self, msg, code, wi):
+        """7b: kurzer Hinweis, wenn ein Aufsatz angesteckt (1), ins Lager gelegt (2) oder aus dem Lager gesteckt (3) wurde."""
+        if code >= 0 and msg in (1, 2, 3):
+            si, v = divmod(code, ATT_CODE)
+            nm = att_name(si, v)
+            wn = EXP_WEAPONS[wi].name if 0 <= wi < len(EXP_WEAPONS) else ""
+            if msg == 1:
+                self.toast(f"{nm} an {wn} angebracht", (0.55, 1.0, 0.55), 2.0)
+            elif msg == 2:
+                self.toast(f"{nm} ins Aufsatz-Lager (T: Waffe ansehen, Klick auf die Markierung)", (0.75, 0.9, 1.0), 2.4)
+            self.sfx.play("servo", None, 0.6, 1.3)
+        if getattr(self, "att_panel", None) is not None:
+            self.att_panel_key = None                       # Fenster neu aufbauen
+
+    def att_equip(self, wi, si, v):
+        """Aufsatz aus dem Lager aufstecken (Fenster der Inspektion). Hier gehört die Ausrüstung dem Spieler."""
+        code = att_equip_local(self.player, wi, si, v)
+        if code is not None:
+            self.att_notice(3, code, wi)
+
+    def insp_ok(self):
+        """9b: darf jetzt inspiziert werden (lebt, Schusswaffe in der Hand, nicht im Fahrzeug)?"""
+        pl = self.player
+        return (self.mode == "play" and pl is not None and pl.hp > 0 and not pl.melee_out and not pl.gad_out
+                and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and self.world.phase == "play")
+
+    def on_inspect(self):
+        """9b: T - Waffe von der Seite ansehen; Markierungen an allen veränderbaren Stellen (Klick = Auswahl aus
+        dem Aufsatz-Lager). Nochmal T oder Esc schliesst. Mit der Nahkampfwaffe: deren Fähigkeit (Bratpfanne)."""
+        if self.mode != "play" or self.quit_box is not None or getattr(self, "end", None) is not None:
+            return
+        if getattr(self, "insp_on", False):
+            self.close_inspect()
+            return
+        pl = self.player
+        if pl is None or pl.hp <= 0:
+            return
+        if pl.melee_out:
+            fn = getattr(self, "on_melee_ability", None)          # 9c: Bratpfanne essen
+            if fn is not None:
+                fn()
+            return
+        if not self.insp_ok():
+            return
+        wi = pl.cur
+        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
+        if not tabs:
+            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            return
+        if self.tab_held:
+            self.tab_up()
+        self.insp_on, self.insp_wi, self.insp_t = True, wi, getattr(self, "insp_t", 0.0)
+        self.insp_root = self.aspect2d.attachNewNode("inspektion")
+        self.insp_root.setBin("fixed", 84)
+        self.insp_root.setDepthTest(False)
+        self.insp_root.setDepthWrite(False)
+        self.insp_marks = {}
+        tex = get_tex("glow")
+        for si in tabs:
+            nd = self.insp_root.attachNewNode("mark%d" % si)
+            cm = CardMaker("m")
+            cm.setFrame(-0.045, 0.045, -0.045, 0.045)
+            gl = nd.attachNewNode(cm.generate())
+            gl.setTransparency(TransparencyAttrib.MAlpha)
+            if tex is not None:
+                gl.setTexture(tex)
+            cm.setFrame(-0.012, 0.012, -0.012, 0.012)
+            dot_ = nd.attachNewNode(cm.generate())
+            dot_.setColor(1, 1, 1, 1)
+            lab = OnscreenText(text="", parent=nd, pos=(0, 0.06), scale=0.034, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1),
+                               align=TextNode.ACenter)
+            self.insp_marks[si] = (nd, gl, lab)
+        self.insp_hint = OnscreenText(text="Waffe ansehen: Markierung anklicken = Aufsätze   -   T / Esc = zurück",
+                                      parent=self.insp_root, pos=(0, 0.76), scale=0.042, fg=(1, 0.85, 0.4, 1),
+                                      shadow=(0, 0, 0, 1), align=TextNode.ACenter)
+        self.att_panel_tab = None
+        self.close_att_panel()
+        self.insp_hits = []
+        if self.captured:
+            self.set_capture(False)
+        self.sfx.ui_click()
+
+    def close_inspect(self, recapture=True):
+        if not getattr(self, "insp_on", False):
+            return
+        self.insp_on = False
+        self.close_att_panel()
+        r = getattr(self, "insp_root", None)
+        if r is not None:
+            r.removeNode()
+        self.insp_root, self.insp_marks, self.insp_hits = None, {}, []
+        if (recapture and self.mode == "play" and self.quit_box is None and not self.tab_held and self.player is not None
+                and self.player.hp > 0):
+            self.set_capture(True)
+
+    def insp_anchor(self, wi, si):
+        """9b: Punkt (Waffenkoordinaten) der Markierung für Platz si."""
+        wn = EXP_WEAPONS[wi].name
+        if si == ATT_SCOPE:
+            sy_, sz_ = SCOPE_MOUNT.get(wn, (0.1, 0.04))
+            return (0.0, sy_, sz_ + 0.035)
+        if si == 0:
+            mz_ = GUN_PARTS[wn][1]
+            return (mz_[0], mz_[1] + 0.02, mz_[2])
+        if si == 1:
+            mp = MAG_PARTS.get(wn)
+            return (mp[0], mp[1], mp[2] - mp[5] * 0.3) if mp is not None else (0.0, 0.1, -0.06)
+        y_, zt = GRIP_AT.get(wn, (0.15, -0.02))
+        return (0.0, y_, zt - 0.035)
+
+    def insp_pose(self, w, t):
+        """9b: (x, y, z, h, p, r) der präsentierten Waffe vor der Waffenkamera: Lauf nach rechts, Mitte etwas oben."""
+        y0, y1, z0, z1 = weapon_frame(w.name)
+        hfov = math.radians(self.gun_lens.getHfov())
+        vfov = math.radians(self.gun_lens.getVfov())
+        dist = max(0.35, (y1 - y0) / INSPECT_FILL / (2.0 * math.tan(hfov / 2.0)),
+                   (z1 - z0) / INSPECT_FILL_V / (2.0 * math.tan(vfov / 2.0)))
+        yc, zc = (y0 + y1) / 2.0, (z0 + z1) / 2.0
+        h = -90.0 + INSPECT_SWAY * math.sin(t * 0.7)
+        hr = math.radians(h)                                  # Mitte der Waffe (0, yc, zc) nach der Drehung um z
+        ox, oy = -yc * math.sin(hr), yc * math.cos(hr)
+        return (-ox, dist - oy, -zc + dist * math.tan(vfov / 2.0) * INSPECT_LIFT, h, 2.0 * math.sin(t * 0.5), 0.0)
+
+    def update_inspect(self, dt):
+        """9b: Markierungen auf die Waffe projizieren, Auswahlfenster pflegen; schliesst, wenn es nicht mehr passt."""
+        if not getattr(self, "insp_on", False):
+            return
+        pl = self.player
+        if not self.insp_ok() or pl.cur != self.insp_wi:
+            if self.insp_ok() and any(att_fits(pl.cur, s) for s in (ATT_SCOPE, 0, 1, 2)):
+                sel = self.att_panel_tab                          # Waffe gewechselt: Inspektion folgt
+                self.close_inspect()
+                self.on_inspect()
+                if sel is not None and att_fits(pl.cur, sel) and getattr(self, "insp_on", False):
+                    self.insp_pick(sel)
+            else:
+                self.close_inspect()
+            return
+        wi = self.insp_wi
+        model = self.gun_models[wi]
+        ar = self.getAspectRatio()
+        hits = []
+        for si, (nd, gl, lab) in self.insp_marks.items():
+            p3 = self.gun_cam.getRelativePoint(model, Point3(*self.insp_anchor(wi, si)))
+            p2 = Point2()
+            if self.insp_t < 0.6 or not self.gun_lens.project(p3, p2):
+                nd.hide()
+                continue
+            nd.show()
+            x, z = p2[0] * ar, p2[1]
+            nd.setPos(x, 0, z)
+            on = si == self.att_panel_tab
+            pulse = 0.75 + 0.25 * math.sin(time.time() * 5.0)
+            gl.setColor(1.0, 0.85 if on else 0.6, 0.15 if on else 0.1, (1.0 if on else 0.8) * pulse)
+            cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+            nm = att_name(si, cur) if cur else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
+            self.set_text(lab, f"{ATT_SLOT_NAMES[si]}\n{nm}")
+            lab.setFg((1, 0.88, 0.3, 1) if on else (1, 1, 1, 1))
+            hits.append((x - 0.07, x + 0.07, z - 0.07, z + 0.07, (lambda s=si: self.insp_pick(s))))
+        self.insp_hits = hits
+        self.update_att_panel()
+
+    def insp_pick(self, si):
+        """9b: Markierung angeklickt -> Auswahl der passenden Aufsätze dieses Platzes."""
+        self.att_panel_tab = si
+        self.open_att_panel(self.insp_wi)
+        self.att_select_tab(si)
+
+    def insp_click(self, m):
+        if m is None:
+            return
+        mx, mz = m
+        for x0, x1, z0, z1, act in list(getattr(self, "att_hits", ())) + list(getattr(self, "insp_hits", ())):
+            if x0 <= mx <= x1 and z0 <= mz <= z1:
+                self.sfx.ui_click()
+                act()
+                return
+
+    def open_att_panel(self, wi):
+        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
+        if not tabs:
+            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            self.close_att_panel()
+            return
+        self.att_panel_wi, self.att_panel_tabs = wi, tabs
+        if getattr(self, "att_panel_tab", None) not in tabs:
+            self.att_panel_tab = tabs[0]
+        self.att_panel_key = None
+        if getattr(self, "att_panel", None) is None:
+            self.att_panel = self.aspect2d.attachNewNode("aufsatzfenster")
+            self.att_panel.setBin("fixed", 85)
+            self.att_panel.setDepthTest(False)
+            self.att_panel.setDepthWrite(False)
+
+    def close_att_panel(self):
+        if getattr(self, "att_panel", None) is not None:
+            self.att_panel.removeNode()
+        self.att_panel, self.att_hits, self.att_panel_key = None, [], None
+
+    def att_select_tab(self, si):
+        self.att_panel_tab, self.att_panel_key = si, None
+
+    def update_att_panel(self):
+        """Fenster neu aufbauen, wenn sich etwas geändert hat (Waffe, Reiter, Aufsätze, Lager)."""
+        root = getattr(self, "att_panel", None)
+        if root is None:
+            return
+        pl, wi = self.player, self.att_panel_wi
+        if wi not in pl.slots or pl.hp <= 0:
+            self.close_att_panel()
+            return
+        si = self.att_panel_tab
+        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+        key = (wi, si, cur, tuple(pl.att.get(wi) or ATT_NONE), pscope(pl, wi), tuple(sorted(pl.att_store)))
+        if key == self.att_panel_key:
+            return
+        self.att_panel_key = key
+        for c in root.getChildren():
+            c.removeNode()
+        hits = []
+        W, Z0, Z1 = self.ATT_PANEL_W, self.ATT_PANEL_Z0, self.ATT_PANEL_Z1
+        cm = CardMaker("attbg")
+        cm.setFrame(-W, W, Z0, Z1)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.02, 0.03, 0.06, 1.0)
+        cm.setFrame(-W, W, Z1 - 0.006, Z1)
+        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
+        OnscreenText(text=f"Aufsätze: {EXP_WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
+                     fg=(1.0, 0.8, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
+        OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, T / Esc = zu", parent=root,
+                     pos=(W - 0.04, Z1 - 0.06), scale=0.034, fg=(0.8, 0.85, 0.9, 1), align=TextNode.ARight)
+        x = -W + 0.06                                        # Reiter
+        for s in self.att_panel_tabs:
+            lab = ATT_SLOT_NAMES[s]
+            on = s == si
+            t = OnscreenText(text=lab, parent=root, pos=(x, Z1 - 0.14), scale=0.045,
+                             fg=(1, 0.85, 0.2, 1) if on else (0.85, 0.9, 1.0, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
+            wd = len(lab) * 0.026 + 0.03
+            if on:
+                cm.setFrame(x - 0.01, x + wd - 0.02, Z1 - 0.157, Z1 - 0.151)
+                root.attachNewNode(cm.generate()).setColor(1, 0.85, 0.2, 1)
+            hits.append((x - 0.02, x + wd, Z1 - 0.17, Z1 - 0.1, (lambda s=s: self.att_select_tab(s))))
+            x += wd + 0.06
+        nmax = len(ATT_SCOPE_NAMES) if si == ATT_SCOPE else len(ATTACHMENTS[si])
+        counts = {}
+        for c in pl.att_store:
+            s_, v_ = divmod(c, ATT_CODE)
+            if s_ == si and 0 < v_ < nmax:
+                counts[v_] = counts.get(v_, 0) + 1
+        items = [0] + sorted(set(counts) | ({cur} if cur else set()))
+        cw, ch, gap = 0.37, 0.19, 0.035
+        per_row = 4
+        for k, v in enumerate(items):
+            col, row = k % per_row, k // per_row
+            cx = -W + 0.06 + col * (cw + gap)
+            ztop = Z1 - 0.2 - row * (ch + gap)
+            on = v == cur
+            cm.setFrame(cx, cx + cw, ztop - ch, ztop)
+            card = root.attachNewNode(cm.generate())
+            card.setColor(*((0.35, 0.28, 0.08, 0.95) if on else (0.10, 0.12, 0.16, 0.95)))
+            card.setTransparency(TransparencyAttrib.MAlpha)
+            ic = None
+            if v:
+                ic = scope_icon(v, 0.22, 0.08) if si == ATT_SCOPE else att_icon(wi, si, v, 0.22, 0.07)
+            if ic is not None:
+                ic.reparentTo(root)
+                ic.setPos(cx + cw / 2, 0, ztop - 0.055)
+            nm = att_name(si, v) if v else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
+            n_ = counts.get(v, 0)
+            lab = nm + ("  - dran" if on else (f"   x{n_}" if n_ > 1 else ""))
+            OnscreenText(text=lab, parent=root, pos=(cx + 0.015, ztop - 0.125), scale=0.036 if len(lab) < 18 else 0.029,
+                         fg=(1, 0.88, 0.4, 1) if on else (1, 1, 1, 1), align=TextNode.ALeft, shadow=(0, 0, 0, 0.9))
+            info = att_info(si, v)
+            OnscreenText(text=(info[:44] + "…") if len(info) > 45 else info, parent=root, pos=(cx + 0.015, ztop - 0.165),
+                         scale=0.025, fg=(0.75, 0.8, 0.88, 1), align=TextNode.ALeft)
+            if not on:
+                hits.append((cx, cx + cw, ztop - ch, ztop, (lambda v=v: self.att_equip(wi, si, v))))
+        if len(items) == 1:
+            OnscreenText(text="Keine passenden Aufsätze im Lager - Kisten öffnen!", parent=root,
+                         pos=(-W + 0.06 + cw + gap, Z1 - 0.3), scale=0.036, fg=(0.8, 0.8, 0.85, 1), align=TextNode.ALeft)
+        self.att_hits = hits
+
+    def build_crates(self):
+        """Vorlagen für die vier Kistenarten (die Kisten selbst kommen und gehen, siehe update_crates).
+        7b: Aufsatz-Kiste = flacher grüner Werkzeugkoffer mit leuchtendem Band, Schwebe-Zahnrad, grüner Lichtsäule.
+        gewöhnlich = kleine braune Holzkiste mit blassem Schwebewürfel,
+        selten = grössere Metallkiste mit blau leuchtenden Bändern, Leuchtwürfel und blauer Lichtsäule,
+        gold = grösste Kiste, golden, mit rotem Rubin vorne, schwebendem Rubin und goldener Lichtsäule."""
+        rng = random.Random(11)
+        wood, cmark = Mesh(), Mesh(lit=False)
+        wood.mat = "wood"
+        box(wood, 0, 0, 0.4, 1.1, 0.8, 0.8, (0.78, 0.56, 0.22), rng)
+        box(wood, 0, 0, 0.84, 1.16, 0.86, 0.08, (0.50, 0.34, 0.10))
+        for sx in (-0.42, 0.42):                                          # Latten
+            box(wood, sx, 0, 0.4, 0.08, 0.84, 0.82, (0.45, 0.30, 0.10))
+        box(cmark, 0, 0, 0, 0.22, 0.22, 0.22, (0.95, 0.88, 0.65))
+        metal, glow, rmark, beam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.22, lit=False)
+        metal.mat = "metal"
+        box(metal, 0, 0, 0.5, 1.45, 1.0, 1.0, (0.20, 0.24, 0.38), rng)
+        box(metal, 0, 0, 1.05, 1.52, 1.07, 0.12, (0.14, 0.16, 0.26))
+        for sx in (-0.6, 0.6):                                            # Eckverstärkungen
+            box(metal, sx, 0, 0.5, 0.12, 1.06, 1.02, (0.32, 0.34, 0.42))
+        for z in (0.3, 0.75):                                             # leuchtende Bänder
+            box(glow, 0, 0, z, 1.47, 1.02, 0.07, (0.35, 0.85, 1.0))
+        box(rmark, 0, 0, 0, 0.36, 0.36, 0.36, (0.45, 0.9, 1.0))
+        box(beam, 0, 0, 4.6, 0.5, 0.5, 4.0, (0.4, 0.85, 1.0))
+        gold, gglow, gmark, gbeam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.13, lit=False)
+        gold.mat = "metal"
+        box(gold, 0, 0, 0.58, 1.75, 1.18, 1.16, (1.0, 0.76, 0.20), rng)
+        box(gold, 0, 0, 1.2, 1.84, 1.26, 0.14, (0.80, 0.55, 0.10))          # Deckel
+        box(gold, 0, 0, 0.06, 1.84, 1.26, 0.12, (0.80, 0.55, 0.10))         # Sockel
+        for sx in (-0.78, 0.78):
+            box(gold, sx, 0, 0.6, 0.14, 1.24, 1.12, (0.86, 0.62, 0.14))
+        box(gglow, 0, -0.62, 0.68, 0.34, 0.08, 0.34, (1.0, 0.08, 0.12))    # Rubin vorne
+        box(gglow, 0, 0.62, 0.68, 0.34, 0.08, 0.34, (1.0, 0.08, 0.12))     # und hinten
+        box(gglow, 0, -0.6, 0.68, 0.5, 0.05, 0.5, (1.0, 0.85, 0.35))       # goldene Fassung
+        box(gglow, 0, 0.6, 0.68, 0.5, 0.05, 0.5, (1.0, 0.85, 0.35))
+        box(gmark, 0, 0, 0, 0.42, 0.42, 0.42, (1.0, 0.1, 0.15))
+        box(gbeam, 0, 0, 6.0, 0.6, 0.6, 6.0, (1.0, 0.62, 0.15))            # Lichtsäule über dem Rubin
+        # 7b: Aufsatz-Kiste - flacher grüner Werkzeugkoffer mit Griff, grün leuchtendem Band und Schwebe-Zahnrad
+        green, agl, amark, abeam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.18, lit=False)
+        green.mat = "metal"
+        box(green, 0, 0, 0.32, 1.3, 0.75, 0.64, (0.20, 0.42, 0.18), rng)
+        box(green, 0, 0, 0.67, 1.36, 0.8, 0.07, (0.14, 0.30, 0.12))
+        box(green, 0, 0, 0.78, 0.5, 0.08, 0.06, (0.12, 0.12, 0.12))        # Tragegriff
+        for sx in (-0.26, 0.26):
+            box(green, sx, 0, 0.73, 0.06, 0.08, 0.1, (0.12, 0.12, 0.12))
+        for sx in (-0.4, 0.4):                                            # Schnallen
+            box(green, sx, -0.385, 0.5, 0.12, 0.02, 0.12, (0.75, 0.75, 0.72))
+        box(agl, 0, 0, 0.36, 1.32, 0.77, 0.06, (0.35, 1.0, 0.4))
+        for a in range(0, 180, 45):                                       # Zahnrad aus vier Balken
+            box(amark, 0, 0, 0, 0.36 if a % 90 == 0 else 0.07, 0.07, 0.36 if a % 90 else 0.07, (0.4, 1.0, 0.45))
+        box(amark, 0, 0, 0, 0.2, 0.06, 0.2, (0.6, 1.0, 0.6))
+        box(abeam, 0, 0, 3.8, 0.4, 0.4, 3.2, (0.35, 1.0, 0.4))
+        self.crate_tpl = {}
+        for kind, parts in (("common", ((wood, "body", True), (cmark, "mark", False))),
+                            ("rare", ((metal, "body", True), (glow, "glow", False), (rmark, "mark", False),
+                                      (beam, "beam", False))),
+                            ("gold", ((gold, "body", True), (gglow, "glow", False), (gmark, "mark", False),
+                                      (gbeam, "beam", False))),
+                            ("att", ((green, "body", True), (agl, "glow", False), (amark, "mark", False),
+                                     (abeam, "beam", False)))):
+            tpl = NodePath(f"crate_{kind}")
+            for mesh, name, lit in parts:
+                n = tpl.attachNewNode(mesh.node(name))
+                if not lit:
+                    n.setFogOff()
+                if name == "beam":
+                    n.setTransparency(TransparencyAttrib.MAlpha)
+                    n.setDepthWrite(False)
+                    n.setBin("transparent", 4)
+                    n.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd))
+                if name == "mark" and kind == "gold":
+                    n.setP(45)
+                    n.setR(35)                                            # auf der Spitze: wie ein Edelstein
+            self.crate_tpl[kind] = tpl
+        self.crate_views = {}
+        self.update_crates()
+
+    def update_crates(self):
+        """Kisten-Darstellung an die Liste der Welt angleichen (neue zeigen, geöffnete entfernen)."""
+        t = time.time()
+        live = {}
+        for c in self.world.crates:
+            v = self.crate_views.get(c.cid)
+            if v is None:
+                root = self.render.attachNewNode(f"crate{c.cid}")
+                root.setPos(c.x, c.y, c.z)
+                root.setH((c.cid * 47) % 360)
+                if getattr(c, "air", False):                     # 10e: Airdrop - neutrale Versorgungskiste
+                    if "air" not in self.crate_tpl:
+                        self.crate_tpl["air"] = build_supply_crate()
+                    self.crate_tpl["air"].copyTo(root)
+                else:
+                    self.crate_tpl.get(c.kind, self.crate_tpl["common"]).copyTo(root)  # eigene Kopie: der Schwebewürfel bewegt sich je Kiste
+                mark = root.find("**/mark")
+                if getattr(c, "bonus", False):         # Titan-Belohnung: goldene Lichtsäule, weithin sichtbar
+                    bm = Mesh(lit=False)
+                    for k in range(6):
+                        a0, a1 = math.tau * k / 6, math.tau * (k + 1) / 6
+                        p0 = (math.cos(a0) * 0.35, math.sin(a0) * 0.35)
+                        p1 = (math.cos(a1) * 0.35, math.sin(a1) * 0.35)
+                        gc = (1.0, 0.62, 0.08)
+                        bm.tri((p0[0], p0[1], 0.5), (p1[0], p1[1], 0.5), (p1[0], p1[1], TITAN_BEAM_H), gc, (0, 0, 10))
+                        bm.tri((p0[0], p0[1], 0.5), (p1[0], p1[1], TITAN_BEAM_H), (p0[0], p0[1], TITAN_BEAM_H), gc, (0, 0, 10))
+                    bn = root.attachNewNode(bm.node("beam"))
+                    bn.setTwoSided(True)
+                    bn.setTransparency(TransparencyAttrib.MAlpha)
+                    bn.setDepthWrite(False)
+                    bn.setBin("transparent", 4)
+                    bn.setColorScale(1, 1, 1, 0.45)          # normal durchscheinend: bleibt auch vor Himmel gold
+                    bn.setLightOff()
+                    bn.setFogOff()                     # sonst färbt der Nebel sie weiss
+                v = (root, mark)
+            live[c.cid] = v
+            root, mark = v
+            if not mark.isEmpty():
+                hz, spin = {"rare": (1.9, 160.0), "gold": (2.3, 120.0), "att": (1.5, 140.0)}.get(c.kind, (1.45, 90.0))
+                mark.setPos(0, 0, hz + 0.2 * math.sin(t * 2.0 + c.cid))
+                mark.setH(t * spin - root.getH())
+        for cid, (root, _m) in self.crate_views.items():
+            if cid not in live:
+                root.removeNode()
+        self.crate_views = live
+
+    def set_slot_icon(self, i, wi, att=None, scope=0):
+        """Zeigt in Karte i das Bild der Waffe wi (None = leer) - mit ihren Aufsätzen (7b). Jede Karte besitzt
+        eigene, unabhängige Bildknoten, gezeigt wird durch Ein-/Aushängen statt hide()/show()."""
+        d = self.slot_icons[i]
+        att = att_valid(att)
+        key = (("a", wi, att, scope) if ((att is not None and att != ATT_NONE) or scope) and isinstance(wi, int)
+               else wi)
+        if d["cur"] == key:
+            return
+        if d["cur"] is not None:
+            d["nodes"][d["cur"]].detachNode()
+        d["cur"] = key
+        if wi is None:
+            return
+        nd = d["nodes"].get(key)
+        if nd is None:
+            if isinstance(key, tuple) and key[0] == "a":
+                nd = exp_weapon_icon(wi, extra=loadout_extra(wi, scope, att), scope=scope)
+            else:
+                nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else exp_weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
+            nd.setBin("fixed", 21)
+            nd.setDepthTest(False)
+            nd.setDepthWrite(False)
+            d["nodes"][key] = nd
+        nd.reparentTo(d["holder"])
 
     def build_tab_overlay(self):
         self.tab_held = False
@@ -121885,33 +122453,53 @@ class Game(ShowBase):
                 return s
         return 0
 
-    def equip_loot(self, wi):
+    def equip_loot(self, wi, atts=None, scope=-1):
         """Kistenwaffe erhalten: sie ersetzt die Waffe in der Hand (eine bereits getragene Kistenwaffe
         wird stattdessen ersetzt). Das Gadget bleibt im dritten Slot."""
         pl = self.player
         s = next((i for i in (0, 1) if pl.loot >= 0 and pl.slots[i] == pl.loot), self.held_slot())
+        old = pl.slots[s]
         pl.slots[s] = wi
         pl.slots[1 - s] = pl.slots[1 - s] if pl.slots[1 - s] != wi else None
         pl.loot = wi
-        pl.guns[wi] = GunState(WEAPONS[wi])
+        self.gun_extras(old, wi, atts, scope)
+        pl.guns[wi] = GunState(pl.wp(wi))
         pl.gad_out = False
         self.sel_req = wi
 
-    def equip_drop(self, wi):
-        """Aufgehobene Waffe: tauscht mit der Waffe in der Hand (mit frischer Munition)."""
+    def equip_drop(self, wi, atts=None, scope=-1):
+        """Aufgehobene Waffe: tauscht mit der Waffe in der Hand (mit frischer Munition). atts/scope: ihre Aufsätze."""
         pl = self.player
         if WEAPONS[wi].kind == "loot":
-            self.equip_loot(wi)
+            self.equip_loot(wi, atts, scope)
             return
         s = self.held_slot()
+        old = pl.slots[s]
         if pl.loot >= 0 and pl.slots[s] == pl.loot:
             pl.loot = -1
         pl.slots[s] = wi
         if pl.slots[1 - s] == wi:
             pl.slots[1 - s] = None
-        pl.guns[wi] = GunState(WEAPONS[wi])
+        self.gun_extras(old, wi, atts, scope)
+        pl.guns[wi] = GunState(pl.wp(wi))
         pl.gad_out = False
         self.sel_req = wi
+
+    def gun_extras(self, old, wi, atts, scope):
+        """Waffe gewechselt: die Aufsätze der abgegebenen Waffe gehen mit ihr, die der neuen (vom Boden) kommen dazu."""
+        pl = self.player
+        if old is not None and old != wi and old not in pl.slots:
+            pl.att.pop(old, None)
+            pl.scopes.pop(old, None)
+        a = att_valid(atts)
+        if a is not None and a != ATT_NONE and att_fits(wi):
+            pl.att[wi] = a
+        else:
+            pl.att.pop(wi, None)
+        if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
+            pl.scopes[wi] = scope
+        else:
+            pl.scopes.pop(wi, None)
 
     def my_vehicle(self):
         pl = self.player
@@ -122434,7 +123022,7 @@ class Game(ShowBase):
             trig = edge = False
             if self.captured and self.quit_box is None:
                 self.set_capture(False)
-        if self.quit_box is not None:         # Abfrage offen: das Spiel läuft, die Eingaben ruhen
+        if self.quit_box is not None or getattr(self, "insp_on", False):   # Abfrage/Inspektion: kein Schuss, kein Einfangen
             trig = edge = False
         elif not self.captured and edge and not self.dead_free:      # Klick fängt die Maus wieder ein
             self.set_capture(True)
@@ -122988,14 +123576,30 @@ class Game(ShowBase):
                         if v_ is not None:          # Mündungsfeuer und Rückstoss an der fremden Figur
                             v_.fire(op.cur)
                     self.pings[e[1]] = (time.time(), e[2], e[3])
-            elif kind == "loot":
-                if e[1] == self.my_id:
-                    self.equip_loot(e[2])
-                self.feed_add(f"{self.pname(e[1])} öffnet eine Kiste: {WEAPONS[e[2]].name}")
             elif kind == "pickup":
                 if e[1] == self.my_id:
-                    self.equip_drop(e[2])
+                    self.equip_drop(e[2], e[3] if len(e) > 3 else None, e[4] if len(e) > 4 else -1)
+                    a_ = att_valid(e[3] if len(e) > 3 else None) or ATT_NONE
+                    names_ = [att_name(i_, v_) for i_, v_ in enumerate(a_) if v_]
+                    self.toast(f"Aufgehoben: {WEAPONS[e[2]].name}" + (f"  ({', '.join(names_)})" if names_ else ""),
+                               (1, 1, 1), 1.8)
                 self.feed_add(f"{self.pname(e[1])} hebt auf: {WEAPONS[e[2]].name}")
+            elif kind == "attgain":            # 7b: Aufsatz aufgehoben - an die Waffe in der Hand oder ins Lager
+                if e[1] == self.my_id:
+                    self.att_notice(*att_give(self.player, e[2], e[3]))
+            elif kind == "lootpop":            # 7b: Beute fliegt aus der Kiste / dem Monster vor den Spieler
+                self.drop_pop[e[2]] = (time.time(), (e[4], e[5], e[6]))
+                self.sfx.play("gren_throw", (e[4], e[5], e[6]), 0.7, 1.35)
+                if e[1] == self.my_id:
+                    ck = e[3] if isinstance(e[3], int) and 0 <= e[3] < len(CRATE_KINDS) else 0
+                    nm = CRATE_NAMES[CRATE_KINDS[ck]]
+                    self.toast(f"{nm[:1].upper()}{nm[1:]} geöffnet - schau es dir an, F nimmt es", (1, 1, 1), 2.0)
+            elif kind == "droplock":           # 7b: Beute gehört noch kurz dem Öffnenden
+                if e[1] == self.my_id:
+                    self.toast(f"Gehört noch {int(math.ceil(e[3]))} s {self.pname(e[2])}", (0.95, 0.85, 0.6), 1.5)
+            elif kind == "titanloot":          # Titan erlegt: goldene Kiste mit Lichtsäule
+                self.feed_add("Der Titan ist gefallen!")
+                self.toast("TITAN BESIEGT - eine goldene Kiste liegt an seiner Stelle", (1.0, 0.82, 0.25), 3.5)
             elif kind == "venter":
                 if e[1] == self.my_id:
                     v = self.world.vehicle_by_id(e[2])
@@ -123130,8 +123734,8 @@ class Game(ShowBase):
             return "rocket"
         if w.scope:
             return "sniper"                                   # Railgun
-        if w.kind == "primary" and pl.cur == pl.slots[0]:
-            return SIGHT_NAMES[pl.scope]
+        if w.name in SCOPE_MOUNT:                             # 7b: Visier je Waffe (Aufsatz)
+            return SIGHT_NAMES[pscope(pl, pl.cur)]
         return "iron"
 
     def ads_fov(self, pl, w, sight):
@@ -123146,8 +123750,8 @@ class Game(ShowBase):
         return w.ads_fov
 
     def ads_z(self, pl, w):
-        if w.kind == "primary" and pl.cur == pl.slots[0] and w.name in SCOPE_MOUNT:
-            return scope_ads_z(pl.scope, w.name)
+        if w.name in SCOPE_MOUNT:
+            return scope_ads_z(pscope(pl, pl.cur), w.name)
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
     # ------------------------------------------------------------ Darstellung
@@ -123280,8 +123884,18 @@ class Game(ShowBase):
             pz -= 0.30 * dipg
             pitch -= 25 * dipg
             roll += 8 * dipg
+        hdg = self.sw_h.x + hdg_add
+        ins = 1.0 if getattr(self, "insp_on", False) else 0.0       # 9b: Inspektion - Waffe von der Seite präsentieren
+        self.insp_t = getattr(self, "insp_t", 0.0)
+        self.insp_t += (ins - self.insp_t) * min(1.0, INSPECT_BLEND * dt)
+        if self.insp_t > 0.002:
+            e_ = smoothstep(0.0, 1.0, self.insp_t)
+            ix, iy, iz, ih, ip, ir = self.insp_pose(w, time.time())
+            px, py, pz = px + (ix - px) * e_, py + (iy - py) * e_, pz + (iz - pz) * e_
+            hdg, pitch, roll = hdg + (ih - hdg) * e_, pitch + (ip - pitch) * e_, roll + (ir - roll) * e_
         self.gun_pivot.setPos(px, py, pz)
-        self.gun_pivot.setHpr(self.sw_h.x + hdg_add, pitch, roll)
+        self.gun_pivot.setHpr(hdg, pitch, roll)
+        self.update_inspect(dt)
         self.update_gren_arm(pl, driving)
         scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and self.melee_t <= 0
         rsc = w.sight == "rocket" and self.ads_t > 0.6 and pl.hp > 0 and not driving
@@ -123332,9 +123946,9 @@ class Game(ShowBase):
         if pl.cur < len(self.gun_flash):                          # Mündungsfeuer sitzt am Ende des Laufaufsatzes
             self.gun_flash[pl.cur].setY(GUN_PARTS[w.name][1][1] + ATT_MUZZLE_EXT[att_[0]])
         for sc_, nd_ in self.scope_nodes[pl.cur].items():          # montiertes Visier der Primärwaffe zeigen
-            (nd_.show if sc_ == pl.scope and w.kind == "primary" and pl.cur == pl.slots[0] else nd_.hide)()
+            (nd_.show if sc_ == pscope(pl, pl.cur) and w.name in SCOPE_MOUNT else nd_.hide)()
             if sc_ == 0 and w.name == SG_NAME and getattr(self, "sg_front", None) is not None:
-                (self.sg_front.show if sc_ == pl.scope and pl.cur == pl.slots[0] else self.sg_front.hide)()
+                (self.sg_front.show if sc_ == pscope(pl, pl.cur) else self.sg_front.hide)()
         if rsc:
             self.rscope.show()
             self.update_rocket_sight()
@@ -123503,10 +124117,13 @@ class Game(ShowBase):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                mdl = self.drop_models[d.wi].copyTo(v)
-                mdl.setScale(1.4)
+                if d.att >= 0 and d.att in self.att_drop_models:
+                    mdl = self.att_drop_models[d.att].copyTo(v)
+                else:
+                    mdl = self.drop_models[max(0, d.wi)].copyTo(v)
+                    mdl.setScale(1.4)
                 beam = Mesh(lit=False)
-                box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (1.0, 0.9, 0.3))
+                box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (0.4, 1.0, 0.45) if d.att >= 0 else (1.0, 0.9, 0.3))
                 bn = v.attachNewNode(beam.node("beam"))
                 bn.setTransparency(TransparencyAttrib.MAlpha)
                 bn.setColorScale(1, 1, 1, 0.45)
@@ -123514,6 +124131,15 @@ class Game(ShowBase):
                 v.setPythonTag("model", mdl)
                 v.setPythonTag("beam", bn)
             v.setPos(d.x, d.y, d.z)
+            pop = self.drop_pop.get(d.did)
+            if pop is not None:                                # 7b: fliegt im Bogen aus der Kiste
+                u = (now - pop[0]) / LOOT_POP_T
+                if u >= 1.0:
+                    del self.drop_pop[d.did]
+                else:
+                    sx_, sy_, sz_ = pop[1]
+                    v.setPos(sx_ + (d.x - sx_) * u, sy_ + (d.y - sy_) * u,
+                             sz_ + (d.z - sz_) * u + LOOT_POP_H * 4.0 * u * (1.0 - u) - 0.6 * (1.0 - u))
             mdl = v.getPythonTag("model")
             mdl.setPos(0, 0, 0.6 + 0.1 * math.sin(now * 2.2 + d.did))
             mdl.setH(now * 80.0)
@@ -123523,6 +124149,8 @@ class Game(ShowBase):
                 mdl.show()
         for d in [d for d in self.drop_views if d not in cur]:
             self.drop_views.pop(d).removeNode()
+        if len(self.drop_pop) > 40:
+            self.drop_pop.clear()
 
         for v in world.vehicles:
             vv = self.veh_views.get(v)
@@ -123553,26 +124181,6 @@ class Game(ShowBase):
         if self.world.mode == "koth":
             return f"{mark}{i + 1}. {p.name[:12]}   {int(p.score)} P   {p.kills}/{p.deaths}"
         return f"{mark}{i + 1}. {p.name[:12]}   K/D {p.kills / max(1, p.deaths):.2f}   ({p.kills}/{p.deaths})"
-
-    def set_slot_icon(self, i, wi):
-        """Zeigt in Karte i das Bild der Waffe wi (None = leer). Jede Karte besitzt eigene,
-        unabhängige Bildknoten, gezeigt wird durch Ein-/Aushängen statt hide()/show()."""
-        d = self.slot_icons[i]
-        if d["cur"] == wi:
-            return
-        if d["cur"] is not None:
-            d["nodes"][d["cur"]].detachNode()
-        d["cur"] = wi
-        if wi is None:
-            return
-        nd = d["nodes"].get(wi)
-        if nd is None:
-            nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
-            nd.setBin("fixed", 21)
-            nd.setDepthTest(False)
-            nd.setDepthWrite(False)
-            d["nodes"][wi] = nd
-        nd.reparentTo(d["holder"])
 
     def update_hud(self, dt):
         pl, world = self.player, self.world
@@ -123611,7 +124219,11 @@ class Game(ShowBase):
         want = pl.switch_to if pl.switch_t > 0 else pl.cur
         for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget
             wi = pl.slots[i] if i < 2 else ("g", pl.gadget)
-            self.set_slot_icon(i, wi)
+            if i < 2:
+                self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
+                                   pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
+            else:
+                self.set_slot_icon(i, wi)
             on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
             if i == 2:
                 active = pl.gad_out and on_foot
@@ -123707,11 +124319,24 @@ class Game(ShowBase):
             use = world.nearest_use(pl)
             if use is not None:
                 kind, o = use
-                if kind == "crate":
-                    prompt = f"F   Kiste öffnen: {WEAPONS[o.content].name}"
-                    prompt += f"   (ersetzt {WEAPONS[pl.loot if pl.loot >= 0 else pl.cur].name})"
+                if kind == "crate" and getattr(o, "air", False):
+                    prompt = "F   Versorgungskiste öffnen"
+                elif kind == "crate":
+                    prompt = f"F   {CRATE_NAMES.get(o.kind, 'Kiste')[0].upper()}{CRATE_NAMES.get(o.kind, 'Kiste')[1:]} öffnen"
+                elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
+                    si_, v_ = divmod(o.att, ATT_CODE)
+                    nm_ = att_name(si_, v_)
+                    if pl.melee_out or pl.gad_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
+                        prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - T: Waffe ansehen)"
+                    else:
+                        old_ = pscope(pl, pl.cur) if si_ == ATT_SCOPE else (pl.att.get(pl.cur) or ATT_NONE)[si_]
+                        prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
+                        if old_:
+                            prompt += f"   ({att_name(si_, old_)} ins Lager)"
                 elif kind == "drop":
                     prompt = f"F   Waffe aufheben: {WEAPONS[o.wi].name}"
+                    if o.lock > 0 and o.owner >= 0 and o.owner != pl.pid and o.owner in world.players:
+                        prompt += f"   (gehört noch {int(math.ceil(o.lock))} s {self.pname(o.owner)})"
                 elif kind == "vehicle":
                     ct = world.car_turret(o)
                     if o.driver < 0:
@@ -123742,6 +124367,8 @@ class Game(ShowBase):
                       GAD_BEACON: "Rechtsklick  Funkbake aufstellen   (nur Boden)"}[pl.gadget]
         if now - self.gad_msg[1] < 2.0 and self.gad_msg[0] and pl.hp > 0:
             prompt = self.gad_msg[0]
+        if getattr(self, "att_panel", None) is not None:
+            prompt = ""                                       # Aufsatz-Fenster offen: kein Hinweis darüber
         self.set_text(self.prompt_text, prompt)
         if world.strike == 1 and world.phase == "play":
             left = int(math.ceil(max(0.0, world.strike_t)))
@@ -124641,24 +125268,6 @@ class Game(ShowBase):
                 (n.show if q.hp > 0 else n.hide)()
 
     # ------------------------------------------------------------ Lootkisten
-    def build_crates(self):
-        rng = random.Random(11)
-        full, empty, gem = Mesh(), Mesh(), Mesh(lit=False)
-        full.mat = empty.mat = "wood"
-        box(full, 0, 0, 0.4, 1.1, 0.8, 0.8, (0.85, 0.62, 0.12), rng)
-        box(full, 0, 0, 0.84, 1.16, 0.86, 0.08, (0.55, 0.38, 0.08))
-        box(empty, 0, 0, 0.25, 1.1, 0.8, 0.5, (0.30, 0.24, 0.17), rng)
-        box(gem, 0, 0, 0, 0.3, 0.3, 0.3, (1.0, 0.9, 0.3))
-        self.crate_views = []
-        for c in self.world.crates:
-            root = self.render.attachNewNode(f"crate{c.cid}")
-            root.setPos(c.x, c.y, c.z)
-            f = root.attachNewNode(full.node("full"))
-            e = root.attachNewNode(empty.node("empty"))
-            g = root.attachNewNode(gem.node("gem"))
-            g.setFogOff()
-            self.crate_views.append((c, f, e, g))
-
     def build_toma(self):
         """Rakete für den sichtbaren Anflug des Tomahawk (erscheint nur während des Countdowns)."""
         self.toma_rk = None
@@ -124757,20 +125366,6 @@ class Game(ShowBase):
             k = self.TOMA_FAR / d
             np_.setPos(c[0] + (pos[0] - c[0]) * k, c[1] + (pos[1] - c[1]) * k, c[2] + (pos[2] - c[2]) * k)
             np_.setScale(max(0.01, scale * k))
-
-    def update_crates(self):
-        t = time.time()
-        for c, f, e, g in self.crate_views:
-            if c.content >= 0:
-                f.show()
-                e.hide()
-                g.show()
-                g.setPos(0, 0, 1.6 + 0.2 * math.sin(t * 2.0 + c.cid))
-                g.setH(t * 120.0)
-            else:
-                f.hide()
-                e.show()
-                g.hide()
 
     def stall_flicker(self, root, pos):
         """Lahmgelegtes Fahrzeug: blau flackern (für alle sichtbar), ab und zu ein Blitz-Funke."""
@@ -124919,7 +125514,7 @@ class ExpGame(Game):
         self.ip_edited = False
         self.lost_text = None
         self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
-                        resp=RESPAWN_DEFAULT, map=None)   # Host-Einstellungen
+                        resp=RESPAWN_DEFAULT, map=None, bcr=None, bha=None)   # Host-Einstellungen (bcr/bha: Bonuskisten/-hasen)
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
         self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
         self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
@@ -124959,6 +125554,7 @@ class ExpGame(Game):
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
         self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
         self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
+        self.insp_on, self.insp_t = False, 0.0           # 9b: Waffen-Inspektion (T) offen / Überblendung
         self.gad_views = {}
         self.tur_views = {}
         self.heli_views = {}
@@ -125213,6 +125809,7 @@ class ExpGame(Game):
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
+        c["bcr"], c["bha"] = bool(w.bonus_crates), bool(w.bonus_hares)
         self.map_list = list_maps()
         if c.get("map") not in [pp for _n, pp in self.map_list]:
             c["map"] = None
@@ -125263,6 +125860,8 @@ class ExpGame(Game):
         w.limit = float(c["limit"]) * 60.0
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
+        b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
+        w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
         if self.host is not None:
             self.host.send_cfg()
@@ -125788,7 +126387,7 @@ class ExpGame(Game):
             world = ExpWorld(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)))
+                          tomahawk=bool(self.cfg.get("tomahawk", True)), bonus=self.bonus_cfg())
         world.map_raw = raw
         world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
@@ -126762,17 +127361,7 @@ class ExpGame(Game):
             for k in list(pl.att):
                 if k < len(pl.guns):
                     clamp_ammo(pl, k)
-        if code >= 0 and msg in (1, 2, 3):
-            si, v = divmod(code, ATT_CODE)
-            nm = att_name(si, v)
-            wn = EXP_WEAPONS[wi].name if 0 <= wi < len(EXP_WEAPONS) else ""
-            if msg == 1:
-                self.toast(f"{nm} an {wn} angebracht", (0.55, 1.0, 0.55), 2.0)
-            elif msg == 2:
-                self.toast(f"{nm} ins Aufsatz-Lager (Tab: Klick auf eine Waffe)", (0.75, 0.9, 1.0), 2.4)
-            self.sfx.play("servo", None, 0.6, 1.3)
-        if getattr(self, "att_panel", None) is not None:
-            self.att_panel_key = None                       # Fenster neu aufbauen
+        self.att_notice(msg, code, wi)
 
     def apply_gain(self, wi, slots, dup, atts=None):
         """Eigene Waffe aus Kiste oder vom Boden erhalten (Ereignis 'loot'/'pickup'). Beim Host und im Einzelspiel
@@ -127016,9 +127605,6 @@ class ExpGame(Game):
         if self.captured:
             self.set_capture(False)
 
-    # ------------------------------------------------------------ 7b/9b: Aufsatz-Fenster (Inspektion mit T)
-    ATT_PANEL_W, ATT_PANEL_Z0, ATT_PANEL_Z1 = 0.86, -0.64, -0.06   # Grösse/Lage des Fensters (aspect2d)
-
     def ppos(self, pid):
         """9c: Position (Kopfhöhe) eines Spielers für Geräusche."""
         q = self.world.players.get(pid)
@@ -127050,274 +127636,12 @@ class ExpGame(Game):
         else:
             self.world.pan_eat(pl)
 
-    def insp_ok(self):
-        """9b: darf jetzt inspiziert werden (lebt, Schusswaffe in der Hand, nicht im Fahrzeug)?"""
-        pl = self.player
-        return (self.mode == "play" and pl is not None and pl.hp > 0 and not pl.melee_out and not pl.gad_out
-                and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and self.world.phase == "play")
-
-    def on_inspect(self):
-        """9b: T - Waffe von der Seite ansehen; Markierungen an allen veränderbaren Stellen (Klick = Auswahl aus
-        dem Aufsatz-Lager). Nochmal T oder Esc schliesst. Mit der Nahkampfwaffe: deren Fähigkeit (Bratpfanne)."""
-        if self.mode != "play" or self.quit_box is not None or getattr(self, "end", None) is not None:
-            return
-        if getattr(self, "insp_on", False):
-            self.close_inspect()
-            return
-        pl = self.player
-        if pl is None or pl.hp <= 0:
-            return
-        if pl.melee_out:
-            fn = getattr(self, "on_melee_ability", None)          # 9c: Bratpfanne essen
-            if fn is not None:
-                fn()
-            return
-        if not self.insp_ok():
-            return
-        wi = pl.cur
-        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
-        if not tabs:
-            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
-            return
-        if self.tab_held:
-            self.tab_up()
-        self.insp_on, self.insp_wi, self.insp_t = True, wi, getattr(self, "insp_t", 0.0)
-        self.insp_root = self.aspect2d.attachNewNode("inspektion")
-        self.insp_root.setBin("fixed", 84)
-        self.insp_root.setDepthTest(False)
-        self.insp_root.setDepthWrite(False)
-        self.insp_marks = {}
-        tex = get_tex("glow")
-        for si in tabs:
-            nd = self.insp_root.attachNewNode("mark%d" % si)
-            cm = CardMaker("m")
-            cm.setFrame(-0.045, 0.045, -0.045, 0.045)
-            gl = nd.attachNewNode(cm.generate())
-            gl.setTransparency(TransparencyAttrib.MAlpha)
-            if tex is not None:
-                gl.setTexture(tex)
-            cm.setFrame(-0.012, 0.012, -0.012, 0.012)
-            dot_ = nd.attachNewNode(cm.generate())
-            dot_.setColor(1, 1, 1, 1)
-            lab = OnscreenText(text="", parent=nd, pos=(0, 0.06), scale=0.034, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1),
-                               align=TextNode.ACenter)
-            self.insp_marks[si] = (nd, gl, lab)
-        self.insp_hint = OnscreenText(text="Waffe ansehen: Markierung anklicken = Aufsätze   -   T / Esc = zurück",
-                                      parent=self.insp_root, pos=(0, 0.76), scale=0.042, fg=(1, 0.85, 0.4, 1),
-                                      shadow=(0, 0, 0, 1), align=TextNode.ACenter)
-        self.att_panel_tab = None
-        self.close_att_panel()
-        self.insp_hits = []
-        if self.captured:
-            self.set_capture(False)
-        self.sfx.ui_click()
-
-    def close_inspect(self, recapture=True):
-        if not getattr(self, "insp_on", False):
-            return
-        self.insp_on = False
-        self.close_att_panel()
-        r = getattr(self, "insp_root", None)
-        if r is not None:
-            r.removeNode()
-        self.insp_root, self.insp_marks, self.insp_hits = None, {}, []
-        if (recapture and self.mode == "play" and self.quit_box is None and not self.tab_held and self.player is not None
-                and self.player.hp > 0):
-            self.set_capture(True)
-
-    def insp_anchor(self, wi, si):
-        """9b: Punkt (Waffenkoordinaten) der Markierung für Platz si."""
-        wn = EXP_WEAPONS[wi].name
-        if si == ATT_SCOPE:
-            sy_, sz_ = SCOPE_MOUNT.get(wn, (0.1, 0.04))
-            return (0.0, sy_, sz_ + 0.035)
-        if si == 0:
-            mz_ = GUN_PARTS[wn][1]
-            return (mz_[0], mz_[1] + 0.02, mz_[2])
-        if si == 1:
-            mp = MAG_PARTS.get(wn)
-            return (mp[0], mp[1], mp[2] - mp[5] * 0.3) if mp is not None else (0.0, 0.1, -0.06)
-        y_, zt = GRIP_AT.get(wn, (0.15, -0.02))
-        return (0.0, y_, zt - 0.035)
-
-    def insp_pose(self, w, t):
-        """9b: (x, y, z, h, p, r) der präsentierten Waffe vor der Waffenkamera: Lauf nach rechts, Mitte etwas oben."""
-        y0, y1, z0, z1 = weapon_frame(w.name)
-        hfov = math.radians(self.gun_lens.getHfov())
-        vfov = math.radians(self.gun_lens.getVfov())
-        dist = max(0.35, (y1 - y0) / INSPECT_FILL / (2.0 * math.tan(hfov / 2.0)),
-                   (z1 - z0) / INSPECT_FILL_V / (2.0 * math.tan(vfov / 2.0)))
-        yc, zc = (y0 + y1) / 2.0, (z0 + z1) / 2.0
-        h = -90.0 + INSPECT_SWAY * math.sin(t * 0.7)
-        hr = math.radians(h)                                  # Mitte der Waffe (0, yc, zc) nach der Drehung um z
-        ox, oy = -yc * math.sin(hr), yc * math.cos(hr)
-        return (-ox, dist - oy, -zc + dist * math.tan(vfov / 2.0) * INSPECT_LIFT, h, 2.0 * math.sin(t * 0.5), 0.0)
-
-    def update_inspect(self, dt):
-        """9b: Markierungen auf die Waffe projizieren, Auswahlfenster pflegen; schliesst, wenn es nicht mehr passt."""
-        if not getattr(self, "insp_on", False):
-            return
-        pl = self.player
-        if not self.insp_ok() or pl.cur != self.insp_wi:
-            if self.insp_ok() and any(att_fits(pl.cur, s) for s in (ATT_SCOPE, 0, 1, 2)):
-                sel = self.att_panel_tab                          # Waffe gewechselt: Inspektion folgt
-                self.close_inspect()
-                self.on_inspect()
-                if sel is not None and att_fits(pl.cur, sel) and getattr(self, "insp_on", False):
-                    self.insp_pick(sel)
-            else:
-                self.close_inspect()
-            return
-        wi = self.insp_wi
-        model = self.gun_models[wi]
-        ar = self.getAspectRatio()
-        hits = []
-        for si, (nd, gl, lab) in self.insp_marks.items():
-            p3 = self.gun_cam.getRelativePoint(model, Point3(*self.insp_anchor(wi, si)))
-            p2 = Point2()
-            if self.insp_t < 0.6 or not self.gun_lens.project(p3, p2):
-                nd.hide()
-                continue
-            nd.show()
-            x, z = p2[0] * ar, p2[1]
-            nd.setPos(x, 0, z)
-            on = si == self.att_panel_tab
-            pulse = 0.75 + 0.25 * math.sin(time.time() * 5.0)
-            gl.setColor(1.0, 0.85 if on else 0.6, 0.15 if on else 0.1, (1.0 if on else 0.8) * pulse)
-            cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
-            nm = att_name(si, cur) if cur else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
-            self.set_text(lab, f"{ATT_SLOT_NAMES[si]}\n{nm}")
-            lab.setFg((1, 0.88, 0.3, 1) if on else (1, 1, 1, 1))
-            hits.append((x - 0.07, x + 0.07, z - 0.07, z + 0.07, (lambda s=si: self.insp_pick(s))))
-        self.insp_hits = hits
-        self.update_att_panel()
-
-    def insp_pick(self, si):
-        """9b: Markierung angeklickt -> Auswahl der passenden Aufsätze dieses Platzes."""
-        self.att_panel_tab = si
-        self.open_att_panel(self.insp_wi)
-        self.att_select_tab(si)
-
-    def insp_click(self, m):
-        if m is None:
-            return
-        mx, mz = m
-        for x0, x1, z0, z1, act in list(getattr(self, "att_hits", ())) + list(getattr(self, "insp_hits", ())):
-            if x0 <= mx <= x1 and z0 <= mz <= z1:
-                self.sfx.ui_click()
-                act()
-                return
-
-    def open_att_panel(self, wi):
-        tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
-        if not tabs:
-            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
-            self.close_att_panel()
-            return
-        self.att_panel_wi, self.att_panel_tabs = wi, tabs
-        if getattr(self, "att_panel_tab", None) not in tabs:
-            self.att_panel_tab = tabs[0]
-        self.att_panel_key = None
-        if getattr(self, "att_panel", None) is None:
-            self.att_panel = self.aspect2d.attachNewNode("aufsatzfenster")
-            self.att_panel.setBin("fixed", 85)
-            self.att_panel.setDepthTest(False)
-            self.att_panel.setDepthWrite(False)
-
-    def close_att_panel(self):
-        if getattr(self, "att_panel", None) is not None:
-            self.att_panel.removeNode()
-        self.att_panel, self.att_hits, self.att_panel_key = None, [], None
-
-    def att_select_tab(self, si):
-        self.att_panel_tab, self.att_panel_key = si, None
-
     def att_equip(self, wi, si, v):
         if self.net_mode == "client":
             if self.client is not None and not self.client.lost:
                 self.client.send_atteq(wi, si, v)
         else:
             self.world.equip_att(self.player, wi, si, v)
-
-    def update_att_panel(self):
-        """Fenster neu aufbauen, wenn sich etwas geändert hat (Waffe, Reiter, Aufsätze, Lager)."""
-        root = getattr(self, "att_panel", None)
-        if root is None:
-            return
-        pl, wi = self.player, self.att_panel_wi
-        if wi not in pl.slots or pl.hp <= 0:
-            self.close_att_panel()
-            return
-        si = self.att_panel_tab
-        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
-        key = (wi, si, cur, tuple(pl.att.get(wi) or ATT_NONE), pscope(pl, wi), tuple(sorted(pl.att_store)))
-        if key == self.att_panel_key:
-            return
-        self.att_panel_key = key
-        for c in root.getChildren():
-            c.removeNode()
-        hits = []
-        W, Z0, Z1 = self.ATT_PANEL_W, self.ATT_PANEL_Z0, self.ATT_PANEL_Z1
-        cm = CardMaker("attbg")
-        cm.setFrame(-W, W, Z0, Z1)
-        bg = root.attachNewNode(cm.generate())
-        bg.setColor(0.02, 0.03, 0.06, 1.0)
-        cm.setFrame(-W, W, Z1 - 0.006, Z1)
-        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        OnscreenText(text=f"Aufsätze: {EXP_WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
-                     fg=(1.0, 0.8, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
-        OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, T / Esc = zu", parent=root,
-                     pos=(W - 0.04, Z1 - 0.06), scale=0.034, fg=(0.8, 0.85, 0.9, 1), align=TextNode.ARight)
-        x = -W + 0.06                                        # Reiter
-        for s in self.att_panel_tabs:
-            lab = ATT_SLOT_NAMES[s]
-            on = s == si
-            t = OnscreenText(text=lab, parent=root, pos=(x, Z1 - 0.14), scale=0.045,
-                             fg=(1, 0.85, 0.2, 1) if on else (0.85, 0.9, 1.0, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
-            wd = len(lab) * 0.026 + 0.03
-            if on:
-                cm.setFrame(x - 0.01, x + wd - 0.02, Z1 - 0.157, Z1 - 0.151)
-                root.attachNewNode(cm.generate()).setColor(1, 0.85, 0.2, 1)
-            hits.append((x - 0.02, x + wd, Z1 - 0.17, Z1 - 0.1, (lambda s=s: self.att_select_tab(s))))
-            x += wd + 0.06
-        nmax = len(ATT_SCOPE_NAMES) if si == ATT_SCOPE else len(ATTACHMENTS[si])
-        counts = {}
-        for c in pl.att_store:
-            s_, v_ = divmod(c, ATT_CODE)
-            if s_ == si and 0 < v_ < nmax:
-                counts[v_] = counts.get(v_, 0) + 1
-        items = [0] + sorted(set(counts) | ({cur} if cur else set()))
-        cw, ch, gap = 0.37, 0.19, 0.035
-        per_row = 4
-        for k, v in enumerate(items):
-            col, row = k % per_row, k // per_row
-            cx = -W + 0.06 + col * (cw + gap)
-            ztop = Z1 - 0.2 - row * (ch + gap)
-            on = v == cur
-            cm.setFrame(cx, cx + cw, ztop - ch, ztop)
-            card = root.attachNewNode(cm.generate())
-            card.setColor(*((0.35, 0.28, 0.08, 0.95) if on else (0.10, 0.12, 0.16, 0.95)))
-            card.setTransparency(TransparencyAttrib.MAlpha)
-            ic = None
-            if v:
-                ic = scope_icon(v, 0.22, 0.08) if si == ATT_SCOPE else att_icon(wi, si, v, 0.22, 0.07)
-            if ic is not None:
-                ic.reparentTo(root)
-                ic.setPos(cx + cw / 2, 0, ztop - 0.055)
-            nm = att_name(si, v) if v else ("Kimme und Korn" if si == ATT_SCOPE else "Standard")
-            n_ = counts.get(v, 0)
-            lab = nm + ("  - dran" if on else (f"   x{n_}" if n_ > 1 else ""))
-            OnscreenText(text=lab, parent=root, pos=(cx + 0.015, ztop - 0.125), scale=0.036 if len(lab) < 18 else 0.029,
-                         fg=(1, 0.88, 0.4, 1) if on else (1, 1, 1, 1), align=TextNode.ALeft, shadow=(0, 0, 0, 0.9))
-            info = att_info(si, v)
-            OnscreenText(text=(info[:44] + "…") if len(info) > 45 else info, parent=root, pos=(cx + 0.015, ztop - 0.165),
-                         scale=0.025, fg=(0.75, 0.8, 0.88, 1), align=TextNode.ALeft)
-            if not on:
-                hits.append((cx, cx + cw, ztop - ch, ztop, (lambda v=v: self.att_equip(wi, si, v))))
-        if len(items) == 1:
-            OnscreenText(text="Keine passenden Aufsätze im Lager - Kisten öffnen!", parent=root,
-                         pos=(-W + 0.06 + cw + gap, Z1 - 0.3), scale=0.036, fg=(0.8, 0.8, 0.85, 1), align=TextNode.ALeft)
-        self.att_hits = hits
 
     def tab_up(self):
         if not self.tab_held:
@@ -129455,32 +129779,6 @@ class ExpGame(Game):
                 best, bc = d, c
         return drop_info(best) if best is not None else ""
 
-    def set_slot_icon(self, i, wi, att=None, scope=0):
-        """Zeigt in Karte i das Bild der Waffe wi (None = leer) - mit ihren Aufsätzen (7b). Jede Karte besitzt
-        eigene, unabhängige Bildknoten, gezeigt wird durch Ein-/Aushängen statt hide()/show()."""
-        d = self.slot_icons[i]
-        att = att_valid(att)
-        key = (("a", wi, att, scope) if ((att is not None and att != ATT_NONE) or scope) and isinstance(wi, int)
-               else wi)
-        if d["cur"] == key:
-            return
-        if d["cur"] is not None:
-            d["nodes"][d["cur"]].detachNode()
-        d["cur"] = key
-        if wi is None:
-            return
-        nd = d["nodes"].get(key)
-        if nd is None:
-            if isinstance(key, tuple) and key[0] == "a":
-                nd = exp_weapon_icon(wi, extra=loadout_extra(wi, scope, att), scope=scope)
-            else:
-                nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else exp_weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
-            nd.setBin("fixed", 21)
-            nd.setDepthTest(False)
-            nd.setDepthWrite(False)
-            d["nodes"][key] = nd
-        nd.reparentTo(d["holder"])
-
     def update_hud(self, dt):
         pl, world = self.player, self.world
         w = EXP_WEAPONS[pl.cur]
@@ -130582,83 +130880,6 @@ class ExpGame(Game):
                 (n.show if q.hp > 0 else n.hide)()
 
     # ------------------------------------------------------------ Lootkisten
-    def build_crates(self):
-        """Vorlagen für die vier Kistenarten (die Kisten selbst kommen und gehen, siehe update_crates).
-        7b: Aufsatz-Kiste = flacher grüner Werkzeugkoffer mit leuchtendem Band, Schwebe-Zahnrad, grüner Lichtsäule.
-        gewöhnlich = kleine braune Holzkiste mit blassem Schwebewürfel,
-        selten = grössere Metallkiste mit blau leuchtenden Bändern, Leuchtwürfel und blauer Lichtsäule,
-        gold = grösste Kiste, golden, mit rotem Rubin vorne, schwebendem Rubin und goldener Lichtsäule."""
-        rng = random.Random(11)
-        wood, cmark = Mesh(), Mesh(lit=False)
-        wood.mat = "wood"
-        box(wood, 0, 0, 0.4, 1.1, 0.8, 0.8, (0.78, 0.56, 0.22), rng)
-        box(wood, 0, 0, 0.84, 1.16, 0.86, 0.08, (0.50, 0.34, 0.10))
-        for sx in (-0.42, 0.42):                                          # Latten
-            box(wood, sx, 0, 0.4, 0.08, 0.84, 0.82, (0.45, 0.30, 0.10))
-        box(cmark, 0, 0, 0, 0.22, 0.22, 0.22, (0.95, 0.88, 0.65))
-        metal, glow, rmark, beam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.22, lit=False)
-        metal.mat = "metal"
-        box(metal, 0, 0, 0.5, 1.45, 1.0, 1.0, (0.20, 0.24, 0.38), rng)
-        box(metal, 0, 0, 1.05, 1.52, 1.07, 0.12, (0.14, 0.16, 0.26))
-        for sx in (-0.6, 0.6):                                            # Eckverstärkungen
-            box(metal, sx, 0, 0.5, 0.12, 1.06, 1.02, (0.32, 0.34, 0.42))
-        for z in (0.3, 0.75):                                             # leuchtende Bänder
-            box(glow, 0, 0, z, 1.47, 1.02, 0.07, (0.35, 0.85, 1.0))
-        box(rmark, 0, 0, 0, 0.36, 0.36, 0.36, (0.45, 0.9, 1.0))
-        box(beam, 0, 0, 4.6, 0.5, 0.5, 4.0, (0.4, 0.85, 1.0))
-        gold, gglow, gmark, gbeam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.13, lit=False)
-        gold.mat = "metal"
-        box(gold, 0, 0, 0.58, 1.75, 1.18, 1.16, (1.0, 0.76, 0.20), rng)
-        box(gold, 0, 0, 1.2, 1.84, 1.26, 0.14, (0.80, 0.55, 0.10))          # Deckel
-        box(gold, 0, 0, 0.06, 1.84, 1.26, 0.12, (0.80, 0.55, 0.10))         # Sockel
-        for sx in (-0.78, 0.78):
-            box(gold, sx, 0, 0.6, 0.14, 1.24, 1.12, (0.86, 0.62, 0.14))
-        box(gglow, 0, -0.62, 0.68, 0.34, 0.08, 0.34, (1.0, 0.08, 0.12))    # Rubin vorne
-        box(gglow, 0, 0.62, 0.68, 0.34, 0.08, 0.34, (1.0, 0.08, 0.12))     # und hinten
-        box(gglow, 0, -0.6, 0.68, 0.5, 0.05, 0.5, (1.0, 0.85, 0.35))       # goldene Fassung
-        box(gglow, 0, 0.6, 0.68, 0.5, 0.05, 0.5, (1.0, 0.85, 0.35))
-        box(gmark, 0, 0, 0, 0.42, 0.42, 0.42, (1.0, 0.1, 0.15))
-        box(gbeam, 0, 0, 6.0, 0.6, 0.6, 6.0, (1.0, 0.62, 0.15))            # Lichtsäule über dem Rubin
-        # 7b: Aufsatz-Kiste - flacher grüner Werkzeugkoffer mit Griff, grün leuchtendem Band und Schwebe-Zahnrad
-        green, agl, amark, abeam = Mesh(), Mesh(lit=False), Mesh(lit=False), Mesh(alpha=0.18, lit=False)
-        green.mat = "metal"
-        box(green, 0, 0, 0.32, 1.3, 0.75, 0.64, (0.20, 0.42, 0.18), rng)
-        box(green, 0, 0, 0.67, 1.36, 0.8, 0.07, (0.14, 0.30, 0.12))
-        box(green, 0, 0, 0.78, 0.5, 0.08, 0.06, (0.12, 0.12, 0.12))        # Tragegriff
-        for sx in (-0.26, 0.26):
-            box(green, sx, 0, 0.73, 0.06, 0.08, 0.1, (0.12, 0.12, 0.12))
-        for sx in (-0.4, 0.4):                                            # Schnallen
-            box(green, sx, -0.385, 0.5, 0.12, 0.02, 0.12, (0.75, 0.75, 0.72))
-        box(agl, 0, 0, 0.36, 1.32, 0.77, 0.06, (0.35, 1.0, 0.4))
-        for a in range(0, 180, 45):                                       # Zahnrad aus vier Balken
-            box(amark, 0, 0, 0, 0.36 if a % 90 == 0 else 0.07, 0.07, 0.36 if a % 90 else 0.07, (0.4, 1.0, 0.45))
-        box(amark, 0, 0, 0, 0.2, 0.06, 0.2, (0.6, 1.0, 0.6))
-        box(abeam, 0, 0, 3.8, 0.4, 0.4, 3.2, (0.35, 1.0, 0.4))
-        self.crate_tpl = {}
-        for kind, parts in (("common", ((wood, "body", True), (cmark, "mark", False))),
-                            ("rare", ((metal, "body", True), (glow, "glow", False), (rmark, "mark", False),
-                                      (beam, "beam", False))),
-                            ("gold", ((gold, "body", True), (gglow, "glow", False), (gmark, "mark", False),
-                                      (gbeam, "beam", False))),
-                            ("att", ((green, "body", True), (agl, "glow", False), (amark, "mark", False),
-                                     (abeam, "beam", False)))):
-            tpl = NodePath(f"crate_{kind}")
-            for mesh, name, lit in parts:
-                n = tpl.attachNewNode(mesh.node(name))
-                if not lit:
-                    n.setFogOff()
-                if name == "beam":
-                    n.setTransparency(TransparencyAttrib.MAlpha)
-                    n.setDepthWrite(False)
-                    n.setBin("transparent", 4)
-                    n.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd))
-                if name == "mark" and kind == "gold":
-                    n.setP(45)
-                    n.setR(35)                                            # auf der Spitze: wie ein Edelstein
-            self.crate_tpl[kind] = tpl
-        self.crate_views = {}
-        self.update_crates()
-
     def build_toma(self):
         """Tomahawk: Säule (ein Modell, das zum gerade aktiven bzw. versinkenden Ort springt) und die Rakete
         für den sichtbaren Anflug."""
@@ -130941,52 +131162,6 @@ class ExpGame(Game):
         self.toma_trail = keep
 
     TOMA_FAR = 420.0      # Kamera-Sichtweite ist 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
-
-    def update_crates(self):
-        """Kisten-Darstellung an die Liste der Welt angleichen (neue zeigen, geöffnete entfernen)."""
-        t = time.time()
-        live = {}
-        for c in self.world.crates:
-            v = self.crate_views.get(c.cid)
-            if v is None:
-                root = self.render.attachNewNode(f"crate{c.cid}")
-                root.setPos(c.x, c.y, c.z)
-                root.setH((c.cid * 47) % 360)
-                if getattr(c, "air", False):                     # 10e: Airdrop - neutrale Versorgungskiste
-                    if "air" not in self.crate_tpl:
-                        self.crate_tpl["air"] = build_supply_crate()
-                    self.crate_tpl["air"].copyTo(root)
-                else:
-                    self.crate_tpl.get(c.kind, self.crate_tpl["common"]).copyTo(root)  # eigene Kopie: der Schwebewürfel bewegt sich je Kiste
-                mark = root.find("**/mark")
-                if getattr(c, "bonus", False):         # Titan-Belohnung: goldene Lichtsäule, weithin sichtbar
-                    bm = Mesh(lit=False)
-                    for k in range(6):
-                        a0, a1 = math.tau * k / 6, math.tau * (k + 1) / 6
-                        p0 = (math.cos(a0) * 0.35, math.sin(a0) * 0.35)
-                        p1 = (math.cos(a1) * 0.35, math.sin(a1) * 0.35)
-                        gc = (1.0, 0.62, 0.08)
-                        bm.tri((p0[0], p0[1], 0.5), (p1[0], p1[1], 0.5), (p1[0], p1[1], TITAN_BEAM_H), gc, (0, 0, 10))
-                        bm.tri((p0[0], p0[1], 0.5), (p1[0], p1[1], TITAN_BEAM_H), (p0[0], p0[1], TITAN_BEAM_H), gc, (0, 0, 10))
-                    bn = root.attachNewNode(bm.node("beam"))
-                    bn.setTwoSided(True)
-                    bn.setTransparency(TransparencyAttrib.MAlpha)
-                    bn.setDepthWrite(False)
-                    bn.setBin("transparent", 4)
-                    bn.setColorScale(1, 1, 1, 0.45)          # normal durchscheinend: bleibt auch vor Himmel gold
-                    bn.setLightOff()
-                    bn.setFogOff()                     # sonst färbt der Nebel sie weiss
-                v = (root, mark)
-            live[c.cid] = v
-            root, mark = v
-            if not mark.isEmpty():
-                hz, spin = {"rare": (1.9, 160.0), "gold": (2.3, 120.0), "att": (1.5, 140.0)}.get(c.kind, (1.45, 90.0))
-                mark.setPos(0, 0, hz + 0.2 * math.sin(t * 2.0 + c.cid))
-                mark.setH(t * spin - root.getH())
-        for cid, (root, _m) in self.crate_views.items():
-            if cid not in live:
-                root.removeNode()
-        self.crate_views = live
 
 
 def build_column_model():
@@ -131305,7 +131480,7 @@ def _exp_autostart(g):
     do = spec.get("do")
     if do == "host":
         cfg = spec.get("cfg") if isinstance(spec.get("cfg"), dict) else {}
-        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map"):
+        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map", "bcr", "bha"):
             if k in cfg:
                 g.cfg[k] = cfg[k]
         if g.cfg.get("mode") not in ("koth", "dm"):
