@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 43         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 44         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 173               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -18470,6 +18470,25 @@ def netlog_exc(tag):
         netlog(f"FEHLER in {tag}: " + traceback.format_exc().strip().replace("\n", " | "))
 
 
+SNAP_ZMIN = 600            # Snapshots ab dieser Größe werden komprimiert (JSON schrumpft auf etwa ein Fünftel)
+
+
+def pack_line(msg):
+    """Nachricht als eine Zeile. Große Nachrichten (Snapshots, ~8 KB bei 30/s = 2 MBit/s: das ist für Hamachi zu viel)
+    gehen als 'Z' + base64(zlib(json)); kleine bleiben lesbares JSON."""
+    raw = json.dumps(msg, separators=(",", ":")).encode()
+    if len(raw) >= SNAP_ZMIN:
+        return b"Z" + base64.b64encode(zlib.compress(raw, 1)) + b"\n"
+    return raw + b"\n"
+
+
+def unpack_line(ln):
+    """Gegenstück zu pack_line; wirft ValueError/zlib.error bei kaputten Zeilen."""
+    if ln[:1] == b"Z":
+        ln = zlib.decompress(base64.b64decode(ln[1:]))
+    return json.loads(ln)
+
+
 class Conn:
     """Nicht blockierende TCP-Verbindung. Eine JSON-Nachricht pro Zeile."""
     MAX_BUF = 6 << 20            # größte Nachricht ~3 MB (die Kartendatei steckt im welcome)
@@ -18490,7 +18509,7 @@ class Conn:
         self.rx_bytes = self.tx_bytes = 0
 
     def send(self, msg):
-        self.send_line((json.dumps(msg, separators=(",", ":")) + "\n").encode())
+        self.send_line(pack_line(msg))
 
     def send_line(self, line):
         if self.closed:
@@ -18533,8 +18552,8 @@ class Conn:
             for ln in lines:
                 if ln:
                     try:
-                        out.append(json.loads(ln))
-                    except ValueError:
+                        out.append(unpack_line(ln))
+                    except (ValueError, zlib.error):
                         pass
         if len(self.rbuf) > self.MAX_BUF:
             self.close("Nachricht zu gross")
@@ -19135,7 +19154,7 @@ class HostSession:
                            [[f.fid, f.team, FLAG_STATES.index(f.state), f.carrier, r2(f.x), r2(f.y), r2(f.z),
                              r1(f.drop_t)] for f in w.flags],
                            [[pid, t] for pid, t in w.team_of.items() if pid in w.players]]
-        line = (json.dumps(snap, separators=(",", ":")) + "\n").encode()
+        line = pack_line(snap)
         self.events = []
         ev_now = snap["ev"]
         for c in clients:
@@ -19154,7 +19173,7 @@ class HostSession:
             if pend:                                  # nach einem Stau: aufgesparte Ereignisse nachliefern
                 snap2 = dict(snap)
                 snap2["ev"] = pend + ev_now
-                c.send_line((json.dumps(snap2, separators=(",", ":")) + "\n").encode())
+                c.send_line(pack_line(snap2))
                 c.pend_ev = []
             else:
                 c.send_line(line)

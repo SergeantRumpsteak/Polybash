@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## Netz: Snapshots komprimiert gegen Hamachi-Timeouts (2026-10-23)
+**NET_VERSION 44**: alle müssen aktualisieren. Auswertung der Logs von Host und Client: Ein Snapshot ist ~8 KB und geht 30-mal pro Sekunde
+(~2 MBit/s je Mitspieler) unkomprimiert durch Hamachi. Die Leitung staute sich ständig, nach rund einer Minute kam vom Host gar nichts mehr
+an, und nach 30 s gab es die Zeitüberschreitung.
+- GEÄNDERT Nachrichten ab 600 Byte (praktisch nur Snapshots) gehen als `Z` + base64(zlib(JSON)) (`pack_line`/`unpack_line`); kleine bleiben lesbar.
+
 ## Robins Patches 13a-13d und 13f in allen Modi, feste Tomahawk-Säulen auf der Kreisstraße (2026-10-23)
 Alles gilt für KotH, DM, CTF und Experimental gleichermassen. Nicht übernommen: 13e (zerstörbare Umgebung) und alles zu
 Baumwachstum/-hitbox, Baumfällen und zertrampelten Zäunen. **NET_VERSION 43**: alte Clients können nicht mehr beitreten.
