@@ -407,6 +407,8 @@ GREN_ANIM_T = 0.6         # Dauer der Wurfanimation (Arm)
 # --- 10e: Granaten-Arsenal. Arten (Reihenfolge = Index im Netz; neue Arten nur hinten anhängen!)
 GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare", "guard")   # 10h: + Abwehrdrohne
 
+DROP_GK = GREN_KINDS + ("gad:0", "gad:1", "gad:2")     # Art eines Stapel-Drops: Granatenart oder Gadget (Experimental)
+
 GREN_NAMES = {"frag": "Splittergranate", "decoy": "Decoy", "flash": "Blendgranate", "smoke": "Rauchgranate",
               "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel", "guard": "Abwehrdrohne"}
 
@@ -1182,7 +1184,7 @@ MOB_LOOT_R = 1.1               # m: so weit verteilt um die Stelle des Monsters 
 
 LOOT_CATS = ("weapon", "melee", "grenade", "gear", "att")         # Kategorien (je Drop verschieden)
 
-LOOT_CAT_BASE = {"weapon": 0.30, "melee": 0.14, "grenade": 0.16, "gear": 0.24, "att": 0.16}
+LOOT_CAT_BASE = {"weapon": 0.30, "melee": 0.14, "grenade": 0.16, "gear": 0.24, "att": 0.16, "gadget": 0.10}
 
 LOOT_CAT_DOWN = 0.55           # Kategorie-Gedächtnis: bekommene Kategorie x so viel ...
 
@@ -1512,6 +1514,15 @@ GAD_INFO = ("3 Ladungen: Rechtsklick klebt sie an Wände, Boden, Fahrzeuge - Lin
             "3 Baken: Rechtsklick stellt sie auf - zeigt Spieler in der Nähe auf der Minimap. Wer im Wirkungsbereich seiner eigenen Bake steht, wird im Kontrollraum nicht aufgeklärt")
 GAD_SHORT = ("3x  kleben und zünden", "3x  Mine: sofort tot", "3x  zeigt Spieler auf der Karte")
 GAD_START = 3                  # Stück pro Leben
+
+# --- Gadgets als Beute (nur Experimental: dort gibt es kein Loadout, C4/Claymore/Funkbake kommen aus Kisten/Monstern)
+GAD_LOOT_N = (2, 2, 1)         # Stück je Beuteteil: C4, Claymore, Funkbake
+
+GAD_LOOT_W = {"common": (1.0, 1.0, 0.7), "rare": (1.0, 1.0, 0.8), "gold": (1.1, 1.0, 1.0)}   # Gewichte je Kistenstufe
+
+GAD_CRATE_P = {"common": 0.12, "rare": 0.18, "gold": 0.22}   # Chance, dass eine Kiste ein Gadget als viertes Teil enthält
+
+GAD_MAX = 6                    # so viele Stück je Art kann man tragen
 GAD_RANGE = 4.5                # m: so weit kann man ein Gadget vor sich platzieren
 WI_C4, WI_CLAY = -10, -11
 WI_MELEE = -12
@@ -2478,7 +2489,7 @@ class Drop:
                  gk="frag"):
         self.did, self.x, self.y, self.z, self.wi = did, x, y, z, wi
         self.gren = gren if isinstance(gren, int) else 0          # 10b: Granaten (Anzahl), sonst 0
-        self.gk = gk if gk in GREN_KINDS else "frag"              # 10e: Granatenart
+        self.gk = gk if gk in DROP_GK else "frag"                 # 10e: Granatenart (oder "gad:<Art>")
         self.gq = None                                            # 10e: Airdrop-Fackeln - ihre Kistenarten (nur Host)
         self.scope = scope if isinstance(scope, int) else -1   # Visier einer Waffe (-1 = ab Werk)
         self.gear = gear
@@ -3310,6 +3321,9 @@ def weapon_info(wi, gun=None, att=None, scope=None):
 
 def drop_info(d):
     """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
+    if getattr(d, "gren", 0) > 0 and str(getattr(d, "gk", "")).startswith("gad:"):
+        k = int(d.gk[4:])
+        return f"{GADGETS[k]} x{d.gren}  (Gadget)\n{GAD_INFO[k].split(': ', 1)[-1]}\nTaste 5: ausrüsten"
     if getattr(d, "gren", 0) > 0:
         gk = getattr(d, "gk", "frag")
         return f"{GREN_NAMES.get(gk, 'Granate')} x{d.gren}\n{GREN_INFO.get(gk, '')}\nG halten: weiter werfen, H: Art wechseln"
@@ -3434,7 +3448,7 @@ def new_stats():
     und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus end_tabs."""
     return {"mob": {k: 0 for k in KINDS}, "crates": 0, "melee_kills": 0, "toma_fired": 0, "toma_kills": 0,
             "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0, "walk": 0.0, "drive": 0.0, "drives": 0,
-            "fly": 0.0, "flights": 0, "zone_t": 0.0,
+            "fly": 0.0, "flights": 0, "zone_t": 0.0, "buffs": 0,
             "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # CTF: geholt, zurückgebracht, Träger getötet
 
 
@@ -4048,7 +4062,7 @@ def decode_mesh(raw, size):
 
 class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
-    loot_cats = ("weapon", "att")      # was Monster und Kisten hergeben (Experimental: dazu Nahkampf, Granaten, Ausrüstung)
+    loot_cats = LOOT_CATS              # was Monster und Kisten hergeben: Waffen, Nahkampf, Granaten, Ausrüstung, Aufsätze
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
                  respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
@@ -4204,6 +4218,8 @@ class World:
         self.players = {}        # Spieler-ID -> Player (beim Host: alle, beim Client: nur Anzeige)
         self.shot_sink = None    # Client: Schüsse zum Host schicken statt selbst zu simulieren
         self.gren_sink = None    # Client: Granatenwürfe zum Host schicken
+        self.melee_sink = None   # Client: Nahkampf-Schläge zum Host schicken
+        self.mspec_sink = None   # 9c: Client: Sonderattacken (Katana, Schwert) zum Host schicken
         self.gad_sink = None     # Client: Gadget-Aktionen (platzieren / C4 zünden) zum Host schicken
         self.next_gid = 1
         self.next_did = 1
@@ -5409,8 +5425,8 @@ class World:
             ps.sort(key=lambda p: (-(p.kills / max(1, p.deaths)), -p.kills, p.deaths))
         return ps
 
-    def damage_player(self, pl, dmg, attacker=-1, wi=-1):
-        """attacker = Spieler-ID des Schützen, -1 = Monster."""
+    def damage_player(self, pl, dmg, attacker=-1, wi=-1, head=False):
+        """attacker = Spieler-ID des Schützen, -1 = Monster. head: Kopftreffer (für den Helm)."""
         if pl.hp <= 0 or pl.protect > 0 or self.phase != "play":
             return
         if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
@@ -5418,6 +5434,38 @@ class World:
         if (self.mode == "ctf" and not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
                 and attacker != pl.pid and self.allied(attacker, pl.pid)):
             return                                       # Eigenbeschuss aus - Teamkameraden nehmen keinen Schaden
+        instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
+        if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
+            absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
+            pl.shield_hp -= absorb
+            pl.shield_t = 0.0
+            dmg -= absorb
+            if absorb > 0:
+                self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
+            if dmg <= 0:
+                return
+        if dmg >= pl.hp and wi == WI_TOMAHAWK and set_full(pl, "second"):   # 10c: Set-Bonus - überlebt den Tomahawk,
+            for sl, gi in list(pl.gear.items()):                          # dafür zerbricht die ganze Ausrüstung
+                if gi is not None:
+                    pl.gear[sl] = None
+                    self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
+            update_max_hp(pl)
+            pl.hp, pl.since_hurt = min(pl.max_hp, SAVE_HP), 0.0
+            self.events.append(("player_hurt", dmg, pl.pid))
+            return
+        blast = wi in (WI_GRENADE, ROCKET_WI, WI_C4, WI_CLAY, WI_VEHICLE, WI_HELI, WI_FLAK)
+        if dmg >= pl.hp and wi not in (WI_FALL, WI_TOMAHAWK):            # 10c: Zweite Chance (je Teil einmal)
+            save, slot = (("save_head", "head") if head and not blast else
+                          ("save_blast", "feet") if blast else ("save_body", "torso"))
+            gi = pl.gear.get(slot)
+            if gi is not None and GEAR[gi].kind == save:
+                pl.gear[slot] = None
+                update_max_hp(pl)
+                pl.hp = min(pl.max_hp, SAVE_HP)
+                pl.since_hurt = 0.0
+                self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
+                self.events.append(("player_hurt", dmg, pl.pid))
+                return
         pl.hp = max(0.0, pl.hp - dmg)
         pl.since_hurt = 0.0
         self.events.append(("player_hurt", dmg, pl.pid))
@@ -5425,10 +5473,16 @@ class World:
             self.player_died(pl, attacker, wi)
 
     def player_died(self, pl, attacker, wi):
+        if wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99) and attacker != pl.pid:
+            self.pan_add(self.players.get(attacker), "player")   # 9c: Spieler-Kill mit der Pfanne
+        if pl.pan_pts or pl.eat_t > 0:                   # 9c: Ladung geht beim Tod verloren
+            pl.pan_pts, pl.eat_t = 0, 0.0
+            self.events.append(("pan", pl.pid, 0, 0))
         pl.deaths += 1
-        pl.stun_t = pl.stun_lock = 0.0
         pl.death_pos = (pl.x, pl.y)
         act = pl.cur                                     # die Waffe, die er gerade in der Hand hatte
+        if act not in pl.slots:
+            act = next((q for q in pl.slots if q is not None), act)
         hc = self.heli_by_id(pl.heli) if pl.heli >= 0 else None
         if hc is not None:                               # im Hubschrauber: zählt die Höhe des Hubschraubers
             air = hc.z - self.floor_at(hc.x, hc.y, hc.z) > 1.5
@@ -5437,10 +5491,45 @@ class World:
                 and not (self.ladders and self.on_ladder(pl.x, pl.y, pl.z))
         if pl.loot == act:
             pl.loot = -1                                 # Kistenwaffe: liegt jetzt auf dem Boden (oder ist weg)
-        if not air:                                      # wer in der Luft stirbt, lässt keine Waffe zum Aufheben fallen
-            self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
+        if not air:                                      # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
+            rng = self.mrng                              # 10b: genau zwei Dinge fallen - die aktive Waffe (mit Aufsätzen) ...
+            if pl.melee_out and pl.melee != START_MELEE:
+                self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
+                pool = [("weapon", act)]
+            else:
+                self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
+                pool = [("melee", pl.melee)] if pl.melee != START_MELEE else []
+            gks = [k for k in GREN_KINDS if pl.gren.get(k, 0) > 0]
+            if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
+                pool.append(("gren", rng.choice(gks)))
+            pool += [("gad", k) for k in range(3) if pl.gad_stock[k] > 0]
+            pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
+            if pool:
+                kind, v = rng.choice(pool)
+                a = rng.uniform(0, 2 * math.pi)
+                x2, y2 = pl.x + math.cos(a) * 0.9, pl.y + math.sin(a) * 0.9
+                if self.in_solid(x2, y2, 0.3, pl.z):
+                    x2, y2 = pl.x, pl.y
+                if kind == "weapon":
+                    self.add_drop(x2, y2, pl.z, v, atts=pl.att.get(v), scope=pl.scopes.get(v, -1))
+                elif kind == "melee":
+                    self.add_drop(x2, y2, pl.z, -1, -1, v)
+                elif kind == "gad":
+                    self.add_drop(x2, y2, pl.z, -1, gren=pl.gad_stock[v], gk="gad:%d" % v)
+                elif kind == "gren":
+                    gd = self.add_drop(x2, y2, pl.z, -1, gren=pl.gren[v], gk=v)
+                    if v == "flare":
+                        gd.gq = list(getattr(pl, "flare_q", None) or [])
+                else:
+                    self.add_drop(x2, y2, pl.z, -1, v)
+        pl.gear = {sl: None for sl in GEAR_SLOTS}        # (getragene Teile sind oben schon im Zufalls-Topf)
+        pl.gad_stock, pl.gad_n = [0, 0, 0], 0            # Experimental: Gadget-Vorrat weg (ein Stapel fällt evtl. oben)
+        pl.gren, pl.flare_q = {}, []                     # 10e: Granaten sind weg (eine Art fällt evtl. oben)
+        self.gren_event(pl)
         pl.loot_history, pl.last_loot, pl.last_by = {}, None, {}     # Beute-Gedächtnis gilt nur für ein Leben
         pl.att_store = []                                # Aufsatz-Lager wird beim Tod geleert
+        self.end_buff(pl)                                # Buff läuft beim Tod sofort ab
+        pl.stun_t = pl.stun_lock = 0.0
         self.leave_vehicle(pl)
         self.leave_turret(pl)
         self.leave_heli(pl)
@@ -5452,7 +5541,7 @@ class World:
             k.kills += 1                                 # (11: Teamkills zählen nicht)
             if wi == WI_TOMAHAWK:
                 k.stats["toma_kills"] += 1
-            elif wi == WI_MELEE:
+            elif wi >= MELEE_WI0:
                 k.stats["melee_kills"] += 1
             elif 0 <= wi < len(WEAPONS):                 # weitester Kill-Schuss
                 dist = math.hypot(pl.x - k.x, pl.y - k.y)
@@ -5473,10 +5562,11 @@ class World:
             return 2.0
 
     def hit_player(self, pl, dmg, pos, d, head, owner, wi):
+        dmg *= self.dmg_mult(owner)
         pct = round(min(dmg, max(pl.hp, 0.0)) / PLAYER_HP * 100.0)
         self.events.append(("pl_hit", pos, d, dmg, head, owner, pct))
         self.note_hit(owner, head, wi)
-        self.damage_player(pl, dmg, owner, wi)
+        self.damage_player(pl, dmg, owner, wi, head)
 
     def note_hit(self, owner, head, wi=-1):
         """Statistik des Schützen: Treffer und Kopfschüsse (nur mit Waffen)."""
@@ -5487,7 +5577,8 @@ class World:
         if head:
             p.stats["heads"] += 1
 
-    def hurt_mob(self, m, dmg, pos, d, head, owner=0):
+    def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1):
+        dmg *= self.dmg_mult(owner)
         pct = round(min(dmg, max(m.hp, 0.0)) / m.max_hp * 100.0)
         m.hp -= dmg
         m.hurt_t = 0.15
@@ -5502,16 +5593,25 @@ class World:
             sh = self.players.get(owner) if isinstance(owner, int) else None
             if sh is not None and head is True:
                 sh.stats["heads"] += 1
+        if m.hp <= 0 and m.state != "dead" and m.kind in TEMP_MOBS:   # 10e: eigene Drohne abgeschossen (kein Monster)
+            m.state, m.dead_t = "dead", 0.0
+            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
+            return
         if m.hp <= 0 and m.state != "dead":
             m.state, m.dead_t = "dead", 0.0
             self.kills += 1
             killer = self.players.get(owner) if isinstance(owner, int) else None
+            if killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99):
+                self.pan_add(killer, m.kind)              # 9c: Kill mit der Pfanne lädt sie auf
             if killer is not None:
                 killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
+                if wi >= MELEE_WI0:
+                    killer.stats["melee_kills"] += 1
             self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
             self.events.append(("reward", owner))        # Munition für den Schützen
-            if m.kind in MOB_LOOT:                       # Beute: Waffen und Aufsätze fallen aus dem Monster
-                self.mob_loot(m, killer)
+            extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
+            if m.kind in MOB_LOOT or extra:              # Beute: Waffen, Aufsätze, Nahkampf, Granaten, Ausrüstung
+                self.mob_loot(m, killer, extra)          # 10d: Diebesdolch +1 (andere Kategorie)
             if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
                 self.titan_loot(m)
 
@@ -5691,38 +5791,6 @@ class World:
         else:
             self.leave_vehicle(pl, True)
 
-    def melee(self, pl):
-        """Schlag mit der Waffe in der Hand (F, wenn nichts zu benutzen ist). Trifft das nächste Ziel im Kegel vor dem Spieler."""
-        now = time.time()
-        if (pl.hp <= 0 or self.phase != "play" or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0
-                or now < pl.melee_next):
-            return False
-        pl.melee_next = now + MELEE_CD
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        eye = (pl.x, pl.y, pl.z + eye_h(pl))
-        best, bd = None, 1e9
-        cands = [(q, (q.x, q.y, q.z + body_h(q) * 0.55), PLAYER_R, False) for q in self.players.values()
-                 if q is not pl and q.hp > 0 and q.vehicle < 0 and q.heli < 0]
-        cands += [(m, (m.x, m.y, m.z + m.height * 0.55), m.radius, True) for m in self.mobs if m.state != "dead"]
-        for o, c, rad, is_mob in cands:
-            v = (c[0] - eye[0], c[1] - eye[1], c[2] - eye[2])
-            d = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2) or 0.001
-            if d > MELEE_R + rad or (v[0] * f[0] + v[1] * f[1] + v[2] * f[2]) / d < 0.55 or d >= bd:
-                continue
-            if d > 0.9 and not self.los(eye, c):
-                continue
-            best, bd = (o, c, is_mob, (v[0] / d, v[1] / d, v[2] / d)), d
-        hit = best is not None
-        self.events.append(("melee", pl.pid, 1 if hit else 0))
-        if hit:
-            o, c, is_mob, dv = best
-            if is_mob:
-                self.hurt_mob(o, MELEE_DMG, c, dv, False, pl.pid)
-            else:
-                self.hit_player(o, MELEE_DMG, c, dv, False, pl.pid, WI_MELEE)
-        return True
-
     # ------------------------------------------------------------ Waffen am Boden
     def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
                  gk="frag"):
@@ -5748,6 +5816,24 @@ class World:
             if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
                 self.drops.remove(d)
                 self.events.append(("attgain", pl.pid, si, v))
+            return
+        if d.gren > 0 and d.gk.startswith("gad:"):       # Experimental: Gadget-Stücke
+            if self.give_gadget(pl, int(d.gk[4:]), d.gren):
+                self.drops.remove(d)
+            return
+        if d.gren > 0:                                   # 10b: Granaten (10e: je Art)
+            self.drops.remove(d)
+            self.add_grenades(pl, d.gk, d.gren, d.gq)
+            return
+        if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
+            if self.give_gear(pl, d.gear):
+                self.drops.remove(d)
+                note_set_pick(pl, d.gear)                # 10b: Set-Affinität
+            return
+        if d.melee >= 0:                                 # Nahkampfwaffe: gleiche -> bleibt liegen
+            self.drops.remove(d)
+            if not self.give_melee(pl, d.melee):
+                self.drops.append(d)
             return
         self.drops.remove(d)
         if not 0 <= d.wi < len(WEAPONS):
@@ -5898,10 +5984,10 @@ class World:
             d -= 0.45
         return pl.x + fx * 0.3 + rx * side * 0.4, pl.y + fy * 0.3 + ry * side * 0.4, pl.z
 
-    def loot_drop(self, pl, c, wi=-1, gear=-1, melee=-1, att=-1, side=0.0):
+    def loot_drop(self, pl, c, wi=-1, gear=-1, melee=-1, att=-1, side=0.0, gren=0, gk="frag"):
         """7b: Inhalt der Kiste c "ploppt" heraus und fällt vor den Spieler (aufheben mit F); side = seitlich (m)."""
         x, y, z = self.loot_spot(pl, side)
-        d = self.add_drop(x, y, z, wi, gear, melee, att, None, pl.pid, LOOT_OWNER_T)
+        d = self.add_drop(x, y, z, wi, gear, melee, att, None, pl.pid, LOOT_OWNER_T, gren=gren, gk=gk)
         ki = CRATE_KINDS.index(c.kind) if c.kind in CRATE_KINDS else 0
         self.events.append(("lootpop", pl.pid, d.did, ki, round(c.x, 2), round(c.y, 2), round(c.z + 0.7, 2)))
         return d
@@ -5938,6 +6024,9 @@ class World:
             n3 = draw("att")
             if n3:
                 items.append(("att", n3))
+        if "gadget" in self.loot_cats and rng.random() < GAD_CRATE_P.get(c.kind, 0.12):     # Experimental: Gadget als 4. Teil
+            kg = rng.choices(range(3), weights=GAD_LOOT_W.get(c.kind, GAD_LOOT_W["common"]))[0]
+            items.append(("gadget", "gad:%d" % kg))
         if LOOT_DEBUG and hasattr(self, "loot_debug"):
             self.loot_debug(pl, c.kind)
         for art, name in items:
@@ -5962,6 +6051,8 @@ class World:
             elif art == "att":
                 si, v = ATT_BY_NAME[name]
                 self.loot_drop(pl, c, att=si * ATT_CODE + v, side=side)
+            elif art == "gadget":
+                self.loot_drop(pl, c, side=side, gren=GAD_LOOT_N[int(name[4:])], gk=name)
             else:
                 self.loot_drop(pl, c, wi=WEAPON_IDX[name], side=side)
 
@@ -6031,6 +6122,9 @@ class World:
             elif cat == "att":
                 si, v = ATT_BY_NAME[name]
                 kw["att"] = si * ATT_CODE + v
+            elif cat == "gadget":
+                kw["gren"] = cnt
+                kw["gk"] = name                                  # "gad:<Art>"
             else:
                 kw["gren"] = cnt
                 kw["gk"] = name[3:] if name.startswith("gk:") else "frag"      # 10e: Granatenart
@@ -6055,6 +6149,13 @@ class World:
             ks = list(ws)
             k = rng.choices(ks, weights=[ws[q] for q in ks])[0]
             return ("grenade", "gk:" + k, GREN_LOOT_N.get(k, 1))
+        if cat == "gadget":                              # Experimental: C4 / Claymore / Funkbake
+            ws = GAD_LOOT_W.get(tier, GAD_LOOT_W["common"])
+            ks = [k for k in range(3) if "gad:%d" % k not in exclude]
+            if not ks:
+                return None
+            k = rng.choices(ks, weights=[ws[q] for q in ks])[0]
+            return ("gadget", "gad:%d" % k, GAD_LOOT_N[k])
         ch = loot_chances(tier, slots, hist, last.get(cat), cat, worn)
         if cat == "weapon":
             ch = {nm: v for nm, v in ch.items() if WEAPON_IDX.get(nm) != START_WEAPON}
@@ -6507,6 +6608,509 @@ class World:
             if m.state != "dead" and m.z > -1.5 and self.in_strike(m.x, m.y):
                 self.hurt_mob(m, 9999.0, (m.x, m.y, m.z + m.height * 0.5), (0.0, 0.0, 1.0), False, self.strike_by)
 
+    def dmg_mult(self, owner):
+        """Schadens-Buff des Verursachers (Fluchttier): eigene Treffer machen BUFF_DAMAGE-fachen Schaden."""
+        p = self.players.get(owner) if isinstance(owner, int) and owner >= 0 else None
+        return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
+
+    def shock(self, pl):
+        """7c: Schild-Set-Fähigkeit "Stromstoss": betäubt alle Spieler und Monster im Umkreis SHOCK_R (nicht einen
+        selbst) zufällig SHOCK_STUN_MIN..MAX s. Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
+        if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "shield") or getattr(pl, "shock_cd", 0.0) > 0
+                or pl.vehicle >= 0 or pl.heli >= 0):
+            return False
+        pl.shock_cd = SHOCK_CD
+        k = DAGGER_AMP if "shock" in pl.amp else 1.0     # 9c: Erschöpfungsdolch: doppelter Radius und Betäubung
+        pl.amp.discard("shock")
+        rng = self.mrng
+        for q in self.players.values():
+            if q is pl or q.hp <= 0:
+                continue
+            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R * k and abs(q.z - pl.z) < 2.5:
+                q.stun_lock = 0.0
+                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R * k + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
+                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
+                m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
+        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
+        return True
+
+    def give_buff(self, pl):
+        """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank)."""
+        if pl is None or pl.hp <= 0:
+            return
+        self.end_buff(pl)
+        kind = self.mrng.choice(BUFF_KINDS)
+        pl.buff, pl.buff_t = kind, BUFF_T[kind]
+        if kind == "tank":                               # 7c: Tank kommt zu Ausrüstung/Set dazu
+            pl.tank_add = self.mrng.choice(BUFF_TANK_HP) - PLAYER_HP
+            update_max_hp(pl)                            # Leben mitskalieren (80/100 -> 160/200)
+        pl.stats["buffs"] += 1
+        self.events.append(("buff", pl.pid, kind, BUFF_T[kind], pl.max_hp))
+
+    def end_buff(self, pl):
+        if pl.buff == "tank":
+            pl.tank_add = 0.0
+            update_max_hp(pl)                            # prozentual zurück: 180/200 -> 90/100
+        pl.buff, pl.buff_t = None, 0.0
+
+    def blast_los(self, pos, *targets):
+        """10a: Erreicht eine Explosion bei pos das Ziel (einer der Punkte frei sichtbar)? Start leicht angehoben,
+        damit eine Rakete, die an einer Wand einschlägt, nicht in der Wand beginnt."""
+        p0 = (pos[0], pos[1], pos[2] + 0.25)
+        return any(self.los(p0, t) for t in targets)
+
+    def give_gear(self, pl, gi, crate=-1):
+        """Ausrüstung anlegen. Gleiches Teil schon getragen: blockiert (sonst liessen sich Treibstoff/Abklingzeiten
+        durch Tauschen zurücksetzen). Anderes Teil im Slot: wird getauscht, das alte fällt auf den Boden.
+        -> True, wenn angelegt."""
+        g = GEAR[gi]
+        if pl.gear.get(g.slot) == gi:
+            self.events.append(("hasgear", pl.pid, gi))
+            return False
+        old = pl.gear.get(g.slot)
+        if old is not None:
+            self.add_drop(pl.x, pl.y, pl.z, -1, old)
+        pl.gear[g.slot] = gi
+        if g.kind == "shield" and old != gi:
+            pl.shield_t = 0.0                            # Schildstand gehört dem Spieler (kein Zurücksetzen)
+        update_max_hp(pl)                                # 7c: Rüstung/Set/Schild neu verrechnen
+        if g.shield > 0 and old != gi:                   # neues Schild-Teil bringt seine Schild-HP gleich mit
+            pl.shield_hp = min(shield_max(pl), pl.shield_hp + g.shield)
+        self.events.append(("gear", pl.pid, gi, gear_list(pl), crate))
+        return True
+
+    def give_gadget(self, pl, kind, n):
+        """Experimental: Gadget-Stücke aufheben (Beute). Je Art ein Vorrat (höchstens GAD_MAX); ist er voll, bleibt
+        das Teil liegen. -> True, wenn aufgenommen."""
+        st = pl.gad_stock
+        if st[kind] >= GAD_MAX:
+            self.events.append(("gadfull", pl.pid, kind))
+            return False
+        add = min(n, GAD_MAX - st[kind])
+        st[kind] += add
+        if pl.gad_n <= 0:
+            pl.gadget = kind                             # noch nichts im Anschlag: gleich dieses Gadget wählen
+        self.gadget_event(pl, kind, add)
+        return True
+
+    def gadget_event(self, pl, added=-1, n=0):
+        """Vorrat dem Spieler melden (er rechnet Anzeige und Auswahl daraus)."""
+        pl.gad_n = pl.gad_stock[pl.gadget] if 0 <= pl.gadget < 3 else 0
+        self.events.append(("gadget", pl.pid, list(pl.gad_stock), pl.gadget, added, n))
+
+    def melee_swing(self, pl, d):
+        """Nahkampf-Schlag von pl in Richtung d. Mitspieler schicken ihn an den Host (melee_sink)."""
+        if self.melee_sink is not None:
+            self.melee_sink(pl, d)
+            return
+        self.melee_hit(pl, d)
+
+    def melee_hit(self, pl, d):
+        """Host/Einzelspiel: trifft den nächsten Gegner (Monster oder Spieler) in Reichweite und Schlagwinkel.
+        Sehr leise (NOISE_MELEE). Ahnungslose Monster nehmen MELEE_SNEAK-fachen Schaden."""
+        if pl.hp <= 0 or self.phase != "play":
+            return
+        mi = pl.melee if 0 <= pl.melee < len(MELEE) else START_MELEE
+        m = MELEE[mi]
+        pl.protect = 0.0
+        self.events.append(("mswing", pl.pid, mi))
+        self.make_noise(pl.x, pl.y, NOISE_MELEE, pl.z + 1.0)
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        hl = math.hypot(d[0], d[1]) or 1.0
+        fx, fy = d[0] / hl, d[1] / hl
+        cos_arc = math.cos(math.radians(m.arc))
+        best = None
+        cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
+        cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
+                  if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
+        for t, rad, z0, z1 in cands:
+            dx, dy = t.x - pl.x, t.y - pl.y
+            dist = math.hypot(dx, dy)
+            if dist - rad > m.reach or eye[2] < z0 - m.reach or eye[2] > z1 + m.reach:
+                continue
+            if dist > 0.05 and (dx * fx + dy * fy) / dist < cos_arc and dist > rad + 0.3:
+                continue
+            if not self.los(eye, (t.x, t.y, min(max(eye[2], z0 + 0.3), z1 - 0.1))):
+                continue
+            if best is None or dist < best[1]:
+                best = (t, dist, rad, z0, z1)
+        if best is None:
+            return
+        t, dist, rad, z0, z1 = best
+        az = eye[2] + d[2] * max(0.0, dist - rad * 0.5)             # Höhe, auf die gezielt wurde
+        hz = clampf(az, z0 + 0.1, z1 - 0.05)
+        head = hz > z0 + 0.78 * (z1 - z0)
+        dmg = m.dmg * (m.head if head else 1.0)
+        pos = (t.x - fx * rad * 0.8, t.y - fy * rad * 0.8, hz)
+        wi = MELEE_WI0 + mi
+        snd = m.sound if (m.sound != "bong" or head) else "slash"
+        self.events.append(("mhit", tuple(round(c, 2) for c in pos), snd, pl.pid))
+        before = t.hp + getattr(t, "shield_hp", 0.0)
+        if isinstance(t, Mob):
+            if t.aggressive() and t.state == "idle" and t.noise_at is None:
+                dmg *= MELEE_SNEAK                        # von hinten / ahnungslos: leise erledigen
+            self.note_hit(pl.pid, head)
+            self.hurt_mob(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
+        else:
+            self.note_hit(pl.pid, head)
+            self.hit_player(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
+        if m.name == DAGGER_NAME:                         # 9c: Erschöpfungsdolch
+            dealt = max(0.0, before - max(0.0, t.hp) - max(0.0, getattr(t, "shield_hp", 0.0)))
+            if dealt > 0 and pl.hp > 0:
+                heal = min(pl.max_hp - pl.hp, dealt * DAGGER_LEECH)
+                if heal > 0:
+                    pl.hp += heal
+                    self.events.append(("leech", pl.pid, round(heal, 1)))
+            if not isinstance(t, Mob):
+                self.dagger_drain(pl, t)
+
+    def dagger_drain(self, att, tgt):
+        """9c: Erschöpfungsdolch trifft einen Spieler: seine Fähigkeiten auf volle Abklingzeit (Dash, Jetpack leer,
+        Stromstoss, Essen gesperrt/abgebrochen), die des Angreifers sofort bereit und der nächste Einsatz jeder
+        Fähigkeit x DAGGER_AMP (DAGGER_AMP_T s lang). Bewegungs-Fähigkeiten rechnet der Rechner des Spielers - deshalb
+        geht das Ereignis "drain" an alle (apply_drain)."""
+        apply_drain(att, tgt)
+        self.events.append(("drain", att.pid, tgt.pid))
+
+    def pan_add(self, pl, kind):
+        """9c: Kill mit der Bratpfanne: Punkte je Art (PAN_POINTS) -> mehr Essen in der Pfanne."""
+        if pl is None or pl.melee != MELEE_IDX.get(PAN_NAME) or pl.hp <= 0:
+            return
+        n = PAN_POINTS.get(kind, 1)
+        cap = PAN_MAX_PTS
+        if PAN_STAGE3_ONLY_GRUNTS and kind != "grunt":
+            cap = max(pl.pan_pts, min(PAN_MAX_PTS, PAN_STAGES[1][0]))
+        new = min(cap, pl.pan_pts + n)
+        if new != pl.pan_pts:
+            pl.pan_pts = new
+            self.events.append(("pan", pl.pid, pl.pan_pts, n))
+
+    def pan_eat(self, pl):
+        """9c: T mit der Pfanne in der Hand: die erreichte Stufe essen (Host/Einzelspiel entscheidet). -> True"""
+        st = pan_stage(pl.pan_pts)
+        if (pl.hp <= 0 or self.phase != "play" or st == 0 or pl.eat_t > 0 or pl.pan_lock > 0
+                or pl.melee != MELEE_IDX.get(PAN_NAME) or not pl.melee_out or pl.vehicle >= 0 or pl.heli >= 0):
+            return False
+        need, dur, _hp = PAN_STAGES[st - 1]
+        k = DAGGER_AMP if "pan" in pl.amp else 1.0
+        pl.amp.discard("pan")
+        pl.eat_t, pl.eat_dur, pl.eat_stage, pl.eat_k, pl.eat_bites = dur, dur, st, k, 0
+        pl.pan_pts = 0
+        self.events.append(("eat", pl.pid, st, dur, k))
+        self.events.append(("pan", pl.pid, 0, 0))
+        return True
+
+    def update_eating(self, pl, dt):
+        """9c: Essen läuft: Stufe 1/2 heilen gleichmässig, Stufe 3 je Sekunde ein Bissen; danach (Stufe 3) Rülpser."""
+        if pl.eat_t <= 0:
+            return
+        if pl.hp <= 0:
+            pl.eat_t = 0.0
+            return
+        st = pl.eat_stage
+        hp_ = PAN_STAGES[st - 1][2] * pl.eat_k
+        el0 = pl.eat_dur - pl.eat_t
+        pl.eat_t = max(0.0, pl.eat_t - dt)
+        el1 = pl.eat_dur - pl.eat_t
+        if st < 3:
+            pl.hp = min(pl.max_hp, pl.hp + hp_ * (el1 - el0))
+        else:
+            while pl.eat_bites < int(el1 + 1e-6) and pl.eat_bites < int(round(pl.eat_dur)):
+                pl.eat_bites += 1
+                pl.hp = min(pl.max_hp, pl.hp + hp_)
+                self.events.append(("bite", pl.pid, pl.eat_bites))
+        if pl.eat_t <= 0 and st >= 3:
+            self.events.append(("burp", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z + 1.5, 2)))   # kein Lärm!
+
+    def melee_special(self, pl, kind, d):
+        """9c: Sonderattacke (Katana "spin", Schwert "slam"). Mitspieler schicken sie an den Host."""
+        if self.mspec_sink is not None:
+            self.mspec_sink(kind, d)
+            return
+        self.melee_special_hit(pl, kind, d)
+
+    def melee_special_hit(self, pl, kind, d):
+        """9c: Host/Einzelspiel: Katana-Rundumschlag (KATANA_SPIN_R um den Spieler) bzw. Schwert-Aufschlag (bis
+        SWORD_SLAM_R vor dem Spieler im Winkel SWORD_SLAM_ARC) - Flächenschaden mit Faktor, alle Gegner im Bereich."""
+        if pl.hp <= 0 or self.phase != "play" or not (0 <= pl.melee < len(MELEE)):
+            return
+        m = MELEE[pl.melee]
+        if MELEE_SPECIAL.get(m.name) != kind:
+            return
+        pl.protect = 0.0
+        hl = math.hypot(d[0], d[1]) or 1.0
+        fx, fy = d[0] / hl, d[1] / hl
+        R, mult = (KATANA_SPIN_R, KATANA_SPIN_MULT) if kind == "spin" else (SWORD_SLAM_R, SWORD_SLAM_MULT)
+        cos_arc = math.cos(math.radians(SWORD_SLAM_ARC))
+        self.events.append(("mspec", pl.pid, kind, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2), round(math.degrees(math.atan2(-fx, fy)), 1)))
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
+        chest = (pl.x, pl.y, pl.z + 1.0)
+        wi = MELEE_WI0 + pl.melee
+        cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
+        cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
+                  if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
+        for t, rad, z0, z1 in cands:
+            dx, dy = t.x - pl.x, t.y - pl.y
+            dist = math.hypot(dx, dy)
+            if dist - rad > R or z1 < pl.z - 1.0 or z0 > pl.z + 2.6:
+                continue
+            if kind == "slam" and dist > rad + 0.3 and (dx * fx + dy * fy) / max(dist, 1e-6) < cos_arc:
+                continue
+            if not self.los(chest, (t.x, t.y, min(max(chest[2], z0 + 0.3), z1 - 0.1))):
+                continue
+            dn = (dx / dist, dy / dist, 0.0) if dist > 0.05 else (fx, fy, 0.0)
+            pos = (t.x - dn[0] * rad * 0.8, t.y - dn[1] * rad * 0.8, min(z1 - 0.1, z0 + 1.0))
+            self.events.append(("mhit", tuple(round(c, 2) for c in pos), "slash", pl.pid))
+            self.note_hit(pl.pid, False)
+            if isinstance(t, Mob):
+                self.hurt_mob(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
+            else:
+                self.hit_player(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
+
+    def give_melee(self, pl, mi, crate=-1):
+        """Neue Nahkampfwaffe: ersetzt die alte (fällt als Drop, ausser dem Start-Messer). Gleiche Waffe:
+        Aufnehmen blockiert. -> True, wenn genommen."""
+        if pl.melee == mi:
+            self.events.append(("hasmelee", pl.pid, mi))
+            return False
+        if pl.melee != START_MELEE:
+            self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
+        if pl.pan_pts or pl.eat_t > 0:                   # 9c: die Ladung gehört zur Pfanne
+            pl.pan_pts, pl.eat_t = 0, 0.0
+            self.events.append(("pan", pl.pid, 0, 0))
+        pl.melee = mi
+        self.events.append(("melee", pl.pid, mi, crate))
+        return True
+
+    def heli_crash(self, h, impact):
+        """Aufprall eines (von einer Drohne) lahmgelegten Helis: Schaden je m/s über HELI_CRASH_V. Nur kurz nach
+        dem Lahmlegen (der Pilot meldet den Aufprall, der Host prüft)."""
+        if h.stall_t <= -1.0 + 1e-6:
+            return
+        impact = min(float(impact), HELI_STALL_SINK + 2.0)
+        if impact > HELI_CRASH_V:
+            self.damage_heli(h, (impact - HELI_CRASH_V) * HELI_CRASH_DMG, -1)
+            self.events.append(("hcrash", h.id, round(impact, 1)))
+
+    def take_grenade(self, pl, kind):
+        """10e (Host): eine Granate dieser Art aus dem Inventar nehmen -> Kistenart (Airdrop-Fackel) oder None."""
+        pl.gren[kind] = max(0, pl.gren.get(kind, 0) - 1)
+        tier = None
+        if kind == "flare":
+            q = getattr(pl, "flare_q", None) or []
+            tier = q.pop(0) if q else self.mrng.choice(AIR_KINDS)
+            pl.flare_q = q
+        self.gren_event(pl)
+        return tier
+
+    def gren_event(self, pl, added=None, n=0):
+        """10e: Granaten-Inventar an alle (der Spieler übernimmt es; added = aufgehobene Art)."""
+        gren_fix_sel(pl)
+        self.events.append(("gren_inv", pl.pid, gren_list(pl), GREN_KINDS.index(added) if added in GREN_KINDS else -1, n))
+
+    def add_grenades(self, pl, kind, n, tiers=None):
+        """10e: Granaten aufnehmen. Airdrop-Fackeln: je Satz von drei eine braune, eine blaue, eine goldene Kiste in
+        zufälliger Reihenfolge (tiers: schon festgelegte Kistenarten, z. B. aus einem Drop beim Tod)."""
+        kind = kind if kind in GREN_KINDS else "frag"
+        pl.gren[kind] = pl.gren.get(kind, 0) + n
+        if kind == "flare":
+            q = list(getattr(pl, "flare_q", None) or [])
+            if tiers:
+                q += list(tiers)[:n]
+            while len(q) < pl.gren["flare"]:
+                trip = list(AIR_KINDS)
+                self.mrng.shuffle(trip)
+                q += trip[:pl.gren["flare"] - len(q)]
+            pl.flare_q = q[:pl.gren["flare"]]
+        if gren_total(pl) == n:                          # vorher leer: gleich die neue Art in die Hand
+            pl.gren_sel = kind
+        self.gren_event(pl, kind, n)
+
+    def grenade_settle(self, g, dt):
+        """Liegende Granate (Decoy, Rauch): weiter ausrollen lassen."""
+        n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
+        for _ in range(n):
+            self.grenade_step(g, dt / n)
+
+    def grenade_effect(self, g):
+        """10e: Die Granate wirkt (Zündzeit um oder Molotow schlägt auf). -> True: bleibt liegen und wirkt weiter."""
+        pos = (g.x, g.y, g.z + 0.1)
+        k = g.kind
+        if k == "frag":
+            self.explode(pos, g.owner, GREN_R, GREN_DMG, WI_GRENADE)
+            return False
+        if k == "decoy":
+            g.active, g.fuse, g.shot_t, g.shots = True, DECOY_T, 0.05, 0
+            return True
+        if k == "flash":
+            self.flashbang(pos, g.owner)
+            return False
+        if k == "smoke":
+            g.active, g.fuse = True, SMOKE_T - SMOKE_FADE_T
+            self.add_smoke(pos, g.gid)
+            self.events.append(("smoke", g.gid, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+            return True
+        if k == "drone":
+            self.spawn_pdrone(g)
+            return False
+        if k == "guard":
+            self.spawn_gdrone(g)
+            return False
+        if k == "molotov":
+            self.molotov(g)
+            return False
+        if k == "flare":
+            self.start_airdrop(g)
+            return False
+        return False
+
+    def flashbang(self, pos, owner):
+        """10e: Blendgranate. Die Spieler errechnen ihre Blendung selbst aus Abstand, Blickrichtung und freier Sicht
+        (Ereignis "flash"); Monster in Reichweite mit freier Sicht sind orientierungslos (daze_t)."""
+        self.events.append(("flash", tuple(round(c, 2) for c in pos), owner))
+        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION * 0.7, pos[2])
+        for m in self.mobs:
+            if m.state == "dead" or m.kind in TEMP_MOBS and getattr(m, "owner", -1) == owner:
+                continue
+            mp = (m.x, m.y, m.z + m.height * 0.8)
+            d = math.dist(pos, mp)
+            if d < FLASH_R + m.radius and self.blast_los(pos, mp):
+                m.daze_t = max(getattr(m, "daze_t", 0.0), FLASH_MOB_T * (1.0 - 0.6 * d / (FLASH_R + m.radius)))
+                if m.state == "attack":
+                    m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+
+    def add_smoke(self, pos, sid):
+        """10e: Rauchwolke anlegen (Host aus der Granate, Mitspieler aus dem Ereignis)."""
+        if any(s.sid == sid for s in self.smokes):
+            return None
+        sm = Smoke(sid, pos, smoke_cells(self, pos))
+        self.smokes.append(sm)
+        return sm
+
+    def update_smokes(self, dt):
+        for sm in self.smokes:
+            sm.age += dt
+        self.smokes = [sm for sm in self.smokes if sm.age < SMOKE_T]
+
+    def spawn_pdrone(self, g):
+        """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer)."""
+        m = Mob("pdrone", g.x, g.y, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.owner, m.life = g.owner, PDRONE_LIFE
+        m.hover = 0.5
+        m.z = m.gz + m.hover
+        self.mobs.append(m)
+        self.events.append(("pdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+
+    def spawn_gdrone(self, g):
+        """10h: Abwehrdrohne steigt auf (Mob "gdrone", Besitzer = Werfer) und fliegt zum Besitzer."""
+        m = Mob("gdrone", g.x, g.y, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.owner, m.life, m.kills = g.owner, GDRONE_LIFE, 0
+        m.hover = 0.5
+        m.z = m.gz + m.hover
+        self.mobs.append(m)
+        self.events.append(("gdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
+
+    def molotov(self, g):
+        """10e: Molotow zerschellt: Fläche auf der Ebene des Aufpralls brennt MOLO_T s (im Wasser: nichts)."""
+        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
+        pos = (round(g.x, 2), round(g.y, 2), round(z, 2))
+        if in_water(self, g.x, g.y, z):
+            self.events.append(("molo", g.gid, pos, 0))
+            return
+        self.make_noise(g.x, g.y, NOISE_MELEE * 4.0, z + 0.5)
+        fa = FireArea(g.gid, pos, fire_cells(self, pos), g.owner)
+        self.fires.append(fa)
+        self.events.append(("molo", g.gid, pos, 1))
+
+    def add_fire(self, fid, pos, owner=-1):
+        """Mitspieler: brennende Fläche aus dem Ereignis nachbauen (gleiche Zellen wie beim Host)."""
+        if any(f.fid == fid for f in self.fires):
+            return None
+        fa = FireArea(fid, pos, fire_cells(self, pos), owner)
+        self.fires.append(fa)
+        return fa
+
+    def update_fires(self, dt, damage=True):
+        """10e: Flammen brennen MOLO_T s; wer darin steht (Füsse in einer Zelle), nimmt MOLO_DPS Schaden je s."""
+        for fa in self.fires:
+            fa.age += dt
+            if not damage or not fa.cells:
+                continue
+            xs = [c[0] for c in fa.cells]
+            ys = [c[1] for c in fa.cells]
+            x0, x1, y0, y1 = min(xs) - 0.8, max(xs) + 0.8, min(ys) - 0.8, max(ys) + 0.8
+            h = MOLO_CELL * 0.5 + 0.3
+            for pl in list(self.players.values()):
+                if pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or not (x0 < pl.x < x1 and y0 < pl.y < y1):
+                    continue
+                if any(abs(pl.x - c[0]) <= h and abs(pl.y - c[1]) <= h and c[2] - 0.4 <= pl.z <= c[2] + 1.0
+                       for c in fa.cells):
+                    self.damage_player(pl, MOLO_DPS * dt * self.dmg_mult(fa.owner), fa.owner, WI_MOLOTOV)
+            for m in self.mobs:
+                if m.state == "dead" or m.hover > 0 or not (x0 < m.x < x1 and y0 < m.y < y1):
+                    continue
+                hm = h + m.radius * 0.6
+                if any(abs(m.x - c[0]) <= hm and abs(m.y - c[1]) <= hm and c[2] - 0.6 <= m.z <= c[2] + 1.2
+                       for c in fa.cells):
+                    m.hp -= MOLO_DPS * dt * self.dmg_mult(fa.owner)
+                    m.hurt_t = 0.1
+                    if m.hp <= 0:
+                        m.hp = 0.01
+                        self.hurt_mob(m, 1.0, (m.x, m.y, m.z + 0.5), (0.0, 0.0, 1.0), False, fa.owner, WI_MOLOTOV)
+                    elif m.aggressive() and m.state == "idle":
+                        m.on_noise(fa.pos[0], fa.pos[1], self)
+        self.fires = [fa for fa in self.fires if fa.age < MOLO_T]
+
+    def start_airdrop(self, g):
+        """10e: Airdrop-Fackel gezündet: rote Fackel, nach AIR_PLANE_DELAY s fliegt ein Frachtflugzeug über die Fackel
+        und wirft die Kiste (Art aus dem Fackel-Satz) am Fallschirm ab."""
+        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
+        ad = AirDrop(self.next_fxid, g.x, g.y, z, g.tier, g.owner, self.mrng.uniform(0, 2 * math.pi))
+        self.next_fxid += 1
+        self.airdrops.append(ad)
+        self.events.append(("flare", ad.aid, round(g.x, 2), round(g.y, 2), round(z, 2)))
+
+    def update_airdrops(self, dt):
+        keep = []
+        for ad in self.airdrops:
+            ad.age += dt
+            ad.t += dt
+            if ad.state == 0 and ad.t >= AIR_PLANE_DELAY:
+                ad.state, ad.t, ad.dist = 1, 0.0, 0.0
+            if ad.state >= 1:
+                ad.dist += AIR_PLANE_SPEED * dt
+                k = ad.dist - AIR_PLANE_LEAD                 # 0 = über der Fackel
+                ad.px, ad.py = ad.fx + math.cos(ad.ang) * k, ad.fy + math.sin(ad.ang) * k
+                ad.pz = max(AIR_PLANE_ALT, ad.fz + 60.0)
+                if ad.state == 1 and k >= 0:                 # Abwurf
+                    ad.state, ad.t = 2, 0.0
+                    ad.cx, ad.cy, ad.cz = ad.fx, ad.fy, ad.pz - 3.0
+                    self.events.append(("airdrop", ad.aid))
+            if ad.state == 2:
+                ad.cz -= (AIR_FALL_V if ad.t > 1.2 else 14.0) * dt   # erst frei, dann öffnet sich der Schirm
+                fl = self.floor_at(ad.cx, ad.cy, ad.cz)
+                if ad.cz <= fl:
+                    ad.cz, ad.state = fl, 3
+                    c = Crate(self.next_cid, ad.cx, ad.cy, fl, ad.tier if ad.tier in CRATE_KINDS else "common")
+                    c.air = True
+                    self.next_cid += 1
+                    self.crates.append(c)
+                    self.events.append(("airland", ad.aid, c.cid, round(ad.cx, 2), round(ad.cy, 2), round(fl, 2)))
+            if ad.dist < AIR_PLANE_LEAD * 2.0 + 50.0 and ad.age < FLARE_BURN_T + AIR_PLANE_DELAY:
+                keep.append(ad)
+            elif ad.state == 2:                              # (Sicherheit: noch in der Luft - weiter fallen lassen)
+                keep.append(ad)
+        self.airdrops = keep
+
     # ------------------------------------------------------------ Gadgets
     def surface_normal(self, p, d):
         """Flächennormale an einem Treffpunkt (Quader, Hindernis, Gelände)."""
@@ -6691,37 +7295,65 @@ class World:
                 self.explode((g.x, g.y, g.z + 0.15), g.owner, CLAY_R, CLAY_DMG, WI_CLAY)
 
     # ------------------------------------------------------------ Granaten
-    def throw_grenade(self, pl, eye, d):
-        """Granate werfen. Beim Client geht der Wurf an den Host (er simuliert sie)."""
-        if (pl.hp <= 0 or pl.grenades <= 0 or self.phase != "play" or pl.vehicle >= 0
+    def throw_grenade(self, pl, eye, d, kind=None, speed=None):
+        """Granate werfen (10e: Art und Wurfgeschwindigkeit nach Haltedauer). Beim Client geht der Wurf an den Host
+        (er simuliert sie). -> True, wenn geworfen."""
+        kind = kind if kind in GREN_KINDS else getattr(pl, "gren_sel", "frag")
+        if (pl.hp <= 0 or pl.gren.get(kind, 0) <= 0 or self.phase != "play" or pl.vehicle >= 0
                 or pl.mount >= 0 or pl.heli >= 0):
             return False
-        pl.grenades -= 1
+        speed = clampf(speed if speed is not None else GREN_SPEED, GREN_SPEED_MIN, GREN_SPEED_MAX)
         pl.protect = 0.0
         if self.gren_sink is not None:
-            self.gren_sink(pl, eye, d)
+            pl.gren[kind] -= 1                           # Mitspieler: sofort abziehen, der Host bestätigt (gren_inv)
+            if kind == "flare" and getattr(pl, "flare_q", None):
+                pl.flare_q.pop(0)
+            self.gren_sink(pl, eye, d, kind, speed)
         else:
-            self.spawn_grenade(pl.pid, eye, d)
+            tier = self.take_grenade(pl, kind)
+            self.spawn_grenade(pl.pid, eye, d, kind, speed, tier)
         return True
 
-    def spawn_grenade(self, owner, eye, d):
+    def spawn_grenade(self, owner, eye, d, kind="frag", speed=None, tier=None):
+        sp = speed if speed is not None else GREN_SPEED
         g = Grenade(self.next_gid, eye[0], eye[1], eye[2],
-                    d[0] * GREN_SPEED, d[1] * GREN_SPEED, d[2] * GREN_SPEED + 2.0, owner)
+                    d[0] * sp, d[1] * sp, d[2] * sp + 2.0, owner, GREN_FUSE_K.get(kind, GREN_FUSE), kind)
+        if tier:
+            g.tier = tier
         self.next_gid += 1
         self.grenades.append(g)
-        self.events.append(("throw", owner))
+        self.events.append(("throw", owner, GREN_KINDS.index(g.kind)))
 
     def update_grenades(self, dt):
         alive = []
         for g in self.grenades:
             g.fuse -= dt
-            if g.fuse <= 0:
-                self.explode((g.x, g.y, g.z + 0.1), g.owner, GREN_R, GREN_DMG, WI_GRENADE)
+            if g.active:                                 # 10e: liegt und wirkt (Decoy-Lärm, Rauch qualmt)
+                if g.kind == "decoy":
+                    g.shot_t -= dt
+                    if g.shot_t <= 0 and g.shots < DECOY_SHOTS:
+                        g.shots += 1
+                        g.shot_t = self.mrng.uniform(0.25, 1.1) if self.mrng.random() < 0.8 else 0.08
+                        self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
+                        self.events.append(("lnoise", g.owner, round(g.x, 1), round(g.y, 1), round(g.z + 0.5, 1),
+                                            DECOY_NOISE))           # 10h: Gegner hören den Decoy wie Schüsse
+                        self.events.append(("decoy", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
+                                            self.mrng.choice((0, 0, 1, 2, 3))))
+                if g.fuse > 0:
+                    self.grenade_settle(g, dt)
+                    alive.append(g)
+                continue
+            if (g.kind == "molotov" and g.hit) or (g.fuse <= 0 and (g.kind in ("frag", "flash", "molotov")
+                                                                     or grenade_landed(self, g) or g.fuse < -4.0)):
+                if self.grenade_effect(g):
+                    alive.append(g)
                 continue
             n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
             h = dt / n
             for _ in range(n):
                 self.grenade_step(g, h)
+                if g.kind == "molotov" and g.hit:
+                    break
             if -40 < g.x < WORLD + 40 and -40 < g.y < WORLD + 40 and g.z > -30:
                 alive.append(g)
         self.grenades = alive
@@ -6732,6 +7364,7 @@ class World:
         nx, ny, nz = g.x + g.vx * h, g.y + g.vy * h, g.z + g.vz * h
         for b in self.boxes_near(nx - 0.15, ny - 0.15, nx + 0.15, ny + 0.15):
             if b.x0 - 0.1 < nx < b.x1 + 0.1 and b.y0 - 0.1 < ny < b.y1 + 0.1 and b.z0 - 0.1 < nz < b.z1 + 0.1:
+                g.hit = True                                     # 10e: Aufprall (Molotow zerschellt)
                 if not (b.x0 - 0.1 < g.x < b.x1 + 0.1):          # von der Seite aufgetroffen
                     g.vx, nx = -g.vx * 0.45, g.x
                 elif not (b.y0 - 0.1 < g.y < b.y1 + 0.1):
@@ -6748,6 +7381,7 @@ class World:
             dx, dy = nx - p.x, ny - p.y
             d = math.hypot(dx, dy)
             if d < p.hit_r + 0.1 and p.z - 0.3 < nz < p.z + p.hit_h:
+                g.hit = True
                 d = d or 0.01
                 nx, ny = p.x + dx / d * (p.hit_r + 0.1), p.y + dy / d * (p.hit_r + 0.1)
                 dv = (g.vx * dx + g.vy * dy) / d             # Geschwindigkeit nach aussen
@@ -6768,6 +7402,7 @@ class World:
         gz = self.ground_for(nx, ny, nz) + 0.1
         if nz < gz:
             nz = gz
+            g.hit = True
             if g.vz < 0:
                 g.vz = -g.vz * 0.4 if g.vz < -1.5 else 0.0
             fr = math.exp(-5.0 * h)                              # Rollreibung
@@ -6998,6 +7633,7 @@ class World:
                 f.state, f.carrier = "dropped", -1
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
         self.bullets, self.grenades = [], []
+        self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         self.events.append(("matchend",))
         self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
@@ -7033,6 +7669,7 @@ class World:
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
         self.bullets, self.mobs, self.pending = [], [], []
         self.grenades, self.drops = [], []
+        self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         for v in self.vehicles:
             v.reset()
@@ -7104,6 +7741,9 @@ class World:
                 pl.stats["walk"] += d
         self.update_bullets(dt)
         self.update_grenades(dt)
+        self.update_smokes(dt)                           # 10e: Rauch, Feuer, Airdrops
+        self.update_fires(dt)
+        self.update_airdrops(dt)
         self.update_vehicles(dt)
         self.update_gadgets(dt)
         self.update_turrets(dt)
@@ -7123,8 +7763,16 @@ class World:
         self.separate_mobs()
         for pl in players:
             self.push_player(pl)
+        for m in self.mobs:                              # 10e: eigene Drohnen leben nur PDRONE_LIFE s
+            if m.kind in TEMP_MOBS and m.state != "dead":
+                m.life = getattr(m, "life", PDRONE_LIFE) - dt
+                if m.life <= 0 or getattr(m, "owner", -1) not in self.players:
+                    m.hp, m.state, m.dead_t = 0.0, "dead", 0.0
+                    self.events.append(("tempdown", m.id, round(m.x, 2), round(m.y, 2), round(m.z, 2)))
         for m in [m for m in self.mobs if m.state == "dead" and m.dead_t > 4.0]:
             self.mobs.remove(m)
+            if m.kind in TEMP_MOBS:                      # 10e: keine Monster - kommen nicht wieder
+                continue
             self.pending.append([TITAN_RESPAWN if m.kind == "titan" else RESPAWN_T, m.kind])
         avoid = [(p.x, p.y) for p in players if p.hp > 0] or [(CENTER, CENTER)]
         for e in self.pending[:]:
@@ -7142,8 +7790,23 @@ class World:
             pl.protect = max(0.0, pl.protect - dt)
             pl.stun_t = max(0.0, pl.stun_t - dt)
             pl.stun_lock = max(0.0, pl.stun_lock - dt)
-            if self.regen_rate > 0 and 0 < pl.hp < PLAYER_HP and pl.since_hurt > REGEN_DELAY:
-                pl.hp = min(PLAYER_HP, pl.hp + self.regen_rate * dt)
+            if self.regen_rate > 0 and 0 < pl.hp < pl.max_hp and pl.since_hurt > REGEN_DELAY:
+                pl.hp = min(pl.max_hp, pl.hp + self.regen_rate * dt)
+            if pl.hp > 0 and wears(pl, "shield"):
+                pl.shield_t += dt
+                smax = shield_max(pl)
+                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < smax:
+                    n_ = sum(1 for gi in pl.gear.values() if gi is not None and GEAR[gi].shield > 0)
+                    rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
+                    pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
+            pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
+            tick_melee_timers(pl, dt)                    # 9c: Pfannen-Sperre, verstärkte Fähigkeiten
+            self.update_eating(pl, dt)                   # 9c: Essen (Heilung beim Host)
+            if pl.buff is not None:
+                pl.buff_t -= dt
+                if pl.buff_t <= 0:
+                    self.end_buff(pl)
+                    self.events.append(("buffend", pl.pid))
         self.ctf_update(dt)                              # CTF: Flaggen aufnehmen, tragen, abgeben
         if self.phase == "play":
             self.time_left -= dt
@@ -7418,7 +8081,8 @@ class World:
 
 class ExpWorld(World):
     """World im Modus Experimental (Robins Regeln)."""
-    loot_cats = LOOT_CATS
+
+    loot_cats = LOOT_CATS + ("gadget",)               # Experimental: auch C4 / Claymore / Funkbake als Beute
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
                  respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
@@ -8415,6 +9079,7 @@ class ExpWorld(World):
             gks = [k for k in GREN_KINDS if pl.gren.get(k, 0) > 0]
             if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
                 pool.append(("gren", rng.choice(gks)))
+            pool += [("gad", k) for k in range(3) if pl.gad_stock[k] > 0]
             pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
             if pool:
                 kind, v = rng.choice(pool)
@@ -8426,6 +9091,8 @@ class ExpWorld(World):
                     self.add_drop(x2, y2, pl.z, v, atts=pl.att.get(v), scope=pl.scopes.get(v, -1))
                 elif kind == "melee":
                     self.add_drop(x2, y2, pl.z, -1, -1, v)
+                elif kind == "gad":
+                    self.add_drop(x2, y2, pl.z, -1, gren=pl.gad_stock[v], gk="gad:%d" % v)
                 elif kind == "gren":
                     gd = self.add_drop(x2, y2, pl.z, -1, gren=pl.gren[v], gk=v)
                     if v == "flare":
@@ -8433,6 +9100,7 @@ class ExpWorld(World):
                 else:
                     self.add_drop(x2, y2, pl.z, -1, v)
         pl.gear = {sl: None for sl in GEAR_SLOTS}        # (10b: getragene Teile sind oben schon im Zufalls-Topf)
+        pl.gad_stock, pl.gad_n = [0, 0, 0], 0            # Experimental: Gadget-Vorrat weg (ein Stapel fällt evtl. oben)
         pl.gren, pl.flare_q = {}, []                     # 10e: Granaten sind weg (eine Art fällt evtl. oben)
         self.gren_event(pl)
         pl.slots = [None] * N_SLOTS
@@ -8463,56 +9131,6 @@ class ExpWorld(World):
             k = None
         self.events.append(("player_dead", pl.pid))
         self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi))
-
-    def dmg_mult(self, owner):
-        """Schadens-Buff des Verursachers (Fluchttier): eigene Treffer machen BUFF_DAMAGE-fachen Schaden."""
-        p = self.players.get(owner) if isinstance(owner, int) and owner >= 0 else None
-        return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
-
-    def shock(self, pl):
-        """7c: Schild-Set-Fähigkeit "Stromstoss": betäubt alle Spieler und Monster im Umkreis SHOCK_R (nicht einen
-        selbst) zufällig SHOCK_STUN_MIN..MAX s. Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
-        if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "shield") or getattr(pl, "shock_cd", 0.0) > 0
-                or pl.vehicle >= 0 or pl.heli >= 0):
-            return False
-        pl.shock_cd = SHOCK_CD
-        k = DAGGER_AMP if "shock" in pl.amp else 1.0     # 9c: Erschöpfungsdolch: doppelter Radius und Betäubung
-        pl.amp.discard("shock")
-        rng = self.mrng
-        for q in self.players.values():
-            if q is pl or q.hp <= 0:
-                continue
-            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R * k and abs(q.z - pl.z) < 2.5:
-                q.stun_lock = 0.0
-                self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
-        for m in self.mobs:
-            if m.state == "dead":
-                continue
-            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R * k + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
-                m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
-                m.state, m.atk_t, m.did_hit = "chase", 0.0, True
-        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
-        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
-        return True
-
-    def give_buff(self, pl):
-        """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank)."""
-        if pl is None or pl.hp <= 0:
-            return
-        self.end_buff(pl)
-        kind = self.mrng.choice(BUFF_KINDS)
-        pl.buff, pl.buff_t = kind, BUFF_T[kind]
-        if kind == "tank":                               # 7c: Tank kommt zu Ausrüstung/Set dazu
-            pl.tank_add = self.mrng.choice(BUFF_TANK_HP) - PLAYER_HP
-            update_max_hp(pl)                            # Leben mitskalieren (80/100 -> 160/200)
-        pl.stats["buffs"] += 1
-        self.events.append(("buff", pl.pid, kind, BUFF_T[kind], pl.max_hp))
-
-    def end_buff(self, pl):
-        if pl.buff == "tank":
-            pl.tank_add = 0.0
-            update_max_hp(pl)                            # prozentual zurück: 180/200 -> 90/100
-        pl.buff, pl.buff_t = None, 0.0
 
     def hit_player(self, pl, dmg, pos, d, head, owner, wi):
         dmg *= self.dmg_mult(owner)
@@ -8623,12 +9241,6 @@ class ExpWorld(World):
                 l = math.hypot(dx, dy) or 1.0
                 self.hurt_mob(m, dmg * f, mp, (dx / l, dy / l, 0.3), False, owner)
 
-    def blast_los(self, pos, *targets):
-        """10a: Erreicht eine Explosion bei pos das Ziel (einer der Punkte frei sichtbar)? Start leicht angehoben,
-        damit eine Rakete, die an einer Wand einschlägt, nicht in der Wand beginnt."""
-        p0 = (pos[0], pos[1], pos[2] + 0.25)
-        return any(self.los(p0, t) for t in targets)
-
     # ------------------------------------------------------------ Loot
     def use_crate(self, pl, c):
         """Kiste öffnen: Inhalt würfeln, Kiste verschwindet, später taucht woanders eine neue auf."""
@@ -8660,26 +9272,6 @@ class ExpWorld(World):
             self.loot_drop(pl, c, melee=MELEE_IDX[name])
         else:
             self.loot_drop(pl, c, wi=WEAPON_IDX[name])
-
-    def give_gear(self, pl, gi, crate=-1):
-        """Ausrüstung anlegen. Gleiches Teil schon getragen: blockiert (sonst liessen sich Treibstoff/Abklingzeiten
-        durch Tauschen zurücksetzen). Anderes Teil im Slot: wird getauscht, das alte fällt auf den Boden.
-        -> True, wenn angelegt."""
-        g = GEAR[gi]
-        if pl.gear.get(g.slot) == gi:
-            self.events.append(("hasgear", pl.pid, gi))
-            return False
-        old = pl.gear.get(g.slot)
-        if old is not None:
-            self.add_drop(pl.x, pl.y, pl.z, -1, old)
-        pl.gear[g.slot] = gi
-        if g.kind == "shield" and old != gi:
-            pl.shield_t = 0.0                            # Schildstand gehört dem Spieler (kein Zurücksetzen)
-        update_max_hp(pl)                                # 7c: Rüstung/Set/Schild neu verrechnen
-        if g.shield > 0 and old != gi:                   # neues Schild-Teil bringt seine Schild-HP gleich mit
-            pl.shield_hp = min(shield_max(pl), pl.shield_hp + g.shield)
-        self.events.append(("gear", pl.pid, gi, gear_list(pl), crate))
-        return True
 
     def loot_debug(self, pl, kind):
         """LOOT_DEBUG: aktuelle Chancen des Spielers je Kistenart ins Log und als Hinweis an ihn."""
@@ -8816,190 +9408,6 @@ class ExpWorld(World):
             self.leave_vehicle(pl, True)
 
     # ------------------------------------------------------------ Waffen am Boden
-    def melee_swing(self, pl, d):
-        """Nahkampf-Schlag von pl in Richtung d. Mitspieler schicken ihn an den Host (melee_sink)."""
-        if self.melee_sink is not None:
-            self.melee_sink(pl, d)
-            return
-        self.melee_hit(pl, d)
-
-    def melee_hit(self, pl, d):
-        """Host/Einzelspiel: trifft den nächsten Gegner (Monster oder Spieler) in Reichweite und Schlagwinkel.
-        Sehr leise (NOISE_MELEE). Ahnungslose Monster nehmen MELEE_SNEAK-fachen Schaden."""
-        if pl.hp <= 0 or self.phase != "play":
-            return
-        mi = pl.melee if 0 <= pl.melee < len(MELEE) else START_MELEE
-        m = MELEE[mi]
-        pl.protect = 0.0
-        self.events.append(("mswing", pl.pid, mi))
-        self.make_noise(pl.x, pl.y, NOISE_MELEE, pl.z + 1.0)
-        eye = (pl.x, pl.y, pl.z + eye_h(pl))
-        hl = math.hypot(d[0], d[1]) or 1.0
-        fx, fy = d[0] / hl, d[1] / hl
-        cos_arc = math.cos(math.radians(m.arc))
-        best = None
-        cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
-        cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
-                  if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
-        for t, rad, z0, z1 in cands:
-            dx, dy = t.x - pl.x, t.y - pl.y
-            dist = math.hypot(dx, dy)
-            if dist - rad > m.reach or eye[2] < z0 - m.reach or eye[2] > z1 + m.reach:
-                continue
-            if dist > 0.05 and (dx * fx + dy * fy) / dist < cos_arc and dist > rad + 0.3:
-                continue
-            if not self.los(eye, (t.x, t.y, min(max(eye[2], z0 + 0.3), z1 - 0.1))):
-                continue
-            if best is None or dist < best[1]:
-                best = (t, dist, rad, z0, z1)
-        if best is None:
-            return
-        t, dist, rad, z0, z1 = best
-        az = eye[2] + d[2] * max(0.0, dist - rad * 0.5)             # Höhe, auf die gezielt wurde
-        hz = clampf(az, z0 + 0.1, z1 - 0.05)
-        head = hz > z0 + 0.78 * (z1 - z0)
-        dmg = m.dmg * (m.head if head else 1.0)
-        pos = (t.x - fx * rad * 0.8, t.y - fy * rad * 0.8, hz)
-        wi = MELEE_WI0 + mi
-        snd = m.sound if (m.sound != "bong" or head) else "slash"
-        self.events.append(("mhit", tuple(round(c, 2) for c in pos), snd, pl.pid))
-        before = t.hp + getattr(t, "shield_hp", 0.0)
-        if isinstance(t, Mob):
-            if t.aggressive() and t.state == "idle" and t.noise_at is None:
-                dmg *= MELEE_SNEAK                        # von hinten / ahnungslos: leise erledigen
-            self.note_hit(pl.pid, head)
-            self.hurt_mob(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
-        else:
-            self.note_hit(pl.pid, head)
-            self.hit_player(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
-        if m.name == DAGGER_NAME:                         # 9c: Erschöpfungsdolch
-            dealt = max(0.0, before - max(0.0, t.hp) - max(0.0, getattr(t, "shield_hp", 0.0)))
-            if dealt > 0 and pl.hp > 0:
-                heal = min(pl.max_hp - pl.hp, dealt * DAGGER_LEECH)
-                if heal > 0:
-                    pl.hp += heal
-                    self.events.append(("leech", pl.pid, round(heal, 1)))
-            if not isinstance(t, Mob):
-                self.dagger_drain(pl, t)
-
-    def dagger_drain(self, att, tgt):
-        """9c: Erschöpfungsdolch trifft einen Spieler: seine Fähigkeiten auf volle Abklingzeit (Dash, Jetpack leer,
-        Stromstoss, Essen gesperrt/abgebrochen), die des Angreifers sofort bereit und der nächste Einsatz jeder
-        Fähigkeit x DAGGER_AMP (DAGGER_AMP_T s lang). Bewegungs-Fähigkeiten rechnet der Rechner des Spielers - deshalb
-        geht das Ereignis "drain" an alle (apply_drain)."""
-        apply_drain(att, tgt)
-        self.events.append(("drain", att.pid, tgt.pid))
-
-    def pan_add(self, pl, kind):
-        """9c: Kill mit der Bratpfanne: Punkte je Art (PAN_POINTS) -> mehr Essen in der Pfanne."""
-        if pl is None or pl.melee != MELEE_IDX.get(PAN_NAME) or pl.hp <= 0:
-            return
-        n = PAN_POINTS.get(kind, 1)
-        cap = PAN_MAX_PTS
-        if PAN_STAGE3_ONLY_GRUNTS and kind != "grunt":
-            cap = max(pl.pan_pts, min(PAN_MAX_PTS, PAN_STAGES[1][0]))
-        new = min(cap, pl.pan_pts + n)
-        if new != pl.pan_pts:
-            pl.pan_pts = new
-            self.events.append(("pan", pl.pid, pl.pan_pts, n))
-
-    def pan_eat(self, pl):
-        """9c: T mit der Pfanne in der Hand: die erreichte Stufe essen (Host/Einzelspiel entscheidet). -> True"""
-        st = pan_stage(pl.pan_pts)
-        if (pl.hp <= 0 or self.phase != "play" or st == 0 or pl.eat_t > 0 or pl.pan_lock > 0
-                or pl.melee != MELEE_IDX.get(PAN_NAME) or not pl.melee_out or pl.vehicle >= 0 or pl.heli >= 0):
-            return False
-        need, dur, _hp = PAN_STAGES[st - 1]
-        k = DAGGER_AMP if "pan" in pl.amp else 1.0
-        pl.amp.discard("pan")
-        pl.eat_t, pl.eat_dur, pl.eat_stage, pl.eat_k, pl.eat_bites = dur, dur, st, k, 0
-        pl.pan_pts = 0
-        self.events.append(("eat", pl.pid, st, dur, k))
-        self.events.append(("pan", pl.pid, 0, 0))
-        return True
-
-    def update_eating(self, pl, dt):
-        """9c: Essen läuft: Stufe 1/2 heilen gleichmässig, Stufe 3 je Sekunde ein Bissen; danach (Stufe 3) Rülpser."""
-        if pl.eat_t <= 0:
-            return
-        if pl.hp <= 0:
-            pl.eat_t = 0.0
-            return
-        st = pl.eat_stage
-        hp_ = PAN_STAGES[st - 1][2] * pl.eat_k
-        el0 = pl.eat_dur - pl.eat_t
-        pl.eat_t = max(0.0, pl.eat_t - dt)
-        el1 = pl.eat_dur - pl.eat_t
-        if st < 3:
-            pl.hp = min(pl.max_hp, pl.hp + hp_ * (el1 - el0))
-        else:
-            while pl.eat_bites < int(el1 + 1e-6) and pl.eat_bites < int(round(pl.eat_dur)):
-                pl.eat_bites += 1
-                pl.hp = min(pl.max_hp, pl.hp + hp_)
-                self.events.append(("bite", pl.pid, pl.eat_bites))
-        if pl.eat_t <= 0 and st >= 3:
-            self.events.append(("burp", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z + 1.5, 2)))   # kein Lärm!
-
-    def melee_special(self, pl, kind, d):
-        """9c: Sonderattacke (Katana "spin", Schwert "slam"). Mitspieler schicken sie an den Host."""
-        if self.mspec_sink is not None:
-            self.mspec_sink(kind, d)
-            return
-        self.melee_special_hit(pl, kind, d)
-
-    def melee_special_hit(self, pl, kind, d):
-        """9c: Host/Einzelspiel: Katana-Rundumschlag (KATANA_SPIN_R um den Spieler) bzw. Schwert-Aufschlag (bis
-        SWORD_SLAM_R vor dem Spieler im Winkel SWORD_SLAM_ARC) - Flächenschaden mit Faktor, alle Gegner im Bereich."""
-        if pl.hp <= 0 or self.phase != "play" or not (0 <= pl.melee < len(MELEE)):
-            return
-        m = MELEE[pl.melee]
-        if MELEE_SPECIAL.get(m.name) != kind:
-            return
-        pl.protect = 0.0
-        hl = math.hypot(d[0], d[1]) or 1.0
-        fx, fy = d[0] / hl, d[1] / hl
-        R, mult = (KATANA_SPIN_R, KATANA_SPIN_MULT) if kind == "spin" else (SWORD_SLAM_R, SWORD_SLAM_MULT)
-        cos_arc = math.cos(math.radians(SWORD_SLAM_ARC))
-        self.events.append(("mspec", pl.pid, kind, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2), round(math.degrees(math.atan2(-fx, fy)), 1)))
-        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
-        chest = (pl.x, pl.y, pl.z + 1.0)
-        wi = MELEE_WI0 + pl.melee
-        cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
-        cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
-                  if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
-        for t, rad, z0, z1 in cands:
-            dx, dy = t.x - pl.x, t.y - pl.y
-            dist = math.hypot(dx, dy)
-            if dist - rad > R or z1 < pl.z - 1.0 or z0 > pl.z + 2.6:
-                continue
-            if kind == "slam" and dist > rad + 0.3 and (dx * fx + dy * fy) / max(dist, 1e-6) < cos_arc:
-                continue
-            if not self.los(chest, (t.x, t.y, min(max(chest[2], z0 + 0.3), z1 - 0.1))):
-                continue
-            dn = (dx / dist, dy / dist, 0.0) if dist > 0.05 else (fx, fy, 0.0)
-            pos = (t.x - dn[0] * rad * 0.8, t.y - dn[1] * rad * 0.8, min(z1 - 0.1, z0 + 1.0))
-            self.events.append(("mhit", tuple(round(c, 2) for c in pos), "slash", pl.pid))
-            self.note_hit(pl.pid, False)
-            if isinstance(t, Mob):
-                self.hurt_mob(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
-            else:
-                self.hit_player(t, m.dmg * mult, pos, dn, False, pl.pid, wi)
-
-    def give_melee(self, pl, mi, crate=-1):
-        """Neue Nahkampfwaffe: ersetzt die alte (fällt als Drop, ausser dem Start-Messer). Gleiche Waffe:
-        Aufnehmen blockiert. -> True, wenn genommen."""
-        if pl.melee == mi:
-            self.events.append(("hasmelee", pl.pid, mi))
-            return False
-        if pl.melee != START_MELEE:
-            self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
-        if pl.pan_pts or pl.eat_t > 0:                   # 9c: die Ladung gehört zur Pfanne
-            pl.pan_pts, pl.eat_t = 0, 0.0
-            self.events.append(("pan", pl.pid, 0, 0))
-        pl.melee = mi
-        self.events.append(("melee", pl.pid, mi, crate))
-        return True
-
     def set_att_value(self, pl, wi, si, v):
         """Aufsatz-Platz si der Waffe wi auf v setzen. -> vorheriger Wert."""
         return att_set_value(pl, wi, si, v)
@@ -9037,6 +9445,10 @@ class ExpWorld(World):
                 self.drops.remove(d)
                 self.give_attachment(pl, si, v)
             return
+        if d.gren > 0 and d.gk.startswith("gad:"):       # Experimental: Gadget-Stücke
+            if self.give_gadget(pl, int(d.gk[4:]), d.gren):
+                self.drops.remove(d)
+            return
         if d.gren > 0:                                   # 10b: Granaten (10e: je Art)
             self.drops.remove(d)
             self.add_grenades(pl, d.gk, d.gren, d.gq)
@@ -9053,6 +9465,18 @@ class ExpWorld(World):
             return
         self.drops.remove(d)
         self.give_weapon(pl, d.wi, "pickup", 0, d.atts, d.scope)
+
+    def place_gadget(self, pl, kind, pos, nrm, yaw, att=None):
+        """Experimental: die Stückzahl ist der Beute-Vorrat (nicht GAD_START je Leben)."""
+        if kind not in (GAD_C4, GAD_CLAY, GAD_BEACON) or pl.gad_stock[kind] <= 0:
+            return None
+        pl.gad_used[kind] = 0
+        g = World.place_gadget(self, pl, kind, pos, nrm, yaw, att)
+        if g is not None:
+            pl.gad_stock[kind] -= 1
+            pl.gad_used[kind] = 0
+            self.gadget_event(pl)
+        return g
 
     def update_turrets(self, dt):
         """Geschütze feuern nur, wenn ein Spieler sie bedient (Maus zielt, Linke Maustaste schiesst).
@@ -9109,16 +9533,6 @@ class ExpWorld(World):
             self.bullets.append(b)
             self.next_bid += 1
             self.events.append(("tshot", t.id))
-
-    def heli_crash(self, h, impact):
-        """Aufprall eines (von einer Drohne) lahmgelegten Helis: Schaden je m/s über HELI_CRASH_V. Nur kurz nach
-        dem Lahmlegen (der Pilot meldet den Aufprall, der Host prüft)."""
-        if h.stall_t <= -1.0 + 1e-6:
-            return
-        impact = min(float(impact), HELI_STALL_SINK + 2.0)
-        if impact > HELI_CRASH_V:
-            self.damage_heli(h, (impact - HELI_CRASH_V) * HELI_CRASH_DMG, -1)
-            self.events.append(("hcrash", h.id, round(impact, 1)))
 
     def set_toma(self, i, age=0.0):
         """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
@@ -9246,335 +9660,6 @@ class ExpWorld(World):
         return res
 
     # ------------------------------------------------------------ Granaten
-    def throw_grenade(self, pl, eye, d, kind=None, speed=None):
-        """Granate werfen (10e: Art und Wurfgeschwindigkeit nach Haltedauer). Beim Client geht der Wurf an den Host
-        (er simuliert sie). -> True, wenn geworfen."""
-        kind = kind if kind in GREN_KINDS else getattr(pl, "gren_sel", "frag")
-        if (pl.hp <= 0 or pl.gren.get(kind, 0) <= 0 or self.phase != "play" or pl.vehicle >= 0
-                or pl.mount >= 0 or pl.heli >= 0):
-            return False
-        speed = clampf(speed if speed is not None else GREN_SPEED, GREN_SPEED_MIN, GREN_SPEED_MAX)
-        pl.protect = 0.0
-        if self.gren_sink is not None:
-            pl.gren[kind] -= 1                           # Mitspieler: sofort abziehen, der Host bestätigt (gren_inv)
-            if kind == "flare" and getattr(pl, "flare_q", None):
-                pl.flare_q.pop(0)
-            self.gren_sink(pl, eye, d, kind, speed)
-        else:
-            tier = self.take_grenade(pl, kind)
-            self.spawn_grenade(pl.pid, eye, d, kind, speed, tier)
-        return True
-
-    def take_grenade(self, pl, kind):
-        """10e (Host): eine Granate dieser Art aus dem Inventar nehmen -> Kistenart (Airdrop-Fackel) oder None."""
-        pl.gren[kind] = max(0, pl.gren.get(kind, 0) - 1)
-        tier = None
-        if kind == "flare":
-            q = getattr(pl, "flare_q", None) or []
-            tier = q.pop(0) if q else self.mrng.choice(AIR_KINDS)
-            pl.flare_q = q
-        self.gren_event(pl)
-        return tier
-
-    def gren_event(self, pl, added=None, n=0):
-        """10e: Granaten-Inventar an alle (der Spieler übernimmt es; added = aufgehobene Art)."""
-        gren_fix_sel(pl)
-        self.events.append(("gren_inv", pl.pid, gren_list(pl), GREN_KINDS.index(added) if added in GREN_KINDS else -1, n))
-
-    def add_grenades(self, pl, kind, n, tiers=None):
-        """10e: Granaten aufnehmen. Airdrop-Fackeln: je Satz von drei eine braune, eine blaue, eine goldene Kiste in
-        zufälliger Reihenfolge (tiers: schon festgelegte Kistenarten, z. B. aus einem Drop beim Tod)."""
-        kind = kind if kind in GREN_KINDS else "frag"
-        pl.gren[kind] = pl.gren.get(kind, 0) + n
-        if kind == "flare":
-            q = list(getattr(pl, "flare_q", None) or [])
-            if tiers:
-                q += list(tiers)[:n]
-            while len(q) < pl.gren["flare"]:
-                trip = list(AIR_KINDS)
-                self.mrng.shuffle(trip)
-                q += trip[:pl.gren["flare"] - len(q)]
-            pl.flare_q = q[:pl.gren["flare"]]
-        if gren_total(pl) == n:                          # vorher leer: gleich die neue Art in die Hand
-            pl.gren_sel = kind
-        self.gren_event(pl, kind, n)
-
-    def spawn_grenade(self, owner, eye, d, kind="frag", speed=None, tier=None):
-        sp = speed if speed is not None else GREN_SPEED
-        g = Grenade(self.next_gid, eye[0], eye[1], eye[2],
-                    d[0] * sp, d[1] * sp, d[2] * sp + 2.0, owner, GREN_FUSE_K.get(kind, GREN_FUSE), kind)
-        if tier:
-            g.tier = tier
-        self.next_gid += 1
-        self.grenades.append(g)
-        self.events.append(("throw", owner, GREN_KINDS.index(g.kind)))
-
-    def update_grenades(self, dt):
-        alive = []
-        for g in self.grenades:
-            g.fuse -= dt
-            if g.active:                                 # 10e: liegt und wirkt (Decoy-Lärm, Rauch qualmt)
-                if g.kind == "decoy":
-                    g.shot_t -= dt
-                    if g.shot_t <= 0 and g.shots < DECOY_SHOTS:
-                        g.shots += 1
-                        g.shot_t = self.mrng.uniform(0.25, 1.1) if self.mrng.random() < 0.8 else 0.08
-                        self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
-                        self.events.append(("lnoise", g.owner, round(g.x, 1), round(g.y, 1), round(g.z + 0.5, 1),
-                                            DECOY_NOISE))           # 10h: Gegner hören den Decoy wie Schüsse
-                        self.events.append(("decoy", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
-                                            self.mrng.choice((0, 0, 1, 2, 3))))
-                if g.fuse > 0:
-                    self.grenade_settle(g, dt)
-                    alive.append(g)
-                continue
-            if (g.kind == "molotov" and g.hit) or (g.fuse <= 0 and (g.kind in ("frag", "flash", "molotov")
-                                                                     or grenade_landed(self, g) or g.fuse < -4.0)):
-                if self.grenade_effect(g):
-                    alive.append(g)
-                continue
-            n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
-            h = dt / n
-            for _ in range(n):
-                self.grenade_step(g, h)
-                if g.kind == "molotov" and g.hit:
-                    break
-            if -40 < g.x < WORLD + 40 and -40 < g.y < WORLD + 40 and g.z > -30:
-                alive.append(g)
-        self.grenades = alive
-
-    def grenade_settle(self, g, dt):
-        """Liegende Granate (Decoy, Rauch): weiter ausrollen lassen."""
-        n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * dt / 0.25) + 1
-        for _ in range(n):
-            self.grenade_step(g, dt / n)
-
-    def grenade_effect(self, g):
-        """10e: Die Granate wirkt (Zündzeit um oder Molotow schlägt auf). -> True: bleibt liegen und wirkt weiter."""
-        pos = (g.x, g.y, g.z + 0.1)
-        k = g.kind
-        if k == "frag":
-            self.explode(pos, g.owner, GREN_R, GREN_DMG, WI_GRENADE)
-            return False
-        if k == "decoy":
-            g.active, g.fuse, g.shot_t, g.shots = True, DECOY_T, 0.05, 0
-            return True
-        if k == "flash":
-            self.flashbang(pos, g.owner)
-            return False
-        if k == "smoke":
-            g.active, g.fuse = True, SMOKE_T - SMOKE_FADE_T
-            self.add_smoke(pos, g.gid)
-            self.events.append(("smoke", g.gid, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
-            return True
-        if k == "drone":
-            self.spawn_pdrone(g)
-            return False
-        if k == "guard":
-            self.spawn_gdrone(g)
-            return False
-        if k == "molotov":
-            self.molotov(g)
-            return False
-        if k == "flare":
-            self.start_airdrop(g)
-            return False
-        return False
-
-    def flashbang(self, pos, owner):
-        """10e: Blendgranate. Die Spieler errechnen ihre Blendung selbst aus Abstand, Blickrichtung und freier Sicht
-        (Ereignis "flash"); Monster in Reichweite mit freier Sicht sind orientierungslos (daze_t)."""
-        self.events.append(("flash", tuple(round(c, 2) for c in pos), owner))
-        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION * 0.7, pos[2])
-        for m in self.mobs:
-            if m.state == "dead" or m.kind in TEMP_MOBS and getattr(m, "owner", -1) == owner:
-                continue
-            mp = (m.x, m.y, m.z + m.height * 0.8)
-            d = math.dist(pos, mp)
-            if d < FLASH_R + m.radius and self.blast_los(pos, mp):
-                m.daze_t = max(getattr(m, "daze_t", 0.0), FLASH_MOB_T * (1.0 - 0.6 * d / (FLASH_R + m.radius)))
-                if m.state == "attack":
-                    m.state, m.atk_t, m.did_hit = "chase", 0.0, True
-
-    def add_smoke(self, pos, sid):
-        """10e: Rauchwolke anlegen (Host aus der Granate, Mitspieler aus dem Ereignis)."""
-        if any(s.sid == sid for s in self.smokes):
-            return None
-        sm = Smoke(sid, pos, smoke_cells(self, pos))
-        self.smokes.append(sm)
-        return sm
-
-    def update_smokes(self, dt):
-        for sm in self.smokes:
-            sm.age += dt
-        self.smokes = [sm for sm in self.smokes if sm.age < SMOKE_T]
-
-    def spawn_pdrone(self, g):
-        """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer)."""
-        m = Mob("pdrone", g.x, g.y, self)
-        m.id = self.next_mid
-        self.next_mid += 1
-        m.owner, m.life = g.owner, PDRONE_LIFE
-        m.hover = 0.5
-        m.z = m.gz + m.hover
-        self.mobs.append(m)
-        self.events.append(("pdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
-
-    def spawn_gdrone(self, g):
-        """10h: Abwehrdrohne steigt auf (Mob "gdrone", Besitzer = Werfer) und fliegt zum Besitzer."""
-        m = Mob("gdrone", g.x, g.y, self)
-        m.id = self.next_mid
-        self.next_mid += 1
-        m.owner, m.life, m.kills = g.owner, GDRONE_LIFE, 0
-        m.hover = 0.5
-        m.z = m.gz + m.hover
-        self.mobs.append(m)
-        self.events.append(("gdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
-
-    def molotov(self, g):
-        """10e: Molotow zerschellt: Fläche auf der Ebene des Aufpralls brennt MOLO_T s (im Wasser: nichts)."""
-        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
-        pos = (round(g.x, 2), round(g.y, 2), round(z, 2))
-        if in_water(self, g.x, g.y, z):
-            self.events.append(("molo", g.gid, pos, 0))
-            return
-        self.make_noise(g.x, g.y, NOISE_MELEE * 4.0, z + 0.5)
-        fa = FireArea(g.gid, pos, fire_cells(self, pos), g.owner)
-        self.fires.append(fa)
-        self.events.append(("molo", g.gid, pos, 1))
-
-    def add_fire(self, fid, pos, owner=-1):
-        """Mitspieler: brennende Fläche aus dem Ereignis nachbauen (gleiche Zellen wie beim Host)."""
-        if any(f.fid == fid for f in self.fires):
-            return None
-        fa = FireArea(fid, pos, fire_cells(self, pos), owner)
-        self.fires.append(fa)
-        return fa
-
-    def update_fires(self, dt, damage=True):
-        """10e: Flammen brennen MOLO_T s; wer darin steht (Füsse in einer Zelle), nimmt MOLO_DPS Schaden je s."""
-        for fa in self.fires:
-            fa.age += dt
-            if not damage or not fa.cells:
-                continue
-            xs = [c[0] for c in fa.cells]
-            ys = [c[1] for c in fa.cells]
-            x0, x1, y0, y1 = min(xs) - 0.8, max(xs) + 0.8, min(ys) - 0.8, max(ys) + 0.8
-            h = MOLO_CELL * 0.5 + 0.3
-            for pl in list(self.players.values()):
-                if pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or not (x0 < pl.x < x1 and y0 < pl.y < y1):
-                    continue
-                if any(abs(pl.x - c[0]) <= h and abs(pl.y - c[1]) <= h and c[2] - 0.4 <= pl.z <= c[2] + 1.0
-                       for c in fa.cells):
-                    self.damage_player(pl, MOLO_DPS * dt * self.dmg_mult(fa.owner), fa.owner, WI_MOLOTOV)
-            for m in self.mobs:
-                if m.state == "dead" or m.hover > 0 or not (x0 < m.x < x1 and y0 < m.y < y1):
-                    continue
-                hm = h + m.radius * 0.6
-                if any(abs(m.x - c[0]) <= hm and abs(m.y - c[1]) <= hm and c[2] - 0.6 <= m.z <= c[2] + 1.2
-                       for c in fa.cells):
-                    m.hp -= MOLO_DPS * dt * self.dmg_mult(fa.owner)
-                    m.hurt_t = 0.1
-                    if m.hp <= 0:
-                        m.hp = 0.01
-                        self.hurt_mob(m, 1.0, (m.x, m.y, m.z + 0.5), (0.0, 0.0, 1.0), False, fa.owner, WI_MOLOTOV)
-                    elif m.aggressive() and m.state == "idle":
-                        m.on_noise(fa.pos[0], fa.pos[1], self)
-        self.fires = [fa for fa in self.fires if fa.age < MOLO_T]
-
-    def start_airdrop(self, g):
-        """10e: Airdrop-Fackel gezündet: rote Fackel, nach AIR_PLANE_DELAY s fliegt ein Frachtflugzeug über die Fackel
-        und wirft die Kiste (Art aus dem Fackel-Satz) am Fallschirm ab."""
-        z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
-        ad = AirDrop(self.next_fxid, g.x, g.y, z, g.tier, g.owner, self.mrng.uniform(0, 2 * math.pi))
-        self.next_fxid += 1
-        self.airdrops.append(ad)
-        self.events.append(("flare", ad.aid, round(g.x, 2), round(g.y, 2), round(z, 2)))
-
-    def update_airdrops(self, dt):
-        keep = []
-        for ad in self.airdrops:
-            ad.age += dt
-            ad.t += dt
-            if ad.state == 0 and ad.t >= AIR_PLANE_DELAY:
-                ad.state, ad.t, ad.dist = 1, 0.0, 0.0
-            if ad.state >= 1:
-                ad.dist += AIR_PLANE_SPEED * dt
-                k = ad.dist - AIR_PLANE_LEAD                 # 0 = über der Fackel
-                ad.px, ad.py = ad.fx + math.cos(ad.ang) * k, ad.fy + math.sin(ad.ang) * k
-                ad.pz = max(AIR_PLANE_ALT, ad.fz + 60.0)
-                if ad.state == 1 and k >= 0:                 # Abwurf
-                    ad.state, ad.t = 2, 0.0
-                    ad.cx, ad.cy, ad.cz = ad.fx, ad.fy, ad.pz - 3.0
-                    self.events.append(("airdrop", ad.aid))
-            if ad.state == 2:
-                ad.cz -= (AIR_FALL_V if ad.t > 1.2 else 14.0) * dt   # erst frei, dann öffnet sich der Schirm
-                fl = self.floor_at(ad.cx, ad.cy, ad.cz)
-                if ad.cz <= fl:
-                    ad.cz, ad.state = fl, 3
-                    c = Crate(self.next_cid, ad.cx, ad.cy, fl, ad.tier if ad.tier in CRATE_KINDS else "common")
-                    c.air = True
-                    self.next_cid += 1
-                    self.crates.append(c)
-                    self.events.append(("airland", ad.aid, c.cid, round(ad.cx, 2), round(ad.cy, 2), round(fl, 2)))
-            if ad.dist < AIR_PLANE_LEAD * 2.0 + 50.0 and ad.age < FLARE_BURN_T + AIR_PLANE_DELAY:
-                keep.append(ad)
-            elif ad.state == 2:                              # (Sicherheit: noch in der Luft - weiter fallen lassen)
-                keep.append(ad)
-        self.airdrops = keep
-
-    def grenade_step(self, g, h):
-        """Ein Teilschritt: Schwerkraft, Abprallen an Quadern, Bäumen, Felsen und am Boden."""
-        g.vz -= GREN_G * h
-        nx, ny, nz = g.x + g.vx * h, g.y + g.vy * h, g.z + g.vz * h
-        for b in self.boxes_near(nx - 0.15, ny - 0.15, nx + 0.15, ny + 0.15):
-            if b.x0 - 0.1 < nx < b.x1 + 0.1 and b.y0 - 0.1 < ny < b.y1 + 0.1 and b.z0 - 0.1 < nz < b.z1 + 0.1:
-                g.hit = True                                     # 10e: Aufprall (Molotow zerschellt)
-                if not (b.x0 - 0.1 < g.x < b.x1 + 0.1):          # von der Seite aufgetroffen
-                    g.vx, nx = -g.vx * 0.45, g.x
-                elif not (b.y0 - 0.1 < g.y < b.y1 + 0.1):
-                    g.vy, ny = -g.vy * 0.45, g.y
-                elif g.z >= b.z1:                                # von oben: liegen bleiben
-                    nz, g.vz = b.z1 + 0.1, (abs(g.vz) * 0.35 if abs(g.vz) > 1.5 else 0.0)
-                    g.vx *= 0.8
-                    g.vy *= 0.8
-                else:                                            # von unten gegen die Decke
-                    nz, g.vz = b.z0 - 0.1, -abs(g.vz) * 0.3
-                g.vx *= 0.85
-                g.vy *= 0.85
-        for p in self.props_near(nx, ny, nx, ny):
-            dx, dy = nx - p.x, ny - p.y
-            d = math.hypot(dx, dy)
-            if d < p.hit_r + 0.1 and p.z - 0.3 < nz < p.z + p.hit_h:
-                g.hit = True
-                d = d or 0.01
-                nx, ny = p.x + dx / d * (p.hit_r + 0.1), p.y + dy / d * (p.hit_r + 0.1)
-                dv = (g.vx * dx + g.vy * dy) / d             # Geschwindigkeit nach aussen
-                if dv < 0:
-                    g.vx -= 1.6 * dv * dx / d
-                    g.vy -= 1.6 * dv * dy / d
-        if self.cm is not None:                                  # Felswände des Netzes: abprallen
-            qx, qy = self.cm.push(nx, ny, nz, 0.12, (0.0,))
-            if abs(qx - nx) + abs(qy - ny) > 1e-6:
-                wx, wy = qx - nx, qy - ny
-                wl = math.hypot(wx, wy)
-                wx, wy = wx / wl, wy / wl
-                dv = g.vx * wx + g.vy * wy
-                if dv < 0:
-                    g.vx -= 1.45 * dv * wx
-                    g.vy -= 1.45 * dv * wy
-                nx, ny = qx, qy
-        gz = self.ground_for(nx, ny, nz) + 0.1
-        if nz < gz:
-            nz = gz
-            g.hit = True
-            if g.vz < 0:
-                g.vz = -g.vz * 0.4 if g.vz < -1.5 else 0.0
-            fr = math.exp(-5.0 * h)                              # Rollreibung
-            g.vx *= fr
-            g.vy *= fr
-        g.x, g.y, g.z = nx, ny, nz
-
     # ------------------------------------------------------------ Kugeln
     def add_shot(self, pl, eye, dirs, w):
         """Kugeln eines Schusses erzeugen. Beim Client (shot_sink) werden sie
@@ -9948,6 +10033,7 @@ class Player:
         self.gadget = loadout[2] if len(loadout) > 2 else GAD_C4
         self.scope = loadout[3] if len(loadout) > 3 else SC_IRON       # Visier der Primärwaffe
         self.gad_used = [0, 0, 0]         # beim Host: wie viele er von jeder Art schon aufgestellt hat
+        self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (Host entscheidet)
         self.gad_n = GAD_START            # eigene Anzeige: verbleibende Stück
         self.gad_out = False              # Gadget in der Hand (Taste 4)
         self.melee_next = 0.0             # frühester Zeitpunkt des nächsten Schlags
@@ -10004,9 +10090,10 @@ class Player:
         self.melee, self.melee_out = START_MELEE, False   # Nahkampfwaffe (Index in MELEE), gerade in der Hand?
         self.melee_cd = self.swing_t = 0.0                 # Abklingzeit, laufender Schlag (Animation)
         self.gren = gren_new_inv()        # 10e: Granaten je Art (GREN_KINDS)
+        self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (C4, Claymore, Funkbake)
         self.gren_sel = "frag"            # 10e: gewählte Art (H / Mausrad bei gehaltenem G)
         self.flare_q = []                 # 10e: Airdrop-Fackeln: Kistenart jeder Fackel (nur Host)
-        self.cat_mul = {c: 1.0 for c in LOOT_CATS}   # 10b: Kategorie-Gedächtnis der Monster-Beute (pro Leben)
+        self.cat_mul = {c: 1.0 for c in LOOT_CATS + ("gadget",)}   # 10b: Kategorie-Gedächtnis der Monster-Beute (pro Leben)
         self.set_aff, self.set_lvl = "", 0  # 10b: Set-Affinität (zuletzt aufgehobenes Set, Stufe)
         self.pan_pts = 0                  # 9c: Ladung der Bratpfanne (Punkte aus Kills mit ihr; beim Tod weg)
         self.eat_t, self.eat_dur, self.eat_stage, self.eat_k = 0.0, 0.0, 0, 1.0   # 9c: Essen läuft (Rest, Dauer, Stufe, Faktor)
@@ -10078,6 +10165,7 @@ class ExpPlayer(Player):
         self.gadget = loadout[2] if len(loadout) > 2 else GAD_C4
         self.scope = loadout[3] if len(loadout) > 3 else SC_IRON       # Visier der Primärwaffe
         self.gad_used = [0, 0, 0]         # beim Host: wie viele er von jeder Art schon aufgestellt hat
+        self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (Host entscheidet)
         self.gad_n = 0                    # Experimental: kein Gadget (kein Slot, am Start nichts)
         self.gad_out = False              # Gadget in der Hand (Taste 4)
         self.stats = exp_new_stats()          # Rundenstatistik (Host)
@@ -10269,76 +10357,6 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
     pl.moving = l > 0
     pl.running = pl.moving and bool(run) and pl.crouch < 0.3        # für das Lärmsystem
     ox, oy = pl.x, pl.y
-    if pl.moving:
-        speed = RUN if (run and pl.crouch < 0.3) else WALK     # geduckt kein Rennen
-        if pl.ads:
-            speed *= 0.6
-        speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
-        pl.x += dx / l * speed * dt
-        pl.y += dy / l * speed * dt
-        if pl.on_ground:
-            pl.phase += speed * dt * 1.6
-
-    pl.x, pl.y = push_out(pl.x, pl.y, PLAYER_R, world, pl.z)
-    pl.x = max(1.0, min(WORLD - 1.0, pl.x))
-    pl.y = max(1.0, min(WORLD - 1.0, pl.y))
-    if getattr(world, "wmask", None) is not None and (pl.x != ox or pl.y != oy) and world.water_at(pl.x, pl.y, pl.z) \
-            and not world.water_at(ox, oy, pl.z):                  # nicht ins tiefe Wasser gehen (hinaus schon)
-        if not world.water_at(pl.x, oy, pl.z):
-            pl.y = oy
-        elif not world.water_at(ox, pl.y, pl.z):
-            pl.x = ox
-        else:
-            pl.x, pl.y = ox, oy
-    if getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving:
-        too_steep(pl, ox, oy, world)                 # Felswände im Gebirge: nicht hinauf (auch nicht springend)
-
-    if getattr(world, "cm", None) is not None:
-        if pl.moving:
-            mesh_steep_block(pl, ox, oy, world)      # Netzkarten: steile Flächen (Felswände) nicht hinaufklettern
-        mesh_slide(pl, dt, world)                    # ... und auf ihnen nicht stehen bleiben
-    ground = world.floor_at(pl.x, pl.y, pl.z)       # Gelände oder Treppe/Mauer/Dach
-    if world.ladders and world.on_ladder(pl.x, pl.y, pl.z):      # Leiter: W/Leertaste klettern, Ducken hält, sonst langsam runter
-        pl.vz = 2.4 if (forward > 0 or jump) else (0.0 if pl.duck else -2.4)
-        pl.z += pl.vz * dt
-        if pl.z <= ground:
-            pl.z, pl.vz, pl.on_ground = ground, 0.0, True
-        else:
-            pl.on_ground = False
-        return
-    if jump and pl.on_ground and pl.crouch < 0.3:
-        pl.vz = JUMP_V
-        pl.on_ground = False
-    pl.vz -= GRAVITY * dt
-    pl.z += pl.vz * dt
-    if pl.vz > 0:                                    # Kopf stösst an eine Decke
-        cap = world.ceiling_at(pl.x, pl.y, pl.z) - PLAYER_H
-        if pl.z > cap:
-            pl.z, pl.vz = max(cap, ground), 0.0
-    if pl.z <= ground:
-        if pl.vz < 0:                                # Aufprall: Fallhöhe aus der Aufprallgeschwindigkeit
-            fall = pl.vz * pl.vz / (2.0 * GRAVITY)
-            if fall > FALL_SAFE:
-                pl.fall_dmg = getattr(pl, "fall_dmg", 0.0) + (fall - FALL_SAFE) * FALL_DMG
-                pl.fall_h = fall
-        pl.z, pl.vz, pl.on_ground = ground, 0.0, True
-    elif pl.on_ground and pl.z - ground < STEP_H and pl.vz <= 0:
-        pl.z, pl.vz = ground, 0.0   # an Hängen und Treppen "kleben"
-    else:
-        pl.on_ground = False
-
-
-def exp_step_once(pl, forward, strafe, run, jump, dt, world):
-    """Ein Simulationsschritt (siehe step)."""
-    h = math.radians(pl.heading)
-    fx, fy = -math.sin(h), math.cos(h)
-    rx, ry = math.cos(h), math.sin(h)
-    dx = fx * forward + rx * strafe
-    dy = fy * forward + ry * strafe
-    l = math.hypot(dx, dy)
-    pl.moving = l > 0
-    pl.running = pl.moving and bool(run) and pl.crouch < 0.3        # für das Lärmsystem
-    ox, oy = pl.x, pl.y
     gear = getattr(pl, "gear", None)
     if gear is not None:                                            # Ausrüstung: Abklingzeiten (beim Spieler)
         pl.dash_cd = max(0.0, pl.dash_cd - dt)
@@ -10404,7 +10422,8 @@ def exp_step_once(pl, forward, strafe, run, jump, dt, world):
             pl.x = ox
         else:
             pl.x, pl.y = ox, oy
-    if getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving and not MTN_CLIMB:
+    if (getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving
+            and not (MTN_CLIMB and isinstance(world, ExpWorld))):
         too_steep(pl, ox, oy, world)                 # Felswände im Gebirge: nicht hinauf (auch nicht springend)
 
     if getattr(world, "cm", None) is not None:
@@ -10638,71 +10657,7 @@ def drive(v, throttle, steer, brake, dt, world):
     v.z = world.floor_at(px, py, v.z)
 
 
-def fly_heli(h, fwd, strafe, vert, yaw, dt, world, aim_pitch=0.0):
-    """Ein Schritt des Helikopters (arcade): fwd/strafe -1..1 in Blickrichtung, vert +1 steigen / -1 sinken,
-    yaw = Wunsch-Blickrichtung (Maus, die Kurve dreht mit begrenzter Rate nach). Läuft auf dem Rechner des Piloten.
-    Hindernisse (Gebäude, Bäume) blockieren nur, sie verursachen keinen Schaden; die Landung wird abgefedert."""
-    dh = (yaw - h.heading + 180.0) % 360.0 - 180.0
-    h.heading += clampf(dh * 4.0, -HELI_YAW_RATE, HELI_YAW_RATE) * dt      # der Rumpf schwingt in Mausrichtung
-    a = math.radians(h.heading)
-    fx, fy, rx, ry = -math.sin(a), math.cos(a), math.cos(a), math.sin(a)
-    mx, my = fx * fwd + rx * strafe, fy * fwd + ry * strafe
-    m = math.hypot(mx, my)
-    if m > 1.0:
-        mx, my = mx / m, my / m
-    vmax = HELI_VMAX * (0.25 if h.ground else 1.0)
-    k = min(1.0, 1.6 * dt)
-    h.vx += (mx * vmax - h.vx) * k
-    h.vy += (my * vmax - h.vy) * k
-    gz = max(world.ground_for(h.x, h.y, h.z), world.floor_at(h.x, h.y, h.z))
-    alt = h.z - gz
-    tvz = vert * (HELI_VUP if vert > 0 else HELI_VDN)
-    if abs(fwd) < 1e-3 and abs(strafe) < 1e-3 and abs(vert) < 1e-3 and not h.ground:
-        tvz = -HELI_SINK                                   # keine Taste: der Heli hält die Höhe nicht, er sinkt
-    if tvz < 0 and alt < 8.0:
-        tvz = max(tvz, -(1.2 + alt * 0.8))                 # sanft aufsetzen
-    if h.ground and vert <= 0:
-        tvz = 0.0
-    h.vz += (tvz - h.vz) * min(1.0, 3.5 * dt)
-    if h.z > HELI_CEIL:
-        h.vz = min(h.vz, 0.0)
-
-    def blocked(x, y):
-        if world.in_solid(x, y, HELI_R, h.z) or world.in_solid(x, y, HELI_R, h.z + 1.5):
-            return True
-        for q in world.props_near(x, y, x, y):
-            if q.hit_r > 0 and math.hypot(x - q.x, y - q.y) < q.hit_r + HELI_R * 0.7 and h.z < q.z + q.hit_h + 0.5:
-                return True
-        return False
-
-    nx, ny = h.x + h.vx * dt, h.y + h.vy * dt
-    if blocked(nx, ny):
-        if not blocked(nx, h.y):
-            ny, h.vy = h.y, 0.0
-        elif not blocked(h.x, ny):
-            nx, h.vx = h.x, 0.0
-        else:
-            nx, ny, h.vx, h.vy = h.x, h.y, 0.0, 0.0
-    h.x, h.y = clampf(nx, 3.0, WORLD - 3.0), clampf(ny, 3.0, WORLD - 3.0)
-    gz = max(world.ground_for(h.x, h.y, h.z), world.floor_at(h.x, h.y, h.z))
-    nz = h.z + h.vz * dt
-    if nz <= gz:
-        nz, h.vz, h.ground = gz, 0.0, True
-    else:
-        h.ground = False
-    h.z = nz
-    h.speed = math.hypot(h.vx, h.vy)
-    if h.ground:
-        h.pitch = h.roll = 0.0
-    else:
-        vf, vr = h.vx * fx + h.vy * fy, h.vx * rx + h.vy * ry
-        # Nase folgt der Maus (Nick), dazu leichte Neigung nach vorn/hinten bei Beschleunigung
-        tgt = clampf(aim_pitch, HELI_AIM_MIN, HELI_AIM_MAX) - vf / HELI_VMAX * 5.0
-        h.pitch += clampf((tgt - h.pitch) * 4.5, -HELI_AIM_RATE, HELI_AIM_RATE) * dt
-        h.roll += (vr / HELI_VMAX * 16.0 - h.roll) * min(1.0, 4.0 * dt)
-
-
-def exp_fly_heli(h, fwd, strafe, vert, yaw, dt, world, stall=False, aim_pitch=0.0):
+def fly_heli(h, fwd, strafe, vert, yaw, dt, world, stall=False, aim_pitch=0.0):
     """Ein Schritt des Helikopters (arcade): fwd/strafe -1..1 in Blickrichtung, vert +1 steigen / -1 sinken,
     yaw = Wunsch-Blickrichtung (Maus, die Kurve dreht mit begrenzter Rate nach). Läuft auf dem Rechner des Piloten.
     Hindernisse (Gebäude, Bäume) blockieren nur, sie verursachen keinen Schaden; die Landung wird abgefedert.
@@ -10976,51 +10931,6 @@ def melee_charge(pl, world, trigger, dt):
 
 
 def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
-    """Schiessen, Nachladen, Waffenwechsel. trigger = Abzug gehalten,
-    edge = Abzug in diesem Frame neu gedrückt (für Halbautomaten)."""
-    g = pl.guns[pl.cur]
-    w = pl.wp(pl.cur)
-    g.cd = max(0.0, g.cd - dt)
-    pl.bloom = max(0.0, pl.bloom - 5.0 * dt)
-    pl.trigger_buf = max(0.0, pl.trigger_buf - dt)
-    if edge:
-        pl.trigger_buf = 0.18          # zu früh geklickt -> Schuss wird vorgemerkt
-    if select is not None and select != pl.cur and pl.switch_t <= 0:
-        pl.switch_to, pl.switch_t, pl.reload_t = select, SWITCH_T, 0.0
-    if pl.switch_t > 0:
-        before = pl.switch_t
-        pl.switch_t = max(0.0, pl.switch_t - dt)
-        if before > SWITCH_T / 2 >= pl.switch_t:
-            pl.cur = pl.switch_to      # in der Mitte der Animation tauschen
-        pl.ads = False
-        return
-    pl.ads = ads and pl.reload_t <= 0
-    if pl.reload_t > 0:
-        pl.reload_t -= dt
-        if pl.reload_t <= 0:
-            take = min(w.mag - g.mag, g.reserve)
-            g.mag += take
-            g.reserve -= take
-            pl.reload_t = 0.0
-        return
-    wants = trigger if (w.auto and not g.semi) else pl.trigger_buf > 0
-    if (reload_req or g.mag == 0) and g.mag < w.mag and g.reserve > 0:
-        if w.name == SG_NAME:
-            pl.reload_tot = sg_times(min(w.mag - g.mag, g.reserve))[1]   # Kipplauf: je Patrone ein Handgriff
-        else:
-            pl.reload_tot = w.reload
-        pl.reload_t = pl.reload_tot
-        pl.ads = False
-        world.events.append(("wreload", pl.pid, pl.cur))
-        return
-    if wants and g.cd <= 0 and g.mag > 0:
-        g.cd = w.interval
-        g.mag -= 1
-        pl.trigger_buf = 0.0
-        fire(pl, w, world)
-
-
-def exp_update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
     """Schiessen, Nachladen, Waffenwechsel. trigger = Abzug gehalten,
     edge = Abzug in diesem Frame neu gedrückt (für Halbautomaten)."""
     g = pl.guns[pl.cur]
@@ -15712,7 +15622,7 @@ def build_soldier(look):
 def exp_build_soldier(look):
     """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
     (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
-    key = look["key"]
+    key = ("exp", look["key"])               # eigener Cache-Eintrag (andere Teile als build_soldier)
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
         tm, lms, ams, hm, vm, bms = exp_soldier_meshes(look)
@@ -20784,7 +20694,7 @@ class HostSession:
                        for a in w.airdrops],
                 "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee, d.att,
                         list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope, d.gren,
-                        GREN_KINDS.index(d.gk)] for d in w.drops],
+                        DROP_GK.index(d.gk)] for d in w.drops],
                 "gd": [[g.gid, g.kind, g.owner, r2(g.x), r2(g.y), r2(g.z), r2(g.nx), r2(g.ny), r2(g.nz), r1(g.yaw),
                         1 if g.arm > 0 else 0] for g in w.gadgets],
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
@@ -21174,8 +21084,8 @@ class ClientSession:
                 d.scope = row[11]
             if len(row) > 12 and isinstance(row[12], int):
                 d.gren = row[12]
-            if len(row) > 13 and isinstance(row[13], int) and 0 <= row[13] < len(GREN_KINDS):
-                d.gk = GREN_KINDS[row[13]]
+            if len(row) > 13 and isinstance(row[13], int) and 0 <= row[13] < len(DROP_GK):
+                d.gk = DROP_GK[row[13]]
             seen.add(did)
         for did in [i for i in self.drops if i not in seen]:
             del self.drops[did]
@@ -21545,16 +21455,17 @@ def flash_geom():
 
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
+    SOLDIER_BUILDER = staticmethod(build_soldier)
 
     def __init__(self, p):
-        self.team = getattr(p, "team", None)                             # 11: Teamfarbe der Armbinde (CTF)
+        self.team = getattr(p, "team", None)                             # Teamfarbe der Armbinde (CTF)
         self.look_code = getattr(p, "look", "")
         look = soldier_look(self.look_code, p.pid, self.team)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
-         self.armL, self.armR) = build_soldier(look)
+         self.armL, self.armR) = self.SOLDIER_BUILDER(look)
         gc = (0.13, 0.13, 0.15)
         sr = SOLDIER_SH[1]
-        self.gun = self.armR.attachNewNode("gun")                         # Halter am rechten Arm; darin die gehaltene Waffe
+        self.gun_node = self.gun = self.armR.attachNewNode("gun")        # Halter am rechten Arm; darin die gehaltene Waffe
         self.gun.setPos(-sr[0], -sr[1], -sr[2])
         self.held, self.held_cur = {}, -1
         self.flash, self.flash_t, self.kick = {}, 0.0, 0.0                 # Mündungsfeuer und Rückstoss der anderen
@@ -21564,26 +21475,37 @@ class PlayerView:
         mm = Mesh()
         box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
         self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
-        hl = sub(SOLDIER_HAND[0], SOLDIER_SH[0])
-        self.mag_nd.setPos(*hl)
+        self.mag_nd.setPos(*sub(SOLDIER_HAND[0], SOLDIER_SH[0]))
         self.mag_nd.hide()
-        gr = Mesh()
-        blob(gr, 0, 0, 0.0, 0.040, 0.040, 0.052, (0.22, 0.30, 0.16), random.Random(4), jitter=0.04)   # Handgranate
-        box(gr, 0, 0, 0.055, 0.022, 0.022, 0.02, (0.6, 0.6, 0.55))
-        self.gren_nd = self.armR.attachNewNode(gr.node("hand_gren"))
+        self.gren_nd = self.armR.attachNewNode("hand_gren")         # 10e: Granate in der Hand (Modell je Art)
         self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
         self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
         self.gren_nd.hide()
+        self.gren_kind, self.gren_flame = None, None
+        self.th_kind = "frag"
         self.slung = False
-        self.swing = 0.0
+        self.melee_out = False
         self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
         self.rl_sg = False
         self.th_t = 0.0                                               # Granatwurf (von "throw")
+        self.melee_hand = self.torso.attachNewNode("melee_hand")       # Nahkampfwaffe (gezogen)
+        self.melee_hand.setPos(0.24, 0.22, 0.42)
+        self.melee_shown, self.melee_node, self.swing_t = None, None, 0.0
+        self.food, self.food_n = [], -1    # 9c: Essen auf der Pfanne
+        self.eat_t, self.spec = 0.0, None  # 9c: Essen-Animation, Sonderattacke (Art, Rest s)
+        self.swing = 0.0
         self.bar.hide()                                               # keine Lebensbalken über Mitspielern
         # (und auch keine Namensschilder)
         self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
         self.phase = 0.0
         self.dead_t = 0.0
+        self.gear_shown = None
+        self.gear_nodes = []
+        fl = Mesh(lit=False)
+        box(fl, 0, -0.28, -0.32, 0.14, 0.14, 0.35, (1.0, 0.6, 0.15))
+        self.jet_flame = self.torso.attachNewNode(fl.node("flamme"))
+        self.jet_flame.setFogOff()
+        self.jet_flame.hide()
 
     def show_held(self, wi):
         """Die Waffe in der Hand wechseln (Modell je Waffe einmal pro Figur angehängt)."""
@@ -21645,180 +21567,6 @@ class PlayerView:
         self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
         self.rl_t = self.rl_tot
 
-    def start_throw(self):
-        self.th_t = GREN_ANIM_T
-        self.rl_t = 0.0
-
-    def pose_arms(self, dt):
-        """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
-        (rechter Arm holt aus, Waffe hängt am Gurt) und Schlag (Waffe mit beiden Armen)."""
-        SL, SR = SOLDIER_SH
-        HL, HR = self.hl, SOLDIER_HAND[1]
-        v0L, v0R = sub(HL, SL), sub(HR, SR)
-        tl, tr = HL, HR
-        tilt = 0.0
-        mag = gren = slung = False
-        py = 0.0
-        if self.th_t > 0:
-            self.th_t = max(0.0, self.th_t - dt)
-            u = 1.0 - self.th_t / GREN_ANIM_T
-            tl, tr = kf_pos(SOLDIER_THROW_L, u), kf_pos(SOLDIER_THROW_R, u)
-            slung = True
-            gren = u < 0.33                                           # loslassen beim Vorschwung
-        elif self.rl_t > 0:
-            self.rl_t = max(0.0, self.rl_t - dt)
-            tt = self.rl_tot - self.rl_t
-            u = tt / self.rl_tot
-            tilt = 8.0 * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
-            if self.rl_sg:                                            # Patronen: Hand pendelt zwischen Weste und Lauf
-                k = 0.5 - 0.5 * math.cos(2 * math.pi * tt / 0.6)
-                tl = _lerp3((0.0, 0.20, 0.36), _MAG_SLOT, k)
-                tilt = 12.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
-            else:
-                tl = kf_pos(SOLDIER_RELOAD_L, u)
-                away = smoothstep(0.0, 0.18, u) * (1.0 - smoothstep(0.88, 1.0, u))      # Ruheposition je Waffe vorn/hinten
-                tl = add(tl, tuple(c * (1.0 - away) for c in sub(HL, SOLDIER_HAND[0])))
-                mag = (0.18 <= u < 0.38) or (0.58 <= u < 0.88)        # altes Magazin raus, neues in der Hand
-        elif self.swing > 0:                                          # Schlag: Waffe hoch, dann nach unten
-            self.swing = max(0.0, self.swing - dt)
-            u = 1.0 - self.swing / MELEE_T
-            pm = melee_pitch(u) * 0.9
-            tr = add(SR, rot_x(v0R, pm))
-            tl = add(SL, rot_x(v0L, pm * 0.6))
-            py = 0.15 * math.sin(math.pi * u)
-        if tilt:
-            tr = add(SR, rot_x(v0R, tilt))
-        if slung != self.slung:                                       # Waffe beim Wurf am Gurt vor dem Körper
-            self.slung = slung
-            if slung:
-                self.gun.reparentTo(self.torso)
-                self.gun.setPos(0, 0, -0.10)
-                self.gun.setP(-35)
-            else:
-                self.gun.reparentTo(self.armR)
-                self.gun.setPos(-SR[0], -SR[1], -SR[2])
-                self.gun.setP(0)
-        (self.mag_nd.show if mag else self.mag_nd.hide)()
-        (self.gren_nd.show if gren else self.gren_nd.hide)()
-        self.armR.setPos(SR[0], SR[1] + py, SR[2])
-        aim_arm(self.armR, v0R, sub(tr, SR))
-        aim_arm(self.armL, v0L, sub(tl, SL))
-
-    def update(self, p, dt):
-        if math.hypot(p.x - self.x, p.y - self.y) > 8.0:                 # Sprung (Respawn)
-            self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
-        now = time.time()                                                # Vorausberechnung: kein Stehenbleiben zwischen verspäteten Paketen
-        if self.src is None or math.hypot(p.x - self.src[0], p.y - self.src[1]) > 8.0:
-            self.src, self.src_t, self.vel = (p.x, p.y), now, (0.0, 0.0)
-        elif (p.x, p.y) != self.src:
-            dts = now - self.src_t
-            if 0.004 < dts < 0.6 and p.moving:
-                nv = ((p.x - self.src[0]) / dts, (p.y - self.src[1]) / dts)
-                self.vel = (self.vel[0] * 0.65 + nv[0] * 0.35, self.vel[1] * 0.65 + nv[1] * 0.35)
-            else:
-                self.vel = (0.0, 0.0)
-            self.src, self.src_t = (p.x, p.y), now
-        ahead = min(0.18, now - self.src_t) if (p.moving and p.hp > 0) else 0.0
-        if not p.moving:
-            self.vel = (0.0, 0.0)
-        tx, ty = p.x + self.vel[0] * ahead, p.y + self.vel[1] * ahead
-        a = min(1.0, 15.0 * dt)
-        self.x += (tx - self.x) * a
-        self.y += (ty - self.y) * a
-        self.z += (p.z - self.z) * a
-        self.h += ((p.heading - self.h + 180.0) % 360.0 - 180.0) * a
-        r = self.root
-        r.setPos(self.x, self.y, self.z)
-        (r.hide if p.heli >= 0 else r.show)()                           # Piloten sieht man im Cockpit nicht
-        if p.hp <= 0:                                                    # umfallen
-            self.dead_t += dt
-            t = min(1.0, self.dead_t / 0.5)
-            r.setHpr(self.h, 90.0 * t * (2 - t), 0)
-            r.setSz(1.0)
-            r.setColorScale(0.7, 0.7, 0.7, 1)
-            self.bar.hide()
-            self.rl_t = self.th_t = self.swing = 0.0
-            self.pose_arms(0.0)
-            return
-        self.dead_t = 0.0
-        hg = getattr(p, "hold_gad", -1)
-        self.show_held(getattr(p, "cur", 0))
-        self.show_gadget(hg)
-        for k_, nd_ in self.held.items():                                # Gadget in der Hand: Waffe verschwindet
-            if hg >= 0:
-                nd_.hide()
-        self.flash_t = max(0.0, self.flash_t - dt)
-        self.kick = max(0.0, self.kick - 9.0 * dt)
-        for k_, fl_ in self.flash.items():
-            (fl_.show if (self.flash_t > 0 and k_ == self.held_cur and hg < 0) else fl_.hide)()
-        r.clearColorScale()
-        r.setHpr(self.h, 0, 0)
-        r.setSz(1.0 - (1.0 - CROUCH_H / PLAYER_H) * p.crouch)               # geduckt
-        mv = 1.0 if p.moving else 0.0
-        self.phase += mv * 14.0 * dt
-        sw = math.sin(self.phase) * mv
-        self.legL.setP(sw * 40)
-        self.legR.setP(-sw * 40)
-        self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * mv)
-        self.torso.setR(p.lean / LEAN_MAX * 14.0)          # Lehnen: Oberkörper kippt zur Seite
-        self.pose_arms(dt)
-        if not self.slung:                                  # Rückstoss: Waffe ruckt nach hinten und kippt hoch
-            sr_ = SOLDIER_SH[1]
-            self.gun.setPos(-sr_[0], -sr_[1] - 0.07 * self.kick, -sr_[2])
-            self.gun.setP(7.0 * self.kick)
-
-
-class ExpPlayerView(PlayerView):
-    """PlayerView im Modus Experimental (Robins Regeln)."""
-
-    def __init__(self, p):
-        look = soldier_look(getattr(p, "look", ""), p.pid)
-        (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
-         self.armL, self.armR) = exp_build_soldier(look)
-        gc = (0.13, 0.13, 0.15)
-        sr = SOLDIER_SH[1]
-        self.gun_node = self.gun = self.armR.attachNewNode("gun")        # Halter am rechten Arm; darin die gehaltene Waffe
-        self.gun.setPos(-sr[0], -sr[1], -sr[2])
-        self.held, self.held_cur = {}, -1
-        self.flash, self.flash_t, self.kick = {}, 0.0, 0.0                 # Mündungsfeuer und Rückstoss der anderen
-        self.gadn, self.gad_cur = {}, -1                                   # Gadget in der Hand (je Art ein Modell)
-        self.src, self.src_t, self.vel = None, 0.0, (0.0, 0.0)             # Empfangsposition / Geschwindigkeit (Vorausberechnung)
-        self.hl = SOLDIER_HAND[0]                                         # Ruheposition der linken Hand (je Waffe)
-        mm = Mesh()
-        box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
-        self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
-        self.mag_nd.setPos(*sub(SOLDIER_HAND[0], SOLDIER_SH[0]))
-        self.mag_nd.hide()
-        self.gren_nd = self.armR.attachNewNode("hand_gren")         # 10e: Granate in der Hand (Modell je Art)
-        self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
-        self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
-        self.gren_nd.hide()
-        self.gren_kind, self.gren_flame = None, None
-        self.th_kind = "frag"
-        self.slung = False
-        self.melee_out = False
-        self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
-        self.rl_sg = False
-        self.th_t = 0.0                                               # Granatwurf (von "throw")
-        self.melee_hand = self.torso.attachNewNode("melee_hand")       # Nahkampfwaffe (gezogen)
-        self.melee_hand.setPos(0.24, 0.22, 0.42)
-        self.melee_shown, self.melee_node, self.swing_t = None, None, 0.0
-        self.food, self.food_n = [], -1    # 9c: Essen auf der Pfanne
-        self.eat_t, self.spec = 0.0, None  # 9c: Essen-Animation, Sonderattacke (Art, Rest s)
-        self.swing = 0.0
-        self.bar.hide()                                               # keine Lebensbalken über Mitspielern
-        # (und auch keine Namensschilder)
-        self.x, self.y, self.z, self.h = p.x, p.y, p.z, p.heading
-        self.phase = 0.0
-        self.dead_t = 0.0
-        self.gear_shown = None
-        self.gear_nodes = []
-        fl = Mesh(lit=False)
-        box(fl, 0, -0.28, -0.32, 0.14, 0.14, 0.35, (1.0, 0.6, 0.15))
-        self.jet_flame = self.torso.attachNewNode(fl.node("flamme"))
-        self.jet_flame.setFogOff()
-        self.jet_flame.hide()
-
     def start_throw(self, kind="frag"):
         self.th_t = GREN_ANIM_T
         self.rl_t = 0.0
@@ -21834,6 +21582,40 @@ class ExpPlayerView(PlayerView):
         self.gren_flame = None
         if kind == "molotov":
             self.gren_flame = gren_flame_node(self.gren_nd, (0.008, 0.003, 0.068), 0.045)
+
+    def show_gear(self, p):
+        """Getragene Ausrüstung als einfache Formen an die Figur hängen (Helm, Platte/Weste/Jetpack, Schuhe)."""
+        key = tuple(gear_list(p)) if getattr(p, "gear", None) is not None else (-1, -1, -1)
+        if key == self.gear_shown:
+            return
+        self.gear_shown = key
+        for n in self.gear_nodes:
+            n.removeNode()
+        self.gear_nodes = []
+        cos = self.root.getPythonTag("cos") or {}        # 10f: Ausrüstung ersetzt das eigene Kosmetik-Teil
+        for sl, gi in zip(GEAR_SLOTS, key):
+            for nd in (cos.get(sl) if sl == "feet" else [cos.get(sl)]) or ():
+                if nd is not None:
+                    (nd.hide if gi >= 0 else nd.show)()
+        for sl, gi in zip(GEAR_SLOTS, key):
+            if gi < 0:
+                continue
+            if sl == "head":                             # 7c: an Sinans Soldaten angepasst (Kopf ca. 0,26 m breit)
+                n = self.torso.attachNewNode(gear_model(gi).node("gear"))
+                n.setPos(0, -0.005, GEAR_FIG_HEAD_Z)
+                n.setScale(GEAR_FIG_SCALE["head"])
+            elif sl == "torso":
+                n = self.torso.attachNewNode(gear_model(gi).node("gear"))
+                n.setPos(0, 0, 0.34)
+                n.setScale(GEAR_FIG_SCALE["torso"])
+            else:                                        # je ein Schuh an jedem Bein (läuft mit)
+                for leg in (self.legL, self.legR):
+                    n = leg.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
+                    n.setPos(0, 0.04, -0.72)
+                    n.setScale(GEAR_FIG_SCALE["feet"])
+                    self.gear_nodes.append(n)
+                continue
+            self.gear_nodes.append(n)
 
     def pose_arms(self, dt):
         """Arme: beide Hände an der Waffe; Nachladen (linke Hand holt das Magazin aus der Weste), Granatwurf
@@ -21895,40 +21677,6 @@ class ExpPlayerView(PlayerView):
         self.armR.setPos(SR[0], SR[1] + py, SR[2])
         aim_arm(self.armR, v0R, sub(tr, SR))
         aim_arm(self.armL, v0L, sub(tl, SL))
-
-    def show_gear(self, p):
-        """Getragene Ausrüstung als einfache Formen an die Figur hängen (Helm, Platte/Weste/Jetpack, Schuhe)."""
-        key = tuple(gear_list(p))
-        if key == self.gear_shown:
-            return
-        self.gear_shown = key
-        for n in self.gear_nodes:
-            n.removeNode()
-        self.gear_nodes = []
-        cos = self.root.getPythonTag("cos") or {}        # 10f: Ausrüstung ersetzt das eigene Kosmetik-Teil
-        for sl, gi in zip(GEAR_SLOTS, key):
-            for nd in (cos.get(sl) if sl == "feet" else [cos.get(sl)]) or ():
-                if nd is not None:
-                    (nd.hide if gi >= 0 else nd.show)()
-        for sl, gi in zip(GEAR_SLOTS, key):
-            if gi < 0:
-                continue
-            if sl == "head":                             # 7c: an Sinans Soldaten angepasst (Kopf ca. 0,26 m breit)
-                n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, -0.005, GEAR_FIG_HEAD_Z)
-                n.setScale(GEAR_FIG_SCALE["head"])
-            elif sl == "torso":
-                n = self.torso.attachNewNode(gear_model(gi).node("gear"))
-                n.setPos(0, 0, 0.34)
-                n.setScale(GEAR_FIG_SCALE["torso"])
-            else:                                        # je ein Schuh an jedem Bein (läuft mit)
-                for leg in (self.legL, self.legR):
-                    n = leg.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
-                    n.setPos(0, 0.04, -0.72)
-                    n.setScale(GEAR_FIG_SCALE["feet"])
-                    self.gear_nodes.append(n)
-                continue
-            self.gear_nodes.append(n)
 
     def update(self, p, dt):
         gh = getattr(p, "gren_hold", -1)                                 # 10e: hält G (Granate in der Hand)
@@ -22002,6 +21750,8 @@ class ExpPlayerView(PlayerView):
             r.setSz(1.0)
             r.setColorScale(0.7, 0.7, 0.7, 1)
             self.bar.hide()
+            self.rl_t = self.th_t = self.swing = 0.0
+            self.pose_arms(0.0)
             return
         self.dead_t = 0.0
         hg = getattr(p, "hold_gad", -1)
@@ -22042,6 +21792,13 @@ class ExpPlayerView(PlayerView):
 
 
 # --------------------------------------------------------------- Ton
+
+
+class ExpPlayerView(PlayerView):
+    """PlayerView im Modus Experimental (Robins Regeln): eigene Figur mit Kosmetik-Teilen."""
+    SOLDIER_BUILDER = staticmethod(exp_build_soldier)
+
+
 SR = 22050
 
 
@@ -118127,6 +117884,8 @@ def default_fullscreen(g):
 
 
 class Game(ShowBase):
+    BUFF_LOOK = {"speed": ("T", (0.3, 1.0, 0.6)), "damage": ("S", (1.0, 0.35, 0.25)), "tank": ("HP", (1.0, 0.8, 0.25))}
+
     def __init__(self, adopt=False):
         if not adopt:                         # adopt=True: Fenster/ShowBase existieren schon (Rückkehr aus Experimental)
             ShowBase.__init__(self)
@@ -118230,6 +117989,7 @@ class Game(ShowBase):
         self.death_picker = None
         self.fx = []                          # Feuerball, Druckwelle, Rauch
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # Rauch, Feuer, Airdrops
         self.gad_views = {}
         self.tur_views = {}
         self.heli_views = {}
@@ -118296,6 +118056,12 @@ class Game(ShowBase):
         self.apply_volume()
         self.accept("v", self.on_alt)
         self.accept("g", self.on_grenade)
+        self.accept(GREN_KEY_NEXT, self.on_gren_next, [1])      # Granatenart wechseln
+        self.g_hold_t = -1.0                                   # so lange wird G schon gehalten (-1 = nicht)
+        self.g_throw_charge = 0.0
+        self.prev_swing, self.quick_melee, self.prev_run, self.prev_jump = 0.0, False, False, False
+        self.spec_fp, self.shield_flash, self.bite_t = None, 0.0, 0.0
+        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Stromstoss)
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
@@ -119078,7 +118844,13 @@ class Game(ShowBase):
             elif 1 <= d <= 2:
                 self.request_weapon(d - 1)
             elif d == 3:
-                self.toggle_gadget()
+                if self.player.slots[SPECIAL_SLOT] is not None and not (
+                        self.player.gad_n > 0 or (self.player.gadget == GAD_C4 and self.world.has_c4(self.player.pid))):
+                    self.request_weapon(SPECIAL_SLOT)      # Spezialwaffe aus der Kiste, wenn kein Gadget übrig ist
+                else:
+                    self.toggle_gadget()
+            elif d == 4:
+                self.sel_req = MELEE_SEL               # 4 = Nahkampfwaffe
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -120228,6 +120000,7 @@ class Game(ShowBase):
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}
         self.gad_views = {}
         self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
         self.drop_pop = {}
@@ -120236,6 +120009,8 @@ class Game(ShowBase):
         self.rock_views = None
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
         self.strike_fx = None
+        self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # Blendung vorbei
+        self.apply_volume()
         self.water_nps = []
         self.town_np = None
         self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
@@ -120539,6 +120314,8 @@ class Game(ShowBase):
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
             world.shot_sink = self.client.send_shot
             world.gren_sink = self.client.send_grenade
+            world.melee_sink = self.client.send_melee
+            world.mspec_sink = self.client.send_mspec
             world.gad_sink = self.client.send_gadget
             self.attempt = None
 
@@ -120721,6 +120498,7 @@ class Game(ShowBase):
             if mp_ is not None:
                 build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
             self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
+        self.gear_models = [NodePath(gear_model(gi).node("gear")) for gi in range(len(GEAR))]
         self.att_drop_models = {}             # 7b: Aufsatz am Boden - das Teil gross, auf einer grünen Plakette
         for si_ in range(len(ATT_SLOTS)):
             for v_ in range(1, len(ATTACHMENTS[si_])):
@@ -120749,6 +120527,13 @@ class Game(ShowBase):
                         max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
             box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
             self.att_drop_models[ATT_SCOPE * ATT_CODE + v_] = NodePath(am.node("scope_drop"))
+        self.melee_drop_models = []
+        for mi in range(len(MELEE)):
+            nd = NodePath("melee_drop")
+            mm = nd.attachNewNode(melee_model(mi, 1.6).node("m"))
+            mm.setPos(0, -0.4, 0)
+            nd.setR(90)
+            self.melee_drop_models.append(nd)
         m = Mesh(lit=False)                   # Granaten-Symbol im HUD
         for i in range(14):
             a0, a1 = 2 * math.pi * i / 14, 2 * math.pi * (i + 1) / 14
@@ -120875,6 +120660,19 @@ class Game(ShowBase):
                     nd.hide()
                     sn[sc] = nd
             self.scope_nodes.append(sn)
+        # Nahkampfwaffen in der Hand (Ego-Ansicht), Klinge schräg nach vorn oben
+        self.melee_models = []
+        self.pan_food_fp = []
+        for mi in range(len(MELEE)):
+            nd = self.gun_pivot.attachNewNode("melee_" + MELEE[mi].name)
+            inner = nd.attachNewNode(melee_model(mi, 0.85).node("m"))
+            nd.setPos(0.06, 0.08, -0.02)
+            nd.setHpr(-20, 30, -25)
+            if MELEE[mi].name == PAN_NAME:                  # Kochfläche zur Kamera, darauf das Essen
+                inner.setR(PAN_FP_ROLL)
+                self.pan_food_fp = food_nodes(inner, 0.85)
+            nd.hide()
+            self.melee_models.append(nd)
         # linke Hand (Haut + Ärmel) für das Nachladen
         hm = Mesh()
         fp_arm_mesh(hm, rng, 0.55, -0.17, -0.01, 1.0, -1)
@@ -120913,11 +120711,16 @@ class Game(ShowBase):
         gm = Mesh()
         fp_arm_mesh(gm, rng, 0.5, -0.06, 0.0, 0.5, 1)
         self.gren_arm = self.gun_root.attachNewNode(gm.node("grenarm"))
-        gg = Mesh()
-        box(gg, 0, 0.0, 0.075, 0.075, 0.105, 0.105, (0.20, 0.30, 0.16), rng)
-        box(gg, 0, 0.0, 0.14, 0.03, 0.03, 0.03, (0.55, 0.55, 0.50), rng)
-        box(gg, 0.04, 0.0, 0.135, 0.02, 0.05, 0.012, (0.65, 0.62, 0.30), rng)
-        self.gren_nd = self.gren_arm.attachNewNode(gg.node("grenade_vm"))
+        self.gren_nd = self.gren_arm.attachNewNode("grenade_vm")       # je Art ein Modell in der Hand
+        self.gren_vm = {}
+        for k_ in GREN_KINDS:
+            nd = gren_inst(self.gren_nd, k_, 0.105)
+            nd.setPos(0, 0.0, 0.07)
+            nd.hide()
+            self.gren_vm[k_] = nd
+        self.gren_vm_flame = gren_flame_node(self.gren_vm["molotov"], (0.07, 0.03, 0.62), 0.32)
+        self.gren_vm_kind = None
+        self.thrown_kind = "frag"
         self.gren_arm.hide()
         self.gren_anim_t = 0.0
         self.gad_amp = 0.0
@@ -120970,6 +120773,50 @@ class Game(ShowBase):
         self.hp_text = OnscreenText(text="100", parent=self.a2dBottomLeft, pos=(0.08, 0.13),
                                     scale=0.07, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                     align=TextNode.ALeft, mayChange=True)
+        # Schild (Ausrüstung): blauer Balken direkt unter den Lebenspunkten
+        self.shield_bg = card(self.a2dBottomLeft, 0.07, 0.035, 0.57, 0.026, (0, 0, 0, 0.55))
+        self.shield_fg = card(self.a2dBottomLeft, 0.08, 0.04, 0.55, 0.016, (0.35, 0.75, 1.0, 1))
+        self.shield_bg.hide()
+        self.shield_fg.hide()
+        # Ausrüstung: drei Plaketten (Kopf, Torso, Füsse) rechts neben den Lebenspunkten
+        # Ausrüstung: drei Kacheln senkrecht am rechten Rand (oben Kopf, Mitte Torso, unten Füsse). Im
+        # Hintergrund ein dezenter Umriss des Slots; darüber das getragene Teil. Jede Kachel hat einen eigenen
+        # Knoten "item" - später kann dort statt des Texts ein Symbol pro Teil hängen (GEAR_HUD_*).
+        self.gear_tiles = {}
+        self.gear_icon_cache = getattr(self, "gear_icon_cache", {})
+        for i, sl in enumerate(GEAR_SLOTS):
+            tile = self.a2dRightCenter.attachNewNode("gear_" + sl)
+            tile.setPos(-GEAR_HUD_W / 2 - 0.03, 0, GEAR_HUD_Y0 - i * (GEAR_HUD_H + 0.02))
+            cm = CardMaker("bg")
+            cm.setFrame(-GEAR_HUD_W / 2, GEAR_HUD_W / 2, -GEAR_HUD_H / 2, GEAR_HUD_H / 2)
+            bg = tile.attachNewNode(cm.generate())
+            bg.setColor(0.04, 0.05, 0.08, 0.7)
+            bg.setTransparency(TransparencyAttrib.MAlpha)
+            sym = tile.attachNewNode(slot_symbol(sl).node("sym"))
+            sym.setScale(GEAR_HUD_H * 0.42)
+            sym.setTransparency(TransparencyAttrib.MAlpha)
+            sym.setColorScale(1, 1, 1, 0.16)
+            item = tile.attachNewNode("item")                    # Platz für Text oder (später) Symbol
+            label = OnscreenText(text="", parent=item, pos=(0, -GEAR_HUD_H / 2 + 0.012), scale=GEAR_HUD_TEXT * 0.72,
+                                 fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=True)
+            ico = item.attachNewNode("icon")                     # 9d: Symbol des getragenen Teils
+            ico.setZ(0.014)
+            self.gear_tiles[sl] = {"tile": tile, "bg": bg, "sym": sym, "item": item, "label": label, "ico": ico,
+                                   "gi": None}
+        # 10h: Set komplett - Rahmen in der eigenen Spielerfarbe um den ganzen Block der drei Kacheln
+        fr = self.a2dRightCenter.attachNewNode("gear_set_frame")
+        pad, th = SET_FRAME_PAD, SET_FRAME_W
+        gx0, gx1 = -GEAR_HUD_W - 0.03 - pad, -0.03 + pad
+        gy1 = GEAR_HUD_Y0 + GEAR_HUD_H / 2 + pad
+        gy0 = GEAR_HUD_Y0 - (len(GEAR_SLOTS) - 1) * (GEAR_HUD_H + 0.02) - GEAR_HUD_H / 2 - pad
+        for a0, b0, a1, b1 in ((gx0 - th, gy1, gx1 + th, gy1 + th), (gx0 - th, gy0 - th, gx1 + th, gy0),
+                               (gx0 - th, gy0, gx0, gy1), (gx1, gy0, gx1 + th, gy1)):
+            cm = CardMaker("edge")
+            cm.setFrame(a0, a1, b0, b1)
+            fr.attachNewNode(cm.generate())
+        fr.setTransparency(TransparencyAttrib.MAlpha)
+        fr.hide()
+        self.gear_set_frame = fr
         # Munition und Waffenwahl (Slot 1 = Hauptwaffe, 2 = Kleinwaffe, 3 = Kistenwaffe)
         self.ammo_text = OnscreenText(text="", parent=self.a2dBottomRight, pos=(-0.08, 0.08),
                                       scale=0.1, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
@@ -121001,6 +120848,7 @@ class Game(ShowBase):
             n.setDepthWrite(False)
             return n
 
+        self.bar_root.setX(-0.26)                      # Platz für Nahkampf und Granaten rechts der Waffenkarten
         self.slot_frames, self.slot_icons, self.slot_labels = [], [], []
         for i in range(3):
             x = -0.34 + i * 0.34
@@ -121016,24 +120864,69 @@ class Game(ShowBase):
                 fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
             lab.setBin("fixed", 25)
             self.slot_labels.append(lab)
-        self.gren_frame = hud_card(0.67, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
-        hud_card(0.67, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
-        gi = self.gren_icon.instanceTo(self.bar_root)
-        gi.setPos(0.64, 0, 0.115)
-        gi.setBin("fixed", 21)
-        gi.setDepthTest(False)
-        gi.setDepthWrite(False)
-        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(0.72, 0.1),
-                                      scale=0.06, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
+        # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
+        self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
+                              "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
+                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
+                              "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
+        # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
+        mx_ = 0.66                                    # rechts neben der dritten Waffenkarte (Breite 0.32 / Nahkampf 0.26)
+        self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
+        hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
+        self.melee_holder = self.bar_root.attachNewNode("melee_holder")
+        self.melee_holder.setPos(mx_, 0, 0.11)
+        self.melee_icons, self.melee_icon_cur = {}, None
+        self.melee_label = OnscreenText(text="4 Nahkampf", parent=self.bar_root, pos=(mx_ - 0.115, 0.165),
+                                        scale=0.034, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft,
+                                        mayChange=True)
+        self.melee_label.setBin("fixed", 25)
+        self.pan_text = OnscreenText(text="", parent=self.bar_root, pos=(mx_ + 0.12, 0.05), scale=0.028,
+                                     fg=(1.0, 0.8, 0.4, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
+        self.pan_text.setBin("fixed", 25)                 # 9c: Ladestand der Bratpfanne an der Nahkampf-Kachel
+        self.chg_root = self.aspect2d.attachNewNode("ladebalken")      # 9c: Katana/Schwert laden
+        cm_ = CardMaker("chg")
+        cm_.setFrame(-0.16, 0.16, -0.205, -0.185)
+        self.chg_bg = self.chg_root.attachNewNode(cm_.generate())
+        self.chg_bg.setColor(0.05, 0.05, 0.08, 0.75)
+        self.chg_bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm_.setFrame(0.0, 0.32, -0.202, -0.188)
+        self.chg_fg = self.chg_root.attachNewNode(cm_.generate())
+        self.chg_fg.setX(-0.16)
+        self.chg_txt = OnscreenText(text="", parent=self.chg_root, pos=(0, -0.25), scale=0.04, fg=(1, 0.85, 0.3, 1),
+                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
+        self.chg_root.hide()
+        self.chg_full = False
+        self.amp_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.06, 0.88), scale=0.034,
+                                     fg=(0.85, 0.6, 1.0, 1), shadow=(0, 0, 0, 1), align=TextNode.ALeft, mayChange=True)
+        gx_ = mx_ + 0.25
+        self.gren_frame = hud_card(gx_, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
+        hud_card(gx_, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
+        self.gren_icons = {}                           # 10e: Symbol je Granatenart (die gewählte wird gezeigt)
+        for k_ in GREN_KINDS:
+            gi = self.bar_root.attachNewNode(gren_icon_mesh(k_, 0.042).node("gren_icon_" + k_))
+            gi.setPos(gx_ - 0.035, 0, 0.11)
+            gi.setTwoSided(True)
+            gi.setBin("fixed", 21)
+            gi.setDepthTest(False)
+            gi.setDepthWrite(False)
+            gi.hide()
+            self.gren_icons[k_] = gi
+        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.045, 0.095),
+                                      scale=0.055, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                       align=TextNode.ACenter, mayChange=True)
         self.gren_text.setBin("fixed", 25)
-        gk = OnscreenText(text="G", parent=self.bar_root, pos=(0.585, 0.165), scale=0.04,
-                          fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=False)
-        gk.setBin("fixed", 25)
+        self.gren_label = OnscreenText(text="G", parent=self.bar_root, pos=(gx_ - 0.085, 0.165), scale=0.034,
+                                       fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
+        self.gren_label.setBin("fixed", 25)
+        self.gren_more = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.215), scale=0.026,
+                                      fg=(0.85, 0.88, 0.95, 0.85), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
+                                      mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
+        self.gren_more.setBin("fixed", 25)
         # Gadget: dritter Slot der Waffenleiste, Stückzahl rechts unten in der Karte
         self.gad_count = OnscreenText(text="", parent=self.bar_root, pos=(0.34 + 0.15, 0.065), scale=0.05,
                                       fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight, mayChange=True)
         self.gad_count.setBin("fixed", 25)
+        self.build_gren_hud()
         self.build_heli_hud()
         self.speed_text = OnscreenText(text="", pos=(0, -0.7), scale=0.08, fg=(1, 0.9, 0.3, 1),
                                        shadow=(0, 0, 0, 0.9), mayChange=True)
@@ -121070,6 +120963,8 @@ class Game(ShowBase):
                                       align=TextNode.ALeft, mayChange=True)
         self.prompt_text = OnscreenText(text="", pos=(0, -0.55), scale=0.055, fg=(1, 0.95, 0.5, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # Drop ansehen
+                                      shadow=(0, 0, 0, 0.9), mayChange=True)
         self.dead_text = OnscreenText(text="", pos=(0, 0.74), scale=0.07, fg=(0.95, 0.8, 0.8, 1),
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.over_text = OnscreenText(text="", pos=(0, 0.55), scale=0.065, fg=(1, 0.95, 0.6, 1),
@@ -122103,10 +121998,23 @@ class Game(ShowBase):
     )
 
     def update_gren_arm(self, pl, driving):
-        if self.gren_anim_t <= 0 or pl.hp <= 0 or driving:
+        ch = self.gren_charge()
+        holding = ch >= 0 and self.gren_anim_t <= 0                   # 10e: G gehalten - Arm bleibt ausgeholt
+        if (self.gren_anim_t <= 0 and not holding) or pl.hp <= 0 or driving:
             self.gren_arm.hide()
             return
-        u = 1.0 - self.gren_anim_t / GREN_ANIM_T
+        if holding:
+            u = 0.0
+            kind = gren_fix_sel(pl)
+        else:
+            u = 1.0 - self.gren_anim_t / GREN_ANIM_T
+            kind = self.thrown_kind
+        if kind != self.gren_vm_kind:
+            for k_, nd in self.gren_vm.items():
+                (nd.show if k_ == kind else nd.hide)()
+            self.gren_vm_kind = kind
+        if kind == "molotov":
+            flame_flicker(self.gren_vm_flame)
         kf = self.GREN_KF
         for i in range(len(kf) - 1):
             if u <= kf[i + 1][0]:
@@ -122115,6 +122023,10 @@ class Game(ShowBase):
                 break
         else:
             v = list(kf[-1][1])
+        if holding:                                                   # 10e: gut sichtbar rechts unten halten,
+            e_ = smoothstep(0.0, 0.18, self.g_hold_t)                 # je länger gehalten, desto weiter ausgeholt
+            hold = (0.21 + 0.04 * ch, 0.58 - 0.10 * ch, -0.21 + 0.08 * ch, -14.0, 24.0 + 16.0 * ch, -10.0)
+            v = [a + (b - a) * e_ for a, b in zip(kf[0][1], hold)]
         self.gren_arm.setPos(v[0], v[1], v[2])
         self.gren_arm.setHpr(v[3], v[4], v[5])
         self.gren_arm.show()
@@ -122271,6 +122183,7 @@ class Game(ShowBase):
             pl.gad_out = False
         elif pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid)):
             pl.gad_out, pl.ads = True, False
+            pl.melee_out = False
         else:
             self.gad_msg = (f"Keine {GADGETS[pl.gadget]} mehr übrig", time.time())
 
@@ -122315,17 +122228,21 @@ class Game(ShowBase):
         """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
+        if self.g_hold_t >= 0:                      # bei gehaltenem G: Granatenart wechseln
+            self.on_gren_next(d)
+            return
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
         gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid))
-        order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else [])
+        order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else []) + [MELEE_SEL]
         if not order:
             return
         if pl.gad_out and "gad" in order:
             cur = "gad"
         else:
-            cur = self.sel_req if self.sel_req is not None else (pl.switch_to if pl.switch_t > 0 else pl.cur)
+            cur = self.sel_req if self.sel_req is not None else (
+                pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur))
         i = order.index(cur) if cur in order else 0
         nxt = order[(i + d) % len(order)]
         if nxt == "gad":
@@ -122365,8 +122282,621 @@ class Game(ShowBase):
             self.alt_req = True
 
     def on_grenade(self):
-        if self.mode == "play" and self.quit_box is None:
-            self.throw_req = True
+        """10e: G gedrückt - der Wurf kommt beim Loslassen (update_task); hier nur der Hinweis bzw. der Stift."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if gren_total(pl) <= 0:
+            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
+        elif pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0:
+            self.sfx.play("pin", None, 0.6, self.prng.uniform(0.95, 1.05))
+
+    def on_gren_next(self, step=1):
+        """10e: H (oder Mausrad bei gehaltenem G): nächste Granatenart, die man hat."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if gren_total(pl) <= 0:
+            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
+            return
+        old = pl.gren_sel
+        k = gren_fix_sel(pl, step)
+        if k:
+            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}", tuple(min(1.0, c * 1.4 + 0.25)
+                                                                          for c in GREN_COL[k]), 1.2)
+
+    def on_ability(self):
+        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if not set_full(pl, "shield"):
+            self.toast("Stromstoss nur mit komplettem Schild-Set (Helm, Schild, Stiefel)", (0.8, 0.85, 0.95), 1.8)
+            return
+        if getattr(pl, "shock_cd", 0.0) > 0:
+            self.toast(f"Stromstoss lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_shock()
+        else:
+            self.world.shock(pl)
+
+    def on_melee_ability(self):
+        """9c: T mit der Nahkampfwaffe in der Hand - Bratpfanne: die erreichte Stufe essen."""
+        pl = self.player
+        if pl.hp <= 0 or not pl.melee_out or self.world.phase != "play":
+            return
+        name = MELEE[pl.melee].name
+        if name != PAN_NAME:
+            hint = {"spin": "Linke Maus halten: Rundumschlag", "slam": "Linke Maus halten: Sprungangriff"}.get(
+                MELEE_SPECIAL.get(name), "Keine Fähigkeit auf T")
+            self.toast(f"{name}: {hint}", (0.9, 0.9, 0.95), 1.6)
+            return
+        if pl.eat_t > 0:
+            return
+        if pl.pan_lock > 0:
+            self.toast(f"Erschöpft - essen erst in {int(math.ceil(pl.pan_lock))} s", (0.8, 0.5, 1.0), 1.4)
+            return
+        if pan_stage(pl.pan_pts) == 0:
+            self.toast(f"Pfanne leer - Kills mit der Pfanne laden sie auf ({pl.pan_pts}/{PAN_STAGES[0][0]})",
+                       (0.95, 0.85, 0.6), 1.8)
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_eat()
+        else:
+            self.world.pan_eat(pl)
+
+    def gren_throw_params(self, pl, charge):
+        """10e: Abwurfpunkt, Richtung und Tempo (nach Haltedauer) - für den Wurf und die Bogen-Vorschau."""
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        eye = (pl.x + d[0] * 0.4, pl.y + d[1] * 0.4, pl.z + eye_h(pl) - 0.1 + d[2] * 0.4)
+        return eye, d, GREN_SPEED_MIN + (GREN_SPEED_MAX - GREN_SPEED_MIN) * clampf(charge, 0.0, 1.0)
+
+    def gren_hold_input(self, dt, held):
+        """10e: G gedrückt halten lädt den Wurf auf (Ladebalken, Bogen-Vorschau), Loslassen wirft. Kurz getippt
+        (< GREN_TAP_T) = kurzer Wurf. -> True im Bild des Loslassens."""
+        pl = self.player
+        ok = (pl is not None and self.mode == "play" and self.quit_box is None and pl.hp > 0
+              and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and gren_total(pl) > 0
+              and getattr(self, "end", None) is None and not getattr(self, "tab_held", False)
+              and not getattr(self, "insp_on", False) and self.world is not None and self.world.phase == "play")
+        if not ok:
+            self.g_hold_t = -1.0
+            if pl is not None:
+                pl.gren_hold = -1
+            return False
+        if held:
+            self.g_hold_t = 0.0 if self.g_hold_t < 0 else self.g_hold_t + dt
+            pl.gren_hold = GREN_KINDS.index(gren_fix_sel(pl))
+            return False
+        if self.g_hold_t < 0:
+            return False
+        t = self.g_hold_t
+        self.g_hold_t = -1.0
+        pl.gren_hold = -1
+        self.g_throw_charge = 0.0 if t < GREN_TAP_T else clampf((t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
+        return True
+
+    def gren_charge(self):
+        """10e: aktueller Ladestand 0..1 (oder -1, wenn G nicht gehalten wird)."""
+        if self.g_hold_t < 0:
+            return -1.0
+        return clampf((self.g_hold_t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
+
+    def spawn_slash_fx(self, kind, pos, heading):
+        """10d: Katana: weisser Slash-Ring, der sich vom Spieler bis KATANA_SPIN_R ausbreitet. Schwert: weisser
+        Windstoss-Schnitt fährt von oben nach unten durch den Trefferbereich (bis SWORD_SLAM_R vor einem), dazu eine
+        Staub-/Schockwelle, die in der Mitte aufquillt und nach links und rechts ausläuft."""
+        m = Mesh(alpha=0.75, lit=False)
+        if kind == "spin":
+            n = 40
+            for i in range(n):
+                a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+                for r0, r1, z0, z1 in ((0.7, 1.0, 0.0, 0.0), (0.9, 1.0, -0.12, 0.12)):
+                    pa, pb = (math.cos(a0) * r0, math.sin(a0) * r0, z0), (math.cos(a1) * r0, math.sin(a1) * r0, z0)
+                    pc, pd = (math.cos(a1) * r1, math.sin(a1) * r1, z1), (math.cos(a0) * r1, math.sin(a0) * r1, z1)
+                    col = (0.92, 0.96, 1.0) if r0 > 0.9 else (0.6, 0.8, 1.0)
+                    m.tri(pa, pb, pc, col)
+                    m.tri(pa, pc, pd, col)
+        else:
+            n = 18                                                  # Halbmond-Schnitt (senkrecht, quer zur Blickrichtung)
+            for i in range(n):
+                a0, a1 = math.pi * i / n, math.pi * (i + 1) / n
+                for r0, r1 in ((0.82, 1.0),):
+                    pa = (math.cos(a0) * r0, 0.0, math.sin(a0) * r0 * 0.6)
+                    pb = (math.cos(a1) * r0, 0.0, math.sin(a1) * r0 * 0.6)
+                    pc = (math.cos(a1) * r1, 0.0, math.sin(a1) * r1 * 0.6)
+                    pd = (math.cos(a0) * r1, 0.0, math.sin(a0) * r1 * 0.6)
+                    m.tri(pa, pb, pc, (0.95, 0.97, 1.0))
+                    m.tri(pa, pc, pd, (0.95, 0.97, 1.0))
+        nd = self.render.attachNewNode(m.node("slash"))
+        nd.setTransparency(TransparencyAttrib.MAlpha)
+        nd.setTwoSided(True)
+        nd.setDepthWrite(False)
+        nd.setLightOff()
+        nd.setBin("transparent", 14)
+        nd.setPos(pos[0], pos[1], pos[2] + (1.0 if kind == "spin" else 0.0))
+        nd.setH(heading)
+        if not hasattr(self, "slash_fx"):
+            self.slash_fx = []
+        self.slash_fx.append([nd, time.time(), kind])
+        if kind == "slam":                                          # Staubwelle: Mitte quillt auf, läuft seitlich aus
+            hr = math.radians(heading)
+            fx, fy = -math.sin(hr), math.cos(hr)
+            rx, ry = math.cos(hr), math.sin(hr)
+            cx, cy = pos[0] + fx * SWORD_SLAM_R * 0.45, pos[1] + fy * SWORD_SLAM_R * 0.45
+            for k in range(36):
+                s = (k / 35.0) * 2 - 1
+                up = 3.5 * (1 - abs(s))
+                self.add_particle((cx + rx * s * 0.6, cy + ry * s * 0.6, pos[2] + 0.1),
+                                  (rx * s * 7.0 + fx * self.prng.uniform(-0.5, 1.5), ry * s * 7.0 + fy * self.prng.uniform(-0.5, 1.5),
+                                   up + self.prng.uniform(0, 1.5)), (0.55, 0.47, 0.34), 0.14, self.prng.uniform(0.5, 0.9), 0.2)
+
+    def update_slash_fx(self):
+        """10d: Slash-Effekte animieren (Ring wächst und verblasst; Windstoss fährt von oben nach unten)."""
+        now = time.time()
+        keep = []
+        for ent in getattr(self, "slash_fx", ()):
+            nd, t0, kind = ent
+            u = (now - t0) / SLASH_FX_T
+            if u >= 1.0:
+                nd.removeNode()
+                continue
+            if kind == "spin":
+                r = 0.5 + (KATANA_SPIN_R + 0.4) * (1 - (1 - u) ** 2)
+                nd.setScale(r, r, 1.0)
+            else:
+                d = 0.6 + SWORD_SLAM_R * 0.5                    # Mitte des Trefferbereichs vor dem Spieler
+                hr = math.radians(nd.getH())
+                base = nd.getPythonTag("base") if nd.hasPythonTag("base") else None
+                if base is None:
+                    p0 = nd.getPos()
+                    base = (p0[0], p0[1], p0[2])
+                    nd.setPythonTag("base", base)
+                nd.setPos(base[0] - math.sin(hr) * d, base[1] + math.cos(hr) * d, base[2] + 3.2 * (1 - u) + 0.1)
+                nd.setScale(SWORD_SLAM_R * 0.55, 1.0, 1.0 + 0.6 * (1 - u))
+                nd.setP(-25.0 * u)
+            nd.setColorScale(1, 1, 1, 0.85 * (1 - u))
+            keep.append(ent)
+        self.slash_fx = keep
+
+    def build_gren_hud(self):
+        """10e: Ladebalken für die Wurfweite, Bogen-Vorschau und Landepunkt, Blend-Overlay."""
+        self.gch_root = self.aspect2d.attachNewNode("wurfbalken")
+        cm_ = CardMaker("gch")
+        cm_.setFrame(-0.16, 0.16, -0.30, -0.28)
+        bg = self.gch_root.attachNewNode(cm_.generate())
+        bg.setColor(0.05, 0.05, 0.08, 0.75)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm_.setFrame(0.0, 0.32, -0.297, -0.283)
+        self.gch_fg = self.gch_root.attachNewNode(cm_.generate())
+        self.gch_fg.setX(-0.16)
+        self.gch_txt = OnscreenText(text="", parent=self.gch_root, pos=(0, -0.345), scale=0.036, fg=(1, 0.9, 0.5, 1),
+                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
+        self.gch_root.hide()
+        self.gren_arc = None
+        self.gren_land = self.disc_np.instanceTo(self.render)
+        self.gren_land.setTransparency(TransparencyAttrib.MAlpha)
+        self.gren_land.setLightOff()
+        self.gren_land.setDepthWrite(False)
+        self.gren_land.setBin("transparent", 10)
+        self.gren_land.hide()
+        cm_ = CardMaker("blend")                       # Blendgranate: weisses Bild über allem
+        cm_.setFrame(-1, 1, -1, 1)
+        self.flash_white = self.render2d.attachNewNode(cm_.generate())
+        self.flash_white.setTransparency(TransparencyAttrib.MAlpha)
+        self.flash_white.setBin("fixed", 95)
+        self.flash_white.setDepthTest(False)
+        self.flash_white.setDepthWrite(False)
+        self.flash_white.setColor(1, 1, 1, 0)
+        self.flash_white.hide()
+        self.flash_ghost = []                         # eingefrorenes, verschwommenes Bild (Nachbild)
+        self.flash_st = None                          # (Start, Stärke, Dauer, Weiss-Dauer)
+
+    def update_gren_hud(self, pl):
+        """10e: Granaten-Kachel (gewählte Art mit Symbol und Anzahl, weitere Arten darüber), Ladebalken und Bogen."""
+        kind = gren_fix_sel(pl)
+        n = pl.gren.get(kind, 0)
+        for k_, nd in self.gren_icons.items():
+            (nd.show if k_ == kind else nd.hide)()
+        self.set_text(self.gren_text, f"x{n}")
+        self.set_text(self.gren_label, f"G {GREN_SHORT[kind]}")
+        more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
+        self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
+        ch = self.gren_charge() if pl.hp > 0 else -1.0
+        if ch >= 0:
+            self.gren_frame.setColor(1.0, 0.85, 0.2, 1.0)
+        else:
+            self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if gren_total(pl) > 0 else (0.7, 0.15, 0.1, 0.6)))
+        if ch >= 0:
+            self.gch_root.show()
+            self.gch_fg.setSx(max(0.02, ch))
+            c = GREN_COL[kind]
+            self.gch_fg.setColor(min(1, c[0] * 1.4 + 0.3), min(1, c[1] * 1.4 + 0.3), min(1, c[2] * 1.4 + 0.3), 1)
+            self.set_text(self.gch_txt, f"{GREN_NAMES[kind]} - " + ("kurzer Wurf" if self.g_hold_t < GREN_TAP_T
+                                                                    else f"Wurfweite {int(ch * 100)} %"))
+            self.draw_gren_arc(pl, kind, ch)
+        else:
+            self.gch_root.hide()
+            if self.gren_arc is not None:
+                self.gren_arc.removeNode()
+                self.gren_arc = None
+            self.gren_land.hide()
+
+    def draw_gren_arc(self, pl, kind, ch):
+        """10e: Bogen-Vorschau: die Flugbahn wird mit der echten Granaten-Physik vorausberechnet (Wände, Dächer,
+        Abpraller), gestrichelt gezeichnet; am Landepunkt ein Ring."""
+        world = self.world
+        eye, d, sp = self.gren_throw_params(pl, ch)
+        key = (kind, round(eye[0], 2), round(eye[1], 2), round(eye[2], 2),          # 12: nichts verändert (Spieler
+               round(d[0], 3), round(d[1], 3), round(d[2], 3), round(sp, 2))       # steht und zielt) -> Bogen bleibt
+        if self.gren_arc is not None and getattr(self, "gren_arc_key", None) == key:
+            return
+        self.gren_arc_key = key
+        g = Grenade(-1, eye[0], eye[1], eye[2], d[0] * sp, d[1] * sp, d[2] * sp + 2.0, -1, 99.0, kind)
+        pts, t = [eye], 0.0
+        while t < GREN_ARC_T:
+            n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * GREN_ARC_DT / 0.25) + 1
+            for _ in range(n):
+                world.grenade_step(g, GREN_ARC_DT / n)
+                if kind == "molotov" and g.hit:
+                    break
+            pts.append((g.x, g.y, g.z))
+            t += GREN_ARC_DT
+            if (kind == "molotov" and g.hit) or (g.hit and grenade_landed(world, g)):
+                break
+        if self.gren_arc is not None:
+            self.gren_arc.removeNode()
+        ls = LineSegs("wurfbogen")
+        ls.setThickness(2.5)
+        c = GREN_COL[kind]
+        ls.setColor(min(1, c[0] + 0.45), min(1, c[1] + 0.45), min(1, c[2] + 0.45), 0.85)
+        for i in range(1, len(pts) - 1, 2):                    # gestrichelt
+            ls.moveTo(*pts[i])
+            ls.drawTo(*pts[i + 1])
+        self.gren_arc = self.render.attachNewNode(ls.create())
+        self.gren_arc.setLightOff()
+        self.gren_arc.setFogOff()
+        self.gren_arc.setTransparency(TransparencyAttrib.MAlpha)
+        lp = pts[-1]
+        r_ = {"smoke": SMOKE_R * 0.5, "flash": 1.5, "molotov": MOLO_R, "frag": GREN_KILL_R}.get(kind, 0.8)
+        self.gren_land.setPos(lp[0], lp[1], world.floor_at(lp[0], lp[1], lp[2]) + 0.06)
+        self.gren_land.setScale(r_)
+        self.gren_land.setColorScale(min(1, c[0] + 0.5), min(1, c[1] + 0.5), min(1, c[2] + 0.5), 0.6)
+        self.gren_land.show()
+
+    def flash_hit(self, pos, owner):
+        """10e: Blendgranate gezündet. Der Spieler errechnet seine Blendung selbst: bis FLASH_R m, freie Sicht
+        (keine Wand/Decke dazwischen); je näher, desto weniger zählt die Blickrichtung - je mehr man hinschaut,
+        desto stärker. Volle Wirkung FLASH_FULL_T s (davon FLASH_WHITE_T s weiss), dazu Pfeifton und dumpfer Klang."""
+        self.fx_spawn(self.sphere_np, pos, 0.25, 0.3, 3.5, (1.0, 1.0, 1.0), (1.0, 1.0, 0.9), p=0.6, fog=False)
+        self.sfx.play("explosion", tuple(pos), 1.0, 1.65)
+        for _ in range(6):
+            self.smoke_puff(pos, 0.25, 1.5, 0.8)
+        pl = self.player
+        if pl is None or pl.hp <= 0:
+            return
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        dist = math.dist(pos, eye)
+        if dist > FLASH_R or not self.world.blast_los(pos, eye):
+            return
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        fwd = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        to = norm(sub(pos, eye))
+        look = clampf((dot(fwd, to) + 0.3) / 1.3, 0.0, 1.0)
+        prox = (1.0 - dist / FLASH_R) ** 0.5
+        st = prox * (prox + (1.0 - prox) * look)
+        if st < 0.06:
+            return
+        dur = FLASH_FULL_T * st
+        if self.flash_st is not None and time.time() - self.flash_st[0] < self.flash_st[2] and self.flash_st[1] > st:
+            return                                             # schon stärker geblendet
+        self.flash_st = (time.time(), st, dur, FLASH_WHITE_T * st)
+        for c in self.flash_ghost:
+            c.removeNode()
+        self.flash_ghost = []
+        try:                                                   # Nachbild: das Bild im Moment des Blitzes, verschwommen
+            tex = self.win.getScreenshot()
+            if tex is not None:
+                for ox, oy in ((0, 0), (0.008, 0), (-0.008, 0), (0, 0.011), (0, -0.011)):
+                    cm_ = CardMaker("nachbild")
+                    cm_.setFrame(-1 + ox, 1 + ox, -1 + oy, 1 + oy)
+                    gc = self.render2d.attachNewNode(cm_.generate())
+                    gc.setTexture(tex)
+                    gc.setTransparency(TransparencyAttrib.MAlpha)
+                    gc.setBin("fixed", 94)
+                    gc.setDepthTest(False)
+                    gc.setDepthWrite(False)
+                    gc.setColor(1, 1, 1, 0)
+                    self.flash_ghost.append(gc)
+        except Exception:
+            self.flash_ghost = []
+        self.sfx.play("ring", None, 0.35 + 0.5 * st, 1.0)
+        self.toast("GEBLENDET", (1, 1, 1), min(2.0, dur))
+
+    def update_flash(self):
+        """10e: Blendung ausblenden: erst weiss, dann langsam durchsichtig mit verschwommenem Nachbild; der Ton ist
+        so lange gedämpft."""
+        fs = self.flash_st
+        if fs is None:
+            return
+        t0, st, dur, white = fs
+        t = time.time() - t0
+        if t >= dur or (self.player is not None and self.player.hp <= 0 and t > 0.3):
+            self.flash_white.hide()
+            for c in self.flash_ghost:
+                c.removeNode()
+            self.flash_ghost = []
+            self.flash_st = None
+            self.apply_volume()
+            return
+        if t < white:
+            a = min(1.0, 0.55 + st)
+            ga = 0.0
+        else:
+            u = (t - white) / max(0.05, dur - white)
+            a = min(1.0, 0.55 + st) * (1.0 - u) ** 1.6
+            ga = 0.55 * (1.0 - u) ** 0.8 * min(1.0, (t - white) / 0.3)
+        self.flash_white.show()
+        self.flash_white.setColor(1, 1, 1, a)
+        for c in self.flash_ghost:
+            c.setColor(1, 1, 1, ga / 3.0)
+        m = st * (1.0 if t < white else max(0.0, 1.0 - (t - white) / max(0.05, dur - white)))
+        try:
+            self.sfxManagerList[0].setVolume(self.vol_sfx / 100.0 * (1.0 - FLASH_MUFFLE * m))
+        except Exception:
+            pass
+
+    def update_smoke_views(self, dt):
+        """10e: Rauchwolken: je Zelle eine graue Wolke (zu einem Modell zusammengefasst), Deckkraft nach Alter."""
+        world = self.world
+        live = set()
+        for sm in world.smokes:
+            live.add(sm.sid)
+            v = self.smoke_views.get(sm.sid)
+            if v is None:
+                v = self.render.attachNewNode(f"rauch{sm.sid}")
+                rng = random.Random(sm.sid * 7 + 3)
+                grp = v.attachNewNode("puffs")
+                for c in sm.cells:
+                    pf = self.sphere_np.copyTo(grp)
+                    pf.setPos(c[0] + rng.uniform(-0.3, 0.3), c[1] + rng.uniform(-0.3, 0.3), c[2] + rng.uniform(-0.2, 0.3))
+                    pf.setScale(SMOKE_CELL * rng.uniform(0.8, 1.05), SMOKE_CELL * rng.uniform(0.8, 1.05),
+                                SMOKE_CELL * rng.uniform(0.6, 0.85))
+                    g_ = rng.uniform(0.66, 0.78)
+                    pf.setColor(g_, g_, g_ * 1.02, 1)
+                grp.flattenStrong()
+                v.setTransparency(TransparencyAttrib.MAlpha)
+                v.setDepthWrite(False)
+                v.setLightOff()
+                v.setBin("transparent", 5)
+                self.smoke_views[sm.sid] = v
+            dn = sm.density()
+            v.setColorScale(1, 1, 1, 0.82 * dn)
+            v.setZ(0.25 * math.sin(sm.age * 0.6))
+            sc = 0.6 + 0.4 * min(1.0, sm.age / SMOKE_GROW_T)
+            v.setScale(sc, sc, sc)
+            v.setPos(sm.pos[0] * (1 - sc), sm.pos[1] * (1 - sc), sm.pos[2] * (1 - sc) + 0.25 * math.sin(sm.age * 0.6))
+        for sid in [k for k in self.smoke_views if k not in live]:
+            self.smoke_views.pop(sid).removeNode()
+
+    def update_fire_views(self, dt):
+        """10e: Flammen des Molotows: je Zelle eine flackernde Flamme, dazu Glut am Boden und etwas Rauch."""
+        world = self.world
+        live = set()
+        for fa in world.fires:
+            live.add(fa.fid)
+            v = self.fire_views.get(fa.fid)
+            if v is None:
+                v = self.render.attachNewNode(f"feuer{fa.fid}")
+                rng = random.Random(fa.fid * 13 + 1)
+                fl = []
+                for c in fa.cells:
+                    f_ = gren_flame_node(v, (c[0] + rng.uniform(-0.2, 0.2), c[1] + rng.uniform(-0.2, 0.2), c[2] + 0.02),
+                                         rng.uniform(0.35, 0.6))
+                    fl.append(f_)
+                    gl = v.attachNewNode("glut")
+                    self.scorch_np.instanceTo(gl)
+                    gl.setPos(c[0], c[1], c[2] + 0.04)
+                    gl.setScale(MOLO_CELL * 0.7)
+                    gl.setColorScale(1.0, 0.45, 0.1, 0.7)
+                    gl.setTransparency(TransparencyAttrib.MAlpha)
+                    gl.setLightOff()
+                v.setPythonTag("fl", fl)
+                self.fire_views[fa.fid] = v
+            k = clampf(min(fa.age / 0.3, (MOLO_T - fa.age) / 0.8), 0.0, 1.0)
+            for f_ in v.getPythonTag("fl") or ():
+                flame_flicker(f_)
+            v.setColorScale(1, 1, 1, k)
+            v.setTransparency(TransparencyAttrib.MAlpha)
+            if fa.cells and self.prng.random() < 0.12:
+                c = self.prng.choice(fa.cells)
+                self.smoke_puff((c[0], c[1], c[2] + 0.8), 0.4, 1.6, 0.25)
+        for fid in [k for k in self.fire_views if k not in live]:
+            self.fire_views.pop(fid).removeNode()
+
+    def update_airdrop_views(self, dt):
+        """10e: Airdrop - rote Leuchtfackel mit rotem Rauch, Frachtflugzeug (für alle sichtbar), Kiste am Fallschirm."""
+        world = self.world
+        live = set()
+        now = time.time()
+        for a in world.airdrops:
+            live.add(a.aid)
+            v = self.ad_views.get(a.aid)
+            if v is None:
+                root = self.render.attachNewNode(f"airdrop{a.aid}")
+                fl = root.attachNewNode("fackel")
+                gren_inst(fl, "flare", 0.3)
+                fl.setPos(a.fx, a.fy, a.fz + 0.05)
+                fl.setP(70)
+                fire = gren_flame_node(fl, (0, 0, 0.18), 0.12)
+                fire.setColorScale(1.0, 0.35, 0.3, 1)
+                glow = self.sphere_np.copyTo(fl)
+                glow.setScale(0.5)
+                glow.setPos(0, 0, 0.2)
+                glow.setTransparency(TransparencyAttrib.MAlpha)
+                glow.setLightOff()
+                glow.setFogOff()
+                glow.setColorScale(1.0, 0.15, 0.1, 0.5)
+                plane, props = build_cargo_plane()
+                plane.reparentTo(root)
+                plane.hide()
+                drop = root.attachNewNode("kiste")
+                build_supply_crate().reparentTo(drop)
+                chute = build_parachute()
+                chute.reparentTo(drop)
+                drop.hide()
+                v = self.ad_views[a.aid] = {"root": root, "flare": fl, "fire": fire, "glow": glow, "plane": plane,
+                                            "props": props, "drop": drop, "chute": chute, "puff": 0.0}
+            burning = a.age < FLARE_BURN_T and a.state < 3 or (a.state == 3 and a.age < FLARE_BURN_T * 0.6)
+            (v["fire"].show if burning else v["fire"].hide)()
+            (v["glow"].show if burning else v["glow"].hide)()
+            if burning:
+                flame_flicker(v["fire"])
+                v["glow"].setScale(0.45 + 0.12 * math.sin(now * 17.0))
+                v["puff"] -= dt
+                if v["puff"] <= 0:                              # roter Rauch steigt hoch auf (weit sichtbar)
+                    v["puff"] = 0.12
+                    self.fx_spawn(self.sphere_np, (a.fx + self.prng.uniform(-0.2, 0.2), a.fy + self.prng.uniform(-0.2, 0.2),
+                                                   a.fz + 0.4), 3.2, 0.25, 1.6, (0.95, 0.2, 0.15), (0.6, 0.25, 0.22),
+                                  p=1.2, rise=2.6)
+            if a.state >= 1:
+                k = a.dist - AIR_PLANE_LEAD
+                pz = max(AIR_PLANE_ALT, a.fz + 60.0)
+                v["plane"].show()
+                v["plane"].setPos(a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, pz)
+                v["plane"].setH(math.degrees(a.ang) - 90.0)
+                for pp in v["props"]:
+                    pp.setR((now * 1400.0) % 360.0)
+            if a.state == 2:
+                v["drop"].show()
+                v["drop"].setPos(a.fx, a.fy, a.cz)
+                v["drop"].setH(a.aid * 31.0 + 20.0 * math.sin(now * 0.8))
+                open_k = clampf((max(AIR_PLANE_ALT, a.fz + 60.0) - 3.0 - a.cz) / 6.0, 0.05, 1.0)   # Schirm öffnet sich
+                v["chute"].setScale(open_k, open_k, 0.4 + 0.6 * open_k)
+                v["drop"].setR(4.0 * math.sin(now * 1.3))
+            else:
+                v["drop"].hide()
+        for aid in [k for k in self.ad_views if k not in live]:
+            self.ad_views.pop(aid)["root"].removeNode()
+
+    def update_ability_icons(self):
+        """Buff-Symbol (Kreis-Timer = Restzeit), Dash (leuchtet bereit, sonst grau mit ablaufender Abklingzeit),
+        Jetpack (Kreis = Treibstoff), Schildbalken und Ausrüstungs-Übersicht."""
+        pl = self.player
+        ic = self.ability_icons.get("buff")
+        if ic is None:
+            return
+        alive = pl.hp > 0
+        dash, jet = self.ability_icons["dash"], self.ability_icons["jet"]
+        if alive and wears(pl, "dash"):
+            rdy = pl.dash_cd <= 0
+            dash.set(rdy, 1.0 if rdy else 1.0 - pl.dash_cd / DASH_CD, None,
+                     "Dash" if rdy else f"{int(math.ceil(pl.dash_cd))} s")
+        else:
+            dash.hide()
+        if alive and wears(pl, "jetpack"):
+            fm_ = max(0.1, jet_fuel_max(pl))
+            jet.set(pl.jet_fuel > 0.3, min(1.0, pl.jet_fuel / fm_), None, "")
+            jet.bar(min(1.0, pl.jet_fuel / fm_))
+        else:
+            jet.hide()
+        if alive and wears(pl, "shield"):
+            self.shield_bg.show()
+            self.shield_fg.show()
+            self.shield_fg.setSx(max(0.55 * pl.shield_hp / max(1.0, shield_max(pl)), 0.0001))
+        else:
+            self.shield_bg.hide()
+            self.shield_fg.hide()
+        in_veh = alive and (pl.heli >= 0 or pl.vehicle >= 0 or pl.mount >= 0)   # 7a: im Fahrzeug/am Geschütz
+        if in_veh:                                              # Ausrüstung, Dash, Jetpack, Buff ausblenden
+            dash.hide()
+            jet.hide()
+            ic.hide()
+            if self.ability_icons.get("shock") is not None:
+                self.ability_icons["shock"].hide()
+            for tl in self.gear_tiles.values():
+                tl["tile"].hide()
+            if getattr(self, "gear_set_frame", None) is not None:
+                self.gear_set_frame.hide()
+            return
+        full = next((s for s in SETS if alive and set_full(pl, s)), None)   # 7c: komplettes Set: Kacheln leuchten
+        fr = getattr(self, "gear_set_frame", None)
+        if fr is not None:                                      # 10h: Rahmen in der Spielerfarbe
+            if full is not None:
+                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0)["acc"]
+                fr.setColor(acc[0], acc[1], acc[2], 1.0)
+                fr.setColorScale(1, 1, 1, 0.8 + 0.2 * math.sin(time.time() * 3.0))
+                fr.show()
+            else:
+                fr.hide()
+        shock = self.ability_icons.get("shock")
+        if shock is not None:
+            if full == "shield":
+                rdy = pl.shock_cd <= 0
+                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, None,
+                          f"{SET_ICON_KEY.upper()}  Stromstoss" if rdy else f"{int(math.ceil(pl.shock_cd))} s")
+            else:
+                shock.hide()
+        for sl, tl in self.gear_tiles.items():
+            tl["tile"].show()
+            if full is not None:
+                sc_ = SETS[full][1]
+                tl["bg"].setColor(sc_[0] * 0.45, sc_[1] * 0.45, sc_[2] * 0.45, 0.85)
+            else:
+                tl["bg"].setColor(0.04, 0.05, 0.08, 0.7)
+            gi = pl.gear.get(sl) if alive else None
+            if gi != tl["gi"]:                                   # 9d: Symbol tauschen
+                for c in tl["ico"].getChildren():
+                    c.detachNode()
+                if gi is not None:
+                    ic_ = self.gear_icon_cache.get(gi)
+                    if ic_ is None:
+                        ic_ = self.gear_icon_cache[gi] = gear_icon(gi, GEAR_HUD_W * 0.62, GEAR_HUD_H * 0.62)
+                        ic_.setBin("fixed", 22)
+                        ic_.setDepthTest(False)
+                        ic_.setDepthWrite(False)
+                    ic_.reparentTo(tl["ico"])
+                tl["gi"] = gi
+            self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
+            if gi is not None:
+                tl["label"].setFg(tuple(c * 0.65 + 0.35 for c in GEAR[gi].col) + (1,))   # aufgehellt: lesbar
+            tl["sym"].setColorScale(1, 1, 1, 0.1 if gi is not None else 0.2)   # leer: Umriss etwas deutlicher
+        b = getattr(pl, "buff", None)
+        if b in BUFF_T and pl.buff_t > 0 and pl.hp > 0:
+            lab, col = self.BUFF_LOOK.get(b, ("B", (1, 1, 1)))
+            ic.set(True, pl.buff_t / BUFF_T[b], lab, f"{BUFF_NAMES[b]} {int(math.ceil(pl.buff_t))} s", col)
+        else:
+            ic.hide()
+
+    def look_info(self):
+        """7b: Schaut man auf einen Drop (bis LOOT_LOOK_R m, höchstens LOOT_LOOK_ANG Grad neben der Blickrichtung,
+        freie Sicht), stehen Name und kurze Werte unter dem Fadenkreuz."""
+        pl, world = self.player, self.world
+        if pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or not world.drops:
+            return ""
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        best, bc = None, math.cos(math.radians(LOOT_LOOK_ANG))
+        for d in world.drops:
+            p = (d.x, d.y, d.z + 0.6)
+            v = (p[0] - eye[0], p[1] - eye[1], p[2] - eye[2])
+            dist = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            if dist > LOOT_LOOK_R or dist < 0.05:
+                continue
+            c = (v[0] * f[0] + v[1] * f[1] + v[2] * f[2]) / dist
+            if c > bc and world.los(eye, p):
+                best, bc = d, c
+        return drop_info(best) if best is not None else ""
+
+    def ppos(self, pid):
+        """9c: Position (Kopfhöhe) eines Spielers für Geräusche."""
+        q = self.world.players.get(pid)
+        return (q.x, q.y, q.z + 1.5) if q is not None else None
 
     def use_object(self, alt=False):
         """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
@@ -122387,19 +122917,25 @@ class Game(ShowBase):
             self.world.use_object(self.player, alt)
 
     def do_melee(self):
+        """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
+        nicht in der Hand, wird sie gezogen; mit QUICK_MELEE_STAY bleibt sie danach in der Hand (Linke Maus schlägt
+        weiter, 1-3/Mausrad wechselt zurück), sonst wird sie nach dem Schlag wieder weggesteckt."""
         pl = self.player
-        now = time.time()
-        if (pl.hp <= 0 or pl.gad_out or pl.switch_t > 0 or now < self.melee_next or self.melee_t > 0
+        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.melee_cd > 0
                 or self.world.phase != "play"):
             return
-        self.melee_next = now + MELEE_CD
-        self.melee_t = MELEE_T
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_melee()
-            self.sfx.melee(self.my_id, False)
-        else:
-            self.world.melee(pl)
+        pl.gad_out = False                                  # F schlägt immer mit dem Messer: Gadget wegstecken,
+        if pl.switch_t > 0:                                 # Waffenwechsel abbrechen (Messer statt Schusswaffe)
+            pl.switch_t = 0.0
+            pl.switch_to = pl.cur
+        if not pl.melee_out:
+            pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
+            self.quick_melee = not QUICK_MELEE_STAY        # 7a: bleibt in der Hand (Wechsel mit 1-3/Mausrad)
+        m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
+        pl.melee_cd = pl.swing_t = m.interval
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        self.world.melee_swing(pl, d)
 
     @staticmethod
     def is_rocket(b):
@@ -122430,7 +122966,10 @@ class Game(ShowBase):
         pl, world = self.player, self.world
         up = (1 if inp.jump else 0) - (1 if inp.run else 0)
         pl.pitch = clampf(pl.pitch, -75.0, 25.0)
-        fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, pl.pitch)
+        fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
+        if self.net_mode != "client" and hc.impact > 0:       # Einzelspiel/Host: Aufprall gleich auswerten
+            world.heli_crash(hc, hc.impact)
+            hc.impact = 0.0
         pl.x, pl.y, pl.z, pl.vz = hc.x, hc.y, hc.z + 0.4, 0.0
         pl.moving = pl.ads = False
         pl.on_ground = hc.ground
@@ -122507,14 +123046,15 @@ class Game(ShowBase):
 
     def throw_grenade(self):
         pl = self.player
-        if pl.gren_cd > 0 or pl.grenades <= 0:
+        kind = gren_fix_sel(pl)
+        if pl.gren_cd > 0 or pl.gren.get(kind, 0) <= 0:
             return
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        eye = (pl.x + d[0] * 0.4, pl.y + d[1] * 0.4, pl.z + eye_h(pl) - 0.1 + d[2] * 0.4)
-        if self.world.throw_grenade(pl, eye, d):
+        eye, d, speed = self.gren_throw_params(pl, self.g_throw_charge)
+        if self.world.throw_grenade(pl, eye, d, kind, speed):
+            self.thrown_kind = kind
             pl.gren_cd = GREN_COOLDOWN
-            self.gren_anim_t = GREN_ANIM_T
+            self.gren_anim_t = GREN_ANIM_T * 0.85          # 10e: der Arm war schon ausgeholt (G gehalten)
+            gren_fix_sel(pl)
             self.sfx.play("gren_throw", None, 0.8, 1.0)         # sofort beim Klick (nicht erst über das Netz-Ereignis)
             self.sp_back.kick(2.5)                 # kleiner Ruck der Waffe beim Wurf
             self.sp_pitch.kick(-90)
@@ -123039,6 +123579,7 @@ class Game(ShowBase):
             trigger=trig, edge=edge, ads=down(MouseButton.three()) and self.captured,
             reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
             throw=self.throw_req, mdx=0, mdy=0)
+        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])))   # G halten = Wurf aufladen, Loslassen wirft
         if self.quit_box is not None:
             inp = SimpleNamespace(forward=0, strafe=0, run=False, jump=False, turn=0, look=0, lean=0,
                                   duck=False, trigger=False, edge=False, ads=False, reload=False, select=None,
@@ -123056,6 +123597,13 @@ class Game(ShowBase):
         """Ein Spielschritt (Logik + Darstellung). Getrennt von der Eingabe,
         damit man ihn auch ohne Fenster testen kann."""
         pl, world = self.player, self.world
+        if self.net_mode == "client" and getattr(pl, "shock_cd", 0.0) > 0:
+            pl.shock_cd = max(0.0, pl.shock_cd - dt)          # beim Host zählt die Welt
+        if self.net_mode == "client":                         # Essen, Pfannen-Sperre, verstärkte Fähigkeiten
+            tick_melee_timers(pl, dt)
+            pl.eat_t = max(0.0, pl.eat_t - dt)
+            if pl.hp <= 0:
+                pl.eat_t, pl.slam_pending, pl.leap_t = 0.0, False, 0.0
         nsub = max(1, int(math.ceil(dt / 0.034)))
         dead = pl.hp <= 0
         if getattr(pl, "stun_t", 0.0) > 0 and not dead:   # betäubt (Drohne): nicht bewegen, schiessen, steuern;
@@ -123081,6 +123629,10 @@ class Game(ShowBase):
                 run = False                                        # ... und nicht rennen
             if over:
                 trigger = edge = reload_req = ads = False
+        if not dead:                                  # Tastenflanken für Dash (Shift) und Doppelsprung (Leertaste)
+            pl.run_edge = pl.run_edge or (bool(run) and not getattr(self, "prev_run", False))
+            pl.jump_edge = pl.jump_edge or (bool(jump) and not getattr(self, "prev_jump", False))
+        self.prev_run, self.prev_jump = bool(run), bool(jump)
         self.run_now, self.key_turn = bool(run), inp.turn
         self.trig_now = bool(trigger)
         if dead or over_or_driving(self):
@@ -123117,7 +123669,10 @@ class Game(ShowBase):
             self.operate_turret(tur, trigger and not over, ads)
         elif veh is not None:                  # am Steuer: das Fahrzeug bewegt die Figur
             for _ in range(nsub):              # bei niedriger Bildrate in kleinen Schritten (keine Tunnel, kein Zeitlupen-Auto)
-                drive(veh, forward, strafe, jump, dt / nsub, world)
+                if veh.stall_t > 0:            # Drohne hat den Motor lahmgelegt: kein Gas, Lenkung schwach
+                    drive(veh, 0, strafe * VEH_STALL_STEER, jump, dt / nsub, world)
+                else:
+                    drive(veh, forward, strafe, jump, dt / nsub, world)
             pl.x, pl.y, pl.z, pl.vz, pl.on_ground = veh.x, veh.y, veh.z + 0.3, 0.0, True
             pl.moving, pl.ads = False, False
             update_lean(pl, 0, dt * 4, world)  # Lehnen beenden
@@ -123131,12 +123686,22 @@ class Game(ShowBase):
                 update_lean(pl, 0, dt, world)
         if not dead:
             if veh is None and hc is None and tur is None:
+                if select == MELEE_SEL:
+                    pl.gad_out = False                         # Nahkampfwaffe ziehen: Gadget wegstecken
                 if self.gadget_hand(pl, ads, edge, select, over):
                     trigger = edge = reload_req = ads = False
                 self.scope_breath(pl, dt, hold_key and not over)
                 update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select)
                 if getattr(inp, "throw", False) and not over:
                     self.throw_grenade()
+            if getattr(self, "quick_melee", False) and pl.swing_t <= 0:   # Schnellschlag (F) vorbei: wieder wegstecken
+                self.quick_melee = False
+                if pl.melee_out and pl.switch_t <= 0:
+                    pl.melee_out = False
+            if pl.swing_t > getattr(self, "prev_swing", 0.0) + 0.01:     # eigener Schlag: Ton
+                self.sfx.melee(self.my_id, False, 0.85 if pl.melee >= 3 else 1.0)
+                self.noise_wave(pl.x, pl.y, NOISE_MELEE)
+            self.prev_swing = pl.swing_t
             if veh is not None or hc is not None or tur is not None:
                 pl.gad_out = False
                 self.prev_gad_ads = bool(ads)
@@ -123415,18 +123980,6 @@ class Game(ShowBase):
     def handle_events(self):
         for e in self.world.events:
             kind = e[0]
-            if kind == "melee":
-                if e[1] == self.my_id:
-                    if self.net_mode != "client":
-                        self.sfx.melee(e[1], e[2])
-                    elif e[2]:
-                        self.sfx.play("melee_punch" if "melee_punch" in self.sfx.pool else "thud", None, 0.9, 1.0)
-                else:
-                    v = self.player_views.get(e[1])
-                    if v is not None:
-                        v.swing = MELEE_T
-                    self.sfx.melee(e[1], e[2])
-                continue
             if kind == "ctf":
                 self.ctf_event(e)
                 continue
@@ -123460,7 +124013,56 @@ class Game(ShowBase):
                     self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
                     v = self.player_views.get(e[1])
                     if v is not None:
-                        v.start_throw()
+                        gk_ = e[2] if len(e) > 2 and isinstance(e[2], int) and 0 <= e[2] < len(GREN_KINDS) else 0
+                        v.start_throw(GREN_KINDS[gk_])
+            elif kind == "gren_inv":           # 10e: Granaten-Inventar (Host entscheidet)
+                if e[1] == self.my_id and isinstance(e[2], list):
+                    pl = self.player
+                    pl.gren = {k_: int(n_) for k_, n_ in zip(GREN_KINDS, e[2]) if n_}
+                    gren_fix_sel(pl)
+                    if len(e) > 4 and isinstance(e[3], int) and 0 <= e[3] < len(GREN_KINDS) and e[4] > 0:
+                        k_ = GREN_KINDS[e[3]]
+                        self.toast(f"+{e[4]} {GREN_NAMES[k_]}", tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k_]), 1.6)
+            elif kind == "decoy":              # 10e: Decoy "schiesst" (nur Lärm)
+                pos_ = (e[2], e[3], e[4])
+                clip = ("ar_single", "pistol_single", "smg_single", "shotgun_shot")[e[5] % 4] if len(e) > 5 else "rifle"
+                if clip not in self.sfx.pool:
+                    clip = "rifle"
+                self.sfx.play(clip, pos_, 0.9, self.prng.uniform(0.97, 1.03))
+                self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.3), 0.08, 0.05, 0.25, (1.0, 0.9, 0.5),
+                              (1.0, 0.6, 0.2), p=0.5, fog=False)
+            elif kind == "flash":              # 10e: Blendgranate
+                self.flash_hit(e[1], e[2] if len(e) > 2 else -1)
+            elif kind == "smoke":              # 10e: Rauchgranate zündet (die Wolke baut die Ansicht selbst)
+                self.sfx.play("gas", (e[2], e[3], e[4]), 0.9, 1.2)
+                for _ in range(8):
+                    self.smoke_puff((e[2], e[3], e[4] + 0.2), 0.6, 2.0, 0.72)
+            elif kind == "molo":               # 10e: Molotow zerschellt (e[3]: 1 brennt, 0 im Wasser)
+                pos_ = e[2]
+                self.sfx.play("glass", tuple(pos_), 1.0, self.prng.uniform(0.95, 1.05))
+                if e[3]:
+                    self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.4), 0.5, 0.3, MOLO_R * 0.8,
+                                  (1.0, 0.75, 0.25), (0.8, 0.25, 0.05), p=1.0, fog=False)
+                else:
+                    self.burst((pos_[0], pos_[1], pos_[2] + 0.05), "water")
+            elif kind == "flare":              # 10e: Airdrop-Fackel brennt
+                self.sfx.play("pin", (e[2], e[3], e[4]), 0.9, 0.6)
+                ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
+                if ad_ is not None and ad_.owner == self.my_id:
+                    self.toast("Airdrop angefordert - Flugzeug im Anflug", (1.0, 0.45, 0.35), 2.5)
+            elif kind == "airland":            # 10e: Kiste gelandet
+                if "thud" in self.sfx.pool:
+                    self.sfx.play("thud", (e[3], e[4], e[5]), 1.0, 0.8)
+                for _ in range(5):
+                    self.smoke_puff((e[3], e[4], e[5] + 0.1), 0.5, 1.4, 0.6)
+            elif kind == "pdrone":             # 10e: eigene Drohne steigt auf
+                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.7, 1.3)
+                if e[1] == self.my_id:
+                    self.toast("Drohne gestartet", (0.85, 0.55, 1.0), 1.5)
+            elif kind == "tempdown":           # 10e: eigene Drohne erlischt
+                for _ in range(8):
+                    self.add_particle((e[2], e[3], e[4]), (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2),
+                                                           self.prng.uniform(0, 3)), (0.85, 0.5, 1.0), 0.04, 0.5, 0.2)
             elif kind == "explosion":
                 if len(e) > 4 and e[4] == self.my_id:
                     self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
@@ -123668,6 +124270,159 @@ class Game(ShowBase):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
                     self.sp_cam.kick(10)
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
+            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen
+                cx_, cy_, cz_ = e[2], e[3], e[4] + 1.0
+                for k_ in range(12):
+                    a_ = k_ * math.tau / 12
+                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * SHOCK_R, cy_ + math.sin(a_) * SHOCK_R,
+                                                  cz_ - 0.6 + 0.4 * math.sin(k_ * 1.7)), True)
+                for k_ in range(36):
+                    a_ = k_ * math.tau / 36
+                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * SHOCK_R * 2.2, math.sin(a_) * SHOCK_R * 2.2, 0.6),
+                                      (0.5, 0.85, 1.0), 0.05, 0.45, 0.0)
+                self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
+                if e[1] == self.my_id:
+                    self.player.shock_cd = SHOCK_CD
+                    self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
+            elif kind == "gdrone":             # 10h: Abwehrdrohne steigt auf
+                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.6, 1.6)
+                if e[1] == self.my_id:
+                    self.toast("Abwehrdrohne aktiv", (1.0, 0.65, 0.25), 1.5)
+            elif kind == "hcrash":
+                if self.my_heli() is not None and self.my_heli().id == e[1]:
+                    self.toast(f"Harte Landung! ({e[2]} m/s)", (1, 0.6, 0.4), 2.0)
+                    self.hurt_flash = max(self.hurt_flash, 0.5)
+            elif kind == "buff":
+                if e[1] == self.my_id:
+                    pl = self.player
+                    pl.buff, pl.buff_t = e[2], float(e[3])
+                    if len(e) > 4:
+                        pl.max_hp = float(e[4])
+                    self.toast(f"Buff: {buff_text(e[2], pl.max_hp)}  -  {int(e[3])} s",
+                               self.BUFF_LOOK.get(e[2], ("", (1, 0.85, 0.3)))[1])
+                    self.sfx.ui_click()
+            elif kind in ("gear", "gearbreak"):    # Ausrüstung angelegt / Helm bzw. Platte hat gerettet
+                gi = e[2] if 0 <= e[2] < len(GEAR) else None
+                if e[1] == self.my_id:
+                    pl = self.player
+                    gl = e[3] if len(e) > 3 and isinstance(e[3], list) else gear_list(pl)
+                    pl.gear = {sl: (v if isinstance(v, int) and 0 <= v < len(GEAR) else None)
+                               for sl, v in zip(GEAR_SLOTS, gl)}
+                    if kind == "gearbreak":
+                        self.toast(f"{'Helm' if GEAR[gi].slot == 'head' else 'Rüstung'} zerstört - hat dich gerettet!",
+                                   (1, 0.55, 0.4), 2.5)
+                        self.hurt_flash = 0.75
+                        self.sp_hurt.kick(80)
+                        self.sfx.play("railgun", None, 0.8, 1.6)
+                if kind == "gear" and gi is not None and e[1] == self.my_id:
+                    self.toast(f"Angelegt: {GEAR[gi].name}", tuple(c * 0.6 + 0.4 for c in GEAR[gi].col), 1.8)
+            elif kind == "mswing":             # fremder Nahkampf-Schlag: Ton + Animation
+                if e[1] != self.my_id:
+                    op = self.world.players.get(e[1])
+                    if op is not None:
+                        self.sfx.melee(e[1], False)
+                    v = self.player_views.get(e[1])
+                    if v is not None:
+                        v.swing_t = 0.35
+            elif kind == "mhit":               # Nahkampf-Treffer: Ton (Pfanne: BONG) + Spritzer
+                pos = tuple(e[1])
+                self.sfx.play(e[2] if e[2] in ("slash", "bong") else "slash", pos, 1.0, self.prng.uniform(0.92, 1.08))
+                if e[2] != "bong":
+                    self.sfx.melee_hit(pos)                # deine Aufnahme des Treffers kommt dazu
+                self.burst(pos, "blood")
+                if len(e) > 3 and e[3] == self.my_id:
+                    self.sp_cam.kick(1.5)
+            elif kind == "melee":              # neue Nahkampfwaffe aus Kiste / vom Boden
+                if e[1] == self.my_id and 0 <= e[2] < len(MELEE):
+                    self.player.melee = e[2]
+                    self.toast(f"Nahkampf: {MELEE[e[2]].name}", (1.0, 0.85, 0.5), 1.8)
+            elif kind == "hasmelee":
+                if e[1] == self.my_id:
+                    self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
+            elif kind == "pan":                # 9c: Ladung der Bratpfanne (für Anzeige und Essen in der Pfanne)
+                op = self.world.players.get(e[1])
+                if op is not None:
+                    old = op.pan_pts
+                    op.pan_pts = e[2]
+                    if e[1] == self.my_id and e[2] > old:
+                        st = pan_stage(e[2])
+                        self.toast(f"Pfanne +{e[3]}  ({e[2]} Punkte" + (f", Stufe {st} - T: essen)" if st else ")"),
+                                   (1.0, 0.8, 0.4), 1.6)
+                        self.sfx.play("chew", None, 0.35, 1.4)
+            elif kind == "eat":                # 9c: jemand isst (Stufe, Dauer)
+                op = self.world.players.get(e[1])
+                if op is not None:
+                    op.eat_stage, op.eat_dur, op.eat_k = e[2], e[3], e[4]
+                    if self.net_mode == "client" or e[1] != self.my_id:
+                        op.eat_t = e[3]
+                    op.eat_bites = 0
+                    if e[1] == self.my_id:
+                        self.player.amp.discard("pan")
+                        self.toast(f"Mahlzeit! Stufe {e[2]}" + (" (x2)" if e[4] > 1 else ""), (1.0, 0.8, 0.4), 1.6)
+                v = self.player_views.get(e[1])
+                if v is not None:
+                    v.eat_t = e[3]
+                if e[2] < 3:
+                    self.sfx.play("chew", self.ppos(e[1]), 0.9, 1.0)
+            elif kind == "bite":               # 9c: Stufe 3 - ein Bissen
+                self.sfx.play("chew", self.ppos(e[1]), 1.0, self.prng.uniform(0.92, 1.06))
+                if e[1] == self.my_id:
+                    self.bite_t = 0.0
+            elif kind == "burp":               # 9c: der Rülpser (nur für Spieler hörbar, kein Monster-Lärm)
+                self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
+                if e[1] == self.my_id:
+                    self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
+            elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
+                if e[1] == self.my_id:
+                    self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
+            elif kind == "drain":              # 9c: Erschöpfungsdolch trifft einen Spieler
+                me_a, me_t = e[1] == self.my_id, e[2] == self.my_id
+                if self.net_mode == "client" and (me_a or me_t):
+                    apply_drain(self.player if me_a else None, self.player if me_t else None)
+                if me_t:
+                    self.toast("Erschöpft! Alle Fähigkeiten auf Abklingzeit", (0.8, 0.45, 1.0), 2.0)
+                    self.sp_hurt.kick(3.0)
+                elif me_a:
+                    self.toast(f"Kraft entzogen: Fähigkeiten bereit, nächster Einsatz x{DAGGER_AMP:g}", (0.85, 0.6, 1.0), 2.0)
+                self.sfx.play("zap", self.ppos(e[2]), 0.5, 0.6)
+            elif kind == "mspec":              # 9c: Katana-Rundumschlag / Schwert-Aufschlag
+                pos = (e[3], e[4], e[5] + 0.3)
+                self.spawn_slash_fx(e[2], (e[3], e[4], e[5]), e[6])        # 10d: Ring / Windstoss + Schockwelle
+                if e[2] == "spin":
+                    self.sfx.play("swoosh", pos, 1.0, 0.8)
+                    self.sfx.play("swing", pos, 0.8, 1.2)
+                    for k_ in range(24):
+                        a_ = k_ * math.tau / 24
+                        self.add_particle((pos[0] + math.cos(a_) * 0.6, pos[1] + math.sin(a_) * 0.6, pos[2] + 0.8),
+                                          (math.cos(a_) * KATANA_SPIN_R * 2.5, math.sin(a_) * KATANA_SPIN_R * 2.5, 0.2),
+                                          (0.85, 0.9, 1.0), 0.03, 0.3, 0.0)
+                else:
+                    self.sfx.play("thud", pos, 1.0, 0.9)
+                    self.sfx.play("explosion", pos, 0.25, 1.6)
+                    h_ = math.radians(e[6])
+                    for k_ in range(30):
+                        a_ = h_ + math.radians(self.prng.uniform(-SWORD_SLAM_ARC, SWORD_SLAM_ARC))
+                        dx_, dy_ = -math.sin(a_), math.cos(a_)
+                        self.add_particle((pos[0] + dx_ * 0.8, pos[1] + dy_ * 0.8, pos[2]),
+                                          (dx_ * SWORD_SLAM_R * 1.6, dy_ * SWORD_SLAM_R * 1.6, 1.5), (0.45, 0.36, 0.22),
+                                          0.06, 0.6, 0.3)
+                    if e[1] == self.my_id:
+                        self.sp_cam.kick(4.0)
+                v = self.player_views.get(e[1])
+                if v is not None:
+                    v.spec = (e[2], 0.5)
+                if e[1] == self.my_id:
+                    self.spec_fp = (e[2], 0.0)
+            elif kind == "hasgear":
+                if e[1] == self.my_id:
+                    self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
+            elif kind == "shieldhit":
+                if e[1] == self.my_id:
+                    self.hurt_flash = max(0.0, self.hurt_flash - 0.2)
+                    self.shield_flash = 0.4
+            elif kind == "buffend":
+                if e[1] == self.my_id:
+                    self.toast("Buff abgelaufen", (0.85, 0.85, 0.9), 1.5)
             elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
                 self.open_end_screen(e[1])
             elif kind == "newmatch":
@@ -123877,9 +124632,74 @@ class Game(ShowBase):
             pitch += melee_pitch(u) * k
             roll += (-25.0 * wind + 35.0 * hit) * k
             hdg_add += (18.0 * wind - 30.0 * hit) * k
-        if self.gren_anim_t > 0:                  # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
+        if pl.melee_out and pl.swing_t > 0:       # Nahkampf: ausholen (rechts oben), Hieb nach links unten
+            mw = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
+            u = 1.0 - pl.swing_t / max(mw.interval, 0.05)
+            if u < 0.22:
+                k = u / 0.22
+                hdg_add -= 30 * k
+                pitch += 22 * k
+                px += 0.06 * k
+                pz += 0.05 * k
+            elif u < 0.5:
+                k = (u - 0.22) / 0.28
+                hdg_add += -30 + 100 * k
+                pitch += 22 - 50 * k
+                roll += 35 * k
+                px += 0.06 - 0.2 * k
+                pz += 0.05 - 0.1 * k
+            else:
+                k = 1.0 - (u - 0.5) / 0.5
+                hdg_add += 70 * k
+                pitch -= 28 * k
+                roll += 35 * k
+                px -= 0.14 * k
+                pz -= 0.05 * k
+        if pl.melee_out:                          # 9c: Laden, Sprungangriff, Sonderattacke, Essen
+            ch = clampf((pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START), 0.0, 1.0) \
+                if pl.chg_hold > MELEE_HOLD_START else 0.0
+            if ch > 0:
+                full = ch >= 1.0
+                py -= 0.10 * ch
+                pz += 0.06 * ch
+                pitch += 30 * ch
+                roll += 25 * ch
+                if full:
+                    hdg_add += 1.5 * math.sin(time.time() * 47.0)        # zittert vor Kraft
+            if pl.slam_pending:
+                pitch += 60.0
+                pz += 0.12
+            sp_ = getattr(self, "spec_fp", None)
+            if sp_ is not None:
+                k_, t_ = sp_
+                t_ += dt
+                self.spec_fp = (k_, t_) if t_ < 0.5 else None
+                u_ = min(1.0, t_ / 0.45)
+                if k_ == "spin":
+                    hdg_add += 360.0 * u_
+                    roll += 70.0 * math.sin(math.pi * u_)
+                    px += 0.12 * math.sin(math.pi * u_)
+                else:
+                    pitch -= 75.0 * math.sin(math.pi * min(1.0, u_ * 1.5))
+                    pz -= 0.08 * math.sin(math.pi * u_)
+            if pl.eat_t > 0:                      # Pfanne vor das Gesicht; Stufe 3: je Sekunde ein Bissen zum Mund
+                el = pl.eat_dur - pl.eat_t
+                bite = math.sin(math.pi * (el % 1.0)) ** 2 if pl.eat_stage >= 3 else 0.25 + 0.15 * math.sin(el * 7.0)
+                px += (-0.04 - px) * 0.8
+                py += (0.40 - 0.16 * bite - py) * 0.8
+                pz += (-0.10 + 0.06 * bite - pz) * 0.8
+                pitch += 20.0 + 18.0 * bite
+        if self.pan_food_fp:
+            n_ = pan_food_count(pl.pan_pts)
+            if pl.eat_t > 0:
+                n0 = pan_food_count(PAN_STAGES[max(0, pl.eat_stage - 1)][0])
+                n_ = int(math.ceil(n0 * pl.eat_t / max(0.1, pl.eat_dur)))
+            if n_ != getattr(self, "pan_food_n", -1):
+                show_food(self.pan_food_fp, n_)
+                self.pan_food_n = n_
+        if self.gren_anim_t > 0 or self.g_hold_t >= 0:   # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
             self.gren_anim_t = max(0.0, self.gren_anim_t - dt)
-            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T
+            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T if self.gren_anim_t > 0 else 0.15 * smoothstep(0.0, 0.18, self.g_hold_t)
             dipg = smoothstep(0.0, 0.15, ug) * (1.0 - smoothstep(0.7, 1.0, ug))
             pz -= 0.30 * dipg
             pitch -= 25 * dipg
@@ -123907,7 +124727,9 @@ class Game(ShowBase):
         red_on = sight == "red" and self.ads_t > 0.75 and pl.hp > 0 and not driving and self.melee_t <= 0
         hidden = scoped or rsc or gad_show
         for i, m in enumerate(self.gun_models):
-            (m.show if i == pl.cur and not hidden and pl.hp > 0 and not driving else m.hide)()
+            (m.show if i == pl.cur and not pl.melee_out and not hidden and pl.hp > 0 and not driving else m.hide)()
+        for i, m in enumerate(self.melee_models):
+            (m.show if pl.melee_out and i == pl.melee and pl.hp > 0 and not driving else m.hide)()
         rh = RHAND_GRIP.get(w.name) if (pl.reload_t > 0 and pl.switch_t <= 0) else None
         if rh is not None and self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
             self.vm_rhand.setPos(*rh[:3])           # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
@@ -124066,6 +124888,7 @@ class Game(ShowBase):
         self.update_toma_rocket(dt)
         self.update_gfx(dt)
         self.update_hud(dt)
+        self.update_flash()                     # Blendgranate
         self.place_camera()
 
     def update_objects(self, dt):
@@ -124075,16 +124898,33 @@ class Game(ShowBase):
         cur = set(world.grenades)
         for g in world.grenades:
             np = self.gren_views.get(g)
-            if np is None:
-                np = self.gren_views[g] = self.gren_np.instanceTo(self.render)
-            np.setPos(g.x, g.y, g.z)
-            np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
-            if g.fuse < 1.0 and int(now * 10) % 2 == 0:       # kurz vor der Explosion blinkt sie rot
+            if np is None:                                     # 10e: Modell je Granatenart
+                np = self.gren_views[g] = self.render.attachNewNode("gren")
+                gren_inst(np, g.kind, 0.24)
+                if g.kind == "molotov":                        # brennender Lappen im Flug
+                    np.setPythonTag("flame", gren_flame_node(np, (0.017, 0.007, 0.15), 0.08))
+            np.setPos(g.x, g.y, g.z + 0.04)
+            moving = g.vx * g.vx + g.vy * g.vy + g.vz * g.vz > 1.0
+            if moving:
+                np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
+            else:                                              # liegt: auf die Seite gekippt
+                np.setHpr(g.gid * 47.0, 90.0 if g.kind not in ("drone", "frag", "guard") else 0.0, 0)
+            fl = np.getPythonTag("flame")
+            if fl is not None:
+                flame_flicker(fl)
+            if g.kind == "frag" and g.fuse < 1.0 and int(now * 10) % 2 == 0:   # kurz vor der Explosion blinkt sie rot
                 np.setColorScale(2.2, 0.5, 0.4, 1)
+            elif g.kind == "decoy" and g.active and int(now * 6) % 2 == 0:
+                np.setColorScale(1.6, 1.4, 0.6, 1)
             else:
                 np.clearColorScale()
+            if g.kind == "smoke" and g.active and self.prng.random() < 0.12:  # Rauchgranate qualmt
+                self.smoke_puff((g.x, g.y, g.z + 0.15), 0.35, 1.6, 0.7)
         for g in [g for g in self.gren_views if g not in cur]:
             self.gren_views.pop(g).removeNode()
+        self.update_smoke_views(dt)                            # 10e: Rauchwolken, Flammen, Airdrops
+        self.update_fire_views(dt)
+        self.update_airdrop_views(dt)
 
         cur = set(world.gadgets)
         for g in world.gadgets:
@@ -124117,11 +124957,18 @@ class Game(ShowBase):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.att >= 0 and d.att in self.att_drop_models:
+                if d.gren > 0:                                 # 10b: Granaten-Päckchen (10e: Modell der Art)
+                    mdl = v.attachNewNode("gren")
+                    for k_ in range(min(3, d.gren)):
+                        gg = gren_inst(mdl, d.gk, 0.24)
+                        gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0.12)
+                elif d.att >= 0 and d.att in self.att_drop_models:
                     mdl = self.att_drop_models[d.att].copyTo(v)
+                elif d.melee >= 0:
+                    mdl = self.melee_drop_models[d.melee].copyTo(v)
                 else:
-                    mdl = self.drop_models[max(0, d.wi)].copyTo(v)
-                    mdl.setScale(1.4)
+                    mdl = (self.gear_models[d.gear] if d.gear >= 0 else self.drop_models[d.wi]).copyTo(v)
+                    mdl.setScale(1.4 if d.gear < 0 else 1.0)
                 beam = Mesh(lit=False)
                 box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (0.4, 1.0, 0.45) if d.att >= 0 else (1.0, 0.9, 0.3))
                 bn = v.attachNewNode(beam.node("beam"))
@@ -124187,11 +125034,17 @@ class Game(ShowBase):
         w = WEAPONS[pl.cur]
         g = pl.guns[pl.cur]
         now = time.time()
-        ratio = max(0.0, pl.hp / PLAYER_HP)
+        mx = getattr(pl, "max_hp", PLAYER_HP)
+        ratio = max(0.0, min(1.0, pl.hp / mx))
         self.hp_fg.setSx(max(0.55 * ratio, 0.0001))
-        self.hp_fg.setColor(*((0.2, 0.8, 0.2, 1) if ratio > 0.5 else
-                              (0.95, 0.75, 0.1, 1) if ratio > 0.25 else (0.9, 0.15, 0.1, 1)))
-        self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))}")
+        if mx > PLAYER_HP:                                 # Tank-Buff: goldener Balken, "180 / 200"
+            self.hp_fg.setColor(0.95, 0.8, 0.25, 1)
+            self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))} / {int(mx)}")
+        else:
+            self.hp_fg.setColor(*((0.2, 0.8, 0.2, 1) if ratio > 0.5 else
+                                  (0.95, 0.75, 0.1, 1) if ratio > 0.25 else (0.9, 0.15, 0.1, 1)))
+            self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))}")
+        self.update_ability_icons()
         tur, hc = self.my_turret(), self.my_heli()
         car = self.my_vehicle() if pl.hp > 0 else None
         if pl.hp <= 0:
@@ -124210,29 +125063,78 @@ class Game(ShowBase):
         elif tur is not None:
             self.set_text(self.ammo_text, "")                      # Hitze zeigt nur der Balken im Visier
             self.set_text(self.name_text, TURRET_NAMES.get(tur.kind, "Geschütz"))
+        elif pl.melee_out and not (pl.switch_t > 0 and pl.switch_to != MELEE_SEL):
+            self.set_text(self.ammo_text, "")
+            self.set_text(self.name_text, MELEE[pl.melee].name)
         else:
             ins = 0
             if w.name == SG_NAME and pl.reload_t > 0:          # Kipplauf: Anzeige zählt mit jeder eingelegten Patrone hoch
                 ins = max(0, min(sg_count(pl.reload_tot), int(getattr(self, "sg_ev", 0)), g.reserve))
             self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}")
             self.set_text(self.name_text, w.name + (("   " + ("Semi" if g.semi else "Auto")) if pl.cur in SELECTIVE_FIRE else ""))
-        want = pl.switch_to if pl.switch_t > 0 else pl.cur
-        for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget
-            wi = pl.slots[i] if i < 2 else ("g", pl.gadget)
-            if i < 2:
+        want = pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur)
+        if self.melee_icon_cur != pl.melee:                 # Nahkampf-Karte: Bild der getragenen Waffe
+            for nd in self.melee_icons.values():
+                nd.detachNode()
+            nd = self.melee_icons.get(pl.melee)
+            if nd is None:
+                nd = self.melee_icons[pl.melee] = melee_icon(pl.melee)
+                nd.setBin("fixed", 21)
+                nd.setDepthTest(False)
+                nd.setDepthWrite(False)
+            nd.reparentTo(self.melee_holder)
+            self.melee_icon_cur = pl.melee
+        mact = want == MELEE_SEL and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
+        if MELEE[pl.melee].name == PAN_NAME:              # 9c: Pfannen-Ladung (Stufe, Punkte bis zur nächsten)
+            st = pan_stage(pl.pan_pts)
+            nxt = PAN_STAGES[st][0] if st < len(PAN_STAGES) else None
+            self.set_text(self.pan_text, ("Essen ..." if pl.eat_t > 0 else
+                                          f"St.{st}  {pl.pan_pts}/{nxt}" if nxt else f"St.{st}  voll - T"))
+        else:
+            self.set_text(self.pan_text, "")
+        ch = (pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START)
+        if pl.melee_out and pl.chg_hold > MELEE_HOLD_START and pl.hp > 0:       # 9c: Ladebalken
+            ch = min(1.0, ch)
+            self.chg_root.show()
+            self.chg_fg.setSx(max(0.001, ch))
+            full = ch >= 1.0
+            self.chg_fg.setColor(*((1.0, 0.85, 0.2, 1) if full else (0.6, 0.8, 1.0, 1)))
+            kind = MELEE_SPECIAL.get(MELEE[pl.melee].name)
+            self.set_text(self.chg_txt, ("Loslassen: " + ("Rundumschlag!" if kind == "spin" else "Sprungangriff!"))
+                          if full else "Aufladen ...")
+            if full and not self.chg_full:
+                self.sfx.play("click", None, 0.9, 1.4)
+            elif not full and not getattr(self, "chg_on", False):
+                self.sfx.play("charge", None, 0.5, 1.3)
+            self.chg_full, self.chg_on = full, True
+        else:
+            self.chg_root.hide()
+            self.chg_full = self.chg_on = False
+        if pl.amp and pl.hp > 0:                          # 9c: verstärkte Fähigkeiten (Erschöpfungsdolch)
+            nm = {"dash": "Dash", "jet": "Jetpack", "shock": "Stromstoss", "pan": "Pfanne"}
+            self.set_text(self.amp_text, f"x{DAGGER_AMP:g} bereit: " + ", ".join(nm[a] for a in ("dash", "jet", "shock", "pan")
+                                                                              if a in pl.amp) + f"  ({int(math.ceil(pl.amp_t))} s)")
+        else:
+            self.set_text(self.amp_text, "")
+        self.melee_frame.setColor(*((1.0, 0.85, 0.2, 1.0) if mact else (0.4, 0.4, 0.4, 0.6)))
+        self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
+        gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and world.has_c4(pl.pid))
+        for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget (oder Spezialwaffe, wenn kein Gadget da ist)
+            spec = i == 2 and pl.slots[2] is not None and not gad_ok
+            wi = pl.slots[i] if (i < 2 or spec) else ("g", pl.gadget)
+            if i < 2 or spec:
                 self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
                                    pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
             else:
                 self.set_slot_icon(i, wi)
             on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-            if i == 2:
+            if i == 2 and not spec:
                 active = pl.gad_out and on_foot
             else:
                 active = wi is not None and wi == want and on_foot and not pl.gad_out
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
             self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
-        self.set_text(self.gren_text, f"x{pl.grenades}")
-        self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if pl.grenades > 0 else (0.7, 0.15, 0.1, 0.6)))
+        self.update_gren_hud(pl)                       # gewählte Granatenart, Anzahl, Ladebalken, Bogen
         veh = self.my_vehicle() if pl.hp > 0 else None
         txt = ""
         if hc is not None:
@@ -124292,6 +125194,9 @@ class Game(ShowBase):
                 self.add_particle((pl.x - math.sin(h) * 0.6, pl.y + math.cos(h) * 0.6, pl.z + 1.4),
                                   (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2), self.prng.uniform(0, 3)),
                                   (0.6, 0.9, 1.0), 0.015, 0.25, 0.0)
+        elif getattr(self, "shield_flash", 0.0) > 0:      # Schild hat abgefangen: kurz blau
+            self.shield_flash = max(0.0, self.shield_flash - dt)
+            self.hurt_card.setColor(0.3, 0.6, 1.0, self.shield_flash * 0.5)
         else:
             self.hurt_card.setColor(0.8, 0, 0, min(0.8, self.hurt_flash + low))
 
@@ -124333,6 +125238,22 @@ class Game(ShowBase):
                         prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
                         if old_:
                             prompt += f"   ({att_name(si_, old_)} ins Lager)"
+                elif kind == "drop" and o.melee >= 0:
+                    prompt = f"F   Aufheben: {MELEE[o.melee].name}"
+                    if pl.melee == o.melee:
+                        prompt += "   (Hast du schon)"
+                    elif pl.melee != START_MELEE:
+                        prompt += f"   (tauscht gegen {MELEE[pl.melee].name})"
+                elif kind == "drop" and o.gear >= 0:
+                    g_ = GEAR[o.gear]
+                    prompt = f"F   Aufheben: {g_.name}"
+                    cur_ = pl.gear.get(g_.slot)
+                    if cur_ == o.gear:
+                        prompt += "   (Hast du schon)"
+                    elif cur_ is not None:
+                        prompt += f"   (tauscht gegen {GEAR[cur_].name})"
+                elif kind == "drop" and o.gren > 0:
+                    prompt = f"F   Aufheben: {GREN_NAMES.get(o.gk, 'Granate')} x{o.gren}"
                 elif kind == "drop":
                     prompt = f"F   Waffe aufheben: {WEAPONS[o.wi].name}"
                     if o.lock > 0 and o.owner >= 0 and o.owner != pl.pid and o.owner in world.players:
@@ -124370,6 +125291,7 @@ class Game(ShowBase):
         if getattr(self, "att_panel", None) is not None:
             prompt = ""                                       # Aufsatz-Fenster offen: kein Hinweis darüber
         self.set_text(self.prompt_text, prompt)
+        self.set_text(self.look_text, self.look_info() if pl.hp > 0 and world.phase == "play" else "")
         if world.strike == 1 and world.phase == "play":
             left = int(math.ceil(max(0.0, world.strike_t)))
             self.set_text(self.strike_text, f"ACHTUNG: TOMAHAWK-ANGRIFF IN {left} s")      # Ziel bleibt unbekannt
@@ -125768,6 +126690,8 @@ class ExpGame(Game):
                 self.request_weapon(d - 1)
             elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
                 self.sel_req = MELEE_SEL
+            elif self.player.hp > 0 and d == N_SLOTS + 2:      # 5 = Gadget (aus Beute)
+                self.toggle_gadget()
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -127002,6 +127926,10 @@ class ExpGame(Game):
                                       fg=(0.85, 0.88, 0.95, 0.85), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
                                       mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
         self.gren_more.setBin("fixed", 25)
+        self.gad_hud = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.265), scale=0.03,
+                                    fg=(0.85, 0.88, 0.95, 0.9), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
+                                    mayChange=True)                # 5: Gadget-Vorrat (nur wenn vorhanden)
+        self.gad_hud.setBin("fixed", 25)
         self.build_gren_hud()
         self.build_heli_hud()
         self.speed_text = OnscreenText(text="", pos=(0, -0.7), scale=0.08, fg=(1, 0.9, 0.3, 1),
@@ -127149,53 +128077,31 @@ class ExpGame(Game):
         self.build_minimap()
         self.build_tab_overlay()
 
-    def update_gren_arm(self, pl, driving):
-        ch = self.gren_charge()
-        holding = ch >= 0 and self.gren_anim_t <= 0                   # 10e: G gehalten - Arm bleibt ausgeholt
-        if (self.gren_anim_t <= 0 and not holding) or pl.hp <= 0 or driving:
-            self.gren_arm.hide()
-            return
-        if holding:
-            u = 0.0
-            kind = gren_fix_sel(pl)
-        else:
-            u = 1.0 - self.gren_anim_t / GREN_ANIM_T
-            kind = self.thrown_kind
-        if kind != self.gren_vm_kind:
-            for k_, nd in self.gren_vm.items():
-                (nd.show if k_ == kind else nd.hide)()
-            self.gren_vm_kind = kind
-        if kind == "molotov":
-            flame_flicker(self.gren_vm_flame)
-        kf = self.GREN_KF
-        for i in range(len(kf) - 1):
-            if u <= kf[i + 1][0]:
-                t = smoothstep(kf[i][0], kf[i + 1][0], u)
-                v = [a + (b - a) * t for a, b in zip(kf[i][1], kf[i + 1][1])]
-                break
-        else:
-            v = list(kf[-1][1])
-        if holding:                                                   # 10e: gut sichtbar rechts unten halten,
-            e_ = smoothstep(0.0, 0.18, self.g_hold_t)                 # je länger gehalten, desto weiter ausgeholt
-            hold = (0.21 + 0.04 * ch, 0.58 - 0.10 * ch, -0.21 + 0.08 * ch, -14.0, 24.0 + 16.0 * ch, -10.0)
-            v = [a + (b - a) * e_ for a, b in zip(kf[0][1], hold)]
-        self.gren_arm.setPos(v[0], v[1], v[2])
-        self.gren_arm.setHpr(v[3], v[4], v[5])
-        self.gren_arm.show()
-        (self.gren_nd.show if u < 0.32 else self.gren_nd.hide)()      # Loslassen beim Vorschwung
-
     # ------------------------------------------------------------ Eingabe
     def toggle_gadget(self):
-        """Taste 4: Gadget in die Hand nehmen bzw. wieder wegstecken."""
+        """Taste 5: Gadget (C4, Claymore, Funkbake - nur aus Beute) in die Hand nehmen; weiter drücken wechselt zur
+        nächsten Art, nach der letzten wird weggesteckt."""
         pl = self.player
         if pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        if pl.gad_out:
+        has = [k for k in range(3) if pl.gad_stock[k] > 0 or (k == GAD_C4 and self.world.has_c4(pl.pid))]
+        if not has:
             pl.gad_out = False
-        elif pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid)):
-            pl.gad_out, pl.ads = True, False
+            self.toast("Kein Gadget - C4, Claymore und Funkbake gibt es nur als Beute", (0.9, 0.85, 0.7), 1.8)
+            return
+        if pl.gad_out and pl.gadget in has:
+            i = has.index(pl.gadget)
+            if i + 1 < len(has):
+                pl.gadget = has[i + 1]
+            else:
+                pl.gad_out = False
+                return
         else:
-            self.gad_msg = (f"Keine {GADGETS[pl.gadget]} mehr übrig", time.time())
+            if pl.gadget not in has:
+                pl.gadget = has[0]
+            pl.gad_out, pl.ads, pl.melee_out = True, False, False
+        pl.gad_n = pl.gad_stock[pl.gadget]
+        self.toast(f"{GADGETS[pl.gadget]}  x{pl.gad_n}", (1.0, 0.9, 0.55), 1.2)
 
     def cycle_weapon(self, d):
         """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern.
@@ -127239,47 +128145,6 @@ class ExpGame(Game):
         elif self.world.can_respawn(pl):
             self.world.respawn_player(pl)           # Einzelspiel/Host: Ereignis 'respawn' folgt
 
-    def on_grenade(self):
-        """10e: G gedrückt - der Wurf kommt beim Loslassen (update_task); hier nur der Hinweis bzw. der Stift."""
-        pl = self.player
-        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
-            return
-        if gren_total(pl) <= 0:
-            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
-        elif pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0:
-            self.sfx.play("pin", None, 0.6, self.prng.uniform(0.95, 1.05))
-
-    def on_gren_next(self, step=1):
-        """10e: H (oder Mausrad bei gehaltenem G): nächste Granatenart, die man hat."""
-        pl = self.player
-        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
-            return
-        if gren_total(pl) <= 0:
-            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
-            return
-        old = pl.gren_sel
-        k = gren_fix_sel(pl, step)
-        if k:
-            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}", tuple(min(1.0, c * 1.4 + 0.25)
-                                                                          for c in GREN_COL[k]), 1.2)
-
-    def on_ability(self):
-        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
-        pl = self.player
-        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
-            return
-        if not set_full(pl, "shield"):
-            self.toast("Stromstoss nur mit komplettem Schild-Set (Helm, Schild, Stiefel)", (0.8, 0.85, 0.95), 1.8)
-            return
-        if getattr(pl, "shock_cd", 0.0) > 0:
-            self.toast(f"Stromstoss lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
-            return
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_shock()
-        else:
-            self.world.shock(pl)
-
     def use_object(self, alt=False):
         """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
         (der Host entscheidet)."""
@@ -127301,34 +128166,13 @@ class ExpGame(Game):
         else:
             self.world.use_object(self.player, alt)
 
-    def do_melee(self):
-        """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
-        nicht in der Hand, wird sie gezogen; mit QUICK_MELEE_STAY bleibt sie danach in der Hand (Linke Maus schlägt
-        weiter, 1-3/Mausrad wechselt zurück), sonst wird sie nach dem Schlag wieder weggesteckt."""
-        pl = self.player
-        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or pl.melee_cd > 0
-                or self.world.phase != "play"):
-            return
-        pl.gad_out = False                                  # F schlägt immer mit dem Messer: Gadget wegstecken,
-        if pl.switch_t > 0:                                 # Waffenwechsel abbrechen (Messer statt Schusswaffe)
-            pl.switch_t = 0.0
-            pl.switch_to = pl.cur
-        if not pl.melee_out:
-            pl.melee_out, pl.reload_t, pl.ads = True, 0.0, False
-            self.quick_melee = not QUICK_MELEE_STAY        # 7a: bleibt in der Hand (Wechsel mit 1-3/Mausrad)
-        m = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
-        pl.melee_cd = pl.swing_t = m.interval
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        self.world.melee_swing(pl, d)
-
     def fly_heli_ctl(self, hc, inp, dt, trigger, ads):
         """Helikopter steuern: WASD fliegen, Leertaste steigen, Strg sinken (10a: wie das Jetpack; vorher Shift),
         Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete."""
         pl, world = self.player, self.world
         up = (1 if inp.jump else 0) - (1 if getattr(inp, "duck", False) else 0)
         pl.pitch = clampf(pl.pitch, -75.0, 25.0)
-        exp_fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
+        fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
         if self.net_mode != "client" and hc.impact > 0:       # Einzelspiel/Host: Aufprall gleich auswerten
             world.heli_crash(hc, hc.impact)
             hc.impact = 0.0
@@ -127393,59 +128237,6 @@ class ExpGame(Game):
         if not dup:
             self.sel_req = wi                        # gleich zur neuen Waffe wechseln
         pl.gad_out = False
-
-    def gren_throw_params(self, pl, charge):
-        """10e: Abwurfpunkt, Richtung und Tempo (nach Haltedauer) - für den Wurf und die Bogen-Vorschau."""
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        eye = (pl.x + d[0] * 0.4, pl.y + d[1] * 0.4, pl.z + eye_h(pl) - 0.1 + d[2] * 0.4)
-        return eye, d, GREN_SPEED_MIN + (GREN_SPEED_MAX - GREN_SPEED_MIN) * clampf(charge, 0.0, 1.0)
-
-    def throw_grenade(self):
-        pl = self.player
-        kind = gren_fix_sel(pl)
-        if pl.gren_cd > 0 or pl.gren.get(kind, 0) <= 0:
-            return
-        eye, d, speed = self.gren_throw_params(pl, self.g_throw_charge)
-        if self.world.throw_grenade(pl, eye, d, kind, speed):
-            self.thrown_kind = kind
-            pl.gren_cd = GREN_COOLDOWN
-            self.gren_anim_t = GREN_ANIM_T * 0.85          # 10e: der Arm war schon ausgeholt (G gehalten)
-            gren_fix_sel(pl)
-            self.sfx.play("gren_throw", None, 0.8, 1.0)         # sofort beim Klick (nicht erst über das Netz-Ereignis)
-            self.sp_back.kick(2.5)                 # kleiner Ruck der Waffe beim Wurf
-            self.sp_pitch.kick(-90)
-
-    def gren_hold_input(self, dt, held):
-        """10e: G gedrückt halten lädt den Wurf auf (Ladebalken, Bogen-Vorschau), Loslassen wirft. Kurz getippt
-        (< GREN_TAP_T) = kurzer Wurf. -> True im Bild des Loslassens."""
-        pl = self.player
-        ok = (pl is not None and self.mode == "play" and self.quit_box is None and pl.hp > 0
-              and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and gren_total(pl) > 0
-              and getattr(self, "end", None) is None and not getattr(self, "tab_held", False)
-              and not getattr(self, "insp_on", False) and self.world is not None and self.world.phase == "play")
-        if not ok:
-            self.g_hold_t = -1.0
-            if pl is not None:
-                pl.gren_hold = -1
-            return False
-        if held:
-            self.g_hold_t = 0.0 if self.g_hold_t < 0 else self.g_hold_t + dt
-            pl.gren_hold = GREN_KINDS.index(gren_fix_sel(pl))
-            return False
-        if self.g_hold_t < 0:
-            return False
-        t = self.g_hold_t
-        self.g_hold_t = -1.0
-        pl.gren_hold = -1
-        self.g_throw_charge = 0.0 if t < GREN_TAP_T else clampf((t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
-        return True
-
-    def gren_charge(self):
-        """10e: aktueller Ladestand 0..1 (oder -1, wenn G nicht gehalten wird)."""
-        if self.g_hold_t < 0:
-            return -1.0
-        return clampf((self.g_hold_t - GREN_TAP_T) / GREN_CHARGE_T, 0.0, 1.0)
 
     def lock_trigger(self):
         """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
@@ -127604,37 +128395,6 @@ class ExpGame(Game):
         self.update_tab_overlay()
         if self.captured:
             self.set_capture(False)
-
-    def ppos(self, pid):
-        """9c: Position (Kopfhöhe) eines Spielers für Geräusche."""
-        q = self.world.players.get(pid)
-        return (q.x, q.y, q.z + 1.5) if q is not None else None
-
-    def on_melee_ability(self):
-        """9c: T mit der Nahkampfwaffe in der Hand - Bratpfanne: die erreichte Stufe essen."""
-        pl = self.player
-        if pl.hp <= 0 or not pl.melee_out or self.world.phase != "play":
-            return
-        name = MELEE[pl.melee].name
-        if name != PAN_NAME:
-            hint = {"spin": "Linke Maus halten: Rundumschlag", "slam": "Linke Maus halten: Sprungangriff"}.get(
-                MELEE_SPECIAL.get(name), "Keine Fähigkeit auf T")
-            self.toast(f"{name}: {hint}", (0.9, 0.9, 0.95), 1.6)
-            return
-        if pl.eat_t > 0:
-            return
-        if pl.pan_lock > 0:
-            self.toast(f"Erschöpft - essen erst in {int(math.ceil(pl.pan_lock))} s", (0.8, 0.5, 1.0), 1.4)
-            return
-        if pan_stage(pl.pan_pts) == 0:
-            self.toast(f"Pfanne leer - Kills mit der Pfanne laden sie auf ({pl.pan_pts}/{PAN_STAGES[0][0]})",
-                       (0.95, 0.85, 0.6), 1.8)
-            return
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_eat()
-        else:
-            self.world.pan_eat(pl)
 
     def att_equip(self, wi, si, v):
         if self.net_mode == "client":
@@ -127909,83 +128669,6 @@ class ExpGame(Game):
             pl = self.player
             self.sun_np.setPos(pl.x + SUN[0] * 100, pl.y + SUN[1] * 100, pl.z + SUN[2] * 100)
             self.sun_np.lookAt(pl.x, pl.y, pl.z)
-
-    def spawn_slash_fx(self, kind, pos, heading):
-        """10d: Katana: weisser Slash-Ring, der sich vom Spieler bis KATANA_SPIN_R ausbreitet. Schwert: weisser
-        Windstoss-Schnitt fährt von oben nach unten durch den Trefferbereich (bis SWORD_SLAM_R vor einem), dazu eine
-        Staub-/Schockwelle, die in der Mitte aufquillt und nach links und rechts ausläuft."""
-        m = Mesh(alpha=0.75, lit=False)
-        if kind == "spin":
-            n = 40
-            for i in range(n):
-                a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-                for r0, r1, z0, z1 in ((0.7, 1.0, 0.0, 0.0), (0.9, 1.0, -0.12, 0.12)):
-                    pa, pb = (math.cos(a0) * r0, math.sin(a0) * r0, z0), (math.cos(a1) * r0, math.sin(a1) * r0, z0)
-                    pc, pd = (math.cos(a1) * r1, math.sin(a1) * r1, z1), (math.cos(a0) * r1, math.sin(a0) * r1, z1)
-                    col = (0.92, 0.96, 1.0) if r0 > 0.9 else (0.6, 0.8, 1.0)
-                    m.tri(pa, pb, pc, col)
-                    m.tri(pa, pc, pd, col)
-        else:
-            n = 18                                                  # Halbmond-Schnitt (senkrecht, quer zur Blickrichtung)
-            for i in range(n):
-                a0, a1 = math.pi * i / n, math.pi * (i + 1) / n
-                for r0, r1 in ((0.82, 1.0),):
-                    pa = (math.cos(a0) * r0, 0.0, math.sin(a0) * r0 * 0.6)
-                    pb = (math.cos(a1) * r0, 0.0, math.sin(a1) * r0 * 0.6)
-                    pc = (math.cos(a1) * r1, 0.0, math.sin(a1) * r1 * 0.6)
-                    pd = (math.cos(a0) * r1, 0.0, math.sin(a0) * r1 * 0.6)
-                    m.tri(pa, pb, pc, (0.95, 0.97, 1.0))
-                    m.tri(pa, pc, pd, (0.95, 0.97, 1.0))
-        nd = self.render.attachNewNode(m.node("slash"))
-        nd.setTransparency(TransparencyAttrib.MAlpha)
-        nd.setTwoSided(True)
-        nd.setDepthWrite(False)
-        nd.setLightOff()
-        nd.setBin("transparent", 14)
-        nd.setPos(pos[0], pos[1], pos[2] + (1.0 if kind == "spin" else 0.0))
-        nd.setH(heading)
-        if not hasattr(self, "slash_fx"):
-            self.slash_fx = []
-        self.slash_fx.append([nd, time.time(), kind])
-        if kind == "slam":                                          # Staubwelle: Mitte quillt auf, läuft seitlich aus
-            hr = math.radians(heading)
-            fx, fy = -math.sin(hr), math.cos(hr)
-            rx, ry = math.cos(hr), math.sin(hr)
-            cx, cy = pos[0] + fx * SWORD_SLAM_R * 0.45, pos[1] + fy * SWORD_SLAM_R * 0.45
-            for k in range(36):
-                s = (k / 35.0) * 2 - 1
-                up = 3.5 * (1 - abs(s))
-                self.add_particle((cx + rx * s * 0.6, cy + ry * s * 0.6, pos[2] + 0.1),
-                                  (rx * s * 7.0 + fx * self.prng.uniform(-0.5, 1.5), ry * s * 7.0 + fy * self.prng.uniform(-0.5, 1.5),
-                                   up + self.prng.uniform(0, 1.5)), (0.55, 0.47, 0.34), 0.14, self.prng.uniform(0.5, 0.9), 0.2)
-
-    def update_slash_fx(self):
-        """10d: Slash-Effekte animieren (Ring wächst und verblasst; Windstoss fährt von oben nach unten)."""
-        now = time.time()
-        keep = []
-        for ent in getattr(self, "slash_fx", ()):
-            nd, t0, kind = ent
-            u = (now - t0) / SLASH_FX_T
-            if u >= 1.0:
-                nd.removeNode()
-                continue
-            if kind == "spin":
-                r = 0.5 + (KATANA_SPIN_R + 0.4) * (1 - (1 - u) ** 2)
-                nd.setScale(r, r, 1.0)
-            else:
-                d = 0.6 + SWORD_SLAM_R * 0.5                    # Mitte des Trefferbereichs vor dem Spieler
-                hr = math.radians(nd.getH())
-                base = nd.getPythonTag("base") if nd.hasPythonTag("base") else None
-                if base is None:
-                    p0 = nd.getPos()
-                    base = (p0[0], p0[1], p0[2])
-                    nd.setPythonTag("base", base)
-                nd.setPos(base[0] - math.sin(hr) * d, base[1] + math.cos(hr) * d, base[2] + 3.2 * (1 - u) + 0.1)
-                nd.setScale(SWORD_SLAM_R * 0.55, 1.0, 1.0 + 0.6 * (1 - u))
-                nd.setP(-25.0 * u)
-            nd.setColorScale(1, 1, 1, 0.85 * (1 - u))
-            keep.append(ent)
-        self.slash_fx = keep
 
     def update_wind(self, t, cp):
         """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe).
@@ -128318,7 +129001,7 @@ class ExpGame(Game):
                 if self.gadget_hand(pl, ads, edge, select, over):
                     trigger = edge = reload_req = ads = False
                 self.scope_breath(pl, dt, hold_key and not over)
-                exp_update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select)
+                update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select)
                 if getattr(inp, "throw", False) and not over:
                     self.throw_grenade()
             if getattr(self, "quick_melee", False) and pl.swing_t <= 0:   # Schnellschlag (F) vorbei: wieder wegstecken
@@ -128882,6 +129565,18 @@ class ExpGame(Game):
                     v.spec = (e[2], 0.5)
                 if e[1] == self.my_id:
                     self.spec_fp = (e[2], 0.0)
+            elif kind == "gadget":             # Gadget-Vorrat (Host entscheidet): Stückzahlen je Art, gewählte Art
+                if e[1] == self.my_id:
+                    pl = self.player
+                    pl.gad_stock = [int(v) for v in list(e[2])[:3]] + [0] * (3 - len(e[2]))
+                    if isinstance(e[3], int) and 0 <= e[3] < 3:
+                        pl.gadget = e[3]
+                    pl.gad_n = pl.gad_stock[pl.gadget]
+                    if len(e) > 5 and isinstance(e[4], int) and 0 <= e[4] < 3 and e[5] > 0:
+                        self.toast(f"+{e[5]} {GADGETS[e[4]]}   (Taste 5: ausrüsten)", (1.0, 0.9, 0.55), 1.8)
+            elif kind == "gadfull":
+                if e[1] == self.my_id:
+                    self.toast(f"{GADGETS[e[2]]}: Vorrat voll", (0.9, 0.9, 0.95), 1.5)
             elif kind == "hasgear":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
@@ -129306,326 +130001,6 @@ class ExpGame(Game):
         self.place_camera()
 
     # ------------------------------------------------------------ 10e: Granaten (HUD, Effekte)
-    def build_gren_hud(self):
-        """10e: Ladebalken für die Wurfweite, Bogen-Vorschau und Landepunkt, Blend-Overlay."""
-        self.gch_root = self.aspect2d.attachNewNode("wurfbalken")
-        cm_ = CardMaker("gch")
-        cm_.setFrame(-0.16, 0.16, -0.30, -0.28)
-        bg = self.gch_root.attachNewNode(cm_.generate())
-        bg.setColor(0.05, 0.05, 0.08, 0.75)
-        bg.setTransparency(TransparencyAttrib.MAlpha)
-        cm_.setFrame(0.0, 0.32, -0.297, -0.283)
-        self.gch_fg = self.gch_root.attachNewNode(cm_.generate())
-        self.gch_fg.setX(-0.16)
-        self.gch_txt = OnscreenText(text="", parent=self.gch_root, pos=(0, -0.345), scale=0.036, fg=(1, 0.9, 0.5, 1),
-                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
-        self.gch_root.hide()
-        self.gren_arc = None
-        self.gren_land = self.disc_np.instanceTo(self.render)
-        self.gren_land.setTransparency(TransparencyAttrib.MAlpha)
-        self.gren_land.setLightOff()
-        self.gren_land.setDepthWrite(False)
-        self.gren_land.setBin("transparent", 10)
-        self.gren_land.hide()
-        cm_ = CardMaker("blend")                       # Blendgranate: weisses Bild über allem
-        cm_.setFrame(-1, 1, -1, 1)
-        self.flash_white = self.render2d.attachNewNode(cm_.generate())
-        self.flash_white.setTransparency(TransparencyAttrib.MAlpha)
-        self.flash_white.setBin("fixed", 95)
-        self.flash_white.setDepthTest(False)
-        self.flash_white.setDepthWrite(False)
-        self.flash_white.setColor(1, 1, 1, 0)
-        self.flash_white.hide()
-        self.flash_ghost = []                         # eingefrorenes, verschwommenes Bild (Nachbild)
-        self.flash_st = None                          # (Start, Stärke, Dauer, Weiss-Dauer)
-
-    def update_gren_hud(self, pl):
-        """10e: Granaten-Kachel (gewählte Art mit Symbol und Anzahl, weitere Arten darüber), Ladebalken und Bogen."""
-        kind = gren_fix_sel(pl)
-        n = pl.gren.get(kind, 0)
-        for k_, nd in self.gren_icons.items():
-            (nd.show if k_ == kind else nd.hide)()
-        self.set_text(self.gren_text, f"x{n}")
-        self.set_text(self.gren_label, f"G {GREN_SHORT[kind]}")
-        more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
-        self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
-        ch = self.gren_charge() if pl.hp > 0 else -1.0
-        if ch >= 0:
-            self.gren_frame.setColor(1.0, 0.85, 0.2, 1.0)
-        else:
-            self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if gren_total(pl) > 0 else (0.7, 0.15, 0.1, 0.6)))
-        if ch >= 0:
-            self.gch_root.show()
-            self.gch_fg.setSx(max(0.02, ch))
-            c = GREN_COL[kind]
-            self.gch_fg.setColor(min(1, c[0] * 1.4 + 0.3), min(1, c[1] * 1.4 + 0.3), min(1, c[2] * 1.4 + 0.3), 1)
-            self.set_text(self.gch_txt, f"{GREN_NAMES[kind]} - " + ("kurzer Wurf" if self.g_hold_t < GREN_TAP_T
-                                                                    else f"Wurfweite {int(ch * 100)} %"))
-            self.draw_gren_arc(pl, kind, ch)
-        else:
-            self.gch_root.hide()
-            if self.gren_arc is not None:
-                self.gren_arc.removeNode()
-                self.gren_arc = None
-            self.gren_land.hide()
-
-    def draw_gren_arc(self, pl, kind, ch):
-        """10e: Bogen-Vorschau: die Flugbahn wird mit der echten Granaten-Physik vorausberechnet (Wände, Dächer,
-        Abpraller), gestrichelt gezeichnet; am Landepunkt ein Ring."""
-        world = self.world
-        eye, d, sp = self.gren_throw_params(pl, ch)
-        key = (kind, round(eye[0], 2), round(eye[1], 2), round(eye[2], 2),          # 12: nichts verändert (Spieler
-               round(d[0], 3), round(d[1], 3), round(d[2], 3), round(sp, 2))       # steht und zielt) -> Bogen bleibt
-        if self.gren_arc is not None and getattr(self, "gren_arc_key", None) == key:
-            return
-        self.gren_arc_key = key
-        g = Grenade(-1, eye[0], eye[1], eye[2], d[0] * sp, d[1] * sp, d[2] * sp + 2.0, -1, 99.0, kind)
-        pts, t = [eye], 0.0
-        while t < GREN_ARC_T:
-            n = int(math.sqrt(g.vx ** 2 + g.vy ** 2 + g.vz ** 2) * GREN_ARC_DT / 0.25) + 1
-            for _ in range(n):
-                world.grenade_step(g, GREN_ARC_DT / n)
-                if kind == "molotov" and g.hit:
-                    break
-            pts.append((g.x, g.y, g.z))
-            t += GREN_ARC_DT
-            if (kind == "molotov" and g.hit) or (g.hit and grenade_landed(world, g)):
-                break
-        if self.gren_arc is not None:
-            self.gren_arc.removeNode()
-        ls = LineSegs("wurfbogen")
-        ls.setThickness(2.5)
-        c = GREN_COL[kind]
-        ls.setColor(min(1, c[0] + 0.45), min(1, c[1] + 0.45), min(1, c[2] + 0.45), 0.85)
-        for i in range(1, len(pts) - 1, 2):                    # gestrichelt
-            ls.moveTo(*pts[i])
-            ls.drawTo(*pts[i + 1])
-        self.gren_arc = self.render.attachNewNode(ls.create())
-        self.gren_arc.setLightOff()
-        self.gren_arc.setFogOff()
-        self.gren_arc.setTransparency(TransparencyAttrib.MAlpha)
-        lp = pts[-1]
-        r_ = {"smoke": SMOKE_R * 0.5, "flash": 1.5, "molotov": MOLO_R, "frag": GREN_KILL_R}.get(kind, 0.8)
-        self.gren_land.setPos(lp[0], lp[1], world.floor_at(lp[0], lp[1], lp[2]) + 0.06)
-        self.gren_land.setScale(r_)
-        self.gren_land.setColorScale(min(1, c[0] + 0.5), min(1, c[1] + 0.5), min(1, c[2] + 0.5), 0.6)
-        self.gren_land.show()
-
-    def flash_hit(self, pos, owner):
-        """10e: Blendgranate gezündet. Der Spieler errechnet seine Blendung selbst: bis FLASH_R m, freie Sicht
-        (keine Wand/Decke dazwischen); je näher, desto weniger zählt die Blickrichtung - je mehr man hinschaut,
-        desto stärker. Volle Wirkung FLASH_FULL_T s (davon FLASH_WHITE_T s weiss), dazu Pfeifton und dumpfer Klang."""
-        self.fx_spawn(self.sphere_np, pos, 0.25, 0.3, 3.5, (1.0, 1.0, 1.0), (1.0, 1.0, 0.9), p=0.6, fog=False)
-        self.sfx.play("explosion", tuple(pos), 1.0, 1.65)
-        for _ in range(6):
-            self.smoke_puff(pos, 0.25, 1.5, 0.8)
-        pl = self.player
-        if pl is None or pl.hp <= 0:
-            return
-        eye = (pl.x, pl.y, pl.z + eye_h(pl))
-        dist = math.dist(pos, eye)
-        if dist > FLASH_R or not self.world.blast_los(pos, eye):
-            return
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        fwd = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        to = norm(sub(pos, eye))
-        look = clampf((dot(fwd, to) + 0.3) / 1.3, 0.0, 1.0)
-        prox = (1.0 - dist / FLASH_R) ** 0.5
-        st = prox * (prox + (1.0 - prox) * look)
-        if st < 0.06:
-            return
-        dur = FLASH_FULL_T * st
-        if self.flash_st is not None and time.time() - self.flash_st[0] < self.flash_st[2] and self.flash_st[1] > st:
-            return                                             # schon stärker geblendet
-        self.flash_st = (time.time(), st, dur, FLASH_WHITE_T * st)
-        for c in self.flash_ghost:
-            c.removeNode()
-        self.flash_ghost = []
-        try:                                                   # Nachbild: das Bild im Moment des Blitzes, verschwommen
-            tex = self.win.getScreenshot()
-            if tex is not None:
-                for ox, oy in ((0, 0), (0.008, 0), (-0.008, 0), (0, 0.011), (0, -0.011)):
-                    cm_ = CardMaker("nachbild")
-                    cm_.setFrame(-1 + ox, 1 + ox, -1 + oy, 1 + oy)
-                    gc = self.render2d.attachNewNode(cm_.generate())
-                    gc.setTexture(tex)
-                    gc.setTransparency(TransparencyAttrib.MAlpha)
-                    gc.setBin("fixed", 94)
-                    gc.setDepthTest(False)
-                    gc.setDepthWrite(False)
-                    gc.setColor(1, 1, 1, 0)
-                    self.flash_ghost.append(gc)
-        except Exception:
-            self.flash_ghost = []
-        self.sfx.play("ring", None, 0.35 + 0.5 * st, 1.0)
-        self.toast("GEBLENDET", (1, 1, 1), min(2.0, dur))
-
-    def update_flash(self):
-        """10e: Blendung ausblenden: erst weiss, dann langsam durchsichtig mit verschwommenem Nachbild; der Ton ist
-        so lange gedämpft."""
-        fs = self.flash_st
-        if fs is None:
-            return
-        t0, st, dur, white = fs
-        t = time.time() - t0
-        if t >= dur or (self.player is not None and self.player.hp <= 0 and t > 0.3):
-            self.flash_white.hide()
-            for c in self.flash_ghost:
-                c.removeNode()
-            self.flash_ghost = []
-            self.flash_st = None
-            self.apply_volume()
-            return
-        if t < white:
-            a = min(1.0, 0.55 + st)
-            ga = 0.0
-        else:
-            u = (t - white) / max(0.05, dur - white)
-            a = min(1.0, 0.55 + st) * (1.0 - u) ** 1.6
-            ga = 0.55 * (1.0 - u) ** 0.8 * min(1.0, (t - white) / 0.3)
-        self.flash_white.show()
-        self.flash_white.setColor(1, 1, 1, a)
-        for c in self.flash_ghost:
-            c.setColor(1, 1, 1, ga / 3.0)
-        m = st * (1.0 if t < white else max(0.0, 1.0 - (t - white) / max(0.05, dur - white)))
-        try:
-            self.sfxManagerList[0].setVolume(self.vol_sfx / 100.0 * (1.0 - FLASH_MUFFLE * m))
-        except Exception:
-            pass
-
-    def update_smoke_views(self, dt):
-        """10e: Rauchwolken: je Zelle eine graue Wolke (zu einem Modell zusammengefasst), Deckkraft nach Alter."""
-        world = self.world
-        live = set()
-        for sm in world.smokes:
-            live.add(sm.sid)
-            v = self.smoke_views.get(sm.sid)
-            if v is None:
-                v = self.render.attachNewNode(f"rauch{sm.sid}")
-                rng = random.Random(sm.sid * 7 + 3)
-                grp = v.attachNewNode("puffs")
-                for c in sm.cells:
-                    pf = self.sphere_np.copyTo(grp)
-                    pf.setPos(c[0] + rng.uniform(-0.3, 0.3), c[1] + rng.uniform(-0.3, 0.3), c[2] + rng.uniform(-0.2, 0.3))
-                    pf.setScale(SMOKE_CELL * rng.uniform(0.8, 1.05), SMOKE_CELL * rng.uniform(0.8, 1.05),
-                                SMOKE_CELL * rng.uniform(0.6, 0.85))
-                    g_ = rng.uniform(0.66, 0.78)
-                    pf.setColor(g_, g_, g_ * 1.02, 1)
-                grp.flattenStrong()
-                v.setTransparency(TransparencyAttrib.MAlpha)
-                v.setDepthWrite(False)
-                v.setLightOff()
-                v.setBin("transparent", 5)
-                self.smoke_views[sm.sid] = v
-            dn = sm.density()
-            v.setColorScale(1, 1, 1, 0.82 * dn)
-            v.setZ(0.25 * math.sin(sm.age * 0.6))
-            sc = 0.6 + 0.4 * min(1.0, sm.age / SMOKE_GROW_T)
-            v.setScale(sc, sc, sc)
-            v.setPos(sm.pos[0] * (1 - sc), sm.pos[1] * (1 - sc), sm.pos[2] * (1 - sc) + 0.25 * math.sin(sm.age * 0.6))
-        for sid in [k for k in self.smoke_views if k not in live]:
-            self.smoke_views.pop(sid).removeNode()
-
-    def update_fire_views(self, dt):
-        """10e: Flammen des Molotows: je Zelle eine flackernde Flamme, dazu Glut am Boden und etwas Rauch."""
-        world = self.world
-        live = set()
-        for fa in world.fires:
-            live.add(fa.fid)
-            v = self.fire_views.get(fa.fid)
-            if v is None:
-                v = self.render.attachNewNode(f"feuer{fa.fid}")
-                rng = random.Random(fa.fid * 13 + 1)
-                fl = []
-                for c in fa.cells:
-                    f_ = gren_flame_node(v, (c[0] + rng.uniform(-0.2, 0.2), c[1] + rng.uniform(-0.2, 0.2), c[2] + 0.02),
-                                         rng.uniform(0.35, 0.6))
-                    fl.append(f_)
-                    gl = v.attachNewNode("glut")
-                    self.scorch_np.instanceTo(gl)
-                    gl.setPos(c[0], c[1], c[2] + 0.04)
-                    gl.setScale(MOLO_CELL * 0.7)
-                    gl.setColorScale(1.0, 0.45, 0.1, 0.7)
-                    gl.setTransparency(TransparencyAttrib.MAlpha)
-                    gl.setLightOff()
-                v.setPythonTag("fl", fl)
-                self.fire_views[fa.fid] = v
-            k = clampf(min(fa.age / 0.3, (MOLO_T - fa.age) / 0.8), 0.0, 1.0)
-            for f_ in v.getPythonTag("fl") or ():
-                flame_flicker(f_)
-            v.setColorScale(1, 1, 1, k)
-            v.setTransparency(TransparencyAttrib.MAlpha)
-            if fa.cells and self.prng.random() < 0.12:
-                c = self.prng.choice(fa.cells)
-                self.smoke_puff((c[0], c[1], c[2] + 0.8), 0.4, 1.6, 0.25)
-        for fid in [k for k in self.fire_views if k not in live]:
-            self.fire_views.pop(fid).removeNode()
-
-    def update_airdrop_views(self, dt):
-        """10e: Airdrop - rote Leuchtfackel mit rotem Rauch, Frachtflugzeug (für alle sichtbar), Kiste am Fallschirm."""
-        world = self.world
-        live = set()
-        now = time.time()
-        for a in world.airdrops:
-            live.add(a.aid)
-            v = self.ad_views.get(a.aid)
-            if v is None:
-                root = self.render.attachNewNode(f"airdrop{a.aid}")
-                fl = root.attachNewNode("fackel")
-                gren_inst(fl, "flare", 0.3)
-                fl.setPos(a.fx, a.fy, a.fz + 0.05)
-                fl.setP(70)
-                fire = gren_flame_node(fl, (0, 0, 0.18), 0.12)
-                fire.setColorScale(1.0, 0.35, 0.3, 1)
-                glow = self.sphere_np.copyTo(fl)
-                glow.setScale(0.5)
-                glow.setPos(0, 0, 0.2)
-                glow.setTransparency(TransparencyAttrib.MAlpha)
-                glow.setLightOff()
-                glow.setFogOff()
-                glow.setColorScale(1.0, 0.15, 0.1, 0.5)
-                plane, props = build_cargo_plane()
-                plane.reparentTo(root)
-                plane.hide()
-                drop = root.attachNewNode("kiste")
-                build_supply_crate().reparentTo(drop)
-                chute = build_parachute()
-                chute.reparentTo(drop)
-                drop.hide()
-                v = self.ad_views[a.aid] = {"root": root, "flare": fl, "fire": fire, "glow": glow, "plane": plane,
-                                            "props": props, "drop": drop, "chute": chute, "puff": 0.0}
-            burning = a.age < FLARE_BURN_T and a.state < 3 or (a.state == 3 and a.age < FLARE_BURN_T * 0.6)
-            (v["fire"].show if burning else v["fire"].hide)()
-            (v["glow"].show if burning else v["glow"].hide)()
-            if burning:
-                flame_flicker(v["fire"])
-                v["glow"].setScale(0.45 + 0.12 * math.sin(now * 17.0))
-                v["puff"] -= dt
-                if v["puff"] <= 0:                              # roter Rauch steigt hoch auf (weit sichtbar)
-                    v["puff"] = 0.12
-                    self.fx_spawn(self.sphere_np, (a.fx + self.prng.uniform(-0.2, 0.2), a.fy + self.prng.uniform(-0.2, 0.2),
-                                                   a.fz + 0.4), 3.2, 0.25, 1.6, (0.95, 0.2, 0.15), (0.6, 0.25, 0.22),
-                                  p=1.2, rise=2.6)
-            if a.state >= 1:
-                k = a.dist - AIR_PLANE_LEAD
-                pz = max(AIR_PLANE_ALT, a.fz + 60.0)
-                v["plane"].show()
-                v["plane"].setPos(a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, pz)
-                v["plane"].setH(math.degrees(a.ang) - 90.0)
-                for pp in v["props"]:
-                    pp.setR((now * 1400.0) % 360.0)
-            if a.state == 2:
-                v["drop"].show()
-                v["drop"].setPos(a.fx, a.fy, a.cz)
-                v["drop"].setH(a.aid * 31.0 + 20.0 * math.sin(now * 0.8))
-                open_k = clampf((max(AIR_PLANE_ALT, a.fz + 60.0) - 3.0 - a.cz) / 6.0, 0.05, 1.0)   # Schirm öffnet sich
-                v["chute"].setScale(open_k, open_k, 0.4 + 0.6 * open_k)
-                v["drop"].setR(4.0 * math.sin(now * 1.3))
-            else:
-                v["drop"].hide()
-        for aid in [k for k in self.ad_views if k not in live]:
-            self.ad_views.pop(aid)["root"].removeNode()
-
     def update_objects(self, dt):
         """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
         world, now = self.world, time.time()
@@ -129692,7 +130067,11 @@ class ExpGame(Game):
             v = self.drop_views.get(d)
             if v is None:
                 v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.gren > 0:                                 # 10b: Granaten-Päckchen (10e: Modell der Art)
+                if d.gren > 0 and d.gk.startswith("gad:"):     # Gadget-Beute: Modell des Gadgets
+                    mdl = self.gad_models[int(d.gk[4:])].copyTo(v)
+                    mdl.setScale(1.6)
+                    mdl.setZ(0.1)
+                elif d.gren > 0:                               # 10b: Granaten-Päckchen (10e: Modell der Art)
                     mdl = v.attachNewNode("gren")
                     for k_ in range(min(3, d.gren)):
                         gg = gren_inst(mdl, d.gk, 0.24)
@@ -129757,27 +130136,6 @@ class ExpGame(Game):
                 tv.root.reparentTo(self.render)
             tv.update(t, dt, self)
         self.update_fx(dt)
-
-    def look_info(self):
-        """7b: Schaut man auf einen Drop (bis LOOT_LOOK_R m, höchstens LOOT_LOOK_ANG Grad neben der Blickrichtung,
-        freie Sicht), stehen Name und kurze Werte unter dem Fadenkreuz."""
-        pl, world = self.player, self.world
-        if pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0 or not world.drops:
-            return ""
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        eye = (pl.x, pl.y, pl.z + eye_h(pl))
-        best, bc = None, math.cos(math.radians(LOOT_LOOK_ANG))
-        for d in world.drops:
-            p = (d.x, d.y, d.z + 0.6)
-            v = (p[0] - eye[0], p[1] - eye[1], p[2] - eye[2])
-            dist = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
-            if dist > LOOT_LOOK_R or dist < 0.05:
-                continue
-            c = (v[0] * f[0] + v[1] * f[1] + v[2] * f[2]) / dist
-            if c > bc and world.los(eye, p):
-                best, bc = d, c
-        return drop_info(best) if best is not None else ""
 
     def update_hud(self, dt):
         pl, world = self.player, self.world
@@ -129887,6 +130245,17 @@ class ExpGame(Game):
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
             self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
         self.update_gren_hud(pl)                       # 10e: gewählte Granatenart, Anzahl, Ladebalken, Bogen
+        st_ = pl.gad_stock                             # Gadget-Vorrat (nur aus Beute)
+        ks_ = [k for k in range(3) if st_[k] > 0]
+        placed_ = world.has_c4(pl.pid)
+        if ks_ or placed_:
+            txt_ = "  ".join(("[%s x%d]" if k == pl.gadget else "%s x%d") % (GADGETS[k], st_[k]) for k in ks_)
+            if placed_:
+                txt_ = (txt_ + "  " if txt_ else "") + "C4 scharf"
+            self.set_text(self.gad_hud, "5   " + txt_)
+            self.gad_hud.setFg((1.0, 0.9, 0.3, 1) if pl.gad_out else (0.85, 0.88, 0.95, 0.9))
+        else:
+            self.set_text(self.gad_hud, "")
         veh = self.my_vehicle() if pl.hp > 0 else None
         txt = ""
         if hc is not None:
@@ -129983,7 +130352,14 @@ class ExpGame(Game):
                         if old_:
                             prompt += f"   ({att_name(si_, old_)} ins Lager)"
                 elif kind == "drop":
-                    if o.melee >= 0:
+                    if o.gren > 0 and o.gk.startswith("gad:"):
+                        k_ = int(o.gk[4:])
+                        prompt = f"F   Aufheben: {GADGETS[k_]} x{o.gren}"
+                        if pl.gad_stock[k_] >= GAD_MAX:
+                            prompt += "   (Vorrat voll)"
+                    elif o.gren > 0:
+                        prompt = f"F   Aufheben: {GREN_NAMES.get(o.gk, 'Granate')} x{o.gren}"
+                    elif o.melee >= 0:
                         prompt = f"F   Aufheben: {MELEE[o.melee].name}"
                         if pl.melee == o.melee:
                             prompt += "   (Hast du schon)"
@@ -130917,96 +131293,6 @@ class ExpGame(Game):
         rr.hide()
         self.toma_rk = rr
 
-    BUFF_LOOK = {"speed": ("T", (0.3, 1.0, 0.6)), "damage": ("S", (1.0, 0.35, 0.25)), "tank": ("HP", (1.0, 0.8, 0.25))}
-
-    def update_ability_icons(self):
-        """Buff-Symbol (Kreis-Timer = Restzeit), Dash (leuchtet bereit, sonst grau mit ablaufender Abklingzeit),
-        Jetpack (Kreis = Treibstoff), Schildbalken und Ausrüstungs-Übersicht."""
-        pl = self.player
-        ic = self.ability_icons.get("buff")
-        if ic is None:
-            return
-        alive = pl.hp > 0
-        dash, jet = self.ability_icons["dash"], self.ability_icons["jet"]
-        if alive and wears(pl, "dash"):
-            rdy = pl.dash_cd <= 0
-            dash.set(rdy, 1.0 if rdy else 1.0 - pl.dash_cd / DASH_CD, None,
-                     "Dash" if rdy else f"{int(math.ceil(pl.dash_cd))} s")
-        else:
-            dash.hide()
-        if alive and wears(pl, "jetpack"):
-            fm_ = max(0.1, jet_fuel_max(pl))
-            jet.set(pl.jet_fuel > 0.3, min(1.0, pl.jet_fuel / fm_), None, "")
-            jet.bar(min(1.0, pl.jet_fuel / fm_))
-        else:
-            jet.hide()
-        if alive and wears(pl, "shield"):
-            self.shield_bg.show()
-            self.shield_fg.show()
-            self.shield_fg.setSx(max(0.55 * pl.shield_hp / max(1.0, shield_max(pl)), 0.0001))
-        else:
-            self.shield_bg.hide()
-            self.shield_fg.hide()
-        in_veh = alive and (pl.heli >= 0 or pl.vehicle >= 0 or pl.mount >= 0)   # 7a: im Fahrzeug/am Geschütz
-        if in_veh:                                              # Ausrüstung, Dash, Jetpack, Buff ausblenden
-            dash.hide()
-            jet.hide()
-            ic.hide()
-            if self.ability_icons.get("shock") is not None:
-                self.ability_icons["shock"].hide()
-            for tl in self.gear_tiles.values():
-                tl["tile"].hide()
-            if getattr(self, "gear_set_frame", None) is not None:
-                self.gear_set_frame.hide()
-            return
-        full = next((s for s in SETS if alive and set_full(pl, s)), None)   # 7c: komplettes Set: Kacheln leuchten
-        fr = getattr(self, "gear_set_frame", None)
-        if fr is not None:                                      # 10h: Rahmen in der Spielerfarbe
-            if full is not None:
-                acc = soldier_look(getattr(pl, "look", "") or getattr(self, "look_code", ""), self.my_id or 0)["acc"]
-                fr.setColor(acc[0], acc[1], acc[2], 1.0)
-                fr.setColorScale(1, 1, 1, 0.8 + 0.2 * math.sin(time.time() * 3.0))
-                fr.show()
-            else:
-                fr.hide()
-        shock = self.ability_icons.get("shock")
-        if shock is not None:
-            if full == "shield":
-                rdy = pl.shock_cd <= 0
-                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, None,
-                          f"{SET_ICON_KEY.upper()}  Stromstoss" if rdy else f"{int(math.ceil(pl.shock_cd))} s")
-            else:
-                shock.hide()
-        for sl, tl in self.gear_tiles.items():
-            tl["tile"].show()
-            if full is not None:
-                sc_ = SETS[full][1]
-                tl["bg"].setColor(sc_[0] * 0.45, sc_[1] * 0.45, sc_[2] * 0.45, 0.85)
-            else:
-                tl["bg"].setColor(0.04, 0.05, 0.08, 0.7)
-            gi = pl.gear.get(sl) if alive else None
-            if gi != tl["gi"]:                                   # 9d: Symbol tauschen
-                for c in tl["ico"].getChildren():
-                    c.detachNode()
-                if gi is not None:
-                    ic_ = self.gear_icon_cache.get(gi)
-                    if ic_ is None:
-                        ic_ = self.gear_icon_cache[gi] = gear_icon(gi, GEAR_HUD_W * 0.62, GEAR_HUD_H * 0.62)
-                        ic_.setBin("fixed", 22)
-                        ic_.setDepthTest(False)
-                        ic_.setDepthWrite(False)
-                    ic_.reparentTo(tl["ico"])
-                tl["gi"] = gi
-            self.set_text(tl["label"], (GEAR[gi].hud or GEAR[gi].name) if gi is not None else "")
-            if gi is not None:
-                tl["label"].setFg(tuple(c * 0.65 + 0.35 for c in GEAR[gi].col) + (1,))   # aufgehellt: lesbar
-            tl["sym"].setColorScale(1, 1, 1, 0.1 if gi is not None else 0.2)   # leer: Umriss etwas deutlicher
-        b = getattr(pl, "buff", None)
-        if b in BUFF_T and pl.buff_t > 0 and pl.hp > 0:
-            lab, col = self.BUFF_LOOK.get(b, ("B", (1, 1, 1)))
-            ic.set(True, pl.buff_t / BUFF_T[b], lab, f"{BUFF_NAMES[b]} {int(math.ceil(pl.buff_t))} s", col)
-        else:
-            ic.hide()
 
     def update_noise_debug(self):
         """NOISE_DEBUG: Lärmradien der letzten Geräusche als Ringe am Boden (nur wo die Welt simuliert wird)."""

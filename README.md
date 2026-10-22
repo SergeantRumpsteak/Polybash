@@ -22,7 +22,11 @@ Polybash/
 - Gemeinsam für alle Modi (Robins Stand): **Monster** (Mob, MobView, Drohnen, Koloss, Titan ...) und **Netzwerk**
   (ein Protokoll, `NET_VERSION`; Host meldet per `exp`-Kennung, ob Experimental läuft).
   Gemeinsam (Stand des Hauptspiels): **Grafik, Texturen und Karte**.
-- Nur in Experimental: Loot, Granatenarten, Nahkampf, Aufsätze, Buffs, Airdrops, Tomahawk-Säulen, Ausrüstungsanzeige.
+- In **allen** Modi (nur als Beute aus Kisten, Monstern und Gefallenen, nicht im Ausrüstungsmenü): Nahkampfwaffen
+  (Taste 4 / F), alle Granatenarten (G halten, H wechselt), Rüstung (Helm/Torso/Füße, Sets), Brände und Rauchwolken,
+  Airdrops (Fackel-Granate) und Helikopter-Abstürze. Das Tomahawk-Säulen-System (und der Luftschlag) bleibt wie bisher.
+- Nur in Experimental: Buffs (Fluchttier), Tomahawk-Säulen mit Rakete, Pistolenstart ohne Ausrüstungsmenü und
+  **C4 / Claymore / Funkbake als Beute** (Taste 5; im Hauptspiel weiterhin über das Ausrüstungsmenü).
 - Experimental ist im Start-Menü gleichberechtigt: Die laufende `Game`-Instanz wird zu `ExpGame` umgewandelt
   (`_pb_to_exp`; Tasks, Events und Szene des Menüs werden vorher abgeräumt, kein zweites Fenster, kein Neustart).
   "Zum Hauptmenü" schaltet über `_pb_back` zurück. Beitreten: im normalen "Spiel beitreten" erscheinen auch

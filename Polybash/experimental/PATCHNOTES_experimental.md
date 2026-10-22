@@ -2,6 +2,17 @@
 
 Neueste Änderungen oben.
 
+## Experimental-Ausrüstung in allen Modi, Gadgets als Beute in Experimental (2026-10-22)
+- NEU **Alle Modi (KotH, DM, CTF):** Nahkampfwaffen, alle 8 Granatenarten, Rüstung (Helm/Torso/Füße mit Sets, Schild, zweite Chance), Brände (Molotow) und Rauchwolken, **Airdrops** (Fackel-Granate), **Heli-Abstürze** und Drohnen-Granaten gibt es jetzt auch in den anderen Modi – ausschließlich als Beute (Bonuskisten, Monster, Gefallene), nicht im Ausrüstungsmenü. Man startet unverändert mit seinem Loadout; dazu kommen 2 Splittergranaten pro Leben.
+- NEU Bedienung (alle Modi): **4** = Nahkampfwaffe, **F** ohne etwas Benutzbares = Schnellschlag, **G** halten = Wurf aufladen, **H** / Mausrad bei gehaltenem G = Granatenart, Stromstoss-Taste für das Schild-Set; HUD mit Rüstungs-Kacheln, Schildbalken, Nahkampf-Karte und Granaten-Karte. Taste 3 öffnet ohne Gadget eine Spezialwaffe aus der Kiste.
+- GEÄNDERT Der alte Messerschlag des Hauptspiels (F) ist durch das Nahkampf-System ersetzt (Start-Nahkampfwaffe = Messer wie in Experimental).
+- GEÄNDERT Das Welt-Regelwerk dazu (Schaden/Rüstung, Granaten, Nahkampf, Rauch, Feuer, Airdrop, Heli-Crash, Beute) liegt jetzt in `World` und gilt für alle Modi; `ExpWorld` erbt es. Ebenso `PlayerView`, `update_weapon` und `fly_heli`.
+- NICHT übernommen: **Tomahawk** (die alte Luftschlag-Mechanik des Hauptspiels bleibt unverändert, der Luftschlag *ist* der Tomahawk), Buffs (Fluchttier-Buff gibt es nur in Experimental).
+- NEU **Experimental:** **C4, Claymore und Funkbake** als Beute: Bonuskisten (je nach Stufe 12–22 % als 4. Teil), Monster-Beute (neue Kategorie „Gadget“) und Gefallene lassen Stapel fallen (C4 x2, Claymore x2, Funkbake x1); Vorrat je Art bis 6, Taste **5** nimmt das Gadget in die Hand (weiter drücken wechselt die Art, danach wird weggesteckt), Rechtsklick stellt es auf, Linksklick zündet C4. Der Vorrat gehört dem Host (Ereignis `gadget`) und verfällt beim Tod (ein Stapel fällt evtl. als Beute).
+- GEFIXT Experimental: **Bewegung der Ausrüstung** (Dash, Doppelsprung, Jetpack, Krallenhelm) lief seit dem Refactor nicht mehr (`exp_step_once` wurde nicht aufgerufen); `_step_once` ist jetzt eine einzige Funktion für alle Modi.
+- GEFIXT Experimental: Hinweistext beim Aufheben von Granaten-Stapeln („Waffe aufheben: Railgun“).
+- GEÄNDERT Netz: Stapel-Drops tragen jetzt auch `gad:<Art>` (Index in `DROP_GK`).
+
 ## Refactor: alles in einer spiel.py (2026-10-22)
 - GEÄNDERT `experimental/robin_experimental.py` gibt es nicht mehr. Robins Regeln stecken in `spiel.py` in den Klassen/Konstanten mit Präfix `Exp` / `EXP_` / `exp_` (ExpGame, ExpWorld, ExpPlayer, EXP_WEAPONS ...) und gelten nur im Modus Experimental.
 - GEÄNDERT Monster (alle 9 Arten inkl. Drohnen, Koloss, Titan) sind jetzt in **allen** Modi (KotH, DM, CTF, Experimental) Robins Version; die alten Hauptspiel-Monster sind entfernt.
