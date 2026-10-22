@@ -111,11 +111,10 @@ Ballistik: Jede Kugel ist ein Massepunkt mit Startgeschwindigkeit v0 und
 Rückstoss: Das Waffenmodell hängt an gedämpften Federn
   x'' = -k x - c x'   (Impuls beim Schuss -> Ausschwingen), ebenso die Kamera.
 """
-# ===== Experimental: Robins Spielregeln (im selben Fenster) =======================================
-# Alles steckt in dieser einen Datei. Im Menü den Modus "Experimental" wählen und starten: dieselbe
-# Game-Instanz wird zu ExpGame (siehe _pb_to_exp weiter unten), Tasks, Events und Szene des Menüs werden
-# abgeräumt. "Zum Hauptmenü" schaltet über _pb_back zurück. Robins Klassen/Konstanten tragen das Präfix
-# Exp / EXP_ / exp_ (ExpWorld, ExpPlayer, ExpGame, EXP_WEAPONS ...); Monster, Netzwerk, Grafik und Karte sind gemeinsam.
+# ===== Modi ======================================================================================
+# Alle Spielmodi (King of the Hill, Deathmatch, Capture the Flag, Experimental) laufen auf denselben Klassen
+# (World, Player, Game): Karte, Physik, Waffen, HUD und Netzwerk sind gemeinsam. Experimental ist nur ein
+# Regelsatz (World.exp): Start mit der Pistole, kein Ausrüstungsmenü, Tomahawk-Säulen statt Kommandoraum-Knopf.
 import os as _os
 import sys as _sys
 
@@ -342,7 +341,6 @@ MODES = ("koth", "dm", "ctf", "experimental")
 EXP_MODES = ("koth", "dm")
 MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch", "ctf": "Capture the Flag", "experimental": "Experimental"}
 
-EXP_MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch"}
 CTF_TEAM_NAMES = ("Blau", "Rot")
 CTF_TEAM_COLS = ((0.18, 0.40, 0.95), (0.92, 0.20, 0.18))     # Teamfarben (Armbinde, Fahne, HUD, Minimap)
 CTF_PICK_R = 1.4         # m: wer so nah (waagerecht) an der Flagge ist, nimmt sie (einfach darüberlaufen)
@@ -543,9 +541,8 @@ VEH_RESPAWN = 35.0       # s bis ein zerstörtes Fahrzeug wieder dasteht
 VEH_BLAST_R, VEH_BLAST_DMG = 5.5, 110.0
 ROCKET_KILL_R = 5.5      # Rakete: Fahrzeug innerhalb dieses Radius ist sofort zerstört
 DROP_LIFE = 90.0         # s, so lange liegt eine fallengelassene Waffe herum
-MAX_DROPS = 24
+MAX_DROPS = 120          # Kistenbeute liegt erst am Boden, dazu Monster-Beute
 
-EXP_MAX_DROPS = 120          # 7b: mehr Platz, weil Kistenbeute jetzt erst am Boden liegt (10b: Monster-Beute -> 120)
 
 GREN_KILL_R = 2.6        # Granate: wer näher als das steht, stirbt sofort
 
@@ -565,7 +562,7 @@ TUR_TURN = 150.0         # Grad/s
 STRIKE_T = 10.0          # Countdown in s (Standard)
 STRIKE_OPTIONS = (5, 10, 20, 30, 60)   # im Kontrollraum einstellbar
 
-EXP_STRIKE_OPTIONS = (10, 20, 30, 60)   # Countdown-Länge, wird auf der Zielkarte gewählt (mind. 10 s)
+TOMA_DURATIONS = (10, 20, 30, 60)   # Countdown-Länge, wird auf der Zielkarte gewählt (mind. 10 s)
 STRIKE_R = 30.0          # King of the Hill: doppelter Radius der Zone
 STRIKE_CD = 120.0        # Standard-Abklingzeit des Tomahawk (s); 0 = nur einmal pro Runde
 STRIKE_CD_CHOICES = (0, 30, 60, 120, 180, 300)   # im Host-Menü einstellbar
@@ -857,35 +854,6 @@ class Weapon:
     ads_spread: float = 0.3   # Faktor auf spread beim Zielen
     bloom: float = 0.0        # Streuungszuwachs pro Schuss
     pickup: int = 0           # Munition pro erlegtem Mob/Spieler
-    kind: str = "primary"     # primary | secondary | loot (nur aus Kisten)
-    scope: bool = False       # Zielfernrohr-Ansicht beim Zielen
-    sight: str = ""           # 'rocket' = Visier mit Entfernungsmesser und Vorhaltmarken
-    grav: float = 1.0         # Faktor auf die Schwerkraft der Kugel
-    blast_r: float = 0.0      # Explosionsradius (0 = normale Kugel)
-    blast_dmg: float = 0.0    # Schaden im Explosionszentrum
-    loud: float = 1.0         # Lautstärke-Faktor des Schusses (Lärmsystem: NOISE_SHOT * loud)
-    head_mult: float = 2.0    # Faktor auf den Schaden bei Kopftreffern
-
-
-@dataclass(frozen=True)
-class ExpWeapon:
-    name: str
-    dmg: float            # Schaden pro Kugel
-    interval: float       # s zwischen zwei Schüssen
-    mag: int              # Magazingrösse
-    max_reserve: int
-    speed: float          # Mündungsgeschwindigkeit m/s
-    spread: float         # Streukegel (Grad, Halbwinkel) bei Hüftfeuer
-    reload: float         # Nachladezeit s
-    auto: bool = False
-    pellets: int = 1
-    kick: float = 1.0         # bleibender Rückstoss nach oben (Grad)
-    kick_yaw: float = 0.3     # zufälliger Seitenversatz (Grad)
-    kick_back: float = 3.0    # Stärke des Federimpulses am Waffenmodell
-    ads_fov: float = 60.0
-    ads_spread: float = 0.3   # Faktor auf spread beim Zielen
-    bloom: float = 0.0        # Streuungszuwachs pro Schuss
-    pickup: int = 0           # Munition pro erlegtem Mob/Spieler
     kind: str = "normal"      # normal (Slot 1/2) | special (nur Slot 3: Raketenwerfer, Minigun, Railgun)
     scope: bool = False       # Zielfernrohr-Ansicht beim Zielen
     sight: str = ""           # 'rocket' = Visier mit Entfernungsmesser und Vorhaltmarken
@@ -898,7 +866,7 @@ class ExpWeapon:
 
 WEAPONS = (
     Weapon("Pistole", 28, 0.30, 12, 96, 240, 0.9, 1.3, kick=1.6, kick_yaw=0.4,
-           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, kind="secondary", loud=0.75),
+           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, loud=0.75),
     Weapon("Sturmgewehr", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,
            kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0),
     Weapon("Schrotflinte", 9, 0.85, 7, 36, 200, 4.5, 2.4, pellets=9, kick=5.0,
@@ -906,42 +874,21 @@ WEAPONS = (
     Weapon("Scharfschütze", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,
            kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25),
     Weapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
-           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, kind="secondary", loud=0.9),
+           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9),
     Weapon("Maschinenpistole", 11, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.5,
-           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, kind="secondary", loud=0.85),
+           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, loud=0.85),
     Weapon("Raketenwerfer", 0, 1.4, 1, 6, 95, 0.4, 2.6, kick=5.0, kick_yaw=0.4,
            kick_back=9.0, ads_fov=26, ads_spread=0.5, grav=0.12, blast_r=6.0, sight="rocket",
-           blast_dmg=130, kind="loot", loud=1.4),
-    Weapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
-           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="loot", loud=1.3),
-    Weapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
-           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="loot", loud=1.2),
-)
-
-EXP_WEAPONS = (
-    ExpWeapon("Pistole", 28, 0.30, 12, 96, 240, 0.9, 1.3, kick=1.6, kick_yaw=0.4,
-           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, loud=0.75),
-    ExpWeapon("Sturmgewehr", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,
-           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0),
-    ExpWeapon("Schrotflinte", 9, 0.85, 7, 36, 200, 4.5, 2.4, pellets=9, kick=5.0,
-           kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6, loud=1.1),
-    ExpWeapon("Scharfschütze", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,
-           kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25),
-    ExpWeapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
-           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9),
-    ExpWeapon("Maschinenpistole", 11, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.5,
-           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, loud=0.85),
-    ExpWeapon("Raketenwerfer", 0, 1.4, 1, 6, 95, 0.4, 2.6, kick=5.0, kick_yaw=0.4,
-           kick_back=9.0, ads_fov=26, ads_spread=0.5, grav=0.12, blast_r=6.0, sight="rocket",
            blast_dmg=130, kind="special", loud=1.4),
-    ExpWeapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
+    Weapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
            kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="special", loud=1.3),
-    ExpWeapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
+    Weapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
            kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2),
 )
 
 
-WEAPON_IDX = {w.name: i for i, w in enumerate(EXP_WEAPONS)}
+
+WEAPON_IDX = {w.name: i for i, w in enumerate(WEAPONS)}
 
 # Ansicht/Aufsätze/Visier gelten wie in den anderen Modi für Haupt- (Slot 1) und Kleinwaffen; hier ist "kind" nur
 # normal/special, darum die Einteilung nach Namen:
@@ -1432,11 +1379,11 @@ ATT_SLOT_NAMES = tuple(ATT_SLOTS) + ("Visier",)
 def att_fits(wi, si=0):
     """Passt an diese Waffe ein Aufsatz des Platzes si? Lauf/Magazin/Griff: Haupt- und Kleinwaffen; Visier: nur
     Waffen mit Schiene (Sturmgewehr, Schrotflinte, Scharfschütze). Spezialwaffen: nie."""
-    if not (0 <= wi < len(EXP_WEAPONS)) or EXP_WEAPONS[wi].kind == "special":
+    if not (0 <= wi < len(WEAPONS)) or WEAPONS[wi].kind == "special":
         return False
     if si == ATT_SCOPE:
-        return EXP_WEAPONS[wi].name in SCOPE_MOUNT
-    return EXP_WEAPONS[wi].name in GRIP_AT
+        return WEAPONS[wi].name in SCOPE_MOUNT
+    return WEAPONS[wi].name in GRIP_AT
 
 def pscope(pl, wi):
     """Visier der Waffe wi des Spielers (7b: je Waffe; ab Werk DEFAULT_SCOPE)."""
@@ -1446,35 +1393,6 @@ def pscope(pl, wi):
 def eff_weapon(wi, att=None):
     """Waffe mit den Faktoren der Aufsätze (att = (Lauf, Magazin, Griff))."""
     base = WEAPONS[wi]
-    att = att_valid(att)
-    if att is None or att == ATT_NONE or base.kind == "loot":
-        return base
-    key = (wi, att)
-    w = _EFF_CACHE.get(key)
-    if w is None:
-        f = {}
-        for i, v in enumerate(att):
-            for k, m in ATTACHMENTS[i][v][2].items():
-                f[k] = f.get(k, 1.0) * m
-        w = dataclasses.replace(
-            base,
-            dmg=round(base.dmg * f.get("dmg", 1.0), 2),
-            speed=base.speed * f.get("speed", 1.0),
-            spread=base.spread * f.get("spread", 1.0),
-            reload=round(base.reload * f.get("reload", 1.0), 2),
-            kick=base.kick * f.get("kick", 1.0),
-            kick_yaw=base.kick_yaw * f.get("kick_yaw", 1.0),
-            ads_spread=base.ads_spread * f.get("ads_spread", 1.0),
-            bloom=base.bloom * f.get("bloom", 1.0),
-            mag=max(1, int(round(base.mag * f.get("mag", 1.0)))),
-            max_reserve=max(1, int(round(base.max_reserve * f.get("reserve", 1.0)))))
-        _EFF_CACHE[key] = w
-    return w
-
-
-def exp_eff_weapon(wi, att=None):
-    """Waffe mit den Faktoren der Aufsätze (att = (Lauf, Magazin, Griff))."""
-    base = EXP_WEAPONS[wi]
     att = att_valid(att)
     if att is None or att == ATT_NONE or base.kind == "special":
         return base
@@ -1548,14 +1466,6 @@ WI_HELI, WI_FLAK = -6, -8
 def weapon_name(wi):
     if 0 <= wi < len(WEAPONS):
         return WEAPONS[wi].name
-    return {WI_GRENADE: "Granate", WI_VEHICLE: "Fahrzeug", WI_TURRET: "Geschütz",
-            WI_TOMAHAWK: "Tomahawk", WI_HELI: "Helikopter",
-            WI_FLAK: "Flak", WI_FALL: "Sturz", WI_C4: "C4", WI_CLAY: "Claymore", WI_MELEE: "Nahkampf"}.get(wi, "?")
-
-
-def exp_weapon_name(wi):
-    if 0 <= wi < len(EXP_WEAPONS):
-        return EXP_WEAPONS[wi].name
     if 0 <= wi - MELEE_WI0 < len(MELEE):
         return MELEE[wi - MELEE_WI0].name
     return {WI_GRENADE: "Granate", WI_VEHICLE: "Fahrzeug", WI_TURRET: "Geschütz",
@@ -3160,9 +3070,8 @@ HUD_TEXT = 0.042                      # Schriftgrösse für Killfeed, Legende, T
 
 
 FEED_T, FEED_N = 6.0, 5               # Killfeed: so lange (s) und höchstens so viele Zeilen
-TAB_COLS = ((-0.88, "l"), (-0.78, "l"), (-0.05, "r"), (0.15, "r"), (0.33, "r"), (0.56, "r"), (0.8, "r"))
 
-EXP_TAB_COLS = ((-0.88, "l"), (-0.78, "l"), (-0.05, "r"), (0.13, "r"), (0.3, "r"), (0.52, "r"), (0.71, "r"), (0.88, "r"))
+TAB_COLS = ((-0.88, "l"), (-0.78, "l"), (-0.05, "r"), (0.13, "r"), (0.3, "r"), (0.52, "r"), (0.71, "r"), (0.88, "r"))
 TAB_W = 0.95                          # halbe Breite der Tab-Übersicht (passt auch bei 4:3 zwischen die HUD-Ränder)
 
 
@@ -3174,14 +3083,7 @@ GEAR_HUD_TEXT = 0.038                 # Schriftgrösse des getragenen Teils
 
 TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schaden 150 % - 15 s" in der Bildmitte
 SB_EVERY = 15                         # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot
-KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen (Sniper: Luft anhalten)"), ("Leertaste", "springen"),
-              ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
-              ("1 2", "Waffe wählen"), ("3", "Gadget"), ("Mausrad", "Waffe / Gadget wechseln"), ("G", "Granate"),
-              ("F", "benutzen / Schlag"), ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken"),
-              ("X / Y", "Minimap zoomen"), ("Tab", "Übersicht"), ("M", "ganze Karte"), ("F3", "Bildrate"),
-              ("Esc", "Menü"))
-
-EXP_KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
+KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
               ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate (halten = weiter)"),
               ("H / G+Mausrad", "Granatenart"), ("F", "benutzen / Schlag"),
@@ -3206,6 +3108,7 @@ def end_tabs(koth, ctf=False):
     kd = lambda e: e["kills"] / max(1, e["deaths"])                                       # noqa: E731
     st = lambda e, k: e["stats"].get(k, 0)                                                  # noqa: E731
     mob = lambda e, k: e["stats"].get("mob", {}).get(k, 0)                                  # noqa: E731
+    crate = lambda e, k: e["stats"].get("crate", {}).get(k, 0)                              # noqa: E731
     team = lambda e: CTF_TEAM_NAMES[e["team"]] if e.get("team") in (0, 1) else "-"         # noqa: E731
     tabs = [("Übersicht", ([("Team", team, False), ("Flaggen", lambda e: st(e, "flag_caps"), True)] if ctf else [])
              + ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
@@ -3217,8 +3120,11 @@ def end_tabs(koth, ctf=False):
             ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
              + [("Gesamt", lambda e: sum(e["stats"].get("mob", {}).values()), True)],
              "Meister-Jäger", lambda e: sum(e["stats"].get("mob", {}).values())),
-            ("Looten", [("Kisten", lambda e: st(e, "crates"), True)],
-             "Schatzsucher", lambda e: st(e, "crates")),
+            ("Looten", [((CRATE_NAMES[k].split()[0][:1].upper() + CRATE_NAMES[k].split()[0][1:]) if k in CRATE_NAMES else k, (lambda e, k=k: crate(e, k)), True)
+                        for k in CRATE_KINDS]
+             + [("Gesamt", lambda e: sum(e["stats"].get("crate", {}).values()), True),
+                ("Buffs", lambda e: st(e, "buffs"), True)],
+             "Schatzsucher", lambda e: sum(e["stats"].get("crate", {}).values())),
             ("Tomahawk", [("Ausgelöst", lambda e: st(e, "toma_fired"), True),
                           ("Tomahawk-Kills", lambda e: st(e, "toma_kills"), True)],
              "Raketen-Profi", lambda e: st(e, "toma_kills") * 100 + st(e, "toma_fired")),
@@ -3245,54 +3151,14 @@ def end_tabs(koth, ctf=False):
     return tabs
 
 
-def exp_end_tabs(koth):
-    """Reiter des Endbildschirms: (Titel, [(Spaltenkopf, Wert(e) -> Zahl/Text, hervorheben?)],
-    Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier."""
-    kd = lambda e: e["kills"] / max(1, e["deaths"])                                       # noqa: E731
-    st = lambda e, k: e["stats"].get(k, 0)                                                  # noqa: E731
-    mob = lambda e, k: e["stats"].get("mob", {}).get(k, 0)                                  # noqa: E731
-    crate = lambda e, k: e["stats"].get("crate", {}).get(k, 0)                              # noqa: E731
-    tabs = [("Übersicht", ([("Punkte", lambda e: int(e["score"]), True)] if koth else [])
-             + [("Kills", lambda e: e["kills"], True), ("Tode", lambda e: e["deaths"], False),
-                ("K/D", lambda e: round(kd(e), 2), True)]
-             + ([("Zeit in der Radarstation", lambda e: f"{int(st(e, 'zone_t')) // 60}:{int(st(e, 'zone_t')) % 60:02d}",
-                  False)] if koth else []),
-             "Sieger", None),
-            ("Jäger", [(MOB_NAMES.get(k, k), (lambda e, k=k: mob(e, k)), True) for k in KINDS]
-             + [("Gesamt", lambda e: sum(e["stats"].get("mob", {}).values()), True)],
-             "Meister-Jäger", lambda e: sum(e["stats"].get("mob", {}).values())),
-            ("Looten", [((CRATE_NAMES[k].split()[0][:1].upper() + CRATE_NAMES[k].split()[0][1:]) if k in CRATE_NAMES else k, (lambda e, k=k: crate(e, k)), True)
-                        for k in CRATE_KINDS]
-             + [("Gesamt", lambda e: sum(e["stats"].get("crate", {}).values()), True),
-                ("Buffs", lambda e: st(e, "buffs"), True)],
-             "Schatzsucher", lambda e: sum(e["stats"].get("crate", {}).values())),
-            ("Tomahawk", [("Ausgelöst", lambda e: st(e, "toma_fired"), True),
-                          ("Tomahawk-Kills", lambda e: st(e, "toma_kills"), True)],
-             "Raketen-Profi", lambda e: st(e, "toma_kills") * 100 + st(e, "toma_fired")),
-            ("Special Shots", [("Nahkampf-Kills", lambda e: st(e, "melee_kills"), True),
-                               ("Weitester Kill", lambda e: f"{st(e, 'longest'):.0f} m" if st(e, "longest") else "-", False),
-                               ("mit", lambda e: exp_weapon_name(st(e, "longest_w")) if st(e, "longest_w") >= 0 else "-", False),
-                               ("Kopfschüsse", lambda e: st(e, "heads"), True),
-                               ("Treffer", lambda e: st(e, "hits"), True),
-                               ("Kopf-Quote", lambda e: f"{100 * st(e, 'heads') / max(1, st(e, 'hits')):.0f} %", False)],
-             "Scharfschütze", lambda e: st(e, "longest")),
-            ("Bewegung", [("Zu Fuss", lambda e: f"{st(e, 'walk'):.0f} m", False),
-                          ("Im Wagen", lambda e: f"{st(e, 'drive'):.0f} m", False),
-                          ("Fahrten", lambda e: st(e, "drives"), True),
-                          ("Im Heli", lambda e: f"{st(e, 'fly'):.0f} m", False),
-                          ("Flüge", lambda e: st(e, "flights"), True)],
-             "Weltenbummler", lambda e: st(e, "walk") + st(e, "drive") + st(e, "fly"))]
-    return tabs
-
-
 def weapon_info(wi, gun=None, att=None, scope=None):
     """Mausover-Info einer Waffe - direkt aus WEAPONS (stimmt nach Balancing-Änderungen automatisch), mit den
     Werten und Namen der Aufsätze (7b)."""
-    w = exp_eff_weapon(wi, att)
+    w = eff_weapon(wi, att)
     lines = [w.name + ("  (Spezialwaffe)" if w.kind == "special" else "")]
     a = att_valid(att) or ATT_NONE
     names = [f"{ATT_SLOTS[i]}: {att_name(i, v)}" for i, v in enumerate(a) if v]
-    if scope is not None and EXP_WEAPONS[wi].name in SCOPE_MOUNT:
+    if scope is not None and WEAPONS[wi].name in SCOPE_MOUNT:
         names.insert(0, f"Visier: {att_name(ATT_SCOPE, scope)}")
     if names:
         lines.append("Aufsätze: " + ", ".join(names))
@@ -3323,7 +3189,7 @@ def drop_info(d):
     """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
     if getattr(d, "gren", 0) > 0 and str(getattr(d, "gk", "")).startswith("gad:"):
         k = int(d.gk[4:])
-        return f"{GADGETS[k]} x{d.gren}  (Gadget)\n{GAD_INFO[k].split(': ', 1)[-1]}\nTaste 5: ausrüsten"
+        return f"{GADGETS[k]} x{d.gren}  (Gadget)\n{GAD_INFO[k].split(': ', 1)[-1]}\nTaste 3: ausrüsten"
     if getattr(d, "gren", 0) > 0:
         gk = getattr(d, "gk", "frag")
         return f"{GREN_NAMES.get(gk, 'Granate')} x{d.gren}\n{GREN_INFO.get(gk, '')}\nG halten: weiter werfen, H: Art wechseln"
@@ -3338,8 +3204,8 @@ def drop_info(d):
     if d.gear >= 0 and d.gear < len(GEAR):
         txt = gear_info(d.gear).split("\n")
         return txt[0] + ("\n" + txt[1] if len(txt) > 1 else "")
-    if 0 <= d.wi < len(EXP_WEAPONS):
-        w = exp_eff_weapon(d.wi, d.atts)
+    if 0 <= d.wi < len(WEAPONS):
+        w = eff_weapon(d.wi, d.atts)
         if w.blast_r > 0:
             st = f"Explosion {w.blast_dmg:.0f}, Radius {w.blast_r:.0f} m"
         else:
@@ -3445,19 +3311,11 @@ def buff_text(kind, max_hp=PLAYER_HP):
 
 def new_stats():
     """Statistik eines Spielers für die laufende Runde (nur der Host zählt). Neue Werte einfach hier ergänzen
-    und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus end_tabs."""
-    return {"mob": {k: 0 for k in KINDS}, "crates": 0, "melee_kills": 0, "toma_fired": 0, "toma_kills": 0,
-            "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0, "walk": 0.0, "drive": 0.0, "drives": 0,
-            "fly": 0.0, "flights": 0, "zone_t": 0.0, "buffs": 0,
-            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # CTF: geholt, zurückgebracht, Träger getötet
-
-
-def exp_new_stats():
-    """Statistik eines Spielers für die laufende Runde (nur der Host zählt). Neue Werte einfach hier ergänzen
     und dort hochzählen, wo es passiert; Scoreboard und Endbildschirm lesen sie aus STAT_TABS."""
     return {"mob": {k: 0 for k in KINDS}, "crate": {k: 0 for k in CRATE_KINDS}, "buffs": 0, "melee_kills": 0,
             "toma_fired": 0, "toma_kills": 0, "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0,
-            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0}
+            "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0,
+            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # CTF: geholt, zurückgebracht, Träger getötet
 
 
 def ctf_summary(p):
@@ -3470,15 +3328,6 @@ def ctf_summary(p):
 
 
 def stat_summary(p):
-    """(Monster-Kills, geöffnete Kisten) für das Tab-Scoreboard: beim Host aus pl.stats, beim
-    Mitspieler aus dem Snapshot (pl.sb)."""
-    st = getattr(p, "stats", None)
-    if st is not None and getattr(p, "sb", None) is None:
-        return sum(st["mob"].values()), st["crates"]
-    return getattr(p, "sb", None) or (0, 0)
-
-
-def exp_stat_summary(p):
     """(Monster-Kills, geöffnete Kisten, Buffs) für das Tab-Scoreboard: beim Host aus pl.stats, beim
     Mitspieler aus dem Snapshot (pl.sb)."""
     st = getattr(p, "stats", None)
@@ -3539,7 +3388,7 @@ def loot_chances(kind, owned=(), history=None, last=None, art="weapon", worn=())
     base = loot_base(kind, history, art)
     skip = set(worn)
     if LOOT_SKIP_OWNED:
-        skip |= {EXP_WEAPONS[wi].name for wi in owned if wi is not None and 0 <= wi < len(EXP_WEAPONS)}
+        skip |= {WEAPONS[wi].name for wi in owned if wi is not None and 0 <= wi < len(WEAPONS)}
     if LOOT_SKIP_LAST and last:
         skip.add(last)
     keep = [n for n in base if n not in skip and base[n] > 0]
@@ -4062,10 +3911,10 @@ def decode_mesh(raw, size):
 
 class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
-    loot_cats = LOOT_CATS              # was Monster und Kisten hergeben: Waffen, Nahkampf, Granaten, Ausrüstung, Aufsätze
+    loot_cats = LOOT_CATS + ("gadget",)   # was Monster und Kisten hergeben: Waffen, Nahkampf, Granaten, Ausrüstung, Aufsätze, Gadgets
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None, exp=False):
         ctf = ctf if isinstance(ctf, dict) else {}
         bonus = bonus if isinstance(bonus, dict) else {}
         self.bonus_crates = bool(bonus.get("crates", True))      # Bonuskisten (Kisten auf der Karte, Titan-Kiste)
@@ -4097,7 +3946,8 @@ class World:
         self.regen_rate = float(regen)       # Lebensregeneration in HP/s (0 = aus)
         self.strike_wait = 0.0               # Sekunden, bis der Knopf wieder geht
         self.seed = seed
-        self.mode = mode if mode in MODES else "koth"
+        self.exp = bool(exp)                 # Regelsatz "Experimental" (Start mit der Pistole, Tomahawk-Säulen, Beute-Gadgets)
+        self.mode = mode if mode in (EXP_MODES if self.exp else MODES) else "koth"
         self.limit = float(limit)         # Zeitlimit in Sekunden
         self.mobs_on = spawn_mobs         # Monster an/aus (der Client bekommt sie vom Host)
         self.mob_level = int(mob_level)   # Dichte: Index in MOB_LEVELS
@@ -4111,15 +3961,22 @@ class World:
         self.crate_spots = [] # (x, y, z): gute Kistenplätze an Bauwerken (Türme, Häuser, Aussenposten ...)
         self.crate_wait = []  # [Restzeit, Art, x, y]: geöffnete Kisten, die woanders neu auftauchen
         self.next_cid = 1
+        self.rocks = []       # Steinbrocken des Titans in der Luft
+        self.next_rid = 1
         self.voids = []   # (x0, y0, x1, y1): Löcher im Gelände = Tunneltreppen (Boden bei TUN_Z)
         self.tunnels = [] # (x0, y0, x1, y1): Tunnelgänge (ein Stockwerk unter dem Gelände)
         self.decor = []   # (x0, y0, x1, y1, z0, z1, Farbe, beleuchtet): nur Darstellung, nicht fest
+        self.follow_boxes = []   # 9a: Quader, die als Ganzes auf die Geländehöhe gesetzt werden (Sandsäcke)
         self.moats = []   # (mx, my, a, o0, o1, o2, o3, Tiefe): Wassergraben um das Quadrat mx±a (Abstände o* vom Quadrat)
         self.dams = []    # (x0, y0, x1, y1): Brücken/Dämme - hier ist der Graben überbrückt
         self.roads = []   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
         self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
         self.vehicles = []
         self.grenades = []
+        self.smokes = []         # 10e: Rauchwolken (jeder Rechner selbst, aus dem Ereignis "smoke")
+        self.fires = []          # 10e: brennende Flächen (Molotow)
+        self.airdrops = []       # 10e: Airdrops (Fackel, Flugzeug, Kiste am Fallschirm)
+        self.next_fxid = 1
         self.gadgets = []        # platzierte Gadgets (C4, Claymore, Funkbake)
         self.next_gadid = 1
         self.drops = []
@@ -4128,10 +3985,20 @@ class World:
         self.pads = []     # (x, y): Helipads
         self.runway = None
         self.strike, self.strike_t, self.strike_by = 0, 0.0, -1   # 0 bereit, 1 Countdown, 2 benutzt
-        self.button = SimpleNamespace(x=80.0 + TO, y=62.55 + TO, z=TUN_Z)
-        self.timer_panel = SimpleNamespace(x=85.0 + TO, y=62.55 + TO, z=TUN_Z)
-        self.strike_dur = STRIKE_T
+        self.toma_spots = []                 # mögliche Orte der Tomahawk-Säule: (x, y, z, Blick zur Kartenmitte)
+        self.toma_idx = -1                   # aktiver Ort (-1 = gerade keiner: Countdown, Abklingzeit, verbraucht)
+        self.toma_age = 0.0                  # s seit die aktive Säule aufgetaucht ist (Hochfahren: TOMA_RISE_T)
+        self.toma_last = -1                  # zuletzt benutzter Ort (der nächste ist ein anderer)
+        self.toma_sink_idx, self.toma_sink_t = -1, 0.0   # benutzte Säule, die gerade versinkt
+        self.toma_lock = {}                  # Spieler-ID -> s, bis er selbst wieder auslösen darf (TOMA_PLAYER_CD)
         self.strike_ang = 0.0                # Himmelsrichtung, aus der die Rakete anfliegt (Grad)
+        if self.exp:                                 # Experimental: Säulen statt Kommandoraum-Knopf
+            self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
+            self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
+        else:
+            self.button = SimpleNamespace(x=80.0 + TO, y=62.55 + TO, z=TUN_Z)
+            self.timer_panel = SimpleNamespace(x=85.0 + TO, y=62.55 + TO, z=TUN_Z)
+        self.strike_dur = STRIKE_T
         self.strike_x, self.strike_y = float(CENTER), float(CENTER)   # Einschlagpunkt (nur Host/Schütze kennt ihn)
         self.spawn_zs = {}
         self.ladders = {}
@@ -4167,6 +4034,9 @@ class World:
                 x = rng.uniform(r + 3, WORLD - r - 3)
                 y = rng.uniform(r + 3, WORLD - r - 3)
                 vis = r * (1.4 if kind == "pond" else 1.0)
+                if kind == "pond" and any(x0 - r * 2.4 - 2 < x < x1 + r * 2.4 + 2 and y0 - r * 2.4 - 2 < y < y1 + r * 2.4 + 2
+                                          for x0, y0, x1, y1 in self.tunnels):
+                    continue                          # 7c: kein Teich über einem Tunnelgang (Decke bliebe stehen)
                 if free(x, y, vis * (1.6 if kind == "pond" else 1.0)):
                     p = Prop(kind, x, y, vis, solid(r))
                     p.base_r = r
@@ -4194,6 +4064,7 @@ class World:
             if mp.get("blocks") is None:
                 self.add_cover(rng)
             self.add_map_objects()
+            self.ground_boxes()                      # 9a: nichts schwebt über Senken und Hängen
         self.build_grids()
         self.last_spawn = {}
         self.spawns = self.make_spawns(rng)
@@ -4207,12 +4078,6 @@ class World:
         self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
         self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
         self.noise_log = []      # NOISE_DEBUG: (x, y, Radius, Restzeit) zur Anzeige
-        self.rocks = []          # Steinbrocken des Titans in der Luft
-        self.next_rid = 1
-        self.smokes, self.fires, self.airdrops = [], [], []   # Rauch, Feuer, Airdrops (nur Experimental belegt)
-        self.next_fxid = 1
-        self.toma_spots, self.toma_idx, self.toma_age = [], -1, 0.0   # Tomahawk-Säulen (nur Experimental belegt)
-        self.toma_sink_idx, self.toma_sink_t, self.toma_lock = -1, 0.0, {}
         self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
         self.kills = 0           # erlegte Monster
         self.players = {}        # Spieler-ID -> Player (beim Host: alle, beim Client: nur Anzeige)
@@ -4231,6 +4096,8 @@ class World:
         self.time_left = self.limit
         self.over_t = 0.0
         self.reset_crates()
+        if self.exp:
+            self.place_toma()    # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
         if spawn_mobs:           # der Client bekommt die Monster vom Host
             self.populate_mobs()
         # --- Capture the Flag
@@ -4243,11 +4110,11 @@ class World:
             self.ctf_reset()
 
     def allied(self, a, b):
-        """Gehören die Spieler a und b zum selben Team? (Nur im CTF; sonst ist jeder allein.)"""
-        if self.mode != "ctf" or a == b:
-            return a == b
-        ta = self.team_of.get(a)
-        return ta in (0, 1) and ta == self.team_of.get(b)
+        """10e: Gehören die Spieler a und b zusammen (derselbe Spieler oder - Team-Modi - dasselbe Team)?"""
+        if a == b:
+            return True
+        tm = getattr(self, "team_of", None)
+        return bool(tm) and tm.get(a) is not None and tm.get(a) == tm.get(b)
 
     def prop_count(self):
         """Prüfsumme für den Beitritt: stimmt nur bei gleicher Version und Seed."""
@@ -4499,26 +4366,42 @@ class World:
                     key = (side, i if side in "WE" else j)
                     runs.setdefault(key, []).append(j if side in "WE" else i)
         T = 0.6
+        seg = int(TUN_SEG / q)                       # lange Wände in Stücke: Oberkante folgt dem Gelände darüber
+
+        def top_over(x0, y0, x1, y1):
+            """Oberkante für Wand/Decke: knapp unter dem tiefsten Geländepunkt darüber (nie über -0.02)."""
+            h = min(self.surface_height(x, y) for x in (x0, (x0 + x1) / 2, x1) for y in (y0, (y0 + y1) / 2, y1))
+            return min(-0.02, h - 0.12)
+
+        def wall(x0, y0, x1, y1):
+            self.add_box(x0, y0, x1, y1, -6.0, top_over(x0, y0, x1, y1), wall_col)
         for (side, line), cells in runs.items():
             cells.sort()
             start = prev = cells[0]
             for c in cells[1:] + [None]:
-                if c is not None and c == prev + 1:
+                if c is not None and c == prev + 1 and prev - start < seg:
                     prev = c
                     continue
                 a, b = start * q, (prev + 1) * q
                 if side == "W":
-                    self.add_box(line * q - T, a, line * q, b, -6.0, -0.02, wall_col)
+                    wall(line * q - T, a, line * q, b)
                 elif side == "E":
-                    self.add_box((line + 1) * q, a, (line + 1) * q + T, b, -6.0, -0.02, wall_col)
+                    wall((line + 1) * q, a, (line + 1) * q + T, b)
                 elif side == "S":
-                    self.add_box(a, line * q - T, b, line * q, -6.0, -0.02, wall_col)
+                    wall(a, line * q - T, b, line * q)
                 else:
-                    self.add_box(a, (line + 1) * q, b, (line + 1) * q + T, -6.0, -0.02, wall_col)
+                    wall(a, (line + 1) * q, b, (line + 1) * q + T)
                 if c is not None:
                     start = prev = c
         for x0, y0, x1, y1 in corr:
-            self.add_box(x0, y0, x1, y1, TUN_ROOF, -0.02, roof_col)     # Decke (unter dem Gelände)
+            lx_, ly_ = x1 - x0, y1 - y0                  # Decke in Stücken (Oberkante unter dem Gelände)
+            n = max(1, int(math.ceil(max(lx_, ly_) / TUN_SEG)))
+            for i in range(n):
+                if lx_ >= ly_:
+                    a0, a1, b0, b1 = x0 + lx_ * i / n, x0 + lx_ * (i + 1) / n, y0, y1
+                else:
+                    a0, a1, b0, b1 = x0, x1, y0 + ly_ * i / n, y0 + ly_ * (i + 1) / n
+                self.add_box(a0, b0, a1, b1, TUN_ROOF, top_over(a0, b0, a1, b1), roof_col)
             self.tunnels.append((x0, y0, x1, y1))
             self.decor.append((x0, y0, x1, y1, TUN_Z - 0.3, TUN_Z, floor_col, True))
         for x0, y0, x1, y1, d in wells:
@@ -4527,24 +4410,28 @@ class World:
                 top = TUN_Z + (i + 1) * sh
                 if d == "N":
                     self.add_box(x0, y0 + i * sd, x1, y0 + (i + 1) * sd, TUN_Z - 1.0, top, STONE_D)
-                else:
+                elif d == "S":
                     self.add_box(x0, y1 - (i + 1) * sd, x1, y1 - i * sd, TUN_Z - 1.0, top, STONE_D)
+                elif d == "E":
+                    self.add_box(x0 + i * sd, y0, x0 + (i + 1) * sd, y1, TUN_Z - 1.0, top, STONE_D)
+                else:
+                    self.add_box(x1 - (i + 1) * sd, y0, x1 - i * sd, y1, TUN_Z - 1.0, top, STONE_D)
         lamp = (1.0, 0.85, 0.5)
         for x0, y0, x1, y1, d in wells:                      # Eingänge deutlich markieren
             rim = (0.95, 0.55, 0.10)
             for a0, b0, a1, b1 in ((x0 - 0.3, y0 - 0.3, x1 + 0.3, y0), (x0 - 0.3, y1, x1 + 0.3, y1 + 0.3),
                                    (x0 - 0.3, y0, x0, y1), (x1, y0, x1 + 0.3, y1)):
                 self.decor.append((a0, b0, a1, b1, 0.0, 0.16, rim, True))
-            px, py = x0 - 0.5, y1 + 0.3 if d == "N" else y0 - 0.5
+            if d in "NS":
+                px, py = x0 - 0.5, y1 + 0.3 if d == "N" else y0 - 0.5
+            else:
+                px, py = (x1 + 0.3 if d == "E" else x0 - 0.5), y0 - 0.5
             self.decor.append((px - 0.08, py - 0.08, px + 0.08, py + 0.08, 0.0, 2.4, (0.2, 0.2, 0.22), True))
             self.decor.append((px - 0.25, py - 0.25, px + 0.25, py + 0.25, 2.4, 2.7, lamp, False))
-        # Kommandoraum: Konsole mit dem grossen roten Knopf, Zeit-Schalter, Kartentisch, Bildschirme
+        # Kommandoraum: Konsolen, Kartentisch, Bildschirme
         self.add_box(79.0 + o, 62.1 + o, 81.0 + o, 63.0 + o, TUN_Z - 1.0, TUN_Z + 1.0, (0.25, 0.27, 0.30))
         self.add_box(84.0 + o, 62.1 + o, 86.0 + o, 63.0 + o, TUN_Z - 1.0, TUN_Z + 1.0, (0.25, 0.27, 0.30))
         self.add_box(76.0 + o, 65.5 + o, 84.0 + o, 67.0 + o, TUN_Z - 1.0, TUN_Z + 0.9, (0.35, 0.28, 0.2))
-        self.decor.append((79.6 + o, 62.3 + o, 80.4 + o, 62.8 + o, TUN_Z + 1.0, TUN_Z + 1.15, (1.0, 0.1, 0.1), False))
-        self.decor.append((84.3 + o, 62.3 + o, 85.7 + o, 62.8 + o, TUN_Z + 1.0, TUN_Z + 1.12, (1.0, 0.75, 0.1), False))
-        self.decor.append((84.2 + o, 62.05 + o, 85.8 + o, 62.2 + o, TUN_Z + 1.3, TUN_Z + 1.8, (1.0, 0.75, 0.1), False))
         self.decor.append((75.0 + o, 62.05 + o, 78.0 + o, 62.2 + o, TUN_Z + 1.2, TUN_Z + 2.0, (0.2, 0.9, 0.4), False))
         for lx in (76.0, 80.0, 84.0):
             self.decor.append((lx - 0.3 + o, 65.7 + o, lx + 0.3 + o, 66.3 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
@@ -4715,11 +4602,11 @@ class World:
                                        0.0, 0.05, yel, True))
             self.helis.append(Heli(hid, x, y, 0.0, hd))
 
-    def build_runway(self):
-        """Landebahn im Süden (Ost-West)."""
+    def build_runway(self, y=None, x0=None, x1=None):
+        """Landebahn im Süden (Ost-West); grosse Karte: in der Militärecke (y, x0, x1)."""
         c = CENTER
-        y, hw = c - 76.0, 7.0
-        x0, x1 = c - 50.0, c + 50.0
+        y, hw = (c - 76.0 if y is None else y), 7.0
+        x0, x1 = (c - 50.0 if x0 is None else x0), (c + 50.0 if x1 is None else x1)
         self.runway = (x0, y - hw, x1, y + hw)
         for x in range(int(x0) - 6, int(x1) + 7, 8):
             self.flats.append((float(x), y, 10.0, 18.0))
@@ -5414,8 +5301,17 @@ class World:
         return pl.z < self.surface_height(pl.x, pl.y) - 2.0
 
     def in_zone(self, pl):
-        """In der King-of-the-Hill-Zone - wer darunter im Untergrund ist, zählt nicht."""
-        return math.hypot(pl.x - CENTER, pl.y - CENTER) <= ZONE_R and not self.underground(pl)
+        """In der King-of-the-Hill-Zone? 10a (Polytown): die Zone ist die Burg - innerhalb der Mauern, auf den Mauern,
+        im Kontrollturm und im Untergrund darunter; nicht im Heli/Fahrzeug und nicht in der Luft über der höchsten
+        Ebene (koth_box: x0, y0, x1, y1, Obergrenze). Andere Karten: Kreis ZONE_R ohne Untergrund."""
+        kb = getattr(self, "koth_box", None)
+        if kb is None:
+            return math.hypot(pl.x - CENTER, pl.y - CENTER) <= ZONE_R and not self.underground(pl)
+        if pl.heli >= 0 or pl.vehicle >= 0:
+            return False
+        if pl.mount >= 0 and 0 <= pl.mount < len(self.turrets) and self.turrets[pl.mount].kind == "car":
+            return False
+        return kb[0] <= pl.x <= kb[2] and kb[1] <= pl.y <= kb[3] and pl.z <= kb[4]
 
     def ranking(self):
         ps = list(self.players.values())
@@ -5481,16 +5377,15 @@ class World:
         pl.deaths += 1
         pl.death_pos = (pl.x, pl.y)
         act = pl.cur                                     # die Waffe, die er gerade in der Hand hatte
-        if act not in pl.slots:
-            act = next((q for q in pl.slots if q is not None), act)
         hc = self.heli_by_id(pl.heli) if pl.heli >= 0 else None
         if hc is not None:                               # im Hubschrauber: zählt die Höhe des Hubschraubers
             air = hc.z - self.floor_at(hc.x, hc.y, hc.z) > 1.5
         else:
             air = pl.z - self.floor_at(pl.x, pl.y, pl.z) > 1.5 and pl.mount < 0 \
                 and not (self.ladders and self.on_ladder(pl.x, pl.y, pl.z))
-        if pl.loot == act:
-            pl.loot = -1                                 # Kistenwaffe: liegt jetzt auf dem Boden (oder ist weg)
+        act = pl.cur                                     # 10b: genau zwei Dinge fallen - die aktive Waffe (mit Aufsätzen)
+        if not 0 <= act < len(WEAPONS) or act not in pl.slots:
+            act = next((wi for wi in pl.slots if wi is not None), START_WEAPON)
         if not air:                                      # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
             rng = self.mrng                              # 10b: genau zwei Dinge fallen - die aktive Waffe (mit Aufsätzen) ...
             if pl.melee_out and pl.melee != START_MELEE:
@@ -5565,17 +5460,20 @@ class World:
         dmg *= self.dmg_mult(owner)
         pct = round(min(dmg, max(pl.hp, 0.0)) / PLAYER_HP * 100.0)
         self.events.append(("pl_hit", pos, d, dmg, head, owner, pct))
-        self.note_hit(owner, head, wi)
         self.damage_player(pl, dmg, owner, wi, head)
 
-    def note_hit(self, owner, head, wi=-1):
-        """Statistik des Schützen: Treffer und Kopfschüsse (nur mit Waffen)."""
+    def note_hit(self, owner, head, target_pos=None, wi=-1, kill=False):
+        """Statistik des Schützen: Treffer, Kopfschüsse, weitester Kill-Schuss (mit Waffe)."""
         p = self.players.get(owner) if isinstance(owner, int) else None
-        if p is None or not (0 <= wi < len(WEAPONS)):
+        if p is None:
             return
         p.stats["hits"] += 1
         if head:
             p.stats["heads"] += 1
+        if kill and target_pos is not None and 0 <= wi < len(WEAPONS):
+            dist = math.hypot(target_pos[0] - p.x, target_pos[1] - p.y)
+            if dist > p.stats["longest"]:
+                p.stats["longest"], p.stats["longest_w"] = round(dist, 1), wi
 
     def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1):
         dmg *= self.dmg_mult(owner)
@@ -5589,10 +5487,6 @@ class World:
         m.kx = clampf(m.kx + d[0] * imp, -6, 6)
         m.ky = clampf(m.ky + d[1] * imp, -6, 6)
         self.events.append(("mob_hit", pos, d, dmg, head, owner, pct))
-        if owner is not None and head is not None:
-            sh = self.players.get(owner) if isinstance(owner, int) else None
-            if sh is not None and head is True:
-                sh.stats["heads"] += 1
         if m.hp <= 0 and m.state != "dead" and m.kind in TEMP_MOBS:   # 10e: eigene Drohne abgeschossen (kein Monster)
             m.state, m.dead_t = "dead", 0.0
             self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
@@ -5600,17 +5494,22 @@ class World:
         if m.hp <= 0 and m.state != "dead":
             m.state, m.dead_t = "dead", 0.0
             self.kills += 1
+            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
+            self.events.append(("reward", owner))        # Munition für den Schützen
             killer = self.players.get(owner) if isinstance(owner, int) else None
             if killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99):
                 self.pan_add(killer, m.kind)              # 9c: Kill mit der Pfanne lädt sie auf
             if killer is not None:
                 killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
-                if wi >= MELEE_WI0:
+                if 0 <= wi < len(WEAPONS):
+                    self.note_hit(owner, False, (m.x, m.y), wi, True)
+                    killer.stats["hits"] -= 1                # (der Treffer wurde schon gezählt)
+                elif wi >= MELEE_WI0:
                     killer.stats["melee_kills"] += 1
-            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
-            self.events.append(("reward", owner))        # Munition für den Schützen
+            if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
+                self.give_buff(killer)
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if m.kind in MOB_LOOT or extra:              # Beute: Waffen, Aufsätze, Nahkampf, Granaten, Ausrüstung
+            if m.kind in MOB_LOOT or extra:              # 10b: Beute von Monstern (Titan: 6 Teile)
                 self.mob_loot(m, killer, extra)          # 10d: Diebesdolch +1 (andere Kategorie)
             if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
                 self.titan_loot(m)
@@ -5618,8 +5517,8 @@ class World:
     def explode(self, pos, owner, r, dmg, wi):
         """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
         Eine Rakete zerstört ein Fahrzeug in ROCKET_KILL_R Umkreis sofort."""
-        self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, wi, owner))
-        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION)
+        self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, owner, wi))
+        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION, pos[2])
         for v in list(self.vehicles):
             if v.hp <= 0:
                 continue
@@ -5643,6 +5542,8 @@ class World:
             d = math.dist(pos, (pl.x, pl.y, pl.z + 0.9))
             if pl.pid == owner and pl.mount >= 0:      # Schütze am Geschütz bleibt unversehrt
                 continue
+            if d < r and not self.blast_los(pos, (pl.x, pl.y, pl.z + 0.9), (pl.x, pl.y, pl.z + 1.6)):
+                continue                               # 10a: Wand/Decke dazwischen - kein Schaden
             kr = {WI_GRENADE: GREN_KILL_R, WI_C4: C4_KILL_R, WI_CLAY: CLAY_KILL_R}.get(wi, 0.0)
             if kr > 0 and d < kr:                      # sofort tot
                 self.damage_player(pl, 9999.0, owner, wi)
@@ -5650,13 +5551,13 @@ class World:
                 f = 1.0 - d / r
                 if pl.pid == owner:
                     f *= 0.5
-                self.damage_player(pl, dmg * f, owner, wi)
+                self.damage_player(pl, dmg * f * self.dmg_mult(owner), owner, wi)
         for m in self.mobs:
             if m.state == "dead":
                 continue
             mp = (m.x, m.y, m.z + m.height * 0.5)
             d = math.dist(pos, mp)
-            if d < r + m.radius:
+            if d < r + m.radius and self.blast_los(pos, mp, (m.x, m.y, m.z + m.height * 0.9)):
                 f = max(0.0, 1.0 - d / (r + m.radius))
                 if wi == WI_GRENADE and d < GREN_KILL_R + m.radius:
                     f = 9999.0 / max(dmg, 1.0)
@@ -5712,7 +5613,7 @@ class World:
                 oz = o.z - o.seat if kind == "turret" else o.z
                 if d < bs and abs(pl.z - oz) < 2.5 and (kind not in ("crate", "drop") or
                                                         self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
-                    best, bs = (kind, o), d                   # nicht durch Decken/Wände (Kisten, Drops)
+                    best, bs = (kind, o), d                   # 10a: nicht durch Decken/Wände (Kisten, Drops)
         if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
             for kind, b in (("button", self.button), ("timer", self.timer_panel)):
                 d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
@@ -5794,7 +5695,7 @@ class World:
     # ------------------------------------------------------------ Waffen am Boden
     def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
                  gk="frag"):
-        while len(self.drops) >= EXP_MAX_DROPS:
+        while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
                  scope, gren, gk)
@@ -5803,19 +5704,18 @@ class World:
         return d
 
     def pickup_drop(self, pl, d):
-        """Waffe oder Aufsatz vom Boden aufheben. Eine Waffe tauscht mit der in der Hand (die verdrängte fällt mit ihren
-        Aufsätzen auf den Boden), ein Aufsatz geht an den Spieler (sein Spiel steckt ihn an oder legt ihn ins Lager).
-        Kistenbeute gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
+        """Waffe/Teil vom Boden aufheben (gleiche Slot-Regeln wie bei Kisten, siehe take_weapon). Kistenbeute
+        gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
         if d not in self.drops:
             return
         if d.lock > 0 and d.owner >= 0 and d.owner != pl.pid and d.owner in self.players:
             self.events.append(("droplock", pl.pid, d.owner, round(d.lock, 1)))
             return
-        if d.att >= 0:                                   # Aufsatz: das Spiel des Spielers entscheidet (Waffe/Lager)
+        if d.att >= 0:                                   # Aufsatz: an die Waffe in der Hand oder ins Lager
             si, v = divmod(d.att, ATT_CODE)
             if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
                 self.drops.remove(d)
-                self.events.append(("attgain", pl.pid, si, v))
+                self.give_attachment(pl, si, v)
             return
         if d.gren > 0 and d.gk.startswith("gad:"):       # Experimental: Gadget-Stücke
             if self.give_gadget(pl, int(d.gk[4:]), d.gren):
@@ -5836,25 +5736,7 @@ class World:
                 self.drops.append(d)
             return
         self.drops.remove(d)
-        if not 0 <= d.wi < len(WEAPONS):
-            return
-        held = pl.cur
-
-        def put(wi):                                     # verdrängte Waffe fällt mit ihren Aufsätzen
-            self.add_drop(pl.x, pl.y, pl.z, wi, atts=pl.att.get(wi), scope=pl.scopes.get(wi, -1))
-        if WEAPONS[d.wi].kind == "loot":
-            old = pl.loot
-            pl.loot = d.wi
-            if old >= 0 and old != d.wi:
-                put(old)                                 # die bisherige Kistenwaffe wird ersetzt
-            elif old < 0 and held != d.wi:
-                put(held)                                # sonst: Tausch gegen die Waffe in der Hand
-        else:
-            if pl.loot == held:
-                pl.loot = -1
-            if held != d.wi:
-                put(held)
-        self.events.append(("pickup", pl.pid, d.wi, list(d.atts), d.scope))
+        self.give_weapon(pl, d.wi, "pickup", 0, d.atts, d.scope)
 
     # ------------------------------------------------------------ Kisten und Beute
     def crate_counts(self):
@@ -6349,8 +6231,10 @@ class World:
             flak = t.kind == "flak"
             t.firing = True
             if getattr(t, "noise_t", 0.0) <= 0:            # Geschütz feuert: laut (alle 0,5 s gemeldet)
-                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2)
+                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2, getattr(t, "z", None))
                 t.noise_t = 0.5
+                self.events.append(("lnoise", op.pid, round(t.x, 1), round(t.y, 1),
+                                    round(getattr(t, "z", None) or self.height(t.x, t.y) + 1.0, 1), NOISE_SHOT * 1.2))
             t.cd = FLAK_INTERVAL if flak else TUR_INTERVAL
             t.heat += FLAK_HEAT if flak else TUR_HEAT_SHOT
             if t.heat >= 1.0:
@@ -6553,8 +6437,11 @@ class World:
     def in_strike(self, x, y):
         return math.hypot(x - self.strike_x, y - self.strike_y) <= STRIKE_R      # in allen Modi kreisförmig
 
-    def press_button(self, pl, tx=None, ty=None):
-        """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte)."""
+    def press_button(self, pl, tx=None, ty=None, dur=None):
+        """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte). Experimental: Tomahawk-Säule
+        (press_toma), sonst der Knopf im Kommandoraum."""
+        if self.exp:
+            return self.press_toma(pl, tx, ty, dur)
         if not self.tomahawk_on or self.strike != 0 or self.phase != "play" or pl.hp <= 0:
             return False
         if tx is None or ty is None or not (math.isfinite(tx) and math.isfinite(ty)):
@@ -6566,11 +6453,46 @@ class World:
         self.events.append(("strike", pl.pid))
         return True
 
+    def press_toma(self, pl, tx=None, ty=None, dur=None):
+        """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte), dur = Countdown
+        (STRIKE_OPTIONS). Die Säule wird unbrauchbar und versinkt; nach der Abklingzeit fährt woanders eine hoch.
+        Wer auslöst, ist danach TOMA_PLAYER_CD Sekunden für den Tomahawk gesperrt."""
+        if (not self.tomahawk_on or self.strike != 0 or self.phase != "play" or pl.hp <= 0 or not self.toma_ready()
+                or self.toma_lock.get(pl.pid, 0.0) > 0):
+            return False
+        if dur in TOMA_DURATIONS:
+            self.strike_dur = float(dur)
+        elif self.strike_dur not in TOMA_DURATIONS:
+            self.strike_dur = float(STRIKE_T)
+        if tx is None or ty is None or not (math.isfinite(tx) and math.isfinite(ty)):
+            tx, ty = CENTER, CENTER
+        self.strike_x, self.strike_y = clampf(float(tx), 4.0, WORLD - 4.0), clampf(float(ty), 4.0, WORLD - 4.0)
+        self.strike, self.strike_t, self.strike_by = 1, self.strike_dur, pl.pid
+        pl.stats["toma_fired"] += 1
+        self.strike_ang = self.mrng.uniform(0.0, 360.0)
+        self.toma_last = self.toma_idx
+        self.toma_sink_idx, self.toma_sink_t = self.toma_idx, 0.0
+        if TOMA_PLAYER_CD > 0:
+            self.toma_lock[pl.pid] = float(TOMA_PLAYER_CD)
+        self.set_toma(-1)
+        self.events.append(("strike", pl.pid))
+        return True
+
     def update_strike(self, dt):
+        self.toma_age += dt
+        if self.toma_sink_idx >= 0:
+            self.toma_sink_t += dt
+            if self.toma_sink_t >= TOMA_SINK_T:
+                self.toma_sink_idx = -1
+        for pid in list(self.toma_lock):
+            self.toma_lock[pid] -= dt
+            if self.toma_lock[pid] <= 0:
+                del self.toma_lock[pid]
         if self.strike == 2 and self.strike_cd > 0 and self.phase == "play":
             self.strike_wait -= dt                       # Abklingzeit läuft; danach ist der Knopf wieder bereit
             if self.strike_wait <= 0:
                 self.strike, self.strike_wait = 0, 0.0
+                self.place_toma()                        # an einem anderen Ort
                 self.events.append(("strikeready",))
             return
         if self.strike != 1:
@@ -6583,10 +6505,11 @@ class World:
 
     def strike_hit(self):
         self.strike, self.strike_t = 2, 0.0
-        self.strike_wait = self.strike_cd
+        j = max(0.0, min(0.95, TOMA_RESPAWN_JITTER))
+        self.strike_wait = self.strike_cd * self.mrng.uniform(1.0 - j, 1.0 + j)
         tx, ty = self.strike_x, self.strike_y
         cz = self.height(tx, ty)
-        self.make_noise(tx, ty, NOISE_TOMAHAWK)
+        self.make_noise(tx, ty, NOISE_TOMAHAWK, cz + 1.0)
         self.events.append(("tomahawk", round(tx, 1), round(ty, 1)))
         self.events.append(("explosion", (round(tx, 2), round(ty, 2), round(cz + 1.0, 2)), 16.0))
         n, rr = 8, STRIKE_R * 0.6
@@ -7154,18 +7077,15 @@ class World:
             if dist <= rng:
                 best, res = dist, (p, self.surface_normal(p, d), None)
         p1 = (o[0] + d[0] * rng, o[1] + d[1] * rng, o[2] + d[2] * rng)
-        for kind, lst, r, hh in (("v", self.vehicles, VEH_R, VEH_HIT_H), ("h", self.helis, HELI_R, HELI_HIT_H)):
+        for kind, lst in (("v", self.vehicles), ("h", self.helis)):
             for v in lst:
                 if v.hp <= 0:
                     continue
-                t = seg_cyl(o, p1, v.x, v.y, r, v.z, v.z + hh)
-                if t is not None and t * rng < best:
-                    best = t * rng
+                th = vehicle_hit_t(o, p1, v, kind == "h")   # 10f: Trefferquader (Normale = getroffene Fläche)
+                if th is not None and th[0] * rng < best:
+                    best = th[0] * rng
                     hp = (o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best)
-                    dx, dy = hp[0] - v.x, hp[1] - v.y
-                    l = math.hypot(dx, dy) or 1.0
-                    n = (0.0, 0.0, 1.0) if hp[2] > v.z + hh - 0.15 else (dx / l, dy / l, 0.0)
-                    res = (hp, n, (kind, v.id))
+                    res = (hp, th[1], (kind, v.id))
         return res
 
     def attach_offsets(self, att, pos, nrm):
@@ -7181,10 +7101,10 @@ class World:
         return off, noff
 
     def place_gadget(self, pl, kind, pos, nrm, yaw, att=None):
-        """Host/Einzelspiel: Gadget aufstellen (prüft Stückzahl und Untergrund). -> Gadget oder None"""
+        """Host/Einzelspiel: Gadget aufstellen (prüft den Vorrat gad_stock und den Untergrund). -> Gadget oder None"""
         if pl.hp <= 0 or self.phase != "play" or kind not in (GAD_C4, GAD_CLAY, GAD_BEACON):
             return None
-        if pl.gad_used[kind] >= GAD_START or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0:
+        if pl.gad_stock[kind] <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0:
             return None
         nrm = norm(nrm)
         if kind != GAD_C4 and (nrm[2] < 0.55 or att is not None):
@@ -7198,11 +7118,145 @@ class World:
         g = Gadget(self.next_gadid, kind, pl.pid, pos[0] + nrm[0] * 0.04, pos[1] + nrm[1] * 0.04, pos[2] + nrm[2] * 0.04,
                    nrm[0], nrm[1], nrm[2], yaw, att, off, noff)
         self.next_gadid += 1
-        pl.gad_used[kind] += 1
+        pl.gad_stock[kind] -= 1
         pl.protect = 0.0
         self.gadgets.append(g)
         self.events.append(("gplace", pl.pid, kind))
+        self.gadget_event(pl)
         return g
+
+    def ground_boxes(self):
+        """9a: Bodennahe Quader und flache Deko an das Gelände anpassen (läuft auf Host und Client gleich, weil
+        alles aus Seed + Karte folgt). follow_boxes werden als Ganzes auf die Geländehöhe ihrer Mitte gesetzt; alle
+        anderen bodennahen Quader bekommen ein Fundament bis unter den tiefsten Geländepunkt ihrer Grundfläche
+        (Oberkante bleibt). Ausgenommen: über Wasser, Graben, Tunnel und Löchern."""
+        def samples(x0, y0, x1, y1):
+            return [(x0 + (x1 - x0) * i / 3.0, y0 + (y1 - y0) * j / 3.0) for i in range(4) for j in range(4)]
+
+        def blocked(pts):
+            for x, y in pts:
+                if self.voids and self.in_void(x, y):
+                    return True
+                if self.tunnels and self.in_tunnel(x, y):
+                    return True
+                if self.moats and self.near_moat(x, y, 0.5):
+                    return True
+                if any(math.hypot(x - px, y - py) < r * 1.3 for px, py, r in self.ponds):
+                    return True
+            return False
+
+        for b in self.follow_boxes:
+            gz = self.surface_height((b.x0 + b.x1) * 0.5, (b.y0 + b.y1) * 0.5)
+            if abs(gz) > GROUND_FOLLOW_TOL and not blocked(samples(b.x0, b.y0, b.x1, b.y1)):
+                b.z0 += gz
+                b.z1 += gz
+        for b in self.boxes:
+            if not b.vis or b.z1 <= 0.05 or b.z0 > GROUND_ANCHOR_Z:
+                continue
+            pts = samples(b.x0, b.y0, b.x1, b.y1)
+            lo = min(self.surface_height(x, y) for x, y in pts)
+            if lo >= b.z0 - 0.05 or b.z0 - lo > GROUND_FOOT_MAX or blocked(pts):
+                continue
+            b.z0 = lo - GROUND_FOOT_SINK
+        for k, d in enumerate(self.decor):
+            x0, y0, x1, y1, z0, z1, col, lit = d
+            if not lit or not -0.05 <= z0 <= GROUND_ANCHOR_Z:
+                continue
+            pts = samples(x0, y0, x1, y1)
+            lo = min(self.surface_height(x, y) for x, y in pts)
+            if lo < z0 - 0.03 and z0 - lo <= GROUND_FOOT_MAX and not blocked(pts):
+                self.decor[k] = (x0, y0, x1, y1, lo - 0.1, z1, col, lit)
+
+    def loot_debug(self, pl, kind):
+        """LOOT_DEBUG: aktuelle Chancen des Spielers je Kistenart ins Log und als Hinweis an ihn."""
+        short = {"Schrotflinte": "SG", "Maschinenpistole": "MP", "Sturmgewehr": "AR", "Revolver": "Rev",
+                 "Minigun": "Mini", "Railgun": "Rail", "Raketenwerfer": "RPG", "Scharfschütze": "Sniper"}
+        lines = []
+        for k in LOOT_CRATE_KINDS:
+            ch = loot_chances(k, pl.slots, pl.loot_history, pl.last_loot)
+            ch.update({f"[{n}]": v for n, v in loot_chances(k, (), pl.loot_history, pl.last_loot, "gear",
+                                                             worn_names(pl)).items()})
+            parts = "  ".join(f"{short.get(n, n)} {ch[n] * 100:.0f}" if ch[n] >= 0.095 else f"{short.get(n, n)} {ch[n] * 100:.1f}" for n in sorted(ch, key=lambda n: -ch[n]))
+            lines.append(f"{'>' if k == kind else ' '}{k}: {parts}")
+        txt = f"Chancen {pl.name} (gezogen: {dict(pl.loot_history) or '-'}):\n" + "\n".join(lines)
+        try:
+            with open(_log_path(), "a", encoding="utf-8") as f:
+                f.write(time.strftime("%H:%M:%S ") + txt + "\n")
+        except OSError:
+            pass
+        self.events.append(("lootdbg", pl.pid, txt))
+
+    def give_weapon(self, pl, wi, how, extra=0, atts=None, scope=-1):
+        """Host/Einzelspiel: Waffe ins Inventar legen; eine verdrängte Waffe fällt auf den Boden (mit ihren
+        Aufsätzen). atts = Aufsätze der aufgehobenen Waffe (7b). Das Ereignis trägt die neue Slot-Belegung und
+        die Aufsätze, der Mitspieler übernimmt sie genau so."""
+        out_att = pl.att.get(wi) if wi in pl.slots else None
+        out, dup = take_weapon(pl, wi)
+        if not dup:
+            a = att_valid(atts)
+            if a is not None and a != ATT_NONE and att_fits(wi):
+                pl.att[wi] = a
+            else:
+                pl.att.pop(wi, None)
+            pl.guns[wi] = GunState(pl.wp(wi))
+            if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
+                pl.scopes[wi] = scope
+            else:
+                pl.scopes.pop(wi, None)
+        else:
+            pl.att[wi] = out_att if out_att else pl.att.get(wi)
+            if pl.att.get(wi) is None:
+                pl.att.pop(wi, None)
+        if out is not None:
+            osc = pl.scopes.pop(out, -1)
+            self.add_drop(pl.x, pl.y, pl.z, out, atts=pl.att.pop(out, None), scope=osc)
+        self.events.append((how, pl.pid, wi, list(pl.slots), 1 if dup else 0, extra,
+                            list(pl.att.get(wi) or ATT_NONE)))
+        self.att_state_event(pl)
+
+    def att_state_event(self, pl, msg=0, code=-1, wi=-1):
+        """7b: Aufsätze, Visiere und Aufsatz-Lager des Spielers an alle (der Spieler übernimmt sie)."""
+        self.events.append(("attstate", pl.pid, {str(k): list(v) for k, v in pl.att.items()},
+                            {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi))
+
+    def give_attachment(self, pl, si, v):
+        """7b: Aufsatz aufheben (siehe att_give). -> True (wird immer genommen)."""
+        msg, code, wi = att_give(pl, si, v)
+        self.att_state_event(pl, msg, code, wi)
+        return True
+
+    def equip_att(self, pl, wi, si, v):
+        """7b: Aufsatz aus dem Lager an die Waffe wi stecken (siehe att_equip_local). -> True, wenn geändert."""
+        code = att_equip_local(pl, wi, si, v)
+        if code is None:
+            return False
+        self.att_state_event(pl, 3, code, wi)
+        return True
+
+    def set_toma(self, i, age=0.0):
+        """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
+        if not (isinstance(i, int) and 0 <= i < len(self.toma_spots)):
+            i = -1
+        self.toma_idx = i
+        self.toma_age = float(age)
+        if i < 0:
+            self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
+            return
+        x, y, z, _h = self.toma_spots[i]
+        self.button = SimpleNamespace(x=x, y=y, z=z)
+
+    def toma_ready(self):
+        """Steht eine Säule ganz oben (Knopf benutzbar)?"""
+        return self.toma_idx >= 0 and self.toma_age >= TOMA_RISE_T
+
+    def place_toma(self):
+        """Host: die Säule an einem zufälligen Ort hochfahren lassen - nie dort, wo sie zuletzt benutzt wurde."""
+        n = len(self.toma_spots)
+        if n == 0:
+            self.set_toma(-1)
+            return
+        choices = [i for i in range(n) if i != self.toma_last] or list(range(n))
+        self.set_toma(self.mrng.choice(choices), 0.0)
 
     def try_place(self, pl, eye, d):
         """Spieler platziert sein Gadget vor sich. Beim Client geht die Meldung an den Host."""
@@ -7418,9 +7472,10 @@ class World:
         if self.shot_sink is not None:
             self.shot_sink(pl, eye, dirs, w)
             return
-        self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1)))
+        self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1),           # 10h: + Lärmradius, Höhe
+                            round(NOISE_SHOT * getattr(w, "loud", 1.0), 1), round(world_noise_z(self, pl), 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
-        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0))
+        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0), world_noise_z(self, pl))
         for d in dirs:
             self.bullets.append(Bullet(eye[0], eye[1], eye[2],
                                        d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
@@ -7451,6 +7506,8 @@ class World:
         for m in (self.mobs if mobs is None else mobs):
             if m.state == "dead":
                 continue
+            if m.kind == "gdrone" and self.allied(getattr(m, "owner", -1), b.owner):
+                continue                                 # 10h: eigene/verbündete Abwehrdrohne fängt keine Kugeln
             if (max(x0, x1) < m.x - m.radius or min(x0, x1) > m.x + m.radius
                     or max(y0, y1) < m.y - m.radius or min(y0, y1) > m.y + m.radius):
                 continue
@@ -7461,21 +7518,21 @@ class World:
         for v in self.vehicles:
             if v.hp <= 0 or v.id == own_v:               # der eigene Wagen wird nie vom eigenen Geschütz getroffen
                 continue
-            if (max(x0, x1) < v.x - VEH_R or min(x0, x1) > v.x + VEH_R
-                    or max(y0, y1) < v.y - VEH_R or min(y0, y1) > v.y + VEH_R):
+            if (max(x0, x1) < v.x - VEH_HIT_REACH or min(x0, x1) > v.x + VEH_HIT_REACH
+                    or max(y0, y1) < v.y - VEH_HIT_REACH or min(y0, y1) > v.y + VEH_HIT_REACH):
                 continue
-            t = seg_cyl(p0, p1, v.x, v.y, VEH_R, v.z, v.z + VEH_HIT_H)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "vehicle", v
+            th = vehicle_hit_t(p0, p1, v)                # 10f: Trefferquader passend zum Modell
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "vehicle", v
         for hc in self.helis:
             if hc.hp <= 0 or (b.owner >= 0 and hc.driver == b.owner):
                 continue
-            if (max(x0, x1) < hc.x - HELI_R or min(x0, x1) > hc.x + HELI_R
-                    or max(y0, y1) < hc.y - HELI_R or min(y0, y1) > hc.y + HELI_R):
+            if (max(x0, x1) < hc.x - HELI_HIT_REACH or min(x0, x1) > hc.x + HELI_HIT_REACH
+                    or max(y0, y1) < hc.y - HELI_HIT_REACH or min(y0, y1) > hc.y + HELI_HIT_REACH):
                 continue
-            t = seg_cyl(p0, p1, hc.x, hc.y, HELI_R, hc.z, hc.z + HELI_HIT_H)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "heli", hc
+            th = vehicle_hit_t(p0, p1, hc, True)
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "heli", hc
         if self.phase == "play":
             for pl in self.players.values():
                 if pl.hp <= 0 or pl.pid == b.owner or pl.protect > 0 or pl.vehicle >= 0 or pl.heli >= 0:
@@ -7518,10 +7575,14 @@ class World:
             self.explode((hx - d[0] * 0.3, hy - d[1] * 0.3, hz - d[2] * 0.3),
                          b.owner, b.blast_r, b.blast_dmg, b.wi)
         elif hit == "mob":
+            b.alerted.add(who.id)
             head = hz > who.z + 0.78 * who.height
-            self.hurt_mob(who, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner)
+            self.note_hit(b.owner, head)
+            self.hurt_mob(who, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
         elif hit == "player":
             head = hz > who.z + 0.78 * body_h(who)
+            if b.owner != who.pid:
+                self.note_hit(b.owner, head)
             self.hit_player(who, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
         elif hit == "vehicle":
             drv = self.players.get(who.driver) if who.driver >= 0 else None
@@ -7611,15 +7672,20 @@ class World:
                     b.y += dy / d * push
 
     def push_player(self, pl):
-        """Spieler aus lebenden Monstern herausschieben."""
+        """Spieler aus lebenden Monstern herausschieben - nur bei überlappendem Höhenbereich (Monster z .. z +
+        height, Spieler z .. z + body_h). Wer auf einem Dach/Turm/Obergeschoss über den Monstern steht, wird
+        nicht mehr geschoben (früher: "unendliche Säule")."""
         if pl.hp <= 0:
             return
+        bh = body_h(pl)
         for a in self.mobs:
             if a.state == "dead":
                 continue
             dx, dy = pl.x - a.x, pl.y - a.y
             md = a.radius + PLAYER_R
             if abs(dx) > md or abs(dy) > md:
+                continue
+            if not z_overlap(pl.z, pl.z + bh, a.z, a.z + a.height):
                 continue
             d = math.hypot(dx, dy)
             if d < md:
@@ -7632,7 +7698,7 @@ class World:
             if f.state == "carried":
                 f.state, f.carrier = "dropped", -1
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
-        self.bullets, self.grenades = [], []
+        self.bullets, self.grenades, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         self.events.append(("matchend",))
@@ -7668,13 +7734,17 @@ class World:
     def new_match(self):
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
         self.bullets, self.mobs, self.pending = [], [], []
-        self.grenades, self.drops = [], []
+        self.grenades, self.drops, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         for v in self.vehicles:
             v.reset()
         self.strike, self.strike_t, self.strike_by, self.strike_wait = 0, 0.0, -1, 0.0
         self.strike_x = self.strike_y = float(CENTER)
+        self.toma_lock.clear()
+        self.toma_sink_idx, self.toma_sink_t = -1, 0.0
+        if self.exp:
+            self.place_toma()
         for t in self.turrets:
             t.heat, t.over, t.firing, t.op = 0.0, False, False, -1
         for hc in self.helis:
@@ -7687,7 +7757,6 @@ class World:
         for pl in list(self.players.values()):
             pl.kills = pl.deaths = 0
             pl.score = 0.0
-            pl.loot = -1
             pl.death_pos = None
             pl.stats = new_stats()
             pl.ready = False
@@ -7724,6 +7793,9 @@ class World:
         if self.lobby:                                   # Lobby: nichts läuft, alle warten auf 'Spiel starten'
             for pl in players:
                 pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
+            return
+        if self.phase == "over":                         # Endbildschirm: die Welt steht still, bis der Host die nächste Runde startet
+            self.over_t = 0.0                            # (keine automatische neue Runde: erst wenn alle 'Bereit' gedrückt haben)
             return
         for pl in players:                               # Strecken für die Statistik
             last = getattr(pl, "stat_pos", None)
@@ -7788,10 +7860,10 @@ class World:
             pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
             pl.since_hurt += dt
             pl.protect = max(0.0, pl.protect - dt)
-            pl.stun_t = max(0.0, pl.stun_t - dt)
-            pl.stun_lock = max(0.0, pl.stun_lock - dt)
             if self.regen_rate > 0 and 0 < pl.hp < pl.max_hp and pl.since_hurt > REGEN_DELAY:
                 pl.hp = min(pl.max_hp, pl.hp + self.regen_rate * dt)
+            pl.stun_t = max(0.0, pl.stun_t - dt)
+            pl.stun_lock = max(0.0, pl.stun_lock - dt)
             if pl.hp > 0 and wears(pl, "shield"):
                 pl.shield_t += dt
                 smax = shield_max(pl)
@@ -8079,1906 +8151,6 @@ class World:
                 m.lod_dt = step
 
 
-class ExpWorld(World):
-    """World im Modus Experimental (Robins Regeln)."""
-
-    loot_cats = LOOT_CATS + ("gadget",)               # Experimental: auch C4 / Claymore / Funkbake als Beute
-
-    def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None):
-        bonus = bonus if isinstance(bonus, dict) else {}
-        self.bonus_crates = bool(bonus.get("crates", False))     # (Experimental: Kisten auf der Karte wie bisher aus)
-        self.bonus_hares = bool(bonus.get("hares", True))
-        self.ctf_ff, self.score_limit = False, 0          # CTF gibt es in Experimental nicht: neutrale Felder fürs gemeinsame Netzprotokoll
-        self.team_of, self.team_score, self.flags, self.next_fid = {}, [0, 0], [], 1
-        self.ctf_bases, self.ctf_spawns = [], [[], []]
-        if mob_level is None:
-            mob_level = MOB_DEFAULT if spawn_mobs else 0
-        spawn_mobs = bool(spawn_mobs) and mob_level > 0
-        if mapdata is None:
-            raise ValueError("Keine Karte angegeben (Standardkarte: maps/polytown.ptmap)")
-        set_world_size(mapdata.get("size", MAP_WORLD))   # vor allem anderen: Grösse dieser Karte
-        rng = random.Random(seed)
-        self.map = mapdata                   # bereinigte Kartendatei (sanitize_map, Polytown-.ptmap oder Minecraft-.mcmap)
-        self.mc = mapdata.get("mc") if mapdata else None      # Minecraft-Welt (.mcmap) oder None
-        self.pt = mapdata.get("pt") if mapdata else None      # Polytown aus Blender (maps/polytown.ptmap) oder None
-        if self.pt:
-            self.GRID = 4.0                  # viele kleine Quader (Häuser, Zäune, Stämme): feineres Raster hält die Abfragen kurz
-        self.steep = bool(mapdata and mapdata.get("steep"))   # steile Hänge sperren den Weg
-        if self.mc:
-            spawn_mobs, mode = False, "dm"   # Minecraft-Karte: Deathmatch ohne Monster
-        self.hgrid = mapdata["terrain"] if mapdata else None
-        self.cm = None                       # Dreiecksnetz-Kollision (Karten mit "mesh")
-        if mapdata and mapdata.get("mesh"):
-            self.cm = TriMesh(*mapdata["mesh"]["coll"])
-            self.steep = True
-        self.respawn_delay = float(respawn)  # Sekunden Wartezeit nach dem Tod (vom Host einstellbar)
-        self.strike_cd = float(strike_cd)    # Abklingzeit des Tomahawk (0 = nur einmal pro Runde)
-        self.regen_rate = float(regen)       # Lebensregeneration in HP/s (0 = aus)
-        self.strike_wait = 0.0               # Sekunden, bis der Knopf wieder geht
-        self.seed = seed
-        self.mode = mode if mode in EXP_MODES else "koth"
-        self.limit = float(limit)         # Zeitlimit in Sekunden
-        self.mobs_on = spawn_mobs         # Monster an/aus (der Client bekommt sie vom Host)
-        self.mob_level = int(mob_level)   # Dichte: Index in MOB_LEVELS
-        self.tomahawk_on = bool(tomahawk) # False: Kontrollraum bleibt, aber der Tomahawk ist nicht benutzbar
-        self.ponds = []   # (x, y, r)
-        self.props = []
-        self.boxes = []
-        self.flats = []   # (x, y, r_innen, r_aussen): hier ist das Gelände eben (Höhe 0)
-        self.floors = []  # (x0, y0, x1, y1, Farbe): Bodenfarbe in Gebäuden
-        self.crates = []      # Kisten, die gerade auf der Karte liegen (beim Client: aus den Snapshots)
-        self.crate_spots = [] # (x, y, z): gute Kistenplätze an Bauwerken (Türme, Häuser, Aussenposten ...)
-        self.crate_wait = []  # [Restzeit, Art, x, y]: geöffnete Kisten, die woanders neu auftauchen
-        self.next_cid = 1
-        self.rocks = []       # Steinbrocken des Titans in der Luft
-        self.next_rid = 1
-        self.voids = []   # (x0, y0, x1, y1): Löcher im Gelände = Tunneltreppen (Boden bei TUN_Z)
-        self.tunnels = [] # (x0, y0, x1, y1): Tunnelgänge (ein Stockwerk unter dem Gelände)
-        self.decor = []   # (x0, y0, x1, y1, z0, z1, Farbe, beleuchtet): nur Darstellung, nicht fest
-        self.follow_boxes = []   # 9a: Quader, die als Ganzes auf die Geländehöhe gesetzt werden (Sandsäcke)
-        self.moats = []   # (mx, my, a, o0, o1, o2, o3, Tiefe): Wassergraben um das Quadrat mx±a (Abstände o* vom Quadrat)
-        self.dams = []    # (x0, y0, x1, y1): Brücken/Dämme - hier ist der Graben überbrückt
-        self.roads = []   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
-        self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
-        self.vehicles = []
-        self.grenades = []
-        self.smokes = []         # 10e: Rauchwolken (jeder Rechner selbst, aus dem Ereignis "smoke")
-        self.fires = []          # 10e: brennende Flächen (Molotow)
-        self.airdrops = []       # 10e: Airdrops (Fackel, Flugzeug, Kiste am Fallschirm)
-        self.next_fxid = 1
-        self.gadgets = []        # platzierte Gadgets (C4, Claymore, Funkbake)
-        self.next_gadid = 1
-        self.drops = []
-        self.turrets = []
-        self.helis = []
-        self.pads = []     # (x, y): Helipads
-        self.runway = None
-        self.strike, self.strike_t, self.strike_by = 0, 0.0, -1   # 0 bereit, 1 Countdown, 2 benutzt
-        self.toma_spots = []                 # mögliche Orte der Tomahawk-Säule: (x, y, z, Blick zur Kartenmitte)
-        self.toma_idx = -1                   # aktiver Ort (-1 = gerade keiner: Countdown, Abklingzeit, verbraucht)
-        self.toma_age = 0.0                  # s seit die aktive Säule aufgetaucht ist (Hochfahren: TOMA_RISE_T)
-        self.toma_last = -1                  # zuletzt benutzter Ort (der nächste ist ein anderer)
-        self.toma_sink_idx, self.toma_sink_t = -1, 0.0   # benutzte Säule, die gerade versinkt
-        self.toma_lock = {}                  # Spieler-ID -> s, bis er selbst wieder auslösen darf (TOMA_PLAYER_CD)
-        self.strike_ang = 0.0                # Himmelsrichtung, aus der die Rakete anfliegt (Grad)
-        self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
-        self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
-        self.strike_dur = STRIKE_T
-        self.strike_x, self.strike_y = float(CENTER), float(CENTER)   # Einschlagpunkt (nur Host/Schütze kennt ihn)
-        self.spawn_zs = {}
-        self.ladders = {}
-        if self.mc:
-            self.build_mc()
-        else:
-            self.build_structures()
-            if self.pt:
-                self.build_pt()
-            self.build_grids()           # Kollisionsgitter schon jetzt, damit Bäume Gebäuden ausweichen können
-
-        def free(x, y, r):
-            for fx, fy, rin, _rout in self.flats:
-                if math.hypot(x - fx, y - fy) < rin + r:
-                    return False
-            for p in self.props:
-                if math.hypot(x - p.x, y - p.y) < r + p.r + 0.4:
-                    return False
-            if self.moats and self.near_moat(x, y, r + 2.0):
-                return False
-            if self.roads:
-                rd = self.road_dist(x, y)
-                if rd is not None and rd[0] < rd[1] + r + 1.0:
-                    return False
-            return not any(b.x0 - r - 0.8 < x < b.x1 + r + 0.8 and b.y0 - r - 0.8 < y < b.y1 + r + 0.8 and b.z1 > 0.5
-                           for b in self.boxes_near(x - r - 1, y - r - 1, x + r + 1, y + r + 1))
-
-        def scatter(count, kind, rmin, rmax, solid):
-            placed = tries = 0
-            while placed < count and tries < count * 60:
-                tries += 1
-                r = rng.uniform(rmin, rmax)
-                x = rng.uniform(r + 3, WORLD - r - 3)
-                y = rng.uniform(r + 3, WORLD - r - 3)
-                vis = r * (1.4 if kind == "pond" else 1.0)
-                if kind == "pond" and any(x0 - r * 2.4 - 2 < x < x1 + r * 2.4 + 2 and y0 - r * 2.4 - 2 < y < y1 + r * 2.4 + 2
-                                          for x0, y0, x1, y1 in self.tunnels):
-                    continue                          # 7c: kein Teich über einem Tunnelgang (Decke bliebe stehen)
-                if free(x, y, vis * (1.6 if kind == "pond" else 1.0)):
-                    p = Prop(kind, x, y, vis, solid(r))
-                    p.base_r = r
-                    self.props.append(p)
-                    if kind == "pond":
-                        self.ponds.append((x, y, r))
-                    placed += 1
-
-        mp = self.map or {}
-        for kind, key, count, rmin, rmax, solid in (() if self.mc else
-                                                    (("pond", "ponds", 4, 4.5, 8.0, lambda r: r * 0.72),
-                                                     ("rock", "rocks", int(35 * 1.3), 0.7, 1.8, lambda r: r * 0.85),
-                                                     ("tree", "trees", 110, 1.6, 2.8, lambda r: 0.45))):
-            if mp.get(key) is None:
-                scatter(count, kind, rmin, rmax, solid)
-            else:                                    # Karte aus dem Editor: genau diese Objekte
-                for x, y, r in mp[key]:
-                    vis = r * (1.4 if kind == "pond" else 1.0)
-                    p = Prop(kind, x, y, vis, solid(r))
-                    p.base_r = r
-                    self.props.append(p)
-                    if kind == "pond":
-                        self.ponds.append((x, y, r))
-        if not self.mc:
-            if mp.get("blocks") is None:
-                self.add_cover(rng)
-            self.add_map_objects()
-            self.ground_boxes()                      # 9a: nichts schwebt über Senken und Hängen
-        self.build_grids()
-        self.last_spawn = {}
-        self.spawns = self.make_spawns(rng)
-        if not self.mc:
-            self.build_vehicles()
-
-        # --- Mobs, Kugeln, Ereignisse (eigener RNG: ändert die Welt nicht)
-        self.mrng = random.Random(seed + 2)
-        self.bullets = []
-        self.mobs = []
-        self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
-        self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
-        self.noise_log = []      # NOISE_DEBUG: (x, y, Radius, Restzeit) zur Anzeige
-        self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
-        self.kills = 0           # erlegte Monster
-        self.players = {}        # Spieler-ID -> Player (beim Host: alle, beim Client: nur Anzeige)
-        self.shot_sink = None    # Client: Schüsse zum Host schicken statt selbst zu simulieren
-        self.gren_sink = None    # Client: Granatenwürfe zum Host schicken
-        self.melee_sink = None   # Client: Nahkampf-Schläge zum Host schicken
-        self.mspec_sink = None   # 9c: Client: Sonderattacken (Katana, Schwert) zum Host schicken
-        self.gad_sink = None     # Client: Gadget-Aktionen (platzieren / C4 zünden) zum Host schicken
-        self.next_gid = 1
-        self.next_did = 1
-        self.runover = {}        # Überfahren: Opfer -> Sperrzeit (damit nicht jedes Frame Schaden kommt)
-        self.next_bid = 1
-        self.next_mid = 1
-        self.phase = "play"      # play | over (Rangliste wird gezeigt)
-        self.lobby = False       # Host-Lobby: alle warten, bis der Host 'Spiel starten' drückt (Zeit und Monster ruhen)
-        self.time_left = self.limit
-        self.over_t = 0.0
-        self.reset_crates()
-        self.place_toma()        # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
-        if spawn_mobs:           # der Client bekommt die Monster vom Host
-            self.populate_mobs()
-
-    # ------------------------------------------------------------ Geheime Tunnel
-    def build_tunnels(self):
-        """Tunnelnetz unter dem ebenen Gelände (dort ist die Höhe exakt 0).
-
-        Ein Gang (Rechteck in self.tunnels) liegt bei TUN_Z. Wer unter -1 m ist und in
-        einem solchen Rechteck steht, hat den Tunnelboden unter den Füssen (siehe
-        floor_at) - oben darüber läuft man ganz normal auf dem Gelände. Die vier
-        Treppenschächte (self.voids) sind Löcher im Gelände: von oben sehen sie aus
-        wie Boden (die Karte zeichnet eine Abdeckung), man fällt aber hinein. Unten
-        führen die Treppen in den Gang, an ihrem oberen Ende kommt man wieder heraus.
-        Wände, Decke und Stufen sind ganz normale Quader (Kollision, Kugeln)."""
-        q = 0.2
-        o = TO
-        corr = [(41.0, 76.4, 119.0, 79.0), (89.0, 79.0, 91.6, 92.0),
-                (79.4, 70.0, 82.0, 76.4),                    # Gang zum Kommandoraum
-                (73.0, 62.0, 87.0, 70.0)]                    # Kommandoraum
-        wells = [(41.4, 79.0, 44.0, 83.0, "N"),      # Westhaus
-                 (116.0, 79.0, 118.6, 83.0, "N"),    # Osthaus
-                 (66.0, 72.4, 68.6, 76.4, "S"),      # Burghof Südwest
-                 (89.0, 92.0, 91.6, 96.0, "N")]      # Burghof Nordost
-        corr = [(a + o, b + o, c + o, d + o) for a, b, c, d in corr]
-        wells = [(a + o, b + o, c + o, d + o, e) for a, b, c, d, e in wells]
-        wall_col, roof_col, floor_col = (0.34, 0.32, 0.30), (0.28, 0.27, 0.27), (0.30, 0.28, 0.26)
-        n_st, sd = 8, 0.5
-        sh = (-0.1 - TUN_Z) / n_st
-        rects = list(corr) + [w[:4] for w in wells]
-
-        def ci(v):
-            return int(round(v / q))
-
-        floor = set()
-        for x0, y0, x1, y1 in rects:
-            for i in range(ci(x0), ci(x1)):
-                for j in range(ci(y0), ci(y1)):
-                    floor.add((i, j))
-        # Wände: überall, wo neben einer Bodenzelle keine mehr liegt (zu Quadern verschmolzen)
-        runs = {}
-        for (i, j) in floor:
-            for side, (di, dj) in (("W", (-1, 0)), ("E", (1, 0)), ("S", (0, -1)), ("N", (0, 1))):
-                if (i + di, j + dj) not in floor:
-                    key = (side, i if side in "WE" else j)
-                    runs.setdefault(key, []).append(j if side in "WE" else i)
-        T = 0.6
-        seg = int(TUN_SEG / q)                       # lange Wände in Stücke: Oberkante folgt dem Gelände darüber
-
-        def top_over(x0, y0, x1, y1):
-            """Oberkante für Wand/Decke: knapp unter dem tiefsten Geländepunkt darüber (nie über -0.02)."""
-            h = min(self.surface_height(x, y) for x in (x0, (x0 + x1) / 2, x1) for y in (y0, (y0 + y1) / 2, y1))
-            return min(-0.02, h - 0.12)
-
-        def wall(x0, y0, x1, y1):
-            self.add_box(x0, y0, x1, y1, -6.0, top_over(x0, y0, x1, y1), wall_col)
-        for (side, line), cells in runs.items():
-            cells.sort()
-            start = prev = cells[0]
-            for c in cells[1:] + [None]:
-                if c is not None and c == prev + 1 and prev - start < seg:
-                    prev = c
-                    continue
-                a, b = start * q, (prev + 1) * q
-                if side == "W":
-                    wall(line * q - T, a, line * q, b)
-                elif side == "E":
-                    wall((line + 1) * q, a, (line + 1) * q + T, b)
-                elif side == "S":
-                    wall(a, line * q - T, b, line * q)
-                else:
-                    wall(a, (line + 1) * q, b, (line + 1) * q + T)
-                if c is not None:
-                    start = prev = c
-        for x0, y0, x1, y1 in corr:
-            lx_, ly_ = x1 - x0, y1 - y0                  # Decke in Stücken (Oberkante unter dem Gelände)
-            n = max(1, int(math.ceil(max(lx_, ly_) / TUN_SEG)))
-            for i in range(n):
-                if lx_ >= ly_:
-                    a0, a1, b0, b1 = x0 + lx_ * i / n, x0 + lx_ * (i + 1) / n, y0, y1
-                else:
-                    a0, a1, b0, b1 = x0, x1, y0 + ly_ * i / n, y0 + ly_ * (i + 1) / n
-                self.add_box(a0, b0, a1, b1, TUN_ROOF, top_over(a0, b0, a1, b1), roof_col)
-            self.tunnels.append((x0, y0, x1, y1))
-            self.decor.append((x0, y0, x1, y1, TUN_Z - 0.3, TUN_Z, floor_col, True))
-        for x0, y0, x1, y1, d in wells:
-            self.voids.append((x0, y0, x1, y1))
-            for i in range(n_st):                        # Stufe 0 liegt am Gang, die letzte oben
-                top = TUN_Z + (i + 1) * sh
-                if d == "N":
-                    self.add_box(x0, y0 + i * sd, x1, y0 + (i + 1) * sd, TUN_Z - 1.0, top, STONE_D)
-                elif d == "S":
-                    self.add_box(x0, y1 - (i + 1) * sd, x1, y1 - i * sd, TUN_Z - 1.0, top, STONE_D)
-                elif d == "E":
-                    self.add_box(x0 + i * sd, y0, x0 + (i + 1) * sd, y1, TUN_Z - 1.0, top, STONE_D)
-                else:
-                    self.add_box(x1 - (i + 1) * sd, y0, x1 - i * sd, y1, TUN_Z - 1.0, top, STONE_D)
-        lamp = (1.0, 0.85, 0.5)
-        for x0, y0, x1, y1, d in wells:                      # Eingänge deutlich markieren
-            rim = (0.95, 0.55, 0.10)
-            for a0, b0, a1, b1 in ((x0 - 0.3, y0 - 0.3, x1 + 0.3, y0), (x0 - 0.3, y1, x1 + 0.3, y1 + 0.3),
-                                   (x0 - 0.3, y0, x0, y1), (x1, y0, x1 + 0.3, y1)):
-                self.decor.append((a0, b0, a1, b1, 0.0, 0.16, rim, True))
-            if d in "NS":
-                px, py = x0 - 0.5, y1 + 0.3 if d == "N" else y0 - 0.5
-            else:
-                px, py = (x1 + 0.3 if d == "E" else x0 - 0.5), y0 - 0.5
-            self.decor.append((px - 0.08, py - 0.08, px + 0.08, py + 0.08, 0.0, 2.4, (0.2, 0.2, 0.22), True))
-            self.decor.append((px - 0.25, py - 0.25, px + 0.25, py + 0.25, 2.4, 2.7, lamp, False))
-        # Kommandoraum: Konsolen, Kartentisch, Bildschirme
-        self.add_box(79.0 + o, 62.1 + o, 81.0 + o, 63.0 + o, TUN_Z - 1.0, TUN_Z + 1.0, (0.25, 0.27, 0.30))
-        self.add_box(84.0 + o, 62.1 + o, 86.0 + o, 63.0 + o, TUN_Z - 1.0, TUN_Z + 1.0, (0.25, 0.27, 0.30))
-        self.add_box(76.0 + o, 65.5 + o, 84.0 + o, 67.0 + o, TUN_Z - 1.0, TUN_Z + 0.9, (0.35, 0.28, 0.2))
-        self.decor.append((75.0 + o, 62.05 + o, 78.0 + o, 62.2 + o, TUN_Z + 1.2, TUN_Z + 2.0, (0.2, 0.9, 0.4), False))
-        for lx in (76.0, 80.0, 84.0):
-            self.decor.append((lx - 0.3 + o, 65.7 + o, lx + 0.3 + o, 66.3 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
-        for lx in range(48, 116, 9):
-            self.decor.append((lx - 0.25 + o, 77.5 + o, lx + 0.25 + o, 77.9 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
-        for ly in (84, 90):
-            self.decor.append((89.9 + o, ly - 0.25 + o, 90.7 + o, ly + 0.25 + o, TUN_ROOF - 0.1, TUN_ROOF, lamp, False))
-
-    def build_castle(self):
-        cx = cy = CENTER
-        WALL, WALL_D = STONE, STONE_D
-        H, T, ZW, ZT, PW = 22.0, 3.0, 5.0, 8.0, 0.6
-        x0, x1, y0, y1 = cx - H, cx + H, cy - H, cy + H
-        g0, g1 = cx - 4.0, cx + 4.0                     # Tore im Süden und Norden
-        B = self.add_box
-        for a, b, c, d in ((x0, y0, g0, y0 + T), (g1, y0, x1, y0 + T),
-                           (x0, y1 - T, g0, y1), (g1, y1 - T, x1, y1),
-                           (x0, y0, x0 + T, y1), (x1 - T, y0, x1, y1)):
-            B(a, b, c, d, -2, ZW, WALL, True)          # Mauern mit Wehrgang
-        for a, b, c, d in ((x0, y0, g0, y0 + PW), (g1, y0, x1, y0 + PW),
-                           (x0, y1 - PW, g0, y1), (g1, y1 - PW, x1, y1),
-                           (x0, y0, x0 + PW, y1), (x1 - PW, y0, x1, y1)):
-            B(a, b, c, d, ZW, ZW + 1.2, WALL_D)        # Brüstung aussen
-        n, sd = 6, 0.7
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                tx, ty = cx + sx * H, cy + sy * H
-                B(tx - 3.5, ty - 3.5, tx + 3.5, ty + 3.5, -2, ZT, WALL, True)       # Eckturm
-                ex, ey = tx + sx * 3.5, ty + sy * 3.5
-                B(min(ex, ex - sx * PW), ty - 3.5, max(ex, ex - sx * PW), ty + 3.5, ZT, ZT + 1.2, WALL_D)
-                B(tx - 3.5, min(ey, ey - sy * PW), tx + 3.5, max(ey, ey - sy * PW), ZT, ZT + 1.2, WALL_D)
-                fx, fy = tx - sx * 3.5, ty - sy * 3.5   # Innenkanten des Turms
-                wy = (y0 + PW) if sy < 0 else (y1 - T)  # Wehrgang der Nord/Süd-Mauer
-                wxx = (x0 + PW) if sx < 0 else (x1 - T)  # Wehrgang der West/Ost-Mauer
-                if sx < 0:
-                    self.stairs(fx + n * sd, wy, "W", n, T - PW, ZW, 0.5, sd)
-                else:
-                    self.stairs(fx - n * sd, wy, "E", n, T - PW, ZW, 0.5, sd)
-                if sy < 0:
-                    self.stairs(wxx, fy + n * sd, "S", n, T - PW, ZW, 0.5, sd)
-                else:
-                    self.stairs(wxx, fy - n * sd, "N", n, T - PW, ZW, 0.5, sd)
-        # Treppen im Hof hinauf zu den Wehrgängen West und Ost
-        self.stairs(x0 + T, cy - 10, "N", 10, 2.5, 0, 0.5, 0.8)
-        self.stairs(x1 - T - 2.5, cy + 10, "S", 10, 2.5, 0, 0.5, 0.8)
-        B(cx - 4, cy - 4, cx + 4, cy + 4, -2, 6.0, WALL, True)             # Bergfried in der Mitte mit Treppe aufs Dach
-        B(cx - 4, cy + 4 - PW, cx + 4, cy + 4, 6.0, 7.2, WALL_D)
-        B(cx - 4, cy - 4, cx - 4 + PW, cy + 4, 6.0, 7.2, WALL_D)
-        self.stairs(cx + 4 - 12 * 0.8, cy - 4 - 2.5, "E", 12, 2.5, 0, 0.5, 0.8)
-        # niedrige Deckung: vor den Toren aussen und im Hof
-        for s in (-1, 1):
-            for a, b in ((cx - 5, cx - 2), (cx + 2, cx + 5)):
-                B(a, cy + s * 27, b, cy + s * 27 + 0.7, -2, 1.2, WALL_D)
-                B(cx + s * 27, a - cx + cy, cx + s * 27 + 0.7, b - cx + cy, -2, 1.2, WALL_D)
-            B(cx - 5, cy + s * 14, cx + 5, cy + s * 14 + 0.7, -2, 1.2, WALL_D)
-        # Kasematten: überdachte Räume an der Innenseite der Mauern (Schutz vor Feuer von oben und aussen)
-        def casemate(xa, ya, xb, yb, front):
-            B(xa, ya, xb, yb, 3.0, 3.5, WALL_D)                                 # Dach
-            if front in "NS":
-                B(xa, ya, xa + PW, yb, -2, 3.0, WALL)
-                B(xb - PW, ya, xb, yb, -2, 3.0, WALL)
-                fy = yb - PW if front == "N" else ya
-                for k in (1 / 3, 2 / 3):
-                    px = xa + (xb - xa) * k
-                    B(px - 0.35, fy, px + 0.35, fy + PW, -2, 3.0, WALL)
-            else:
-                B(xa, ya, xb, ya + PW, -2, 3.0, WALL)
-                B(xa, yb - PW, xb, yb, -2, 3.0, WALL)
-                fx_ = xb - PW if front == "E" else xa
-                for k in (1 / 3, 2 / 3):
-                    py = ya + (yb - ya) * k
-                    B(fx_, py - 0.35, fx_ + PW, py + 0.35, -2, 3.0, WALL)
-        casemate(cx - 14, cy - 19, cx - 6, cy - 14, "N")
-        casemate(cx + 6, cy - 19, cx + 14, cy - 14, "N")
-        casemate(cx - 14, cy + 14, cx - 6, cy + 19, "S")
-        casemate(cx - 19, cy + 4, cx - 14, cy + 14, "E")
-        casemate(cx + 14, cy - 14, cx + 19, cy - 4, "W")
-        # freistehende Mauerstücke (2 m, volle Deckung) um den Bergfried und Sprengschutz hinter den Toren
-        for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-            B(cx + sx * 10 - 2.5, cy + sy * 10, cx + sx * 10 + 2.5, cy + sy * 10 + 0.6, -2, 2.0, WALL_D)
-        for sy in (-1, 1):
-            B(cx - 2, cy + sy * 17, cx + 2, cy + sy * 17 + 0.6, -2, 2.2, WALL_D)
-        # Flak auf zwei Ecktürmen der Burg (Bedienung per F)
-        for sx, sy in ((-1, 1), (1, -1)):
-            tx, ty = cx + sx * H, cy + sy * H
-            B(tx - 0.45, ty - 0.45, tx + 0.45, ty + 0.45, ZT, ZT + 0.9, (0.30, 0.32, 0.34))
-            self.turrets.append(Turret(len(self.turrets), tx, ty, ZT + 1.35,
-                                       math.degrees(math.atan2(-(cx - tx), cy - ty)), "flak"))
-        self.floors.append((x0 + T, y0 + T, x1 - T, y1 - T, COBBLE))
-        self.flats.append((cx, cy, 36.0, 50.0))
-        self.add_crate(cx - 12, cy + 8, 0.0)
-        self.add_crate(cx + 12, cy - 8, 0.0)
-
-    def koth_tower(self, cx, cy, H, T, ZW, WALL, WALL_D):
-        """10a: Kontrollturm (Flughafen-/Militär-Tower) in der Burgmitte: massiver Betonsockel ohne Zugang, zwei Stege
-        von Nord- und Südmauer (Wehrgang, KT_MID) auf die mittlere Etage, im Schaft eine Wendeltreppe (eckig um einen
-        Pfeiler, KT_STEPS Stufen) hinauf in den auskragenden Turmraum: Brüstung (geduckt Deckung), rundum Fenster,
-        Dach mit Antenne. -> Höhe der obersten Ebene (Dach)."""
-        B = self.add_box
-        S, wt, mid = KT_BASE, 0.4, KT_MID
-        B(cx - S, cy - S, cx + S, cy + S, -2, mid, WALL, True)                       # Sockel (kein Zugang)
-        floor = mid + KT_STEP * KT_STEPS                                             # Boden des Turmraums
-        shaft_top = floor - 0.3
-        dw = 0.85                                                                    # halbe Türbreite
-        for sy in (-1, 1):                                                           # Schaft: Nord/Süd mit Tür zum Steg
-            ya, yb = (cy + S - wt, cy + S) if sy > 0 else (cy - S, cy - S + wt)
-            B(cx - S, ya, cx - dw, yb, mid, shaft_top, WALL)
-            B(cx + dw, ya, cx + S, yb, mid, shaft_top, WALL)
-            B(cx - dw, ya, cx + dw, yb, mid + 2.4, shaft_top, WALL)
-        for sx in (-1, 1):                                                           # Ost/West mit schmalen Fenstern
-            xa, xb = (cx + S - wt, cx + S) if sx > 0 else (cx - S, cx - S + wt)
-            B(xa, cy - S + wt, xb, cy - 0.4, mid, shaft_top, WALL)
-            B(xa, cy + 0.4, xb, cy + S - wt, mid, shaft_top, WALL)
-            B(xa, cy - 0.4, xb, cy + 0.4, mid, mid + 2.2, WALL)
-            B(xa, cy - 0.4, xb, cy + 0.4, mid + 3.0, shaft_top, WALL)
-        inner = S - wt                                                               # Wendeltreppe: 3x3-Raster
-        cs = 2 * inner / 3.0
-        B(cx - cs / 2, cy - cs / 2, cx + cs / 2, cy + cs / 2, mid, floor + 2.5, WALL_D)   # Mittelpfeiler (bis unters Dach)
-        ring = ((1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (0, 1), (0, 0))
-        top_cells = set()
-        for k in range(KT_STEPS):
-            i, j = ring[k % 8]
-            xa, ya = cx - inner + i * cs, cy - inner + j * cs
-            z1 = mid + KT_STEP * (k + 1)
-            B(xa, ya, xa + cs, ya + cs, z1 - 0.3, z1, (0.42, 0.40, 0.37))
-            if z1 > floor - 2.1:
-                top_cells.add((i, j))
-        # Turmraum: Boden mit Treppenloch, Brüstung, Fensterpfosten, Dach
-        C, ft = KT_CAB, 0.3
-        hole = [(cx - inner + i * cs, cy - inner + j * cs, cx - inner + (i + 1) * cs, cy - inner + (j + 1) * cs)
-                for i, j in top_cells]
-        step = 0.5
-        nx = int(round(2 * C / step))
-        for a in range(nx):                                                          # Boden in Streifen um das Loch
-            for b in range(nx):
-                xa, ya = cx - C + a * step, cy - C + b * step
-                mx_, my_ = xa + step / 2, ya + step / 2
-                if any(h[0] <= mx_ <= h[2] and h[1] <= my_ <= h[3] for h in hole):
-                    continue
-                if abs(mx_ - cx) < cs / 2 and abs(my_ - cy) < cs / 2:
-                    continue                                                         # Pfeiler
-                B(xa, ya, xa + step, ya + step, floor - ft, floor, (0.36, 0.37, 0.40), False, False)
-        for h in hole:                                                               # Kante des Treppenlochs sichtbar
-            self.decor.append((h[0], h[1], h[2], h[3], floor - ft - 0.01, floor - ft, (0.2, 0.2, 0.22), True))
-        pw = 0.3
-        win0, win1 = floor + KT_PARAPET, floor + KT_PARAPET + KT_WIN
-        roof = win1
-        for sy in (-1, 1):
-            ya, yb = (cy + C - pw, cy + C) if sy > 0 else (cy - C, cy - C + pw)
-            B(cx - C, ya, cx + C, yb, floor, win0, WALL, True)                       # Brüstung
-            B(cx - C, ya, cx + C, yb, win1 - 0.15, roof, WALL_D)                     # Sturz
-        for sx in (-1, 1):
-            xa, xb = (cx + C - pw, cx + C) if sx > 0 else (cx - C, cx - C + pw)
-            B(xa, cy - C + pw, xb, cy + C - pw, floor, win0, WALL, True)
-            B(xa, cy - C + pw, xb, cy + C - pw, win1 - 0.15, roof, WALL_D)
-        for px in (-C + 0.2, -C / 3, C / 3, C - 0.2):                                # Fensterpfosten
-            for py in (-C + 0.2, C - 0.2):
-                B(cx + px - 0.15, cy + py - 0.15, cx + px + 0.15, cy + py + 0.15, win0, win1, WALL_D)
-                B(cx + py - 0.15, cy + px - 0.15, cx + py + 0.15, cy + px + 0.15, win0, win1, WALL_D)
-        B(cx - C - 0.4, cy - C - 0.4, cx + C + 0.4, cy + C + 0.4, roof, roof + 0.35, WALL_D, True)   # Dach (kragt aus)
-        B(cx - 0.1, cy - 0.1, cx + 0.1, cy + 0.1, roof + 0.35, roof + 3.5, (0.55, 0.55, 0.58), False, False)   # Antenne
-        self.decor.append((cx - 0.12, cy - 0.12, cx + 0.12, cy + 0.12, roof + 3.5, roof + 3.7, (1.0, 0.2, 0.15), False))
-        # Stege von der Nord- und Südmauer (Wehrgang auf KT_MID) zur Tür in der mittleren Etage
-        for sy in (-1, 1):
-            ya, yb = (cy + S, cy + H - T) if sy > 0 else (cy - H + T, cy - S)
-            B(cx - 1.1, ya, cx + 1.1, yb, mid - 0.4, mid, (0.40, 0.40, 0.42), True)
-            for sx in (-1, 1):                                                       # Geländer
-                B(cx + sx * 1.1 - sx * 0.08 - 0.04, ya, cx + sx * 1.1 - sx * 0.08 + 0.04, yb, mid + 0.95, mid + 1.05,
-                  (0.30, 0.30, 0.32), False)
-                for yy in range(int(min(ya, yb)) + 1, int(max(ya, yb)), 3):
-                    B(cx + sx * 1.02 - 0.04, yy - 0.04, cx + sx * 1.02 + 0.04, yy + 0.04, mid, mid + 0.95, (0.30, 0.30, 0.32), False)
-            for sx in (-1, 1):                                                       # Stützpfeiler zum Hof
-                B(cx + sx * 0.8 - 0.25, (ya + yb) / 2 - 0.25, cx + sx * 0.8 + 0.25, (ya + yb) / 2 + 0.25, -2, mid - 0.4, WALL_D)
-        self.flagpole(cx + C - 0.6, cy + C - 0.6, roof + 0.35, 3.0, (0.85, 0.84, 0.78), 2.0, 1.2, 0.0)
-        self.add_crate(cx + 2.4, cy - 2.4, floor)
-        return roof + 0.35
-
-    def build_runway(self, y=None, x0=None, x1=None):
-        """Landebahn im Süden (Ost-West); grosse Karte: in der Militärecke (y, x0, x1)."""
-        c = CENTER
-        y, hw = (c - 76.0 if y is None else y), 7.0
-        x0, x1 = (c - 50.0 if x0 is None else x0), (c + 50.0 if x1 is None else x1)
-        self.runway = (x0, y - hw, x1, y + hw)
-        for x in range(int(x0) - 6, int(x1) + 7, 8):
-            self.flats.append((float(x), y, 10.0, 18.0))
-        self.floors.append((x0, y - hw, x1, y + hw, (0.24, 0.24, 0.27)))
-        white, red = (0.92, 0.92, 0.9), (0.9, 0.2, 0.15)
-        for xa in range(int(x0) + 4, int(x1) - 4, 8):
-            self.decor.append((xa, y - 0.2, xa + 4.0, y + 0.2, 0.0, 0.04, white, True))
-        for sgn in (-1, 1):
-            self.decor.append((x0, y + sgn * (hw - 0.5) - 0.12, x1, y + sgn * (hw - 0.5) + 0.12, 0.0, 0.04, white, True))
-        for xe in (x0, x1 - 0.6):
-            self.decor.append((xe, y - hw, xe + 0.6, y + hw, 0.0, 0.04, red, True))
-            for yy in (y - hw, y + hw):
-                self.decor.append((xe + 0.1, yy - 0.15, xe + 0.5, yy + 0.15, 0.0, 1.2, (0.9, 0.5, 0.1), False))
-
-    # ------------------------------------------------------------ Stadt, Graben, Strassen (nur Standardkarte)
-    def wall_gen(self, horiz, a0, a1, b0, b1, zb, zt, holes, col, mm=True):
-        """Wand von zb bis zt. horiz: entlang x (Dicke in y b0..b1), sonst entlang y (Dicke in x). Öffnungen:
-        holes = (von, bis, z unten, z oben) - auch mehrere übereinander (Stockwerke)."""
-        cuts = sorted({a0, a1} | {min(max(h[0], a0), a1) for h in holes} | {min(max(h[1], a0), a1) for h in holes})
-        runs = []
-        for p, q in zip(cuts, cuts[1:]):
-            if q - p < 1e-6:
-                continue
-            mid = (p + q) / 2
-            cur, segs = zb, []
-            for lo, hi in sorted((h[2], h[3]) for h in holes if h[0] < mid < h[1]):
-                if lo > cur:
-                    segs.append((cur, min(lo, zt)))
-                cur = max(cur, hi)
-            if cur < zt:
-                segs.append((cur, zt))
-            segs = tuple((s0, s1) for s0, s1 in segs if s1 - s0 > 1e-6)
-            if runs and runs[-1][2] == segs and abs(runs[-1][1] - p) < 1e-6:
-                runs[-1] = (runs[-1][0], q, segs)
-            else:
-                runs.append((p, q, segs))
-        for p, q, segs in runs:
-            for s0, s1 in segs:
-                if horiz:
-                    self.add_box(p, b0, q, b1, s0, s1, col, mm)
-                else:
-                    self.add_box(b0, p, b1, q, s0, s1, col, mm)
-
-    def slab(self, x0, y0, x1, y1, z, holes, col, t=0.25):
-        """Geschossdecke mit Oberkante z und rechteckigen Aussparungen holes = (x0, y0, x1, y1)."""
-        xs = sorted({x0, x1} | {min(max(h[0], x0), x1) for h in holes} | {min(max(h[2], x0), x1) for h in holes})
-        for p, q in zip(xs, xs[1:]):
-            if q - p < 1e-6:
-                continue
-            mid = (p + q) / 2
-            ys = sorted({y0, y1} | {min(max(h[1], y0), y1) for h in holes if h[0] < mid < h[2]}
-                        | {min(max(h[3], y0), y1) for h in holes if h[0] < mid < h[2]})
-            for a, b in zip(ys, ys[1:]):
-                if b - a < 1e-6:
-                    continue
-                m2 = (a + b) / 2
-                if any(h[0] < mid < h[2] and h[1] < m2 < h[3] for h in holes):
-                    continue
-                self.add_box(p, a, q, b, z - t, z, col)
-
-    def moat_offset(self, x, y):
-        """Abstand zum Burg-Quadrat (Eckturm-Aussenkante) - 0 innerhalb."""
-        for mx, my, a, *_r in self.moats:
-            return math.hypot(max(abs(x - mx) - a, 0.0), max(abs(y - my) - a, 0.0))
-        return 0.0
-
-    def near_moat(self, x, y, m=0.0):
-        for mx, my, a, o0, o1, o2, o3, _dp in self.moats:
-            if math.hypot(max(abs(x - mx) - a, 0.0), max(abs(y - my) - a, 0.0)) < o3 + m:
-                return True
-        return False
-
-    def add_road(self, pts, hw=2.0, kind="dirt", closed=False):
-        n = len(pts)
-        for i in range(n if closed else n - 1):
-            a, b = pts[i], pts[(i + 1) % n]
-            self.roads.append((a[0], a[1], b[0], b[1], hw, kind))
-
-    def nearest_road_pt(self, x, y):
-        best = None
-        for x0, y0, x1, y1, hw, kind in self.roads:
-            dx, dy = x1 - x0, y1 - y0
-            ll = dx * dx + dy * dy
-            t = 0.0 if ll < 1e-9 else max(0.0, min(1.0, ((x - x0) * dx + (y - y0) * dy) / ll))
-            px, py = x0 + dx * t, y0 + dy * t
-            d = math.hypot(x - px, y - py)
-            if best is None or d < best[0]:
-                best = (d, px, py)
-        return best
-
-    def connect_road(self, x, y, hw=1.2, kind="dirt"):
-        """Weg von (x, y) zum nächsten Weg (Hauszugang): so führt jedes Gebäude irgendwohin."""
-        b = self.nearest_road_pt(x, y)
-        if b is not None and b[0] > 0.5:
-            self.roads.append((x, y, b[1], b[2], hw, kind))
-
-    def stair_flights(self, spec_side, x0, y0, x1, y1, t, n_fl, fh, sd=0.65, sh=0.4):
-        """Treppenläufe (hin und her) an der Innenwand spec_side: Liste (Stockwerk, Quader-Anker, Richtung, Aussparung)."""
-        n = int(round(fh / sh))
-        run = n * sd
-        lw, gap = 1.3, 0.1
-        out = []
-        for f in range(n_fl - 1):
-            lane = f % 2
-            if spec_side in "NS":
-                xs = x0 + t + 1.0
-                ya = (y1 - t - lw) if spec_side == "N" else (y0 + t)
-                step = (lw + gap) * lane * (-1 if spec_side == "N" else 1)
-                yy = ya + step
-                if lane == 0:
-                    out.append((f, (xs, yy), "E", (xs, yy, xs + run, yy + lw)))
-                else:
-                    out.append((f, (xs + run, yy), "W", (xs, yy, xs + run, yy + lw)))
-            else:
-                ys = y0 + t + 1.0
-                xa = (x1 - t - lw) if spec_side == "E" else (x0 + t)
-                step = (lw + gap) * lane * (-1 if spec_side == "E" else 1)
-                xx = xa + step
-                if lane == 0:
-                    out.append((f, (xx, ys), "N", (xx, ys, xx + lw, ys + run)))
-                else:
-                    out.append((f, (xx, ys + run), "S", (xx, ys, xx + lw, ys + run)))
-        return n, out
-
-    def town_house(self, x, y, w, d, floors=2, door="S", col=PLASTER, roof=ROOF, fh=3.2, ridge=None, stairs="auto",
-                   doff=0.0, balcony=False, crate=None, chimney=True, tower=None, avoid=(), shop=False, wide=False,
-                   sign=None, extra_win=True, flat=False, trim=PAINT_W, seed=None):
-        """Wohnhaus mit mehreren Stockwerken: Türen, Fenster, innen Treppen, Decken, Möbel; Satteldach (unsichtbare
-        Stufen als Kollision, die glatte Dachform wird in build_scene darübergelegt)."""
-        rng = random.Random(seed if seed is not None else int(x * 31 + y * 17))
-        t = 0.5
-        x0, x1, y0, y1 = x - w / 2, x + w / 2, y - d / 2, y + d / 2
-        H = floors * fh
-        holes = {s: [] for s in "NSEW"}
-        opens = []
-        dc = x if door in "NS" else y
-        dpos = dc + doff
-        hwd = 1.5 if wide else 1.1
-        holes[door].append((dpos - hwd, dpos + hwd, 0.0, 2.5 if not wide else 2.8))
-        opens.append((door, dpos, hwd, 0.0, 2.5 if not wide else 2.8, "door", 0))
-        if stairs == "auto":
-            stairs = {"S": "N", "N": "S", "E": "W", "W": "E"}[door]
-        chim = None
-        if chimney and not flat:
-            rx = ridge or ("x" if w >= d else "y")
-            side = "E" if rx == "x" else "N"
-            if side == door:
-                side = {"E": "W", "N": "S"}[side]
-            chim = side
-        for s in "NSEW":
-            L = w if s in "NS" else d
-            c0 = x if s in "NS" else y
-            nwin = max(1, int((L - 1.6) // 3.1))
-            gp = L / nwin
-            for f in range(floors):
-                zb = f * fh
-                for k in range(nwin):
-                    c = c0 - L / 2 + gp * (k + 0.5)
-                    if s == door and f == 0 and abs(c - dpos) < hwd + 1.3:
-                        continue
-                    if chim == s and abs(c - c0) < 1.6:
-                        continue
-                    if s == door and f == 1 and balcony and abs(c - dpos) < 1.3:
-                        continue
-                    hwn = 0.55
-                    holes[s].append((c - hwn, c + hwn, zb + 0.95, zb + 2.25))
-                    opens.append((s, c, hwn, zb + 0.95, zb + 2.25, "win", f))
-        if balcony and floors > 1:
-            holes[door].append((dpos - 0.9, dpos + 0.9, fh, fh + 2.45))
-            opens.append((door, dpos, 0.9, fh, fh + 2.45, "door", 1))
-        self.wall_gen(True, x0, x1, y0, y0 + t, -2, H, holes["S"], col)
-        self.wall_gen(True, x0, x1, y1 - t, y1, -2, H, holes["N"], col)
-        self.wall_gen(False, y0 + t, y1 - t, x0, x0 + t, -2, H, holes["W"], col)
-        self.wall_gen(False, y0 + t, y1 - t, x1 - t, x1, -2, H, holes["E"], col)
-        n_st, flights = self.stair_flights(stairs, x0, y0, x1, y1, t, floors, fh)
-        for f in range(1, floors):
-            hl = [fl[3] for fl in flights if fl[0] + 1 == f]
-            self.slab(x0 + t, y0 + t, x1 - t, y1 - t, f * fh, hl, WOOD_F)
-        for f, (ax, ay), dr, _hl in flights:
-            self.stairs(ax, ay, dr, n_st, 1.3, f * fh, 0.4, 0.65, WOOD_F)
-        self.add_box(x0, y0, x1, y1, H - 0.25, H + 0.1, col)                       # Decke / Dachboden
-        self.floors.append((x0 + t, y0 + t, x1 - t, y1 - t, WOOD_F))        # nur der Innenraum (kein Überstand nach aussen)
-        self.flats.append((x, y, math.hypot(w, d) / 2 + 3.0, math.hypot(w, d) / 2 + 13.0))
-        # Dach (Kollision: hohle Stufen unter der glatten Dachfläche)
-        rx = ridge or ("x" if w >= d else "y")
-        span, ln = (d, w) if rx == "x" else (w, d)
-        rise = 0.0 if flat else min(2.8, span * 0.34)
-        if flat:
-            self.add_box(x0 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2, H + 0.1, H + 0.5, STONE_D)
-            for (a0, b0, a1, b1) in ((x0 - 0.2, y0 - 0.2, x1 + 0.2, y0 + 0.2), (x0 - 0.2, y1 - 0.2, x1 + 0.2, y1 + 0.2),
-                                     (x0 - 0.2, y0 - 0.2, x0 + 0.2, y1 + 0.2), (x1 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2)):
-                self.add_box(a0, b0, a1, b1, H + 0.5, H + 1.3, STONE_D)
-        else:
-            e = span / 2 + 0.55
-            for k in range(3):
-                z1 = H + 0.1 + (k + 1) * (rise - 0.1) / 3
-                hw_k = max(0.3, e * (1 - (z1 - (H - 0.15)) / (rise + 0.15)) - 0.12)
-                z0 = H + 0.1 + k * (rise - 0.1) / 3
-                if rx == "x":
-                    self.add_box(x0, y - hw_k, x1, y + hw_k, z0, z1, roof, False, False)
-                else:
-                    self.add_box(x - hw_k, y0, x + hw_k, y1, z0, z1, roof, False, False)
-        # Kamin
-        ch_rect = None
-        if chim:
-            if chim == "E":
-                ch_rect = (x1, y - 0.6, x1 + 0.9, y + 0.6)
-            elif chim == "W":
-                ch_rect = (x0 - 0.9, y - 0.6, x0, y + 0.6)
-            elif chim == "N":
-                ch_rect = (x - 0.6, y1, x + 0.6, y1 + 0.9)
-            else:
-                ch_rect = (x - 0.6, y0 - 0.9, x + 0.6, y0)
-            self.add_box(*ch_rect[:2], ch_rect[2], ch_rect[3], -2, H + rise + 1.1, (0.50, 0.26, 0.20))
-        # Eingangsstufe und Balkon
-        if door == "S":
-            self.add_box(dpos - hwd - 0.2, y0 - 0.55, dpos + hwd + 0.2, y0, -1, 0.22, STONE_D)
-        elif door == "N":
-            self.add_box(dpos - hwd - 0.2, y1, dpos + hwd + 0.2, y1 + 0.55, -1, 0.22, STONE_D)
-        elif door == "W":
-            self.add_box(x0 - 0.55, dpos - hwd - 0.2, x0, dpos + hwd + 0.2, -1, 0.22, STONE_D)
-        else:
-            self.add_box(x1, dpos - hwd - 0.2, x1 + 0.55, dpos + hwd + 0.2, -1, 0.22, STONE_D)
-        if balcony and floors > 1:
-            bd = 1.5
-            bw = 2.6
-            if door in "NS":
-                sgn = 1 if door == "N" else -1
-                ya = y1 if sgn > 0 else y0 - bd
-                self.add_box(dpos - bw, ya, dpos + bw, ya + bd, fh - 0.25, fh, WOOD_F)
-                yo = (ya + bd - 0.12) if sgn > 0 else ya
-                self.add_box(dpos - bw, yo, dpos + bw, yo + 0.12, fh, fh + 0.95, WOOD_D)
-                for xx in (dpos - bw, dpos + bw - 0.12):
-                    self.add_box(xx, ya, xx + 0.12, ya + bd, fh, fh + 0.95, WOOD_D)
-            else:
-                sgn = 1 if door == "E" else -1
-                xa = x1 if sgn > 0 else x0 - bd
-                self.add_box(xa, dpos - bw, xa + bd, dpos + bw, fh - 0.25, fh, WOOD_F)
-                xo = (xa + bd - 0.12) if sgn > 0 else xa
-                self.add_box(xo, dpos - bw, xo + 0.12, dpos + bw, fh, fh + 0.95, WOOD_D)
-                for yy in (dpos - bw, dpos + bw - 0.12):
-                    self.add_box(xa, yy, xa + bd, yy + 0.12, fh, fh + 0.95, WOOD_D)
-        if tower is not None:                                  # Uhrturm auf dem Dach
-            tx, ty, ts, th = tower
-            self.add_box(tx - ts / 2, ty - ts / 2, tx + ts / 2, ty + ts / 2, H - 0.25, H + th, STONE, True)
-        # Innenausstattung (Deckung)
-        lanes = [fl[3] for fl in flights]
-        for f in range(floors):
-            zb = f * fh
-            base = -1.0 if f == 0 else zb
-            blockers = [(a - 0.9, b - 0.9, c2 + 0.9, d2 + 0.9) for a, b, c2, d2 in lanes] + list(avoid)
-            if f == 0:
-                if door in "NS":
-                    blockers.append((dpos - 1.6, y0 if door == "S" else y1 - 2.2, dpos + 1.6, y0 + 2.2 if door == "S" else y1))
-                else:
-                    blockers.append((x0 if door == "W" else x1 - 2.2, dpos - 1.6, x0 + 2.2 if door == "W" else x1, dpos + 1.6))
-            self.furnish(rng, x0 + t, y0 + t, x1 - t, y1 - t, base, zb, blockers, f, floors, shop and f == 0)
-        if crate:
-            self.add_crate(crate[0], crate[1], 0.0)
-        rec = {"k": "house", "x": x, "y": y, "w": w, "d": d, "n": floors, "fh": fh, "H": H, "col": col, "roof": roof,
-               "ridge": rx, "rise": rise, "opens": opens, "chim": ch_rect, "door": door, "dpos": dpos, "flat": flat,
-               "trim": trim, "balcony": balcony, "tower": tower, "sign": sign, "seed": int(x * 3 + y * 5),
-               "flights": flights, "t": t}
-        self.vis.append(rec)
-        return rec
-
-    def furnish(self, rng, ix0, iy0, ix1, iy1, base, zb, blockers, f, floors, shop):
-        """Ein paar Möbel als feste Deckung (Tische, Regale, Betten ...)."""
-        kinds = (["counter", "shelf", "shelf", "table", "bench"] if shop else
-                 ["table", "bench", "shelf", "stove", "crate"] if f == 0 else ["bed", "bed", "wardrobe", "table", "shelf"])
-        dims = {"table": (1.6, 0.9, 0.8, WOOD_M), "bench": (1.5, 0.4, 0.5, WOOD_M), "shelf": (1.8, 0.45, 1.9, WOOD_D),
-                "stove": (1.0, 0.8, 1.15, STONE_D), "crate": (0.9, 0.9, 0.9, WOOD_M), "bed": (2.0, 1.0, 0.55, WOOD_M),
-                "wardrobe": (1.1, 0.55, 1.9, WOOD_D), "counter": (3.2, 0.8, 1.05, WOOD_M)}
-        placed = []
-        for kind in kinds:
-            a, b, hz, col = dims[kind]
-            wall = kind in ("shelf", "wardrobe", "stove", "bed", "counter")
-            for _ in range(30):
-                if wall:
-                    side = rng.choice("NSEW")
-                    if side in "NS":
-                        sx_, sy_ = a, b
-                        cx_ = rng.uniform(ix0 + sx_ / 2 + 0.1, ix1 - sx_ / 2 - 0.1)
-                        cy_ = (iy1 - sy_ / 2 - 0.02) if side == "N" else (iy0 + sy_ / 2 + 0.02)
-                    else:
-                        sx_, sy_ = b, a
-                        cy_ = rng.uniform(iy0 + sy_ / 2 + 0.1, iy1 - sy_ / 2 - 0.1)
-                        cx_ = (ix1 - sx_ / 2 - 0.02) if side == "E" else (ix0 + sx_ / 2 + 0.02)
-                else:
-                    sx_, sy_ = (a, b) if rng.random() < 0.5 else (b, a)
-                    cx_ = rng.uniform(ix0 + 1.6, ix1 - 1.6)
-                    cy_ = rng.uniform(iy0 + 1.6, iy1 - 1.6)
-                r = (cx_ - sx_ / 2, cy_ - sy_ / 2, cx_ + sx_ / 2, cy_ + sy_ / 2)
-                if r[0] < ix0 - 0.01 or r[2] > ix1 + 0.01 or r[1] < iy0 - 0.01 or r[3] > iy1 + 0.01:
-                    continue
-                if any(r[0] < q[2] and r[2] > q[0] and r[1] < q[3] and r[3] > q[1] for q in blockers + placed):
-                    continue
-                placed.append((r[0] - 0.55, r[1] - 0.55, r[2] + 0.55, r[3] + 0.55))
-                self.add_box(r[0], r[1], r[2], r[3], base, zb + hz, col)
-                break
-
-    def merlons(self, x0, y0, x1, y1, z, h=0.6, step=2.0, mw=1.1):
-        """Zinnen entlang eines Mauerstücks (lange Seite)."""
-        if x1 - x0 >= y1 - y0:
-            n = max(1, int((x1 - x0) // step))
-            for i in range(n):
-                a = x0 + (x1 - x0) * (i + 0.5) / n
-                self.add_box(a - mw / 2, y0, a + mw / 2, y1, z, z + h, STONE_D)
-        else:
-            n = max(1, int((y1 - y0) // step))
-            for i in range(n):
-                a = y0 + (y1 - y0) * (i + 0.5) / n
-                self.add_box(x0, a - mw / 2, x1, a + mw / 2, z, z + h, STONE_D)
-
-    # ------------------------------------------------------------ Aussenposten (nur Standardkarte)
-    # ------------------------------------------------------------ 7c: grosse Karte (Experimental)
-    def town_northeast(self):
-        """10g: Polytown wächst vom Marktplatz nach Nordosten: eine neue Gasse mit zwei Häuserreihen (gleicher Stil
-        wie am Marktplatz - Backstein/Putz, Ziegel/Schiefer, innen Treppen und Möbel). Der Unterstand am Acker
-        steht jetzt im Hinterhof der Nordreihe."""
-        c = CENTER
-        self.add_road([(c + 33.0, c + 97.0), (c + 60.0, c + 97.5), (c + 88.0, c + 97.0)], 2.2, "dirt")
-        self.connect_road(c + 33.0, c + 97.0, 1.8, "dirt")
-        self.connect_road(c + 88.0, c + 97.0, 1.6, "dirt")   # Richtung Hof/Scheune
-        houses = (  # (x, y, Breite, Tiefe, Stockwerke, Tür, Farbe, Dach, Extras)
-            (c + 46.0, c + 89.5, 10.0, 9.0, 2, "N", HOUSE_COLS[1], ROOFS[0], {}),
-            (c + 60.0, c + 89.0, 11.0, 10.0, 2, "N", HOUSE_COLS[2], ROOFS[1], {"balcony": True}),
-            (c + 74.0, c + 89.5, 10.0, 9.0, 2, "N", HOUSE_COLS[0], ROOFS[3], {"shop": True, "sign": "KRAMLADEN"}),
-            (c + 26.0, c + 106.0, 10.0, 9.0, 2, "E", HOUSE_COLS[3], ROOFS[2], {}),
-            (c + 44.0, c + 105.5, 10.0, 9.0, 2, "S", HOUSE_COLS[4], ROOFS[1], {}),
-            (c + 80.0, c + 105.5, 11.0, 9.0, 2, "S", HOUSE_COLS[1], ROOFS[2], {"balcony": True}),
-        )
-        for i, (hx, hy, w, d, fl, dr, col, roof, ex) in enumerate(houses):
-            self.town_house(hx, hy, w, d, floors=fl, door=dr, col=col, roof=roof, seed=40 + i, **ex)
-            dx, dy = {"N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0)}[dr]
-            self.connect_road(hx + dx * (w / 2 + 1.4), hy + dy * (d / 2 + 1.4), 1.2, "dirt")
-
-    def ground_boxes(self):
-        """9a: Bodennahe Quader und flache Deko an das Gelände anpassen (läuft auf Host und Client gleich, weil
-        alles aus Seed + Karte folgt). follow_boxes werden als Ganzes auf die Geländehöhe ihrer Mitte gesetzt; alle
-        anderen bodennahen Quader bekommen ein Fundament bis unter den tiefsten Geländepunkt ihrer Grundfläche
-        (Oberkante bleibt). Ausgenommen: über Wasser, Graben, Tunnel und Löchern."""
-        def samples(x0, y0, x1, y1):
-            return [(x0 + (x1 - x0) * i / 3.0, y0 + (y1 - y0) * j / 3.0) for i in range(4) for j in range(4)]
-
-        def blocked(pts):
-            for x, y in pts:
-                if self.voids and self.in_void(x, y):
-                    return True
-                if self.tunnels and self.in_tunnel(x, y):
-                    return True
-                if self.moats and self.near_moat(x, y, 0.5):
-                    return True
-                if any(math.hypot(x - px, y - py) < r * 1.3 for px, py, r in self.ponds):
-                    return True
-            return False
-
-        for b in self.follow_boxes:
-            gz = self.surface_height((b.x0 + b.x1) * 0.5, (b.y0 + b.y1) * 0.5)
-            if abs(gz) > GROUND_FOLLOW_TOL and not blocked(samples(b.x0, b.y0, b.x1, b.y1)):
-                b.z0 += gz
-                b.z1 += gz
-        for b in self.boxes:
-            if not b.vis or b.z1 <= 0.05 or b.z0 > GROUND_ANCHOR_Z:
-                continue
-            pts = samples(b.x0, b.y0, b.x1, b.y1)
-            lo = min(self.surface_height(x, y) for x, y in pts)
-            if lo >= b.z0 - 0.05 or b.z0 - lo > GROUND_FOOT_MAX or blocked(pts):
-                continue
-            b.z0 = lo - GROUND_FOOT_SINK
-        for k, d in enumerate(self.decor):
-            x0, y0, x1, y1, z0, z1, col, lit = d
-            if not lit or not -0.05 <= z0 <= GROUND_ANCHOR_Z:
-                continue
-            pts = samples(x0, y0, x1, y1)
-            lo = min(self.surface_height(x, y) for x, y in pts)
-            if lo < z0 - 0.03 and z0 - lo <= GROUND_FOOT_MAX and not blocked(pts):
-                self.decor[k] = (x0, y0, x1, y1, lo - 0.1, z1, col, lit)
-
-    # ------------------------------------------------------------ Spawns
-    def first_spawn(self, pid):
-        return self.spawns[pid % len(self.spawns)]
-
-    def pick_spawn(self, pid):
-        """Startpunkt: weit weg vom Todesort, von lebenden Gegnern und Monstern, und nicht zweimal derselbe.
-        Zufall nur unter den guten Kandidaten."""
-        me = self.players.get(pid)
-        death = getattr(me, "death_pos", None)
-        foes = [(p.x, p.y) for p in self.players.values() if p.pid != pid and p.hp > 0]
-        foes += [(m.x, m.y) for m in self.mobs if m.state != "dead"]
-        last = self.last_spawn.get(pid)
-        scored = []
-        for sx, sy in self.spawns:
-            d_foe = min((math.hypot(sx - x, sy - y) for x, y in foes), default=150.0)
-            d_death = math.hypot(sx - death[0], sy - death[1]) if death is not None else 150.0
-            score = min(d_foe, 120.0) + 0.8 * min(d_death, 140.0)
-            if d_death < self.SPAWN_MIN_DEATH:
-                score -= 400.0 - 4.0 * d_death           # zu nah am Todesort: nur wenn es nichts anderes gibt
-            if d_foe < 25.0:
-                score -= 150.0                           # direkt neben einem Gegner: vermeiden
-            if last is not None and math.hypot(sx - last[0], sy - last[1]) < 10.0:
-                score -= 60.0
-            scored.append((score + self.mrng.uniform(0.0, 12.0), (sx, sy)))
-        best = max(scored)[1]
-        self.last_spawn[pid] = best
-        return best
-
-    def respawn_player(self, pl):
-        """Host/Einzelspiel: Figur neu aufstellen (nur mit der Pistole). Die Darstellung läuft über das
-        Ereignis 'respawn'."""
-        x, y = self.pick_spawn(pl.pid)
-        pl.respawn(self, x, y, DEFAULT_LOADOUT)
-        self.events.append(("respawn", pl.pid, round(x, 2), round(y, 2)))
-
-    # ------------------------------------------------------------ Spielregeln
-    def allied(self, a, b):
-        """10e: Gehören die Spieler a und b zusammen (derselbe Spieler oder - Team-Modi - dasselbe Team)?"""
-        if a == b:
-            return True
-        tm = getattr(self, "team_of", None)
-        return bool(tm) and tm.get(a) is not None and tm.get(a) == tm.get(b)
-
-    def underground(self, pl):
-        """Unter der Erde (Tunnel, Keller unter dem Gelände)?"""
-        if pl.z < -1.0 and self.tunnels and self.in_tunnel(pl.x, pl.y):
-            return True
-        return pl.z < self.surface_height(pl.x, pl.y) - 2.0
-
-    def in_zone(self, pl):
-        """In der King-of-the-Hill-Zone? 10a (Polytown): die Zone ist die Burg - innerhalb der Mauern, auf den Mauern,
-        im Kontrollturm und im Untergrund darunter; nicht im Heli/Fahrzeug und nicht in der Luft über der höchsten
-        Ebene (koth_box: x0, y0, x1, y1, Obergrenze). Andere Karten: Kreis ZONE_R ohne Untergrund."""
-        kb = getattr(self, "koth_box", None)
-        if kb is None:
-            return math.hypot(pl.x - CENTER, pl.y - CENTER) <= ZONE_R and not self.underground(pl)
-        if pl.heli >= 0 or pl.vehicle >= 0:
-            return False
-        if pl.mount >= 0 and 0 <= pl.mount < len(self.turrets) and self.turrets[pl.mount].kind == "car":
-            return False
-        return kb[0] <= pl.x <= kb[2] and kb[1] <= pl.y <= kb[3] and pl.z <= kb[4]
-
-    def ranking(self):
-        ps = list(self.players.values())
-        if self.mode == "koth":
-            ps.sort(key=lambda p: (-p.score, -p.kills, p.deaths))
-        else:
-            ps.sort(key=lambda p: (-(p.kills / max(1, p.deaths)), -p.kills, p.deaths))
-        return ps
-
-    def damage_player(self, pl, dmg, attacker=-1, wi=-1, head=False):
-        """attacker = Spieler-ID des Schützen, -1 = Monster. head: Kopftreffer (für den Helm)."""
-        if pl.hp <= 0 or pl.protect > 0 or self.phase != "play":
-            return
-        if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
-            return
-        instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
-        if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
-            absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
-            pl.shield_hp -= absorb
-            pl.shield_t = 0.0
-            dmg -= absorb
-            if absorb > 0:
-                self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
-            if dmg <= 0:
-                return
-        if dmg >= pl.hp and wi == WI_TOMAHAWK and set_full(pl, "second"):   # 10c: Set-Bonus - überlebt den Tomahawk,
-            for sl, gi in list(pl.gear.items()):                          # dafür zerbricht die ganze Ausrüstung
-                if gi is not None:
-                    pl.gear[sl] = None
-                    self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
-            update_max_hp(pl)
-            pl.hp, pl.since_hurt = min(pl.max_hp, SAVE_HP), 0.0
-            self.events.append(("player_hurt", dmg, pl.pid))
-            return
-        blast = wi in (WI_GRENADE, ROCKET_WI, WI_C4, WI_CLAY, WI_VEHICLE, WI_HELI, WI_FLAK)
-        if dmg >= pl.hp and wi not in (WI_FALL, WI_TOMAHAWK):            # 10c: Zweite Chance (je Teil einmal)
-            save, slot = (("save_head", "head") if head and not blast else
-                          ("save_blast", "feet") if blast else ("save_body", "torso"))
-            gi = pl.gear.get(slot)
-            if gi is not None and GEAR[gi].kind == save:
-                pl.gear[slot] = None
-                update_max_hp(pl)
-                pl.hp = min(pl.max_hp, SAVE_HP)
-                pl.since_hurt = 0.0
-                self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
-                self.events.append(("player_hurt", dmg, pl.pid))
-                return
-        pl.hp = max(0.0, pl.hp - dmg)
-        pl.since_hurt = 0.0
-        self.events.append(("player_hurt", dmg, pl.pid))
-        if pl.hp <= 0:
-            self.player_died(pl, attacker, wi)
-
-    def player_died(self, pl, attacker, wi):
-        if wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99) and attacker != pl.pid:
-            self.pan_add(self.players.get(attacker), "player")   # 9c: Spieler-Kill mit der Pfanne
-        if pl.pan_pts or pl.eat_t > 0:                   # 9c: Ladung geht beim Tod verloren
-            pl.pan_pts, pl.eat_t = 0, 0.0
-            self.events.append(("pan", pl.pid, 0, 0))
-        pl.deaths += 1
-        pl.death_pos = (pl.x, pl.y)
-        act = pl.cur                                     # die Waffe, die er gerade in der Hand hatte
-        hc = self.heli_by_id(pl.heli) if pl.heli >= 0 else None
-        if hc is not None:                               # im Hubschrauber: zählt die Höhe des Hubschraubers
-            air = hc.z - self.floor_at(hc.x, hc.y, hc.z) > 1.5
-        else:
-            air = pl.z - self.floor_at(pl.x, pl.y, pl.z) > 1.5 and pl.mount < 0 \
-                and not (self.ladders and self.on_ladder(pl.x, pl.y, pl.z))
-        act = pl.cur                                     # 10b: genau zwei Dinge fallen - die aktive Waffe (mit Aufsätzen)
-        if not 0 <= act < len(EXP_WEAPONS) or act not in pl.slots:
-            act = next((wi for wi in pl.slots if wi is not None), START_WEAPON)
-        if not air:                                      # wer in der Luft stirbt, lässt nichts zum Aufheben fallen
-            rng = self.mrng
-            if pl.melee_out and pl.melee != START_MELEE:
-                self.add_drop(pl.x, pl.y, pl.z, -1, -1, pl.melee)
-                pool = [("weapon", act)]
-            else:
-                self.add_drop(pl.x, pl.y, pl.z, act, atts=pl.att.get(act), scope=pl.scopes.get(act, -1))
-                pool = [("melee", pl.melee)] if pl.melee != START_MELEE else []
-            gks = [k for k in GREN_KINDS if pl.gren.get(k, 0) > 0]
-            if gks:                                      # ... und EIN zufälliges weiteres Teil (10e: eine Granatenart)
-                pool.append(("gren", rng.choice(gks)))
-            pool += [("gad", k) for k in range(3) if pl.gad_stock[k] > 0]
-            pool += [("gear", gi) for gi in pl.gear.values() if gi is not None]
-            if pool:
-                kind, v = rng.choice(pool)
-                a = rng.uniform(0, 2 * math.pi)
-                x2, y2 = pl.x + math.cos(a) * 0.9, pl.y + math.sin(a) * 0.9
-                if self.in_solid(x2, y2, 0.3, pl.z):
-                    x2, y2 = pl.x, pl.y
-                if kind == "weapon":
-                    self.add_drop(x2, y2, pl.z, v, atts=pl.att.get(v), scope=pl.scopes.get(v, -1))
-                elif kind == "melee":
-                    self.add_drop(x2, y2, pl.z, -1, -1, v)
-                elif kind == "gad":
-                    self.add_drop(x2, y2, pl.z, -1, gren=pl.gad_stock[v], gk="gad:%d" % v)
-                elif kind == "gren":
-                    gd = self.add_drop(x2, y2, pl.z, -1, gren=pl.gren[v], gk=v)
-                    if v == "flare":
-                        gd.gq = list(getattr(pl, "flare_q", None) or [])
-                else:
-                    self.add_drop(x2, y2, pl.z, -1, v)
-        pl.gear = {sl: None for sl in GEAR_SLOTS}        # (10b: getragene Teile sind oben schon im Zufalls-Topf)
-        pl.gad_stock, pl.gad_n = [0, 0, 0], 0            # Experimental: Gadget-Vorrat weg (ein Stapel fällt evtl. oben)
-        pl.gren, pl.flare_q = {}, []                     # 10e: Granaten sind weg (eine Art fällt evtl. oben)
-        self.gren_event(pl)
-        pl.slots = [None] * N_SLOTS
-        pl.loot_history, pl.last_loot = {}, None         # Kisten-Gedächtnis gilt nur für ein Leben
-        pl.last_by = {}
-        pl.att_store = []                                # 7b: Aufsatz-Lager wird beim Tod geleert
-        self.end_buff(pl)                                # Buff läuft beim Tod sofort ab
-        pl.stun_t = pl.stun_lock = 0.0
-        self.leave_vehicle(pl)
-        self.leave_turret(pl)
-        self.leave_heli(pl)
-        self.clear_gadgets(pl.pid)                       # seine platzierten Gadgets verschwinden mit ihm
-        k = self.players.get(attacker)
-        if k is not None and k is not pl:
-            k.kills += 1
-            if wi == WI_TOMAHAWK:
-                k.stats["toma_kills"] += 1
-            elif wi >= MELEE_WI0:
-                k.stats["melee_kills"] += 1
-            elif 0 <= wi < len(EXP_WEAPONS):                 # weitester Kill-Schuss
-                dist = math.hypot(pl.x - k.x, pl.y - k.y)
-                if dist > k.stats["longest"]:
-                    k.stats["longest"], k.stats["longest_w"] = round(dist, 1), wi
-            if self.mode == "koth":                      # in der Zone zählt ein Kill doppelt
-                k.score += KILL_PTS * (2.0 if k.hp > 0 and self.in_zone(k) else 1.0)
-            self.events.append(("reward", k.pid))        # Munition für den Schützen
-        else:
-            k = None
-        self.events.append(("player_dead", pl.pid))
-        self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi))
-
-    def hit_player(self, pl, dmg, pos, d, head, owner, wi):
-        dmg *= self.dmg_mult(owner)
-        pct = round(min(dmg, max(pl.hp, 0.0)) / PLAYER_HP * 100.0)
-        self.events.append(("pl_hit", pos, d, dmg, head, owner, pct))
-        self.damage_player(pl, dmg, owner, wi, head)
-
-    def note_hit(self, owner, head, target_pos=None, wi=-1, kill=False):
-        """Statistik des Schützen: Treffer, Kopfschüsse, weitester Kill-Schuss (mit Waffe)."""
-        p = self.players.get(owner) if isinstance(owner, int) else None
-        if p is None:
-            return
-        p.stats["hits"] += 1
-        if head:
-            p.stats["heads"] += 1
-        if kill and target_pos is not None and 0 <= wi < len(EXP_WEAPONS):
-            dist = math.hypot(target_pos[0] - p.x, target_pos[1] - p.y)
-            if dist > p.stats["longest"]:
-                p.stats["longest"], p.stats["longest_w"] = round(dist, 1), wi
-
-    def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1):
-        dmg *= self.dmg_mult(owner)
-        pct = round(min(dmg, max(m.hp, 0.0)) / m.max_hp * 100.0)
-        m.hp -= dmg
-        m.hurt_t = 0.15
-        m.alert_t = 10.0
-        sh = self.players.get(owner)
-        m.on_shot(self, d, True, (sh.x, sh.y) if sh is not None else None)   # reagiert immer: Richtung Schütze
-        imp = dmg * 0.03 / m.scale                       # Knockback in Schussrichtung
-        m.kx = clampf(m.kx + d[0] * imp, -6, 6)
-        m.ky = clampf(m.ky + d[1] * imp, -6, 6)
-        self.events.append(("mob_hit", pos, d, dmg, head, owner, pct))
-        if m.hp <= 0 and m.state != "dead" and m.kind in TEMP_MOBS:   # 10e: eigene Drohne abgeschossen (kein Monster)
-            m.state, m.dead_t = "dead", 0.0
-            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
-            return
-        if m.hp <= 0 and m.state != "dead":
-            m.state, m.dead_t = "dead", 0.0
-            self.kills += 1
-            self.events.append(("mob_kill", (m.x, m.y, m.z + m.height * 0.5), owner))
-            self.events.append(("reward", owner))        # Munition für den Schützen
-            killer = self.players.get(owner)
-            if killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99):
-                self.pan_add(killer, m.kind)              # 9c: Kill mit der Pfanne lädt sie auf
-            if killer is not None:
-                killer.stats["mob"][m.kind] = killer.stats["mob"].get(m.kind, 0) + 1
-                if 0 <= wi < len(EXP_WEAPONS):
-                    self.note_hit(owner, False, (m.x, m.y), wi, True)
-                    killer.stats["hits"] -= 1                # (der Treffer wurde schon gezählt)
-                elif wi >= MELEE_WI0:
-                    killer.stats["melee_kills"] += 1
-            if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
-                self.give_buff(self.players.get(owner))
-            extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if m.kind in MOB_LOOT or extra:              # 10b: Beute von Monstern (Titan: 6 Teile)
-                self.mob_loot(m, killer, extra)          # 10d: Diebesdolch +1 (andere Kategorie)
-            if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
-                self.titan_loot(m)
-
-    def explode(self, pos, owner, r, dmg, wi):
-        """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
-        Eine Rakete zerstört ein Fahrzeug in ROCKET_KILL_R Umkreis sofort."""
-        self.events.append(("explosion", tuple(round(c, 2) for c in pos), r, owner, wi))
-        self.make_noise(pos[0], pos[1], NOISE_EXPLOSION, pos[2])
-        for v in list(self.vehicles):
-            if v.hp <= 0:
-                continue
-            d = math.dist(pos, (v.x, v.y, v.z + 0.8))
-            if wi == ROCKET_WI and d < ROCKET_KILL_R:
-                self.destroy_vehicle(v, owner)
-            elif d < r + VEH_R:
-                self.damage_vehicle(v, dmg * (1.0 - d / (r + VEH_R)), owner)
-        for hc in list(self.helis):
-            if hc.hp <= 0 or (owner >= 0 and hc.driver == owner):     # eigener Helikopter bleibt heil
-                continue
-            d = math.dist(pos, (hc.x, hc.y, hc.z + 1.2))
-            if wi == ROCKET_WI and d < HELI_R + HELI_ROCKET_KILL_R:
-                self.destroy_heli(hc, owner)                           # Rakete: ein Treffer genügt
-            elif d < r + HELI_R:
-                f = 1.0 - d / (r + HELI_R)
-                self.damage_heli(hc, dmg * f * (1.0 if wi == WI_FLAK else (1.3 if wi == WI_C4 else HELI_K)), owner)
-        for pl in list(self.players.values()):
-            if pl.hp <= 0 or pl.protect > 0 or pl.heli >= 0:
-                continue
-            d = math.dist(pos, (pl.x, pl.y, pl.z + 0.9))
-            if pl.pid == owner and pl.mount >= 0:      # Schütze am Geschütz bleibt unversehrt
-                continue
-            if d < r and not self.blast_los(pos, (pl.x, pl.y, pl.z + 0.9), (pl.x, pl.y, pl.z + 1.6)):
-                continue                               # 10a: Wand/Decke dazwischen - kein Schaden
-            kr = {WI_GRENADE: GREN_KILL_R, WI_C4: C4_KILL_R, WI_CLAY: CLAY_KILL_R}.get(wi, 0.0)
-            if kr > 0 and d < kr:                      # sofort tot
-                self.damage_player(pl, 9999.0, owner, wi)
-            elif d < r:
-                f = 1.0 - d / r
-                if pl.pid == owner:
-                    f *= 0.5
-                self.damage_player(pl, dmg * f * self.dmg_mult(owner), owner, wi)
-        for m in self.mobs:
-            if m.state == "dead":
-                continue
-            mp = (m.x, m.y, m.z + m.height * 0.5)
-            d = math.dist(pos, mp)
-            if d < r + m.radius and self.blast_los(pos, mp, (m.x, m.y, m.z + m.height * 0.9)):
-                f = max(0.0, 1.0 - d / (r + m.radius))
-                if wi == WI_GRENADE and d < GREN_KILL_R + m.radius:
-                    f = 9999.0 / max(dmg, 1.0)
-                dx, dy = m.x - pos[0], m.y - pos[1]
-                l = math.hypot(dx, dy) or 1.0
-                self.hurt_mob(m, dmg * f, mp, (dx / l, dy / l, 0.3), False, owner)
-
-    # ------------------------------------------------------------ Loot
-    def use_crate(self, pl, c):
-        """Kiste öffnen: Inhalt würfeln, Kiste verschwindet, später taucht woanders eine neue auf."""
-        if c not in self.crates:
-            return
-        if CRATE_TRIPLE:                                  # 7b (neu): drei Teile
-            self.open_crate_triple(pl, c)
-            return
-        for _ in range(20):
-            art, name = roll_loot(c.kind, self.mrng, pl.slots, pl.loot_history, pl.last_loot, worn_names(pl))
-            if art == "weapon" and name in WEAPON_IDX and WEAPON_IDX[name] != START_WEAPON:
-                break
-            if art == "gear" and name in GEAR_IDX:
-                break
-            if art == "melee" and name in MELEE_IDX:
-                break
-        else:
-            return
-        if LOOT_DEBUG:
-            self.loot_debug(pl, c.kind)                   # Chancen VOR dem Zug (so wurde gerade gewürfelt)
-        remember_loot(pl, name)
-        pl.stats["crate"][c.kind] = pl.stats["crate"].get(c.kind, 0) + 1
-        self.crates.remove(c)
-        if not c.bonus and not c.air:                    # Titan-/Airdrop-Kiste wird nicht ersetzt
-            self.crate_wait.append([CRATE_RESPAWN.get(c.kind, 25.0), c.kind, c.x, c.y])
-        if art == "gear":                                # 7b: nicht sofort ausrüsten - fällt vor den Spieler
-            self.loot_drop(pl, c, gear=GEAR_IDX[name])
-        elif art == "melee":
-            self.loot_drop(pl, c, melee=MELEE_IDX[name])
-        else:
-            self.loot_drop(pl, c, wi=WEAPON_IDX[name])
-
-    def loot_debug(self, pl, kind):
-        """LOOT_DEBUG: aktuelle Chancen des Spielers je Kistenart ins Log und als Hinweis an ihn."""
-        short = {"Schrotflinte": "SG", "Maschinenpistole": "MP", "Sturmgewehr": "AR", "Revolver": "Rev",
-                 "Minigun": "Mini", "Railgun": "Rail", "Raketenwerfer": "RPG", "Scharfschütze": "Sniper"}
-        lines = []
-        for k in LOOT_CRATE_KINDS:
-            ch = loot_chances(k, pl.slots, pl.loot_history, pl.last_loot)
-            ch.update({f"[{n}]": v for n, v in loot_chances(k, (), pl.loot_history, pl.last_loot, "gear",
-                                                             worn_names(pl)).items()})
-            parts = "  ".join(f"{short.get(n, n)} {ch[n] * 100:.0f}" if ch[n] >= 0.095 else f"{short.get(n, n)} {ch[n] * 100:.1f}" for n in sorted(ch, key=lambda n: -ch[n]))
-            lines.append(f"{'>' if k == kind else ' '}{k}: {parts}")
-        txt = f"Chancen {pl.name} (gezogen: {dict(pl.loot_history) or '-'}):\n" + "\n".join(lines)
-        try:
-            with open(_log_path(), "a", encoding="utf-8") as f:
-                f.write(time.strftime("%H:%M:%S ") + txt + "\n")
-        except OSError:
-            pass
-        self.events.append(("lootdbg", pl.pid, txt))
-
-    def give_weapon(self, pl, wi, how, extra=0, atts=None, scope=-1):
-        """Host/Einzelspiel: Waffe ins Inventar legen; eine verdrängte Waffe fällt auf den Boden (mit ihren
-        Aufsätzen). atts = Aufsätze der aufgehobenen Waffe (7b). Das Ereignis trägt die neue Slot-Belegung und
-        die Aufsätze, der Mitspieler übernimmt sie genau so."""
-        out_att = pl.att.get(wi) if wi in pl.slots else None
-        out, dup = take_weapon(pl, wi)
-        if not dup:
-            a = att_valid(atts)
-            if a is not None and a != ATT_NONE and att_fits(wi):
-                pl.att[wi] = a
-            else:
-                pl.att.pop(wi, None)
-            pl.guns[wi] = GunState(pl.wp(wi))
-            if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
-                pl.scopes[wi] = scope
-            else:
-                pl.scopes.pop(wi, None)
-        else:
-            pl.att[wi] = out_att if out_att else pl.att.get(wi)
-            if pl.att.get(wi) is None:
-                pl.att.pop(wi, None)
-        if out is not None:
-            osc = pl.scopes.pop(out, -1)
-            self.add_drop(pl.x, pl.y, pl.z, out, atts=pl.att.pop(out, None), scope=osc)
-        self.events.append((how, pl.pid, wi, list(pl.slots), 1 if dup else 0, extra,
-                            list(pl.att.get(wi) or ATT_NONE)))
-        self.att_state_event(pl)
-
-    def nearest_use(self, pl):
-        """Was würde F jetzt tun? -> (Art, Objekt) oder None.
-        Art: crate | drop | vehicle | turret | heli | exit | exit_turret | exit_heli | button | timer."""
-        if pl.mount >= 0:
-            return ("exit_turret", self.turrets[pl.mount]) if pl.mount < len(self.turrets) else None
-        if pl.heli >= 0:
-            hc = self.heli_by_id(pl.heli)
-            return ("exit_heli", hc) if hc is not None else None
-        if pl.vehicle >= 0:
-            v = self.vehicle_by_id(pl.vehicle)
-            return ("exit", v) if v is not None else None
-        best, bs = None, 1.0
-        vehs = []
-        for v in self.vehicles:
-            if v.hp > 0:
-                t = self.car_turret(v)
-                if v.driver < 0 or (t is not None and t.op < 0):
-                    vehs.append(v)
-        for kind, objs, rng in (("crate", self.crates, 3.2),
-                                ("drop", self.drops, 2.6),
-                                ("vehicle", vehs, 3.6),
-                                ("heli", [q for q in self.helis if q.hp > 0 and q.driver < 0 and q.ground], 6.0),
-                                ("turret", [t for t in self.turrets if t.kind != "car" and t.op < 0], 2.3)):
-            for o in objs:
-                d = math.hypot(pl.x - o.x, pl.y - o.y) / rng
-                oz = o.z - o.seat if kind == "turret" else o.z
-                if d < bs and abs(pl.z - oz) < 2.5 and (kind not in ("crate", "drop") or
-                                                        self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
-                    best, bs = (kind, o), d                   # 10a: nicht durch Decken/Wände (Kisten, Drops)
-        if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
-            for kind, b in (("button", self.button),):
-                d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
-                if d < bs and abs(pl.z - b.z) < 2.5:
-                    best, bs = (kind, b), d
-        return best
-
-    def use_object(self, pl, alt=False):
-        """F gedrückt (alt = V): Kiste, Waffe, Fahrzeug (Fahrer/Schütze), Geschütz, Helikopter, Knöpfe."""
-        if pl.hp <= 0 or self.phase != "play":
-            return
-        if alt:                                          # V: Schützensitz auf dem Wagen
-            if pl.mount >= 0 or pl.heli >= 0 or pl.vehicle >= 0:
-                return
-            for v in self.vehicles:
-                t = self.car_turret(v)
-                if (v.hp > 0 and t is not None and t.op < 0 and abs(pl.z - v.z) < 2.5
-                        and math.hypot(pl.x - v.x, pl.y - v.y) < 3.6):
-                    self.sync_turret_pos()
-                    self.mount_turret(pl, t)
-                    return
-            return
-        r = self.nearest_use(pl)
-        if r is None:
-            return
-        kind, o = r
-        if kind == "crate":
-            self.use_crate(pl, o)
-        elif kind == "drop":
-            self.pickup_drop(pl, o)
-        elif kind == "button":
-            self.press_button(pl)
-        elif kind == "turret":
-            self.mount_turret(pl, o)
-        elif kind == "exit_turret":
-            self.leave_turret(pl, True)
-        elif kind == "heli":
-            o.driver, o.speed, o.vx, o.vy, o.vz = pl.pid, 0.0, 0.0, 0.0, 0.0
-            pl.heli, pl.ads, pl.trig = o.id, False, False
-            pl.stats["flights"] += 1
-            self.events.append(("henter", pl.pid, o.id))
-        elif kind == "exit_heli":
-            if o.ground and o.speed < 4.0:
-                self.leave_heli(pl, True)
-        elif kind == "vehicle":
-            if o.driver < 0:
-                o.driver, o.speed = pl.pid, 0.0
-                pl.vehicle, pl.ads = o.id, False
-                pl.stats["drives"] += 1
-                self.events.append(("venter", pl.pid, o.id))
-            else:
-                t = self.car_turret(o)
-                if t is not None and t.op < 0:
-                    self.sync_turret_pos()
-                    self.mount_turret(pl, t)
-        else:
-            self.leave_vehicle(pl, True)
-
-    # ------------------------------------------------------------ Waffen am Boden
-    def set_att_value(self, pl, wi, si, v):
-        """Aufsatz-Platz si der Waffe wi auf v setzen. -> vorheriger Wert."""
-        return att_set_value(pl, wi, si, v)
-
-    def att_state_event(self, pl, msg=0, code=-1, wi=-1):
-        """7b: Aufsätze, Visiere und Aufsatz-Lager des Spielers an alle (der Spieler übernimmt sie)."""
-        self.events.append(("attstate", pl.pid, {str(k): list(v) for k, v in pl.att.items()},
-                            {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi))
-
-    def give_attachment(self, pl, si, v):
-        """7b: Aufsatz aufheben (siehe att_give). -> True (wird immer genommen)."""
-        msg, code, wi = att_give(pl, si, v)
-        self.att_state_event(pl, msg, code, wi)
-        return True
-
-    def equip_att(self, pl, wi, si, v):
-        """7b: Aufsatz aus dem Lager an die Waffe wi stecken (siehe att_equip_local). -> True, wenn geändert."""
-        code = att_equip_local(pl, wi, si, v)
-        if code is None:
-            return False
-        self.att_state_event(pl, 3, code, wi)
-        return True
-
-    def pickup_drop(self, pl, d):
-        """Waffe/Teil vom Boden aufheben (gleiche Slot-Regeln wie bei Kisten, siehe take_weapon). Kistenbeute
-        gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
-        if d not in self.drops:
-            return
-        if d.lock > 0 and d.owner >= 0 and d.owner != pl.pid and d.owner in self.players:
-            self.events.append(("droplock", pl.pid, d.owner, round(d.lock, 1)))
-            return
-        if d.att >= 0:                                   # Aufsatz: an die Waffe in der Hand oder ins Lager
-            si, v = divmod(d.att, ATT_CODE)
-            if 0 <= si <= ATT_SCOPE and 0 < v < (len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)):
-                self.drops.remove(d)
-                self.give_attachment(pl, si, v)
-            return
-        if d.gren > 0 and d.gk.startswith("gad:"):       # Experimental: Gadget-Stücke
-            if self.give_gadget(pl, int(d.gk[4:]), d.gren):
-                self.drops.remove(d)
-            return
-        if d.gren > 0:                                   # 10b: Granaten (10e: je Art)
-            self.drops.remove(d)
-            self.add_grenades(pl, d.gk, d.gren, d.gq)
-            return
-        if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
-            if self.give_gear(pl, d.gear):
-                self.drops.remove(d)
-                note_set_pick(pl, d.gear)                # 10b: Set-Affinität
-            return
-        if d.melee >= 0:                                 # Nahkampfwaffe: gleiche -> bleibt liegen
-            self.drops.remove(d)
-            if not self.give_melee(pl, d.melee):
-                self.drops.append(d)
-            return
-        self.drops.remove(d)
-        self.give_weapon(pl, d.wi, "pickup", 0, d.atts, d.scope)
-
-    def place_gadget(self, pl, kind, pos, nrm, yaw, att=None):
-        """Experimental: die Stückzahl ist der Beute-Vorrat (nicht GAD_START je Leben)."""
-        if kind not in (GAD_C4, GAD_CLAY, GAD_BEACON) or pl.gad_stock[kind] <= 0:
-            return None
-        pl.gad_used[kind] = 0
-        g = World.place_gadget(self, pl, kind, pos, nrm, yaw, att)
-        if g is not None:
-            pl.gad_stock[kind] -= 1
-            pl.gad_used[kind] = 0
-            self.gadget_event(pl)
-        return g
-
-    def update_turrets(self, dt):
-        """Geschütze feuern nur, wenn ein Spieler sie bedient (Maus zielt, Linke Maustaste schiesst).
-        Munition ist unbegrenzt, aber die Rohre heizen sich auf: bei 100 % Zwangspause."""
-        self.sync_turret_pos()
-        play = self.phase == "play"
-        for t in self.turrets:
-            op = self.players.get(t.op) if t.op >= 0 else None
-            v = self.vehicle_by_id(t.vid) if t.kind == "car" else None
-            if t.op >= 0 and (op is None or op.hp <= 0 or not play
-                              or (t.kind == "car" and (v is None or v.hp <= 0))):
-                if op is not None:
-                    op.mount, op.trig = -1, False
-                t.op, op = -1, None
-            was, t.firing = t.firing, False
-            t.noise_t = getattr(t, "noise_t", 0.0) - dt
-            if t.over:
-                t.heat = max(0.0, t.heat - TUR_COOL_OVER * dt)
-                if t.heat <= TUR_RESUME:
-                    t.over = False
-            elif not was:
-                t.heat = max(0.0, t.heat - TUR_COOL * dt)
-            t.cd = max(0.0, t.cd - dt)
-            if op is None:
-                continue
-            op.mount = t.id
-            op.x, op.y, op.z = t.x, t.y, t.z - t.seat
-            op.pitch = clampf(op.pitch, t.pmin, t.pmax)
-            t.heading, t.pitch = op.heading % 360.0, op.pitch
-            if not op.trig or t.over or t.cd > 0 or not play:
-                continue
-            flak = t.kind == "flak"
-            t.firing = True
-            if getattr(t, "noise_t", 0.0) <= 0:            # Geschütz feuert: laut (alle 0,5 s gemeldet)
-                self.make_noise(t.x, t.y, NOISE_SHOT * 1.2, getattr(t, "z", None))
-                t.noise_t = 0.5
-                self.events.append(("lnoise", op.pid, round(t.x, 1), round(t.y, 1),
-                                    round(getattr(t, "z", None) or self.height(t.x, t.y) + 1.0, 1), NOISE_SHOT * 1.2))
-            t.cd = FLAK_INTERVAL if flak else TUR_INTERVAL
-            t.heat += FLAK_HEAT if flak else TUR_HEAT_SHOT
-            if t.heat >= 1.0:
-                t.heat, t.over = 1.0, True
-            op.protect = 0.0
-            sp = math.radians(tur_spread(t.kind))
-            h = math.radians(t.heading) + self.mrng.uniform(-sp, sp)
-            p = math.radians(t.pitch) + self.mrng.uniform(-sp, sp)
-            d = (-math.sin(h) * math.cos(p), math.cos(h) * math.cos(p), math.sin(p))
-            spd = FLAK_SPEED if flak else TUR_SPEED
-            b = Bullet(t.x + d[0] * 1.2, t.y + d[1] * 1.2, t.z + d[2] * 1.2,
-                       d[0] * spd, d[1] * spd, d[2] * spd, TUR_DMG, op.pid, self.next_bid,
-                       WI_FLAK if flak else WI_TURRET)
-            if flak:
-                b.blast_r, b.blast_dmg, b.life = FLAK_R, FLAK_DMG, FLAK_LIFE
-            self.bullets.append(b)
-            self.next_bid += 1
-            self.events.append(("tshot", t.id))
-
-    def set_toma(self, i, age=0.0):
-        """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
-        if not (isinstance(i, int) and 0 <= i < len(self.toma_spots)):
-            i = -1
-        self.toma_idx = i
-        self.toma_age = float(age)
-        if i < 0:
-            self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
-            return
-        x, y, z, _h = self.toma_spots[i]
-        self.button = SimpleNamespace(x=x, y=y, z=z)
-
-    def toma_ready(self):
-        """Steht eine Säule ganz oben (Knopf benutzbar)?"""
-        return self.toma_idx >= 0 and self.toma_age >= TOMA_RISE_T
-
-    def place_toma(self):
-        """Host: die Säule an einem zufälligen Ort hochfahren lassen - nie dort, wo sie zuletzt benutzt wurde."""
-        n = len(self.toma_spots)
-        if n == 0:
-            self.set_toma(-1)
-            return
-        choices = [i for i in range(n) if i != self.toma_last] or list(range(n))
-        self.set_toma(self.mrng.choice(choices), 0.0)
-
-    def press_button(self, pl, tx=None, ty=None, dur=None):
-        """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte), dur = Countdown
-        (STRIKE_OPTIONS). Die Säule wird unbrauchbar und versinkt; nach der Abklingzeit fährt woanders eine hoch.
-        Wer auslöst, ist danach TOMA_PLAYER_CD Sekunden für den Tomahawk gesperrt."""
-        if (not self.tomahawk_on or self.strike != 0 or self.phase != "play" or pl.hp <= 0 or not self.toma_ready()
-                or self.toma_lock.get(pl.pid, 0.0) > 0):
-            return False
-        if dur in EXP_STRIKE_OPTIONS:
-            self.strike_dur = float(dur)
-        elif self.strike_dur not in EXP_STRIKE_OPTIONS:
-            self.strike_dur = float(STRIKE_T)
-        if tx is None or ty is None or not (math.isfinite(tx) and math.isfinite(ty)):
-            tx, ty = CENTER, CENTER
-        self.strike_x, self.strike_y = clampf(float(tx), 4.0, WORLD - 4.0), clampf(float(ty), 4.0, WORLD - 4.0)
-        self.strike, self.strike_t, self.strike_by = 1, self.strike_dur, pl.pid
-        pl.stats["toma_fired"] += 1
-        self.strike_ang = self.mrng.uniform(0.0, 360.0)
-        self.toma_last = self.toma_idx
-        self.toma_sink_idx, self.toma_sink_t = self.toma_idx, 0.0
-        if TOMA_PLAYER_CD > 0:
-            self.toma_lock[pl.pid] = float(TOMA_PLAYER_CD)
-        self.set_toma(-1)
-        self.events.append(("strike", pl.pid))
-        return True
-
-    def update_strike(self, dt):
-        self.toma_age += dt
-        if self.toma_sink_idx >= 0:
-            self.toma_sink_t += dt
-            if self.toma_sink_t >= TOMA_SINK_T:
-                self.toma_sink_idx = -1
-        for pid in list(self.toma_lock):
-            self.toma_lock[pid] -= dt
-            if self.toma_lock[pid] <= 0:
-                del self.toma_lock[pid]
-        if self.strike == 2 and self.strike_cd > 0 and self.phase == "play":
-            self.strike_wait -= dt                       # Abklingzeit läuft; danach ist der Knopf wieder bereit
-            if self.strike_wait <= 0:
-                self.strike, self.strike_wait = 0, 0.0
-                self.place_toma()                        # an einem anderen Ort
-                self.events.append(("strikeready",))
-            return
-        if self.strike != 1:
-            return
-        if self.phase != "play":
-            return
-        self.strike_t -= dt
-        if self.strike_t <= 0:
-            self.strike_hit()
-
-    def strike_hit(self):
-        self.strike, self.strike_t = 2, 0.0
-        j = max(0.0, min(0.95, TOMA_RESPAWN_JITTER))
-        self.strike_wait = self.strike_cd * self.mrng.uniform(1.0 - j, 1.0 + j)
-        tx, ty = self.strike_x, self.strike_y
-        cz = self.height(tx, ty)
-        self.make_noise(tx, ty, NOISE_TOMAHAWK, cz + 1.0)
-        self.events.append(("tomahawk", round(tx, 1), round(ty, 1)))
-        self.events.append(("explosion", (round(tx, 2), round(ty, 2), round(cz + 1.0, 2)), 16.0))
-        n, rr = 8, STRIKE_R * 0.6
-        for i in range(n):
-            a = i * math.tau / n
-            x, y = tx + math.cos(a) * rr, ty + math.sin(a) * rr
-            self.events.append(("explosion", (round(x, 2), round(y, 2), round(self.height(x, y) + 1.0, 2)), 9.0))
-        for v in list(self.vehicles):
-            if v.hp > 0 and v.z > -1.5 and self.in_strike(v.x, v.y):
-                self.destroy_vehicle(v, self.strike_by)
-        for hc in self.helis:
-            if hc.hp > 0 and self.in_strike(hc.x, hc.y):
-                self.destroy_heli(hc, self.strike_by)
-        for pl in list(self.players.values()):
-            if pl.hp > 0 and pl.z > -1.5 and self.in_strike(pl.x, pl.y):
-                pl.protect = 0.0
-                self.damage_player(pl, 9999.0, self.strike_by, WI_TOMAHAWK)
-        for m in self.mobs:
-            if m.state != "dead" and m.z > -1.5 and self.in_strike(m.x, m.y):
-                self.hurt_mob(m, 9999.0, (m.x, m.y, m.z + m.height * 0.5), (0.0, 0.0, 1.0), False, self.strike_by)
-
-    def surface_ray(self, o, d, rng=GAD_RANGE):
-        """Strahl vom Auge: erster Treffer auf Gelände, Gebäude, Hindernis, Fahrzeug oder Helikopter.
-        -> (Punkt, Normale, att) oder None. att = ('v'|'h', id) bei Fahrzeugen."""
-        d = norm(d)
-        best, res = rng, None
-        p, hit = self.trace_shot(o, d, 100.0, 0.0, max_t=0.03)
-        if hit:
-            dist = math.dist(o, p)
-            if dist <= rng:
-                best, res = dist, (p, self.surface_normal(p, d), None)
-        p1 = (o[0] + d[0] * rng, o[1] + d[1] * rng, o[2] + d[2] * rng)
-        for kind, lst in (("v", self.vehicles), ("h", self.helis)):
-            for v in lst:
-                if v.hp <= 0:
-                    continue
-                th = vehicle_hit_t(o, p1, v, kind == "h")   # 10f: Trefferquader (Normale = getroffene Fläche)
-                if th is not None and th[0] * rng < best:
-                    best = th[0] * rng
-                    hp = (o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best)
-                    res = (hp, th[1], (kind, v.id))
-        return res
-
-    # ------------------------------------------------------------ Granaten
-    # ------------------------------------------------------------ Kugeln
-    def add_shot(self, pl, eye, dirs, w):
-        """Kugeln eines Schusses erzeugen. Beim Client (shot_sink) werden sie
-        stattdessen an den Host geschickt - der simuliert alle Kugeln."""
-        self.events.append(("shot", pl.cur, pl.pid))
-        if self.shot_sink is not None:
-            self.shot_sink(pl, eye, dirs, w)
-            return
-        self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1),           # 10h: + Lärmradius, Höhe
-                            round(NOISE_SHOT * getattr(w, "loud", 1.0), 1), round(world_noise_z(self, pl), 1)))
-        pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
-        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0), world_noise_z(self, pl))
-        for d in dirs:
-            self.bullets.append(Bullet(eye[0], eye[1], eye[2],
-                                       d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
-                                       w.dmg, pl.pid, self.next_bid, pl.cur))
-            self.next_bid += 1
-
-    def bullet_substep(self, b, h, mobs=None):
-        """Ein Integrationsschritt der Dauer h; False, wenn die Kugel endet. mobs (12): vorab gefilterte Monster nahe
-        der Flugstrecke (None = alle)."""
-        x0, y0, z0 = b.x, b.y, b.z
-        b.vz -= GRAV_BULLET * b.grav * h                 # Bulletdrop
-        x1, y1, z1 = x0 + b.vx * h, y0 + b.vy * h, z0 + b.vz * h
-        p0, p1 = (x0, y0, z0), (x1, y1, z1)
-        best_t, hit, who = 2.0, None, None
-        for m in (self.mobs if mobs is None else mobs):
-            if m.state == "dead":
-                continue
-            if m.kind == "gdrone" and self.allied(getattr(m, "owner", -1), b.owner):
-                continue                                 # 10h: eigene/verbündete Abwehrdrohne fängt keine Kugeln
-            if (max(x0, x1) < m.x - m.radius or min(x0, x1) > m.x + m.radius
-                    or max(y0, y1) < m.y - m.radius or min(y0, y1) > m.y + m.radius):
-                continue
-            t = seg_cyl(p0, p1, m.x, m.y, m.radius, m.z, m.z + m.height)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "mob", m
-        own_v = self.own_vehicle_id(b.owner)
-        for v in self.vehicles:
-            if v.hp <= 0 or v.id == own_v:               # der eigene Wagen wird nie vom eigenen Geschütz getroffen
-                continue
-            if (max(x0, x1) < v.x - VEH_HIT_REACH or min(x0, x1) > v.x + VEH_HIT_REACH
-                    or max(y0, y1) < v.y - VEH_HIT_REACH or min(y0, y1) > v.y + VEH_HIT_REACH):
-                continue
-            th = vehicle_hit_t(p0, p1, v)                # 10f: Trefferquader passend zum Modell
-            if th is not None and th[0] < best_t:
-                best_t, hit, who = th[0], "vehicle", v
-        for hc in self.helis:
-            if hc.hp <= 0 or (b.owner >= 0 and hc.driver == b.owner):
-                continue
-            if (max(x0, x1) < hc.x - HELI_HIT_REACH or min(x0, x1) > hc.x + HELI_HIT_REACH
-                    or max(y0, y1) < hc.y - HELI_HIT_REACH or min(y0, y1) > hc.y + HELI_HIT_REACH):
-                continue
-            th = vehicle_hit_t(p0, p1, hc, True)
-            if th is not None and th[0] < best_t:
-                best_t, hit, who = th[0], "heli", hc
-        if self.phase == "play":
-            for pl in self.players.values():
-                if pl.hp <= 0 or pl.pid == b.owner or pl.protect > 0 or pl.vehicle >= 0 or pl.heli >= 0:
-                    continue
-                if (max(x0, x1) < pl.x - PLAYER_HIT_R or min(x0, x1) > pl.x + PLAYER_HIT_R
-                        or max(y0, y1) < pl.y - PLAYER_HIT_R or min(y0, y1) > pl.y + PLAYER_HIT_R):
-                    continue
-                t = seg_cyl(p0, p1, pl.x, pl.y, PLAYER_HIT_R, pl.z, pl.z + body_h(pl))
-                if t is not None and t < best_t:
-                    best_t, hit, who = t, "player", pl
-        for p in self.props_near(x0, y0, x1, y1):
-            t = seg_cyl(p0, p1, p.x, p.y, p.hit_r, p.z - 0.3, p.z + p.hit_h)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, p.kind, None
-        for bx in self.boxes_near(x0, y0, x1, y1):
-            t = seg_box(p0, p1, bx)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "rock", None       # Gebäude splittern wie Stein
-        if hit is None and z0 >= WATER_LEVEL > z1:
-            for px, py, r in self.ponds:
-                if math.hypot(x1 - px, y1 - py) < r * 1.3:
-                    best_t, hit = (z0 - WATER_LEVEL) / (z0 - z1), "water"
-                    break
-        if self.cm is not None:
-            t = self.cm.seg(p0, p1)
-            if t is not None and t < best_t:
-                best_t, hit, who = t, "ground", None
-        elif hit is None and z1 <= self.ground_for(x1, y1, z1):
-            best_t, hit = 1.0, "ground"
-        if hit is None:
-            b.x, b.y, b.z = x1, y1, z1
-            b.travel += math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
-            return True
-        hx, hy, hz = x0 + (x1 - x0) * best_t, y0 + (y1 - y0) * best_t, z0 + (z1 - z0) * best_t
-        if hit == "ground" and self.cm is None:
-            hz = self.ground_for(hx, hy, hz)
-        b.x, b.y, b.z = hx, hy, hz
-        d = norm((b.vx, b.vy, b.vz))
-        if b.blast_r > 0:                                # Rakete: Explosion kurz vor dem Ziel
-            self.explode((hx - d[0] * 0.3, hy - d[1] * 0.3, hz - d[2] * 0.3),
-                         b.owner, b.blast_r, b.blast_dmg, b.wi)
-        elif hit == "mob":
-            b.alerted.add(who.id)
-            head = hz > who.z + 0.78 * who.height
-            self.note_hit(b.owner, head)
-            self.hurt_mob(who, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
-        elif hit == "player":
-            head = hz > who.z + 0.78 * body_h(who)
-            if b.owner != who.pid:
-                self.note_hit(b.owner, head)
-            self.hit_player(who, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
-        elif hit == "vehicle":
-            drv = self.players.get(who.driver) if who.driver >= 0 else None
-            if (drv is not None and drv.hp > 0 and drv.pid != b.owner and drv.protect <= 0
-                    and hz > who.z + VEH_BODY_H and b.blast_r <= 0):
-                head = hz > who.z + 1.35                    # Fahrer ragt aus der Karosserie: direkt treffbar
-                self.hit_player(drv, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
-            else:
-                self.events.append(("impact", (hx, hy, hz), "rock"))
-                self.damage_vehicle(who, b.dmg, b.owner)
-        elif hit == "heli":
-            self.events.append(("impact", (hx, hy, hz), "rock"))
-            self.damage_heli(who, 0.0 if b.wi == PISTOL_WI else b.dmg * HELI_K, b.owner)
-        else:
-            self.events.append(("impact", (hx, hy, hz), hit))
-        return False
-
-    def push_player(self, pl):
-        """Spieler aus lebenden Monstern herausschieben - nur bei überlappendem Höhenbereich (Monster z .. z +
-        height, Spieler z .. z + body_h). Wer auf einem Dach/Turm/Obergeschoss über den Monstern steht, wird
-        nicht mehr geschoben (früher: "unendliche Säule")."""
-        if pl.hp <= 0:
-            return
-        bh = body_h(pl)
-        for a in self.mobs:
-            if a.state == "dead":
-                continue
-            dx, dy = pl.x - a.x, pl.y - a.y
-            md = a.radius + PLAYER_R
-            if abs(dx) > md or abs(dy) > md:
-                continue
-            if not z_overlap(pl.z, pl.z + bh, a.z, a.z + a.height):
-                continue
-            d = math.hypot(dx, dy)
-            if d < md:
-                d = d or 0.01
-                pl.x, pl.y = a.x + dx / d * md, a.y + dy / d * md
-
-    # ------------------------------------------------------------ Runde
-    def end_match(self):
-        self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
-        self.bullets, self.grenades, self.rocks = [], [], []
-        self.smokes, self.fires, self.airdrops = [], [], []
-        self.clear_gadgets()
-        self.events.append(("matchend",))
-        self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
-
-    def match_stats(self):
-        """Rundenstatistik aller Spieler (Reihenfolge = Rangliste) - geht einmal am Rundenende an alle."""
-        out = []
-        for p in self.ranking():
-            st = p.stats
-            out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
-                        "score": round(p.score, 1), "mode": self.mode,
-                        "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
-        return out
-
-    def new_match(self):
-        """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
-        self.bullets, self.mobs, self.pending = [], [], []
-        self.grenades, self.drops, self.rocks = [], [], []
-        self.smokes, self.fires, self.airdrops = [], [], []
-        self.clear_gadgets()
-        for v in self.vehicles:
-            v.reset()
-        self.strike, self.strike_t, self.strike_by, self.strike_wait = 0, 0.0, -1, 0.0
-        self.strike_x = self.strike_y = float(CENTER)
-        self.toma_lock.clear()
-        self.toma_sink_idx, self.toma_sink_t = -1, 0.0
-        self.place_toma()
-        for t in self.turrets:
-            t.heat, t.over, t.firing, t.op = 0.0, False, False, -1
-        for hc in self.helis:
-            hc.reset()
-        self.kills = 0
-        self.reset_crates()
-        if self.mobs_on:
-            self.populate_mobs()
-        self.phase, self.time_left, self.over_t = "play", self.limit, 0.0
-        for pl in list(self.players.values()):
-            pl.kills = pl.deaths = 0
-            pl.score = 0.0
-            pl.death_pos = None
-            pl.stats = exp_new_stats()
-            pl.ready = False
-        for pl in list(self.players.values()):
-            if getattr(pl, "prespawn", False):
-                continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
-            self.respawn_player(pl)
-        self.events.append(("newmatch",))
-
-    def start_round(self):
-        """Host: die Lobby beenden. Alle Spieler (auch die, die noch nicht gespawnt waren) werden aufgestellt;
-        die gewählte Ausrüstung setzt jeder Spieler bei sich selbst (Ereignis 'respawn')."""
-        if not self.lobby or not self.players_ready():
-            return
-        self.lobby = False
-        self.time_left = self.limit
-        for pl in list(self.players.values()):
-            pl.kills = pl.deaths = 0
-            pl.score = 0.0
-            pl.stats = exp_new_stats()
-            pl.ready = False
-            self.respawn_player(pl)
-        self.events.append(("newmatch",))
-        netlog(f"Host: Lobby beendet, Runde startet mit {len(self.players)} Spielern")
-
-    def update(self, dt):
-        """Simulation der Welt (Monster, Kugeln, Schaden, Punkte) - läuft nur beim Host
-        bzw. im Einzelspiel. Die Gegenseite sind alle Spieler in self.players."""
-        players = list(self.players.values())
-        if self.lobby:                                   # Lobby: nichts läuft, alle warten auf 'Spiel starten'
-            for pl in players:
-                pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
-            return
-        if self.phase == "over":                         # Endbildschirm: die Welt steht still, bis der Host die nächste Runde startet
-            self.over_t = 0.0                            # (keine automatische neue Runde: erst wenn alle 'Bereit' gedrückt haben)
-            return
-        for pl in players:                               # Strecken für die Statistik
-            last = getattr(pl, "stat_pos", None)
-            pl.stat_pos = (pl.x, pl.y, pl.z)
-            if last is None or pl.hp <= 0:
-                continue
-            d = math.hypot(pl.x - last[0], pl.y - last[1])
-            if d > 12.0:                                 # Respawn / Sprung: nicht zählen
-                continue
-            if pl.heli >= 0:
-                pl.stats["fly"] += d
-            elif pl.vehicle >= 0:
-                pl.stats["drive"] += d
-            elif pl.mount < 0:
-                pl.stats["walk"] += d
-        self.update_bullets(dt)
-        self.update_grenades(dt)
-        self.update_smokes(dt)                           # 10e: Rauch, Feuer, Airdrops
-        self.update_fires(dt)
-        self.update_airdrops(dt)
-        self.update_vehicles(dt)
-        self.update_gadgets(dt)
-        self.update_turrets(dt)
-        self.update_helis(dt)
-        self.update_strike(dt)
-        self.update_crates(dt)
-        for d in [d for d in self.drops if d.life <= dt]:
-            self.drops.remove(d)
-        for d in self.drops:
-            d.life -= dt
-            if d.lock > 0:
-                d.lock = max(0.0, d.lock - dt)
-        self.update_noise(dt, players)
-        self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
-        if self.rocks:
-            self.update_rocks(dt)
-        self.separate_mobs()
-        for pl in players:
-            self.push_player(pl)
-        for m in self.mobs:                              # 10e: eigene Drohnen leben nur PDRONE_LIFE s
-            if m.kind in TEMP_MOBS and m.state != "dead":
-                m.life = getattr(m, "life", PDRONE_LIFE) - dt
-                if m.life <= 0 or getattr(m, "owner", -1) not in self.players:
-                    m.hp, m.state, m.dead_t = 0.0, "dead", 0.0
-                    self.events.append(("tempdown", m.id, round(m.x, 2), round(m.y, 2), round(m.z, 2)))
-        for m in [m for m in self.mobs if m.state == "dead" and m.dead_t > 4.0]:
-            self.mobs.remove(m)
-            if m.kind in TEMP_MOBS:                      # 10e: keine Monster - kommen nicht wieder
-                continue
-            self.pending.append([TITAN_RESPAWN if m.kind == "titan" else RESPAWN_T, m.kind])
-        avoid = [(p.x, p.y) for p in players if p.hp > 0] or [(CENTER, CENTER)]
-        for e in self.pending[:]:
-            e[0] -= dt
-            if e[0] <= 0:
-                if e[1] == "drone" and sum(1 for o in self.mobs if o.kind == "drone") >= DRONE_COUNT:
-                    self.pending.remove(e)                       # 9b: nie mehr als DRONE_COUNT Drohnen
-                elif self.spawn_mob(e[1], avoid, 45.0):
-                    self.pending.remove(e)
-                else:
-                    e[0] = 1.0
-        for pl in players:
-            pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
-            pl.since_hurt += dt
-            pl.protect = max(0.0, pl.protect - dt)
-            if self.regen_rate > 0 and 0 < pl.hp < pl.max_hp and pl.since_hurt > REGEN_DELAY:
-                pl.hp = min(pl.max_hp, pl.hp + self.regen_rate * dt)
-            pl.stun_t = max(0.0, pl.stun_t - dt)
-            pl.stun_lock = max(0.0, pl.stun_lock - dt)
-            if pl.hp > 0 and wears(pl, "shield"):
-                pl.shield_t += dt
-                smax = shield_max(pl)
-                if pl.shield_t >= SHIELD_DELAY and pl.shield_hp < smax:
-                    n_ = sum(1 for gi in pl.gear.values() if gi is not None and GEAR[gi].shield > 0)
-                    rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
-                    pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
-            pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
-            tick_melee_timers(pl, dt)                    # 9c: Pfannen-Sperre, verstärkte Fähigkeiten
-            self.update_eating(pl, dt)                   # 9c: Essen (Heilung beim Host)
-            if pl.buff is not None:
-                pl.buff_t -= dt
-                if pl.buff_t <= 0:
-                    self.end_buff(pl)
-                    self.events.append(("buffend", pl.pid))
-        if self.phase == "play":
-            self.time_left -= dt
-            if self.mode == "koth":                      # jeder in der Burg-Zone bekommt Punkte
-                for pl in players:
-                    if pl.hp > 0 and self.in_zone(pl):
-                        pl.score += ZONE_PTS * dt
-                        pl.stats["zone_t"] += dt
-            if self.time_left <= 0:
-                self.end_match()
-        else:
-            self.over_t = 0.0                            # keine automatische neue Runde: der Host startet sie, sobald alle bereit sind
-
-
 class GunState:
     def __init__(self, w):
         self.mag = w.mag
@@ -10008,8 +8180,9 @@ class Player:
         """Wirksame Waffe (mit Aufsätzen)."""
         return eff_weapon(wi, self.att.get(wi))
 
-    def respawn(self, world, x, y, loadout):
-        """Figur neu aufstellen (Punkte, Kills und Tode bleiben)."""
+    def respawn(self, world, x, y, loadout=None):
+        """Figur neu aufstellen (Punkte, Kills und Tode bleiben). Bewaffnung: Ausrüstungsmenü (Haupt- und Kleinwaffe, Aufsätze,
+        Visier, Gadget); im Regelsatz Experimental (world.exp) nur die Pistole - alles Weitere kommt aus der Beute."""
         self.x, self.y = x, y
         self.z = world.spawn_z(x, y)
         self.vz = 0.0
@@ -10023,21 +8196,27 @@ class Player:
         self.hp = PLAYER_HP
         self.prespawn = False
         self.since_hurt = 99.0
-        pri, sec = loadout[0], loadout[1]
+        self.ext_fields()                 # Ausrüstung, Granaten, Nahkampf, Buffs ... (jedes Leben neu)
+        exp = bool(getattr(world, "exp", False))
+        loadout = () if (exp or not loadout) else loadout
+        pri, sec = (loadout[0], loadout[1]) if len(loadout) > 1 else (START_WEAPON, None)
         self.att = {}                     # Aufsätze: Waffe -> (Lauf, Magazin, Griff)
         for wi_, a_ in ((pri, loadout[4] if len(loadout) > 4 else None), (sec, loadout[5] if len(loadout) > 5 else None)):
             a_ = att_valid(a_)
-            if a_ is not None and a_ != ATT_NONE:
+            if wi_ is not None and a_ is not None and a_ != ATT_NONE:
                 self.att[wi_] = a_
         self.guns = [GunState(self.wp(i)) for i in range(len(WEAPONS))]
         self.gadget = loadout[2] if len(loadout) > 2 else GAD_C4
         self.scope = loadout[3] if len(loadout) > 3 else SC_IRON       # Visier der Primärwaffe
-        self.gad_used = [0, 0, 0]         # beim Host: wie viele er von jeder Art schon aufgestellt hat
-        self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (Host entscheidet)
-        self.gad_n = GAD_START            # eigene Anzeige: verbleibende Stück
-        self.gad_out = False              # Gadget in der Hand (Taste 4)
-        self.melee_next = 0.0             # frühester Zeitpunkt des nächsten Schlags
-        self.slots = [pri, sec, None]     # Hauptwaffe, Kleinwaffe, Spezialwaffe aus der Kiste
+        self.gad_stock = [0, 0, 0]        # Vorrat je Gadget-Art (Host entscheidet); Menü-Gadget: GAD_START Stück, sonst nur aus Beute
+        if not exp and 0 <= self.gadget < 3:
+            self.gad_stock[self.gadget] = GAD_START
+        self.gad_n = self.gad_stock[self.gadget] if 0 <= self.gadget < 3 else 0   # eigene Anzeige: verbleibende Stück
+        self.gad_out = False              # Gadget in der Hand (Taste 3)
+        self.slots = [None] * N_SLOTS     # Slot 1..N_FREE_SLOTS: normale Waffen, danach: Spezialwaffe aus der Beute
+        self.slots[0] = pri
+        if sec is not None and N_FREE_SLOTS > 1:
+            self.slots[1] = sec
         self.cur = self.switch_to = pri
         self.switch_t = 0.0
         self.reload_t = 0.0
@@ -10045,9 +8224,7 @@ class Player:
         self.ads = False
         self.bloom = 0.0
         self.trigger_buf = 0.0
-        self.loot = -1                    # getragene Kistenwaffe (-1 = keine)
         self.protect = PROTECT_T          # Spawnschutz in Sekunden
-        self.grenades = GRENADES_START
         self.gren_cd = 0.0
         self.vehicle = -1                 # ID des Fahrzeugs, in dem er sitzt (-1 = zu Fuss)
         self.mount = -1                   # ID des Geschützes, das er bedient
@@ -10059,7 +8236,6 @@ class Player:
         self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
-        self.ext_fields()
         self.scopes = {pri: self.scope} if isinstance(pri, int) else {}   # 7b: Visier je Waffe (Hauptwaffe: gewähltes)
 
     def ext_fields(self):
@@ -10107,118 +8283,9 @@ class Player:
         self.last_spec = -99.0            # 9c: Host: Zeitpunkt der letzten Sonderattacke (gegen Spam)
 
 
-class ExpPlayer(Player):
-    """Player im Modus Experimental (Robins Regeln)."""
-
-    def __init__(self, x, y, world, pid=0, name=""):
-        self.pid, self.name = pid, name
-        self.look = ""                    # Aussehen (Look-Code), vom Spieler gewählt
-        self.kills = self.deaths = 0
-        self.score = 0.0                  # King of the Hill: Punkte
-        self.death_pos = None             # wo er zuletzt gestorben ist (für den Startpunkt)
-        self.dead_age = 0.0               # Sekunden seit dem Tod (Wartezeit bis zum Respawn)
-        self.prespawn = False             # Host/Beitritt: im Spiel, aber noch nicht gespawnt (Ausrüstungsbildschirm)
-        self.ready = False                # 'Bereit' in der Lobby / im Rundenendmenü (Mitspieler)
-        self.hold_gad = -1                # Gadget-Art in der Hand (-1 = keins), für die Ansicht der anderen
-        self.ready_set = 0.0              # Zeitpunkt der letzten eigenen Änderung (Snapshots überschreiben nicht sofort)
-        self.respawn(world, x, y)
-
-    def respawn(self, world, x, y, loadout=None):
-        """Figur neu aufstellen (Punkte, Kills und Tode bleiben). Bewaffnung: nur die Pistole in Slot 1;
-        das Ausrüstungsmenü bestimmt Aufsätze, Visier und Gadget."""
-        self.x, self.y = x, y
-        self.z = world.spawn_z(x, y)
-        self.vz = 0.0
-        self.on_ground = True
-        # Blick Richtung Burg (Blick = (-sin h, cos h))
-        self.heading = math.degrees(math.atan2(-(CENTER - x), CENTER - y))
-        self.pitch = 0.0
-        self.phase = 0.0     # für das Kopfwippen beim Laufen
-        self.moving = False
-        self.hp = PLAYER_HP
-        self.prespawn = False
-        self.max_hp = PLAYER_HP           # Tank-Buff: höher
-        self.stun_t = 0.0                 # Betäubung (Drohne): s
-        self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
-        self.buff, self.buff_t = None, 0.0   # Buff vom Fluchttier: "speed" | "damage" | "tank", Restzeit
-        self.gear = {sl: None for sl in GEAR_SLOTS}   # Ausrüstung je Slot (Index in GEAR)
-        self.shield_hp, self.shield_t = 0.0, 99.0   # Schild: Stand, s seit dem letzten Schildschaden (7c: Teile laden ihn)
-        self.tank_add = 0.0               # 7c: + max. HP durch den Tank-Buff
-        self.shock_cd = 0.0               # 7c: Abklingzeit Stromstoss (Schild-Set)
-        self.dash_dist = 0.0              # 7c: Hermes-Set: so weit ist der laufende Dash schon geglitten
-        self.jet_fuel = JET_FUEL          # Jetpack-Treibstoff (s); gehört dem Spieler, nicht dem Teil
-        self.cling, self.cling_t = False, 0.0   # 10c: hängt an einer Wand (Krallenhelm)
-        self.jet_on = False               # Jetpack feuert gerade (Anzeige, auch für andere)
-        self.dash_cd, self.dash_t = 0.0, 0.0   # Hermes: Abklingzeit, laufender Dash (s)
-        self.dash_dir = (0.0, 0.0)
-        self.air_jump = False             # Doppelsprung in diesem Sprung schon benutzt
-        self.jump_edge = self.run_edge = False   # Taste in diesem Bild neu gedrückt (für Doppelsprung/Dash)
-        self.since_hurt = 99.0
-        loadout = loadout or ()
-        self.att = {}                     # Aufsätze: Waffe -> (Lauf, Magazin, Griff); gelten, sobald er diese Waffe trägt
-        for wi_, a_ in ((loadout[0] if len(loadout) > 0 else None, loadout[4] if len(loadout) > 4 else None),
-                        (loadout[1] if len(loadout) > 1 else None, loadout[5] if len(loadout) > 5 else None)):
-            a_ = att_valid(a_)
-            if wi_ is not None and a_ is not None and a_ != ATT_NONE:
-                self.att[wi_] = a_
-        self.guns = [GunState(self.wp(i)) for i in range(len(EXP_WEAPONS))]
-        self.gadget = loadout[2] if len(loadout) > 2 else GAD_C4
-        self.scope = loadout[3] if len(loadout) > 3 else SC_IRON       # Visier der Primärwaffe
-        self.gad_used = [0, 0, 0]         # beim Host: wie viele er von jeder Art schon aufgestellt hat
-        self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (Host entscheidet)
-        self.gad_n = 0                    # Experimental: kein Gadget (kein Slot, am Start nichts)
-        self.gad_out = False              # Gadget in der Hand (Taste 4)
-        self.stats = exp_new_stats()          # Rundenstatistik (Host)
-        self.sb = None                    # Mitspieler: (Monster, Kisten, Buffs) aus dem Snapshot
-        self.loot_history = {}            # Kisten-Gedächtnis (nur beim Host benutzt): Name -> in diesem Leben gezogen
-        self.last_by = {}                 # 7b: zuletzt gezogen je Art (weapon/melee/gear/att)
-        self.att_store = []               # 7b: Aufsatz-Lager (Codes Platz * ATT_CODE + Index), pro Leben
-        self.scopes = {}                  # 7b: Visier je Waffe (sonst DEFAULT_SCOPE)
-        self.last_loot = None             # zuletzt aus einer Kiste gezogen (kommt in der nächsten nicht)
-        self.slots = [None] * N_SLOTS     # Slot 1..N_FREE_SLOTS: normale Waffen, danach: Spezialwaffe
-        self.slots[0] = START_WEAPON
-        self.last_slot = 0                # zuletzt benutzter normaler Slot (für den Tausch, wenn man die
-        self.melee, self.melee_out = START_MELEE, False   # Nahkampfwaffe (Index in MELEE), gerade in der Hand?
-        self.melee_cd = self.swing_t = 0.0                 # Abklingzeit, laufender Schlag (Animation)
-        self.cur = self.switch_to = START_WEAPON   # Spezialwaffe hält und beide normalen Slots voll sind)
-        self.switch_t = 0.0
-        self.reload_t = 0.0
-        self.reload_tot = 0.0             # Gesamtdauer des laufenden Nachladens (Schrotflinte: je nach Patronenzahl)
-        self.ads = False
-        self.bloom = 0.0
-        self.trigger_buf = 0.0
-        self.protect = PROTECT_T          # Spawnschutz in Sekunden
-        self.gren = gren_new_inv()        # 10e: Granaten je Art (GREN_KINDS)
-        self.gren_sel = "frag"            # 10e: gewählte Art (H / Mausrad bei gehaltenem G)
-        self.flare_q = []                 # 10e: Airdrop-Fackeln: Kistenart jeder Fackel (nur Host)
-        self.gren_cd = 0.0
-        self.vehicle = -1                 # ID des Fahrzeugs, in dem er sitzt (-1 = zu Fuss)
-        self.mount = -1                   # ID des Geschützes, das er bedient
-        self.heli = -1                    # ID des Helikopters, den er fliegt
-        self.trig = False                 # Abzug gehalten (für Geschütze)
-        self.lean = 0.0                   # seitlicher Versatz durch Lehnen (m, + = rechts)
-        self.lean_x = self.lean_y = 0.0
-        self.duck = False                 # Duck-Taste gehalten
-        self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
-        self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
-        self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
-        self.cat_mul = {c: 1.0 for c in LOOT_CATS}   # 10b: Kategorie-Gedächtnis der Monster-Beute (pro Leben)
-        self.set_aff, self.set_lvl = "", 0  # 10b: Set-Affinität (zuletzt aufgehobenes Set, Stufe)
-        self.pan_pts = 0                  # 9c: Ladung der Bratpfanne (Punkte aus Kills mit ihr; beim Tod weg)
-        self.eat_t, self.eat_dur, self.eat_stage, self.eat_k = 0.0, 0.0, 0, 1.0   # 9c: Essen läuft (Rest, Dauer, Stufe, Faktor)
-        self.eat_bites = 0                # 9c: Stufe 3: schon genommene Bissen
-        self.pan_lock = 0.0               # 9c: s, so lange kann er nicht essen (Erschöpfungsdolch)
-        self.amp, self.amp_t = set(), 0.0 # 9c: verstärkte nächste Einsätze ("dash", "jet", "shock", "pan"), Restzeit
-        self.dash_amp = self.jet_amp = 1.0   # 9c: Faktor des laufenden Dashs / Jetpack-Flugs
-        self.chg_hold = 0.0               # 9c: s, so lange die Schlagtaste gehalten wird (Katana/Schwert laden)
-        self.leap_t, self.leap_dir, self.leap_v = 0.0, (0.0, 0.0), 0.0   # 9c: Sprungangriff (Schwert): Satz nach vorn
-        self.slam_pending = self.slam_air = False   # 9c: beim Aufkommen schlägt das Schwert zu
-        self.last_spec = -99.0            # 9c: Host: Zeitpunkt der letzten Sonderattacke (gegen Spam)
-
-
 def note_hand(pl):
     """Merkt sich den zuletzt benutzten normalen Slot (für den Sonderfall beim Tausch)."""
-    if 0 <= pl.cur < len(EXP_WEAPONS) and EXP_WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
+    if 0 <= pl.cur < len(WEAPONS) and WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
         pl.last_slot = pl.slots.index(pl.cur)
 
 def clamp_ammo(pl, wi):
@@ -10280,12 +8347,12 @@ def att_equip_local(pl, wi, si, v):
 
 def stock_ammo(pl, wi):
     """Waffe aufgehoben, die man schon trägt: Reserve auffüllen statt eines zweiten Exemplars."""
-    w, g = EXP_WEAPONS[wi], pl.guns[wi]
+    w, g = WEAPONS[wi], pl.guns[wi]
     g.reserve = min(w.max_reserve, g.reserve + w.mag * DUP_AMMO_MAGS)
 
 def target_slot(pl, wi):
     """In welchen Slot käme die Waffe wi (Regeln siehe take_weapon)?"""
-    if EXP_WEAPONS[wi].kind == "special":
+    if WEAPONS[wi].kind == "special":
         return SPECIAL_SLOT
     slot = next((i for i in range(N_FREE_SLOTS) if pl.slots[i] is None), None)
     if slot is None:
@@ -10303,7 +8370,7 @@ def take_weapon(pl, wi):
     if wi in pl.slots:
         stock_ammo(pl, wi)
         return None, True
-    w = EXP_WEAPONS[wi]
+    w = WEAPONS[wi]
     note_hand(pl)
     slot = target_slot(pl, wi)
     out = pl.slots[slot]
@@ -10313,7 +8380,7 @@ def take_weapon(pl, wi):
         pl.cur = pl.switch_to = wi
         pl.switch_t = SWITCH_T * 0.5             # zweite Hälfte der Wechsel-Animation (Waffe hochnehmen)
         pl.reload_t = 0.0
-    if EXP_WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
+    if WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
         note_hand(pl)
     return out, False
 
@@ -10423,7 +8490,7 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         else:
             pl.x, pl.y = ox, oy
     if (getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving
-            and not (MTN_CLIMB and isinstance(world, ExpWorld))):
+            and not (MTN_CLIMB and world.exp)):
         too_steep(pl, ox, oy, world)                 # Felswände im Gebirge: nicht hinauf (auch nicht springend)
 
     if getattr(world, "cm", None) is not None:
@@ -15147,224 +13214,6 @@ def _soldier_meshes(L):
     GL = L["glove"]
     GLASS = (0.12, 0.18, 0.26)
     tm = Mesh()
-
-    # ---- Rumpf: Becken, Taille, Brustkorb, Schulterlinie (elliptische Querschnitte)
-    zs = [-0.07, 0.0, 0.10, 0.20, 0.30, 0.42, 0.52, 0.585, 0.635, 0.668]
-    rxs = [0.200, 0.215, 0.210, 0.185, 0.190, 0.210, 0.225, 0.225, 0.170, 0.080]
-    rys = [0.120, 0.130, 0.125, 0.110, 0.115, 0.130, 0.140, 0.125, 0.100, 0.075]
-    cys = [0.0, -0.010, -0.015, 0.0, 0.005, 0.010, 0.015, 0.0, -0.010, 0.0]
-    loft(tm, [(0.0, cy, z) for cy, z in zip(cys, zs)], rxs, rys, None, rng, None, camo)
-    # ---- Hals mit Kragen
-    loft(tm, [(0, 0.005, 0.62), (0, 0.010, 0.70), (0, 0.015, 0.79)], [0.070, 0.057, 0.055], [0.070, 0.060, 0.060],
-         skin, rng, None, None, (False, False), 0.015)
-    loft(tm, [(0, 0.0, 0.632), (0, 0.004, 0.668), (0, 0.006, 0.700)], [0.090, 0.078, 0.070], [0.085, 0.072, 0.066],
-         tuple(c * 0.8 for c in pal[1]), rng, None, None, (False, False))
-    # ---- Koppel mit Schnalle und Taschen
-    loft(tm, [(0, 0.0, 0.162), (0, 0.0, 0.218)], [0.196, 0.196], [0.118, 0.118], DK, rng, None, None, (False, False), 0.02)
-    box(tm, 0, 0.122, 0.19, 0.05, 0.012, 0.042, METAL)
-    for sx in (-1, 1):
-        box(tm, sx * 0.165, 0.05, 0.19, 0.055, 0.075, 0.09, LEATH, rng)                  # Gürteltaschen
-        box(tm, sx * 0.165, 0.05, 0.236, 0.058, 0.078, 0.02, tuple(c * 1.15 for c in LEATH), rng)
-    # ---- Weste (Plattenträger) mit Magazintaschen, Funkgerät, Schulterriemen
-    if L["weste"] == 0:
-        vz = [0.30, 0.40, 0.50, 0.578]
-        loft(tm, [(0.0, c, z) for c, z in zip((0.006, 0.013, 0.019, 0.005), vz)], [0.203, 0.222, 0.238, 0.238],
-             [0.130, 0.146, 0.156, 0.140], OLV, rng, None, None, (True, False), 0.04)
-        for sx in (-1, 1):
-            box(tm, sx * 0.125, 0.0, 0.612, 0.065, 0.19, 0.024, OLV, rng, mat=None)       # Schulterriemen
-        for x in (-0.09, 0.0, 0.09):
-            box(tm, x, 0.172, 0.385, 0.076, 0.042, 0.115, POUCH, rng, mat=None)           # Magazintaschen
-            box(tm, x, 0.19, 0.438, 0.078, 0.014, 0.036, FLAP, rng, mat=None)             # Klappe
-        box(tm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
-        box(tm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
-        box(tm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
-    # ---- Rucksack
-    if L["pack"] == 0:                                                                       # gross mit Schlafrolle
-        box(tm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
-        box(tm, 0, -0.205, 0.30, 0.22, 0.09, 0.08, POUCH, rng, mat=None)
-        ell(tm, (0, -0.215, 0.63), 0.14, 0.05, 0.05, (0.40, 0.36, 0.25), rng, None)
-    elif L["pack"] == 1:                                                                     # kleiner Sturmrucksack
-        box(tm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
-        box(tm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
-
-    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
-    #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
-    def arm(S, E, H, s):
-        am = Mesh()
-        E, H = sub(E, S), sub(H, S)
-        S = (0.0, 0.0, 0.0)
-        mid = _lerp3(S, E, 0.5)
-        up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
-        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, None, lambda p: camo(p, 11.0, s * 0.3))
-        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
-        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, None)
-        d = norm(sub(H, E))
-        wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
-        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
-             lambda p: camo(p, 11.0, s * 0.3), (False, False))
-        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
-             (False, False), 0.02)                                 # Manschette
-        glove(am, wr, d, s, GL, rng, 1.0)
-        return am
-
-    arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
-            arm(SOLDIER_SH[1], (0.285, -0.02, 0.31), SOLDIER_HAND[1], 1)]     # rechte Hand am Griff
-
-    # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
-    hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
-    hrx = [0.035, 0.070, 0.080, 0.084, 0.086, 0.086, 0.080, 0.060, 0.020]
-    hry = [0.050, 0.075, 0.090, 0.103, 0.110, 0.112, 0.108, 0.090, 0.040]
-    hcy = [0.060, 0.050, 0.040, 0.028, 0.018, 0.010, 0.005, 0.0, 0.0]
-    kopf, gesicht, brille, extra, frisur = L["kopf"], L["gesicht"], L["brille"], L["extra"], L["frisur"]
-    mask = gesicht == 3
-    loft(tm, [(0, cy, z) for cy, z in zip(hcy, hz)], hrx, hry, skin, rng, None, None, (True, True), 0.015)
-    ell(tm, (0, 0.108, 0.794), 0.030, 0.026, 0.024, DK if mask else skin, rng)                  # Kinn
-    for sx in (-1, 1):
-        ell(tm, (sx * 0.088, 0.0, 0.90), 0.012, 0.028, 0.038, skin_d, rng)                      # Ohren
-        if not mask:
-            ell(tm, (sx * 0.058, 0.088, 0.868), 0.026, 0.022, 0.024, skin, rng)                  # Wangenknochen
-        box(tm, sx * 0.037, 0.1245, 0.915, 0.036, 0.012, 0.019, (0.93, 0.93, 0.90))             # Augapfel
-        box(tm, sx * 0.037, 0.1315, 0.915, 0.019, 0.006, 0.019, eye)                            # Iris
-        box(tm, sx * 0.037, 0.1345, 0.915, 0.009, 0.004, 0.009, (0.02, 0.02, 0.03))             # Pupille
-        box(tm, sx * 0.037, 0.1295, 0.9285, 0.042, 0.012, 0.008, skin_d)                        # Oberlid
-        box(tm, sx * 0.037, 0.1325, 0.941, 0.052, 0.012, 0.010, hair)                           # Augenbraue
-        if frisur != 1:
-            box(tm, sx * 0.092, 0.05, 0.925, 0.012, 0.05, 0.06, hair, rng)                      # Koteletten
-    for a, b, c3 in (((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0, 0.157, 0.880)),            # Nase: Steg, Spitze, Flügel
-                     ((0, 0.128, 0.93), (0, 0.157, 0.880), (0.019, 0.134, 0.872)),
-                     ((-0.019, 0.134, 0.872), (0.019, 0.134, 0.872), (0, 0.157, 0.880)),
-                     ((0, 0.128, 0.93), (-0.019, 0.134, 0.872), (0.019, 0.134, 0.872))):
-        tm.tri(a, b, c3, DK if mask else skin, (0, 0.09, 0.9))
-    if mask:                                                                                    # Sturmhaube: Untergesicht + Hals
-        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:5], hz[:5])], [r * 1.04 + 0.002 for r in hrx[:5]],
-             [r * 1.04 + 0.002 for r in hry[:5]], DK, rng, None, None, (True, False), 0.03)
-        loft(tm, [(0, 0.01, 0.675), (0, 0.012, 0.74), (0, 0.015, 0.79)], [0.066, 0.061, 0.060], [0.066, 0.063, 0.063],
-             DK, rng, None, None, (False, False))
-    else:
-        box(tm, 0, 0.130, 0.8475, 0.052, 0.010, 0.008, (0.62, 0.32, 0.30))                       # Oberlippe
-        box(tm, 0, 0.130, 0.8365, 0.046, 0.010, 0.008, (0.68, 0.36, 0.33))                       # Unterlippe
-        box(tm, 0, 0.128, 0.842, 0.052, 0.006, 0.003, (0.30, 0.12, 0.12))                        # Mundspalt
-    if gesicht == 1:                                                                            # Kinnbart + Schnurrbart
-        loft(tm, [(0, cy, z) for cy, z in zip(hcy[:3], hz[:3])], [r * 1.03 + 0.003 for r in hrx[:3]],
-             [r * 1.03 + 0.003 for r in hry[:3]], hair, rng, None, None, (True, False), 0.05)
-        box(tm, 0, 0.1345, 0.8585, 0.070, 0.014, 0.012, hair, rng)
-    if gesicht == 2:                                                                            # Tarnbemalung
-        g1, g2 = (0.10, 0.15, 0.07), (0.38, 0.33, 0.18)
-        for sx in (-1, 1):
-            for k, zz in enumerate((0.885, 0.862, 0.84)):
-                box(tm, sx * 0.058, 0.1285 - 0.001 * k, zz, 0.052, 0.006, 0.011, g1 if k % 2 == 0 else g2)
-        box(tm, 0, 0.1235, 0.953, 0.10, 0.006, 0.012, g1)
-        box(tm, 0, 0.157, 0.9, 0.02, 0.004, 0.034, g1)
-    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare
-    if frisur != 1:
-        box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                   # Haar im Nacken
-        if kopf in (2, 3, 4):
-            loft(tm, [(0, cy, z) for cy, z in zip((0.003, 0.002, 0.0, 0.0), (0.955, 0.985, 1.015, 1.04))],
-                 [0.090, 0.092, 0.075, 0.030], [0.117, 0.118, 0.098, 0.045], hair, rng, None, None, (False, True), 0.04)
-    if frisur == 2:
-        loft(tm, [(0, -0.100, 0.96), (0, -0.118, 0.90), (0, -0.128, 0.80), (0, -0.120, 0.69)],
-             [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
-    # ---- Kopfbedeckung
-    if kopf == 0:                                                                               # Gefechtshelm mit Tarnbezug
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.012, -0.010, -0.006, -0.004, -0.005, -0.005),
-                                               (0.955, 0.975, 1.0, 1.03, 1.055, 1.072))],
-             [0.105, 0.108, 0.106, 0.090, 0.056, 0.014], [0.130, 0.134, 0.131, 0.117, 0.085, 0.030],
-             None, rng, None, lambda p: camo(p, 17.0, 0.7), (True, True))
-        loft(tm, [(0, -0.010, 0.955), (0, -0.010, 0.962)], [0.110, 0.110], [0.138, 0.138], DK, rng, None, None, (False, False))
-        loft(tm, [(0, -0.010, 0.968), (0, -0.010, 0.988)], [0.111, 0.112], [0.139, 0.140], acc, None, None, None, (False, False))
-        box(tm, 0, -0.12, 0.93, 0.19, 0.03, 0.07, pal[1], rng, mat=None)                      # Nackenschutz
-        for sx in (-1, 1):
-            box(tm, sx * 0.088, 0.03, 0.89, 0.006, 0.014, 0.13, DK)                              # Kinnriemen
-    elif kopf == 1:                                                                             # Buschhut mit Krempe
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.008, -0.006, -0.004, -0.004), (0.962, 1.0, 1.04, 1.058))],
-             [0.100, 0.100, 0.090, 0.050], [0.124, 0.124, 0.112, 0.070], None, rng, None,
-             lambda p: camo(p, 15.0, 0.4), (False, True))
-        loft(tm, [(0, -0.010, 0.952), (0, -0.010, 0.972)], [0.19, 0.12], [0.21, 0.14], None, rng, None,
-             lambda p: camo(p, 13.0, 0.9), (True, True))
-        loft(tm, [(0, -0.008, 0.972), (0, -0.008, 0.99)], [0.102, 0.103], [0.126, 0.127], acc, None, None, None, (False, False))
-    elif kopf == 2:                                                                             # Barett
-        ell(tm, (0.03, 0.0, 1.0), 0.118, 0.128, 0.052, tuple(c * 0.55 for c in acc), rng, None, None, 5)
-        box(tm, 0.03, 0.0, 1.05, 0.014, 0.014, 0.014, tuple(c * 0.4 for c in acc))
-        loft(tm, [(0, 0.0, 0.962), (0, 0.0, 0.978)], [0.096, 0.096], [0.121, 0.121], DK, rng, None, None, (False, False))
-    elif kopf == 3:                                                                             # Feldmütze mit Schirm
-        loft(tm, [(0, cy, z) for cy, z in zip((-0.005, -0.003, -0.002, -0.002), (0.958, 0.99, 1.02, 1.045))],
-             [0.095, 0.097, 0.084, 0.045], [0.122, 0.124, 0.112, 0.070], None, rng, None,
-             lambda p: camo(p, 15.0, 0.2), (True, True))
-        box(tm, 0, 0.148, 0.972, 0.12, 0.085, 0.012, pal[0], rng, mat=None)                    # Schirm
-        loft(tm, [(0, -0.004, 0.962), (0, -0.004, 0.976)], [0.097, 0.098], [0.125, 0.126], acc, None, None, None, (False, False))
-    # ---- Brille
-    if brille == 1:                                                                             # Schutzbrille
-        box(tm, 0, 0.137, 0.915, 0.135, 0.016, 0.045, DK)
-        for sx in (-1, 1):
-            box(tm, sx * 0.034, 0.145, 0.915, 0.052, 0.010, 0.036, GLASS)
-        loft(tm, [(0, 0.014, 0.905), (0, 0.014, 0.927)], [0.092, 0.092], [0.119, 0.119], DK, rng, None, None,
-             (False, False), 0.02)
-    elif brille == 2:                                                                           # Sonnenbrille
-        for sx in (-1, 1):
-            box(tm, sx * 0.037, 0.140, 0.915, 0.050, 0.008, 0.028, (0.03, 0.03, 0.04))
-            box(tm, sx * 0.087, 0.07, 0.918, 0.006, 0.13, 0.008, DK)
-        box(tm, 0, 0.138, 0.92, 0.024, 0.008, 0.008, DK)
-        box(tm, 0, 0.139, 0.931, 0.14, 0.008, 0.008, DK)
-    # ---- Zubehör
-    if extra == 1:                                                                              # Halstuch
-        loft(tm, [(0, 0.008, 0.655), (0, 0.012, 0.69), (0, 0.016, 0.725)], [0.088, 0.075, 0.066], [0.085, 0.072, 0.064],
-             acc, rng, None, None, (False, False), 0.04)
-        box(tm, 0, 0.085, 0.672, 0.045, 0.030, 0.05, acc, rng, mat=None)
-    elif extra == 2:                                                                            # Headset
-        for sx in (-1, 1):
-            ell(tm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
-        box(tm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
-        box(tm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
-        ell(tm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
-        if kopf != 0:
-            loft(tm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
-    elif extra == 3:                                                                            # Nachtsichtgerät
-        if kopf != 0:
-            loft(tm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
-        box(tm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
-        box(tm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
-        box(tm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
-
-    legs = []
-    for sx in (-1, 1):
-        lm = Mesh()
-        off = sx * 0.4
-        # Hose: Oberschenkel, Knie, Wade, Knöchel
-        lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
-        lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
-        lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
-        lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
-        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, None, lambda p, o=off: camo(p, 11.0, o))
-        box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
-        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
-        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
-        # Stiefel: Schaft, Fuss, Sohle, Schnürung
-        loft(lm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
-             LEATH, rng, None, None, (False, False), 0.03)
-        loft(lm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
-             [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
-        box(lm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
-        box(lm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
-        legs.append(lm)
-    return tm, legs, arms
-
-
-def exp_soldier_meshes(L):
-    """Baut die Teile des Soldaten: Oberkörper samt Kopf (Mesh in torso-Koordinaten, Hüfte = Ursprung, Blick +y),
-    je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75) und je einen Arm (Schulter = Ursprung).
-    L = Aussehen aus soldier_look(): Tarnmuster, Hautton, Kopfbedeckung, Brille, Gesicht, Ausrüstung ..."""
-    rng = random.Random(1234 + int(L["key"][0]))
-    skin, hair, eye, acc, pal = L["skin"], L["hair"], L["eye"], L["acc"], L["pal"]
-    skin_d = tuple(c * 0.84 for c in skin)
-    camo = lambda p, f=11.0, off=0.0: _camo_col(p, f, off, pal)          # noqa: E731
-    OLV = tuple(c * 0.66 for c in pal[1])                                # Weste, Taschen
-    POUCH, FLAP = tuple(c * 0.8 for c in OLV), tuple(c * 1.15 for c in OLV)
-    DK = (0.11, 0.11, 0.10)           # schwarzes Leder / Gummi
-    LEATH = L["boots"]
-    METAL = (0.50, 0.46, 0.34)
-    GL = L["glove"]
-    GLASS = (0.12, 0.18, 0.26)
-    tm = Mesh()
     hm, vm = Mesh(), Mesh()       # 10f: Kopfbedeckung (+ Headset/Nachtsicht) und Weste/Rucksack - eigene Teile, die eine
                                   # getragene Ausrüstung ausblendet (Kopf- bzw. Torso-Ausrüstung)
     boots = []                    # 10f: Stiefel je Bein (Fuss-Ausrüstung blendet sie aus)
@@ -15579,53 +13428,10 @@ def exp_soldier_meshes(L):
 def build_soldier(look):
     """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
     (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
-    key = look["key"]
-    parts = _SOLDIER_CACHE.get(key)
-    if parts is None:
-        tm, lms, ams = _soldier_meshes(look)
-        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams])
-    root = NodePath("soldier")
-    torso = root.attachNewNode("torso")
-    torso.setZ(0.75)
-    torso.attachNewNode(parts[0])
-    legs = []
-    for sx, gn in zip((-1, 1), parts[1]):
-        leg = root.attachNewNode("leg")
-        leg.setPos(sx * 0.115, 0, 0.75)
-        leg.attachNewNode(gn)
-        legs.append(leg)
-    arms = []
-    for sh, gn in zip(SOLDIER_SH, parts[2]):
-        an = torso.attachNewNode("arm")
-        an.setPos(*sh)
-        an.attachNewNode(gn)
-        arms.append(an)
-    bar = root.attachNewNode("bar")
-    bar.setPos(0, 0, 2.2)
-    bar.setBillboardPointEye()
-    bar.setLightOff()
-    bar.setTwoSided(True)
-    cm = CardMaker("bg")
-    cm.setFrame(-0.5, 0.5, -0.05, 0.05)
-    bg = bar.attachNewNode(cm.generate())
-    bg.setColor(0, 0, 0, 1)
-    cm = CardMaker("fg")
-    cm.setFrame(0, 1, -0.035, 0.035)
-    fg = bar.attachNewNode(cm.generate())
-    fg.setPos(-0.5, -0.01, 0)
-    fg.setColor(0.85, 0.1, 0.1, 1)
-    fg.setDepthOffset(1)
-    bar.hide()
-    return root, torso, legs[0], legs[1], bar, fg, arms[0], arms[1]
-
-
-def exp_build_soldier(look):
-    """Menschlicher Soldat in Tarnuniform (Spieler). Gleiche Rückgabe und gleiche Haltung wie build_mob:
-    (root, torso, legL, legR, bar, bar_fg); Hüfte bei z=0.75, Füsse bei z=0, Blick +y, Länge ~1.8 m."""
     key = ("exp", look["key"])               # eigener Cache-Eintrag (andere Teile als build_soldier)
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
-        tm, lms, ams, hm, vm, bms = exp_soldier_meshes(look)
+        tm, lms, ams, hm, vm, bms = _soldier_meshes(look)
         parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams],
                                        hm.node("kopfbedeckung"), vm.node("weste"), [bm.node("stiefel") for bm in bms])
     root = NodePath("soldier")
@@ -16608,26 +14414,14 @@ def loadout_extra(wi, scope, att):
     return out
 
 
-def weapon_icon(wi, width=0.42, height=0.2, extra=None, scope=None):
-    """Seitenansicht einer Waffe als flaches Bild (x/z-Ebene, Mitte im Ursprung), gezeichnet
-    aus denselben Quadern wie das 3D-Modell: erst dunkler Rand, dann die Teile in Farbe.
-    extra: zusätzliche Quader (Visier, Aufsätze); scope: Visier statt der Kimme und Korn des Sturmgewehrs."""
-    name = WEAPONS[wi].name
-    iron = not (scope is not None and scope != SC_IRON and name == "Sturmgewehr")
-    polys = list(weapon_polys(name, iron))
-    if extra:
-        polys += rect_polys(extra)
-    return polys_icon(polys, width, height, "icon_" + name, bounds=weapon_frame(name))
-
-
-def exp_weapon_icon(wi, width=0.42, height=0.2, parts=None, name=None, extra=None, scope=None):
+def weapon_icon(wi, width=0.42, height=0.2, parts=None, name=None, extra=None, scope=None):
     """Seitenansicht einer Waffe als flaches Bild (x/z-Ebene, Mitte im Ursprung), gezeichnet
     aus denselben Formen wie das 3D-Modell: je Teil dunkler Rand und Farbverlauf.
     parts/name: eigene Quader (Nahkampfwaffen); extra: zusätzliche Quader (Visier, Aufsätze);
     scope: Visier statt der Kimme und Korn des Sturmgewehrs."""
     if parts is not None:
         return polys_icon(rect_polys(list(parts) + list(extra or [])), width, height, name or "icon_melee")
-    wname = EXP_WEAPONS[wi].name
+    wname = WEAPONS[wi].name
     iron = not (scope is not None and scope != SC_IRON and wname == "Sturmgewehr")
     polys = list(weapon_polys(wname, iron))
     if extra:
@@ -16900,71 +14694,6 @@ def _build_wheel(tm):
 
 
 def build_vehicle_model():
-    """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück."""
-    rng = random.Random(5)
-    body_c, dark, glass = (0.52, 0.22, 0.14), (0.14, 0.14, 0.16), (0.55, 0.75, 0.85)
-    root = NodePath("jeep")
-    m = Mesh()
-    m.mat = "metal"
-    box(m, 0, 0, 0.62, 1.7, 3.2, 0.34, body_c, rng)                  # Wanne
-    box(m, 0, 1.12, 0.95, 1.5, 0.95, 0.3, body_c, rng)               # Motorhaube
-    box(m, 0, 1.62, 0.78, 1.3, 0.08, 0.28, dark)                     # Kühlergrill
-    box(m, 0, -1.3, 0.95, 1.5, 0.5, 0.3, body_c, rng)                # Heck
-    for sx in (-1, 1):
-        box(m, sx * 0.45, -0.2, 0.9, 0.5, 0.55, 0.12, dark, rng)     # Sitze
-        box(m, sx * 0.45, -0.5, 1.2, 0.5, 0.1, 0.5, dark, rng)       # Lehnen
-        box(m, sx * 0.8, 0.45, 1.4, 0.07, 0.07, 0.95, dark)          # Überrollbügel
-        box(m, sx * 0.8, -1.0, 1.4, 0.07, 0.07, 0.95, dark)
-        box(m, sx * 0.8, -0.27, 1.88, 0.07, 1.5, 0.07, dark)
-        box(m, sx * 0.88, 1.1, 0.72, 0.16, 1.0, 0.1, dark, rng)      # Kotflügel
-    box(m, 0, 0.45, 1.88, 1.6, 0.07, 0.07, dark)
-    box(m, 0, -1.0, 1.88, 1.6, 0.07, 0.07, dark)
-    box(m, 0, 0.55, 1.28, 1.5, 0.05, 0.5, glass)                     # Windschutzscheibe
-    box(m, 0, -0.9, 1.3, 0.36, 0.36, 0.5, dark)                      # Sockel fürs Heckgeschütz
-    box(m, 0, -0.9, 1.56, 0.8, 0.8, 0.08, (0.46, 0.48, 0.52))        # Drehkranz
-    box(m, 0, 1.68, 0.6, 1.8, 0.16, 0.16, dark, rng)                 # Stossstange vorn
-    box(m, 0, -1.68, 0.6, 1.8, 0.14, 0.16, dark, rng)                # hinten
-    for sx in (-1, 1):
-        box(m, sx * 1.0, 0.55, 1.15, 0.06, 0.14, 0.16, dark)         # Aussenspiegel
-        box(m, sx * 0.62, 1.66, 0.9, 0.34, 0.1, 0.2, dark)           # Scheinwerfergehäuse
-    box(m, 0.55, -1.2, 1.12, 0.3, 0.22, 0.34, (0.30, 0.34, 0.20), rng)   # Kanister
-    box(m, -0.62, -1.62, 0.55, 0.08, 0.3, 0.08, (0.35, 0.35, 0.38))  # Auspuff
-    root.attachNewNode(m.node("body"))
-    lm = Mesh(lit=False)
-    for sx in (-1, 1):
-        box(lm, sx * 0.55, 1.64, 0.9, 0.28, 0.06, 0.16, (1.0, 0.92, 0.55))
-        box(lm, sx * 0.6, -1.56, 0.92, 0.2, 0.05, 0.1, (0.9, 0.1, 0.1))
-    root.attachNewNode(lm.node("lights"))
-    wheels = []
-    for sx, sy in ((-1, 1.05), (1, 1.05), (-1, -1.05), (1, -1.05)):
-        piv = root.attachNewNode("wheel")
-        piv.setPos(sx * 0.95, sy, 0.4)
-        tm = Mesh()
-        _build_wheel(tm)
-        tire = piv.attachNewNode(tm.node("tire"))
-        tire.setTwoSided(True)
-        tire.setR(90)                                                # Achse = x
-        wheels.append(piv)
-    bar = root.attachNewNode("bar")
-    bar.setPos(0, 0, 2.7)
-    bar.setBillboardPointEye()
-    bar.setLightOff()
-    bar.setTwoSided(True)
-    cm = CardMaker("bg")
-    cm.setFrame(-0.8, 0.8, -0.07, 0.07)
-    bar.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
-    cm = CardMaker("fg")
-    cm.setFrame(0, 1, -0.05, 0.05)
-    fg = bar.attachNewNode(cm.generate())
-    fg.setPos(-0.75, -0.01, 0)
-    fg.setScale(1.5, 1, 1)
-    fg.setColor(0.95, 0.75, 0.1, 1)
-    fg.setDepthOffset(1)
-    bar.hide()
-    return root, wheels, bar, fg
-
-
-def exp_build_vehicle_model():
     """Geländewagen, Front bei +y, Räder bei z=0. Gibt (root, Räder, bar, fg) zurück.
     10f: detaillierter und runder - gefaste Wanne, gewölbte Motorhaube, Kotflügel über den Rädern, runde Scheinwerfer
     mit Gittern, Kühlergrill mit Lamellen, Türen mit Fugen und Griffen, Rohr-Überrollbügel, Armaturenbrett mit Lenkrad,
@@ -17068,68 +14797,6 @@ def exp_build_vehicle_model():
 
 
 def build_heli_model():
-    """Kampfhubschrauber, Nase bei +y, Kufen bei z=0. Gibt (root, rotor, tail_rotor, bar, fg) zurück."""
-    rng = random.Random(31)
-    body, dark, red = (0.30, 0.37, 0.27), (0.14, 0.14, 0.16), (0.72, 0.16, 0.1)
-    glass, steel = (0.5, 0.72, 0.88), (0.5, 0.52, 0.56)
-    root = NodePath("heli")
-    m = Mesh()
-    m.mat = "metal"
-    box(m, 0, 0.0, 1.45, 1.9, 3.6, 1.45, body, rng)                  # Kabine
-    blob(m, 0, 2.0, 1.4, 0.95, 1.2, 0.85, body, rng)                 # Bug
-    blob(m, 0, 2.55, 1.75, 0.8, 0.7, 0.6, glass, rng, jitter=0.05)   # Cockpitscheibe
-    box(m, 0, -3.3, 1.85, 0.5, 4.4, 0.5, body, rng)                  # Heckausleger
-    box(m, 0, -5.3, 2.5, 0.12, 0.95, 1.2, red)                       # Seitenleitwerk
-    box(m, 0, -4.9, 1.9, 1.7, 0.6, 0.1, body)                        # Höhenleitwerk
-    box(m, 0, -0.1, 2.35, 0.9, 1.6, 0.5, dark)                       # Turbinenaufbau
-    box(m, 0, -0.1, 2.7, 0.3, 0.3, 0.35, steel)                      # Rotormast
-    for sx in (-1, 1):
-        box(m, sx * 1.15, 0.1, 0.12, 0.12, 3.8, 0.1, dark)           # Kufen
-        box(m, sx * 1.05, 1.0, 0.6, 0.08, 0.1, 1.0, dark)            # Streben
-        box(m, sx * 1.05, -0.8, 0.6, 0.08, 0.1, 1.0, dark)
-        box(m, sx * 1.55, 0.3, 1.15, 0.55, 1.3, 0.5, dark, rng)      # Raketenbehälter
-        box(m, sx * 1.55, 1.0, 1.15, 0.42, 0.1, 0.38, red)           # Raketenspitzen
-    box(m, 0, 2.7, 0.8, 0.14, 1.2, 0.14, steel)                      # Minigun am Bug
-    box(m, 0, 2.1, 0.85, 0.35, 0.5, 0.3, dark)
-    blob(m, 0, 3.0, 0.95, 0.2, 0.26, 0.2, dark, rng, jitter=0.06)    # Sensorkugel
-    box(m, 0, -5.4, 3.15, 0.1, 0.1, 0.1, red)                         # Positionslicht
-    for sx in (-1, 1):
-        box(m, sx * 0.97, 0.3, 1.5, 0.05, 1.3, 0.85, dark, rng)       # Türfeld
-        box(m, sx * 0.98, 1.0, 1.5, 0.06, 0.06, 0.8, steel)           # Türgriff / Rahmen
-    box(m, 0, -0.1, 3.0, 0.5, 0.5, 0.15, steel)                       # Rotorkopf
-    root.attachNewNode(m.node("body"))
-    rotor = root.attachNewNode("rotor")
-    rotor.setPos(0, -0.1, 2.95)
-    rm = Mesh()
-    box(rm, 0, 0, 0, 10.0, 0.3, 0.05, dark)
-    box(rm, 0, 0, 0, 0.3, 10.0, 0.05, dark)
-    rotor.attachNewNode(rm.node("blades"))
-    trotor = root.attachNewNode("trotor")
-    trotor.setPos(0.25, -5.35, 2.5)
-    tm = Mesh()
-    box(tm, 0, 0, 0, 0.05, 0.2, 2.0, dark)
-    box(tm, 0, 0, 0, 0.05, 2.0, 0.2, dark)
-    trotor.attachNewNode(tm.node("tblades"))
-    bar = root.attachNewNode("bar")
-    bar.setPos(0, 0, 5.2)
-    bar.setBillboardPointEye()
-    bar.setLightOff()
-    bar.setTwoSided(True)
-    cm = CardMaker("bg")
-    cm.setFrame(-1.1, 1.1, -0.1, 0.1)
-    bar.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
-    cm = CardMaker("fg")
-    cm.setFrame(0, 1, -0.08, 0.08)
-    fg = bar.attachNewNode(cm.generate())
-    fg.setPos(-1.05, -0.01, 0)
-    fg.setScale(2.1, 1, 1)
-    fg.setColor(0.95, 0.75, 0.1, 1)
-    fg.setDepthOffset(1)
-    bar.hide()
-    return root, rotor, trotor, bar, fg
-
-
-def exp_build_heli_model():
     """Kampfhubschrauber, Nase bei +y, Kufen bei z=0. Gibt (root, rotor, tail_rotor, bar, fg) zurück.
     10f: aerodynamischer Rumpf (Querschnitte statt Kisten), Cockpitverglasung mit Rahmen, Schiebetüren mit Fenstern,
     zwei Turbinen mit Einlässen und Auspuff, Heckausleger verjüngt, Leitwerk mit Profil, Rotorkopf mit Taumelscheibe und
@@ -19230,8 +16897,9 @@ class SetupPage:
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         elif g.cfg["mode"] == "experimental":
-            self.text(None, "Experimental startet Robins Spielversion - dort gelten ihre eigenen Regeln",
-                      0, -0.885, 0.03, self.YELLOW)
+            sub = "Deathmatch" if (g.cfg_is_mc() or g.cfg.get("exp_sub") == "dm") else "King of the Hill"
+            self.text(None, f"Experimental ({sub}): Start mit der Pistole, Ausrüstung aus Beute   -   Modus nochmal anklicken wechselt",
+                      0, -0.885, 0.028, self.YELLOW)
         else:
             self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    "
                       + ("C = CTF-Regeln    " if g.cfg.get("mode") == "ctf" else "") + "Enter = Start",
@@ -19344,113 +17012,6 @@ class SetupPage:
             self.nodes["val"].setText(self.minutes(v))
 
 
-class ExpSetupPage(SetupPage):
-    """SetupPage im Modus Experimental (Robins Regeln)."""
-
-    def mode_off(self, k):
-        return self.g.cfg_is_mc() and EXP_MODES[k] != "dm"
-
-    # ------------------------------------------------------------ Layout (nur rect/text/image/hit)
-    def layout(self):
-        g = self.g
-        X0, X1 = self.X0, self.X1
-        first = self.page * self.PER_PAGE
-        vis = self.ents[first:first + self.PER_PAGE]
-        n = len(vis)
-        self.text("title", self.title_label(), 0, 0.395, 0.075,
-                  (1.0, 0.78, 0.3, 1.0))
-        # --- Karten
-        cw = 0.62 if n <= 2 else 0.46
-        total = n * cw + (n - 1) * 0.08
-        iw = cw - 0.04
-        ih = iw * 9 / 16
-        ch = 0.02 + ih + 0.115
-        zt = (0.31 - 0.151) / 2 + ch / 2
-        small = cw < 0.5
-        for i, (name, path, cap, key) in enumerate(vis):
-            xc = -total / 2 + cw / 2 + i * (cw + 0.08)
-            gi = first + i
-            self.rect(f"cf{i}", xc - cw / 2 - 0.012, xc + cw / 2 + 0.012, zt - ch - 0.012, zt + 0.012)
-            self.rect(None, xc - cw / 2, xc + cw / 2, zt - ch, zt, self.CARD_BG)
-            iz1 = zt - 0.02
-            self.image(key, xc - iw / 2, xc + iw / 2, iz1 - ih, iz1, name)
-            if gi < 9:                                                  # Ziffer der Zifferntaste
-                self.rect(None, xc - iw / 2 + 0.01, xc - iw / 2 + 0.062, iz1 - 0.068, iz1 - 0.01, (0, 0, 0, 0.6))
-                self.text(None, str(gi + 1), xc - iw / 2 + 0.036, iz1 - 0.055, 0.042, self.WHITE)
-            self.text(f"cn{i}", name, xc, iz1 - ih - 0.058, 0.042 if small else 0.05)
-            self.text(None, cap, xc, iz1 - ih - 0.097, 0.026 if small else 0.03, self.GREY)
-            self.hit(f"card{i}", xc - cw / 2 - 0.012, xc + cw / 2 + 0.012, zt - ch - 0.012, zt + 0.012,
-                     lambda gi=gi: g.setup_pick(gi))
-        if len(self.ents) > self.PER_PAGE:                              # Blättern bei vielen Karten
-            for sgn, ch_, act in ((-1, "<", -1), (1, ">", 1)):
-                xa = sgn * (total / 2 + 0.11)
-                self.rect(f"pg{act}", xa - 0.05, xa + 0.05, zt - ch / 2 - 0.08, zt - ch / 2 + 0.08, self.BTN)
-                self.text(None, ch_, xa, zt - ch / 2 - 0.03, 0.09, self.WHITE)
-                self.hit(f"pgh{act}", xa - 0.05, xa + 0.05, zt - ch / 2 - 0.08, zt - ch / 2 + 0.08,
-                         lambda a=act: g.setup_turn(a))
-        # --- Modus
-        self.text(None, "MODUS", X0, -0.205, 0.034, self.GREY, "l")
-        for k, mode in enumerate(EXP_MODES):
-            x0, x1 = (X0, -0.02) if k == 0 else (0.02, X1)
-            self.rect(f"mf{k}", x0 - 0.008, x1 + 0.008, -0.343, -0.237)
-            self.rect(f"mb{k}", x0, x1, -0.335, -0.245)
-            self.text(f"mt{k}", EXP_MODE_NAMES[mode], (x0 + x1) / 2, -0.305, 0.055)
-            self.hit(f"mode{k}", x0, x1, -0.335, -0.245, lambda m=mode: g.setup_mode(m))
-        # --- Zeitlimit-Slider
-        v = int(g.cfg["limit"])
-        self.text(None, "ZEITLIMIT", X0, -0.40, 0.034, self.GREY, "l")
-        self.text("val", self.minutes(v), X1, -0.40, 0.05, self.YELLOW, "r")
-        self.rect(None, self.SL0, self.SL1, self.SLZ - 0.007, self.SLZ + 0.007, (0.16, 0.22, 0.30, 1.0))
-        for tv in (1, 15, 30, 45, 60):
-            tx = self.vx(tv)
-            self.rect(None, tx - 0.002, tx + 0.002, self.SLZ - 0.034, self.SLZ - 0.014, (0.45, 0.52, 0.60, 1.0))
-            self.text(None, str(tv), tx, self.SLZ - 0.075, 0.03, self.GREY)
-        self.rect("fill", self.SL0, self.vx(v), self.SLZ - 0.007, self.SLZ + 0.007, (1.0, 0.62, 0.14, 1.0))
-        self.rect("knob", self.vx(v) - 0.028, self.vx(v) + 0.028, self.SLZ - 0.028, self.SLZ + 0.028, rot=45.0)
-        self.hit("slider", self.SL0 - 0.05, self.SL1 + 0.05, self.SLZ - 0.06, self.SLZ + 0.06, g.slider_begin)
-        # --- Knöpfe
-        self.bottom_buttons(X0, X1)
-        if g.menu_msg:
-            self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
-        else:
-            self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    Enter = Start",
-                      0, -0.885, 0.028, self.GREY)
-
-    def bottom_buttons(self, X0, X1):
-        g = self.g
-        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.setup_more)
-        self.button("back", X0, -0.02, -0.805, -0.72, "Zurück   (Esc)", 0.052, g.on_escape)
-        self.button("go", 0.02, X1, -0.805, -0.72, "Start   (Enter)", 0.052, lambda: g.start_game(g.setup_for))
-
-    # ------------------------------------------------------------ Knoten (Panda3D)
-    def rect(self, i, x0, x1, z0, z1, col=None, rot=0.0):
-        col = col if col is not None else self.style(i)
-        cm = CardMaker(i or "r")
-        if (i or "").endswith("fill"):          # Einheitsbreite, wird zum Ändern skaliert (Ursprung = linker Rand)
-            cm.setFrame(0.0, 1.0, z0, z1)
-        elif (i or "").endswith("knob"):        # um den Ursprung zentriert, wird zum Ändern verschoben
-            cm.setFrame(x0 - (x0 + x1) / 2, x1 - (x0 + x1) / 2, z0 - (z0 + z1) / 2, z1 - (z0 + z1) / 2)
-        else:
-            cm.setFrame(x0, x1, z0, z1)
-        nd = self.g.aspect2d.attachNewNode(cm.generate())
-        nd.setColor(*col)
-        nd.setTransparency(TransparencyAttrib.MAlpha)
-        if (i or "").startswith(("b_", "mb", "lb", "rb", "vb")):
-            btn3d(nd)
-        if (i or "").endswith("fill"):
-            nd.setPos(x0, 0, 0)
-            nd.setSx(max(0.001, x1 - x0))
-        elif (i or "").endswith("knob"):
-            nd.setPos((x0 + x1) / 2, 0, (z0 + z1) / 2)
-        if rot:
-            nd.setR(rot)
-        self.g.menu_items.append(Deco(nd))
-        if i:
-            self.nodes[i] = nd
-        return nd
-
-
-
 class EndSetupPage(SetupPage):
     """Karte, Modus und Zeitlimit der nächsten Runde - dieselbe Seite wie beim Hosten, aber im Rundenendbildschirm
     eingebettet: 'Übernehmen' ändert die laufende Sitzung, ohne dass jemand getrennt wird."""
@@ -19458,22 +17019,9 @@ class EndSetupPage(SetupPage):
     def title_label(self):
         return "Rundeneinstellungen"
 
-    def mode_off(self, k):
-        return MODES[k] == "experimental" or SetupPage.mode_off(self, k)
-
     def bottom_buttons(self, X0, X1):
         g = self.g
         self.more_buttons(X0, X1, g.end_cfg_more)
-        self.button("back", X0, -0.02, -0.805, -0.72, "Abbrechen   (Esc)", 0.052, g.end_cfg_cancel)
-        self.button("go", 0.02, X1, -0.805, -0.72, "Übernehmen", 0.052, g.end_cfg_apply)
-
-
-class ExpEndSetupPage(EndSetupPage):
-    """EndSetupPage im Modus Experimental (Robins Regeln)."""
-
-    def bottom_buttons(self, X0, X1):
-        g = self.g
-        self.button("more", X0, X1, -0.69, -0.605, "Weitere Einstellungen   (W)", 0.052, g.end_cfg_more)
         self.button("back", X0, -0.02, -0.805, -0.72, "Abbrechen   (Esc)", 0.052, g.end_cfg_cancel)
         self.button("go", 0.02, X1, -0.805, -0.72, "Übernehmen", 0.052, g.end_cfg_apply)
 
@@ -20330,8 +17878,8 @@ class Listener:
 
 
 def player_for(world, x, y, pid, name):
-    """Neue Spielfigur passend zur Welt (Hauptspiel: Player, Experimental: ExpPlayer)."""
-    return (ExpPlayer if isinstance(world, ExpWorld) else Player)(x, y, world, pid, name)
+    """Neue Spielfigur passend zur Welt (alle Modi: Player)."""
+    return Player(x, y, world, pid, name)
 
 
 class HostSession:
@@ -20351,7 +17899,7 @@ class HostSession:
         self.last_phase = None
         netlog(f"Host: lauscht auf TCP {NET_PORT}; LAN-IP {self.ip}, Hamachi-IP {self.hama or '-'}, Modus {world.mode}")
         try:
-            self.beacon = Beacon(name, self.ip, mode=world.mode, exp=isinstance(world, ExpWorld))
+            self.beacon = Beacon(name, self.ip, mode=world.mode, exp=world.exp)
         except OSError as e:
             netlog(f"Host: Host-Suche (UDP) nicht möglich: {e}")
             self.beacon = None
@@ -20399,7 +17947,7 @@ class HostSession:
             c.send({"t": "reload", "id": c.pid, "seed": world.seed, "props": world.prop_count(),
                     "mode": world.mode, "limit": world.limit, "mobs": 1 if world.mobs_on else 0,
                     "tomahawk": 1 if world.tomahawk_on else 0, "ctf": world.ctf_cfg(),
-                    "exp": 1 if isinstance(world, ExpWorld) else 0, "map": getattr(world, "map_raw", None)})
+                    "exp": 1 if world.exp else 0, "map": getattr(world, "map_raw", None)})
             c.flush()
         netlog(f"Host: Welt gewechselt (Karte {'eigene' if getattr(world, 'map_raw', None) else 'Standard'}, "
                f"Modus {world.mode}), {len(world.players)} Spieler")
@@ -20477,7 +18025,7 @@ class HostSession:
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
                     "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
-                    "tomahawk": 1 if w.tomahawk_on else 0, "ctf": w.ctf_cfg(), "exp": 1 if isinstance(w, ExpWorld) else 0,
+                    "tomahawk": 1 if w.tomahawk_on else 0, "ctf": w.ctf_cfg(), "exp": 1 if w.exp else 0,
                     "map": getattr(w, "map_raw", None)})
             return
         pl = w.players.get(c.pid)
@@ -20498,20 +18046,6 @@ class HostSession:
             if isinstance(cur, int) and 0 <= cur < len(WEAPONS) and pl.hp > 0:
                 pl.cur = cur
                 note_hand(pl)
-                if not isinstance(w, ExpWorld):          # hier gehört die Ausrüstung dem Mitspieler: Host merkt sich das,
-                    sl = m.get("sl")                     # was er für Beute und Tod braucht (Slots, Aufsätze der Hand)
-                    if isinstance(sl, list) and len(sl) == 3:
-                        pl.slots = [q if isinstance(q, int) and not isinstance(q, bool) and 0 <= q < len(WEAPONS)
-                                    else None for q in sl]
-                        pl.loot = next((q for q in pl.slots[:2] if q is not None and WEAPONS[q].kind == "loot"), -1)
-                    ca = att_valid(m.get("ca"))
-                    if ca is not None and ca != ATT_NONE and att_fits(cur):
-                        pl.att[cur] = ca
-                    else:
-                        pl.att.pop(cur, None)
-                    cs = m.get("cs")
-                    if isinstance(cs, int) and not isinstance(cs, bool) and 0 <= cs < len(ATT_SCOPE_NAMES):
-                        pl.scopes[cur] = cs
             ln = m.get("ln", 0.0)
             pl.lean = clampf(float(ln), -LEAN_MAX, LEAN_MAX) if finite(ln) else 0.0
             cr = m.get("cr", 0.0)
@@ -20709,8 +18243,8 @@ class HostSession:
                        r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
-            if isinstance(w, ExpWorld):
-                snap["sb"] = [[p.pid] + list(exp_stat_summary(p)) for p in w.players.values()]
+            if w.exp:
+                snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
             else:
                 snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
         if w.mode == "ctf":                              # CTF: Teampunkte, Flaggen, Teams
@@ -20741,7 +18275,7 @@ class HostSession:
                 c.pend_ev = []
             else:
                 c.send_line(line)
-            if isinstance(w, ExpWorld):
+            if w.exp:
                 self.send_toma(c)
             c.flush()
         if self.snap_n % 150 == 1 and clients:       # alle ~5 s: Zustand jeder Leitung
@@ -20829,7 +18363,7 @@ class ClientSession:
 
     def __init__(self, conn, world, my_id, backlog=()):
         self.conn, self.world, self.my_id = conn, world, my_id
-        if isinstance(world, ExpWorld):
+        if world.exp:
             world.set_toma(-1)                  # wo die Kapsel ist, sagt nur der Host (und nur in der Nähe)
         self.mobs = {}               # Monster-ID -> NetMob
         self.bullets = {}            # Kugel-ID -> Bullet (nur zum Anzeigen)
@@ -20916,7 +18450,7 @@ class ClientSession:
                 self.cfg_changed = True
             elif m.get("t") == "reload":
                 self.reload = m
-            elif m.get("t") == "tb" and isinstance(self.world, ExpWorld):    # Tomahawk-Säule in Sichtweite (oder -1 = keine)
+            elif m.get("t") == "tb" and self.world.exp:    # Tomahawk-Säule in Sichtweite (oder -1 = keine)
                 w = self.world
                 w.set_toma(int(m.get("i", -1)), float(m.get("a", 0.0)))
                 w.toma_sink_idx = int(m.get("s", -1))
@@ -20988,7 +18522,7 @@ class ClientSession:
             q = w.players.get(row[0])
             if q is None:
                 continue
-            if isinstance(w, ExpWorld):
+            if w.exp:
                 if len(row) >= 4:
                     q.sb = tuple(int(v) for v in row[1:4])
             elif len(row) >= 3:
@@ -21234,9 +18768,7 @@ class ClientSession:
                "jt": 1 if getattr(pl, "jet_on", False) else (2 if getattr(pl, "cling", False) else 0),
                "mo": 1 if getattr(pl, "melee_out", False) else 0,
                "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1,
-               "gc": getattr(pl, "gren_hold", -1),
-               "sl": [-1 if q is None else q for q in pl.slots[:3]],             # Slots, Aufsätze und Visier der Waffe in
-               "ca": list(pl.att.get(pl.cur) or ATT_NONE), "cs": pscope(pl, pl.cur)}   # der Hand (Beute, Tod: Host)
+               "gc": getattr(pl, "gren_hold", -1)}
         v = self.world.vehicle_by_id(pl.vehicle) if pl.vehicle >= 0 else None
         if v is not None:
             msg["vh"] = [v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed)]
@@ -21455,14 +18987,13 @@ def flash_geom():
 
 class PlayerView:
     """Darstellung eines Mitspielers: Figur mit Waffe (ohne Namensschild und Lebensbalken)."""
-    SOLDIER_BUILDER = staticmethod(build_soldier)
 
     def __init__(self, p):
         self.team = getattr(p, "team", None)                             # Teamfarbe der Armbinde (CTF)
         self.look_code = getattr(p, "look", "")
         look = soldier_look(self.look_code, p.pid, self.team)
         (self.root, self.torso, self.legL, self.legR, self.bar, self.fg,
-         self.armL, self.armR) = self.SOLDIER_BUILDER(look)
+         self.armL, self.armR) = build_soldier(look)
         gc = (0.13, 0.13, 0.15)
         sr = SOLDIER_SH[1]
         self.gun_node = self.gun = self.armR.attachNewNode("gun")        # Halter am rechten Arm; darin die gehaltene Waffe
@@ -21792,11 +19323,6 @@ class PlayerView:
 
 
 # --------------------------------------------------------------- Ton
-
-
-class ExpPlayerView(PlayerView):
-    """PlayerView im Modus Experimental (Robins Regeln): eigene Figur mit Kosmetik-Teilen."""
-    SOLDIER_BUILDER = staticmethod(exp_build_soldier)
 
 
 SR = 22050
@@ -117747,103 +115273,6 @@ class Sfx:
             self.heli_mg[hc.id] = (hc.mg, cd)
 
 
-_A2D = ("render", "aspect2d", "render2d", "a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter",
-        "a2dBottomLeft", "a2dBottomRight", "a2dLeftCenter", "a2dRightCenter")
-
-
-def _pb_snapshot(g):
-    """Zustand direkt nach ShowBase.__init__: alles danach gehört zum jeweiligen Spiel und wird beim Umschalten
-    zwischen Hauptspiel und Experimental wieder abgeräumt."""
-    nodes = [(n, set(n.getChildren())) for n in (getattr(g, nm, None) for nm in _A2D) if n is not None]
-    return dict(keys=set(g.__dict__), tasks=set(g.taskMgr.getAllTasks()), later=set(g.taskMgr.getDoLaters()),
-                events=set(g.getAllAccepting()), nodes=nodes)
-
-
-def _pb_strip(g, leave_restore):
-    """Räumt alles weg, was das bisherige Spiel an der Instanz hängen hat (das Fenster bleibt)."""
-    snap = g._pb_base
-    try:
-        leave_restore()                                  # Sticky-Keys-Einstellung des alten Spiels zurücksetzen
-    except Exception:
-        pass
-    for fn in (lambda: g.sfx.silence(), g.shutdown_net):
-        try:
-            fn()
-        except Exception:
-            pass
-    for t in list(g.taskMgr.getAllTasks()):
-        if t not in snap["tasks"]:
-            g.taskMgr.remove(t)
-    for t in list(g.taskMgr.getDoLaters()):
-        if t not in snap["later"]:
-            g.taskMgr.remove(t)
-    for ev in list(g.getAllAccepting()):
-        if ev not in snap["events"]:
-            g.ignore(ev)
-    for node, keep in snap["nodes"]:
-        for ch in list(node.getChildren()):
-            if ch not in keep:
-                ch.removeNode()
-    for k in list(g.__dict__):
-        if k not in snap["keys"] and k != "_pb_base":
-            del g.__dict__[k]
-
-
-def _pb_rehook(g, title):
-    try:
-        ev = g.win.getCloseRequestEvent()                # Fensterkreuz soll das Spiel der neuen Klasse beenden
-        g.ignore(ev)
-        g.accept(ev, g.userExit)
-    except Exception:
-        pass
-    try:
-        props = WindowProperties()
-        props.setTitle(title)
-        g.win.requestProperties(props)
-    except Exception:
-        pass
-
-
-
-
-def _pb_to_exp(task, g, spec):
-    """Task (läuft vor dem Update-Task): Instanz wird zu Robins Game, dann Start nach spec."""
-    own = Game
-    try:
-        _pb_strip(g, sticky_keys_restore)
-        g.__class__ = ExpGame
-        ExpGame.__init__(g, adopt=True)
-        os.environ["POLYBASH_EXP_SPEC"] = json.dumps(spec)
-        _exp_autostart(g)
-        _pb_rehook(g, "Polybash Experimental")
-    except Exception:
-        import traceback
-        try:
-            with open(_log_path(), "a", encoding="utf-8") as f:
-                f.write(time.strftime("%Y-%m-%d %H:%M:%S") + " (Experimental-Start)\n" + traceback.format_exc() + "\n")
-        except OSError:
-            pass
-        _pb_strip(g, sticky_keys_restore)
-        g.__class__ = own
-        g._pb_msg = "Experimental konnte nicht gestartet werden (spiel_fehler.log)"
-        own.__init__(g, adopt=True)
-        _pb_rehook(g, "Polybash")
-    return task.done
-
-
-def _pb_to_main(task, g):
-    _pb_strip(g, sticky_keys_restore)
-    g.__class__ = Game
-    Game.__init__(g, adopt=True)
-    _pb_rehook(g, "Polybash")
-    return task.done
-
-
-def _pb_back(g):
-    """Von Robins leave_game aufgerufen: im nächsten Frame zurück zum Hauptmenü."""
-    g.taskMgr.add(lambda task: _pb_to_main(task, g), "pb-switch", sort=-100)
-
-
 def set_fullscreen(g, on):
     """Vollbild (in der Auflösung des Bildschirms) oder Fenster (1280x720). True, wenn die Anfrage gestellt werden konnte."""
     try:
@@ -117886,12 +115315,10 @@ def default_fullscreen(g):
 class Game(ShowBase):
     BUFF_LOOK = {"speed": ("T", (0.3, 1.0, 0.6)), "damage": ("S", (1.0, 0.35, 0.25)), "tank": ("HP", (1.0, 0.8, 0.25))}
 
-    def __init__(self, adopt=False):
-        if not adopt:                         # adopt=True: Fenster/ShowBase existieren schon (Rückkehr aus Experimental)
-            ShowBase.__init__(self)
-            load_ui_fonts(self.loader)
-            self._pb_base = _pb_snapshot(self)
-            default_fullscreen(self)
+    def __init__(self):
+        ShowBase.__init__(self)
+        load_ui_fonts(self.loader)
+        default_fullscreen(self)
         self.disableMouse()
         self.setBackgroundColor(*SKY)
         self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
@@ -117966,11 +115393,10 @@ class Game(ShowBase):
         self.feed = []                        # Kill-Anzeige: (Text, Zeit)
         self.pings = {}                       # Minimap: Spieler-ID -> (Zeit, x, y) des letzten Schusses
         self.mm_level = 2                     # Minimap-Zoomstufe (Index in MM_LEVELS)
+        self.toast_later = None
         self.gad_views, self.gad_msg, self.prev_gad_ads, self.gad_anim = {}, ("", 0.0), False, 0.0
         self.was_seated, self.pre_seat = False, None
         self.hud_dead_hidden = False
-        self.melee_t = 0.0                    # laufende Schlaganimation (Sekunden bis zum Ende)
-        self.melee_next = 0.0
         self.crate_views = {}
         self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.insp_on, self.insp_t = False, 0.0           # 9b: Waffen-Inspektion (T) offen / Überblendung
@@ -117999,7 +115425,7 @@ class Game(ShowBase):
         self.flames = {}                      # Rakete -> Flammen-Knoten
         self.throw_req = False
 
-        self.setFrameRateMeter(True)
+        self.setFrameRateMeter(False)         # Bildrate nur auf Wunsch (F3)
         self.build_assets()
         self.build_viewmodel()
         self.gun_dr.setActive(False)   # Waffe erst im Spiel zeigen
@@ -118041,11 +115467,8 @@ class Game(ShowBase):
             self.accept(_k, self.on_arrow, [_dx, _dy])
             self.accept(_k + "-repeat", self.on_arrow, [_dx, _dy])
         self.accept("escape", self.on_escape)
-        self.accept("tab", self.tab_down)
-        self.accept("tab-up", self.tab_up)
         self.accept("q", self.on_q)          # im Spiel lehnt Q (wird per Tastenabfrage gelesen)
         self.accept("f", self.on_use)
-        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
         self.accept("f3", self.toggle_fps)
         self.accept("f11", self.toggle_fullscreen)
         self.accept("c", self.toggle_duck)
@@ -118066,6 +115489,11 @@ class Game(ShowBase):
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
         self.accept("n", self.on_confirm, [False])
+        self.accept("arrow_left", self.end_key, [-1])
+        self.accept("arrow_right", self.end_key, [1])
+        self.accept("tab", self.tab_down)
+        self.accept("tab-up", self.tab_up)
+        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
         self.accept("r", self.on_r)
         for i in range(10):          # Ziffern: Waffenwahl im Spiel, Auswahl/IP-Eingabe im Menü
             self.accept(str(i), self.on_digit, [i])
@@ -118082,6 +115510,8 @@ class Game(ShowBase):
         self.captured = False
         self.mouse_prev = None
         self.warp_pending = False
+        self.warp_frames = 0                  # so viele Frames wartet die Maussteuerung schon auf die Fenstermitte
+        self.warp_ref = None                  # letzte (schon gezählte) Zeigerposition vor dem Zurücksetzen
         self.warp_frames = 0
         self.had_focus = True
         sticky_keys_off()
@@ -118094,7 +115524,7 @@ class Game(ShowBase):
             node = getattr(self, name, None)
             if node is not None:
                 self._keep.append((node, set(node.getChildren())))
-        self.show_menu("main" if str(st.get("name") or "").strip() else "name", getattr(self, "_pb_msg", ""))
+        self.show_menu("main" if str(st.get("name") or "").strip() else "name", "")
 
     # ------------------------------------------------------------ Start-Menü
     def userExit(self):
@@ -118643,6 +116073,9 @@ class Game(ShowBase):
             return                                    # Minecraft-Karten kennen nur Deathmatch (und Experimental)
         c, old = self.cfg, self.cfg.get("mode")
         if mode == old:
+            if mode == "experimental" and not self.cfg_is_mc():       # nochmal anklicken: Untermodus KotH <-> Deathmatch
+                c["exp_sub"] = "dm" if c.get("exp_sub", "koth") == "koth" else "koth"
+                self.menu_refresh()
             return
         if mode == "ctf":                             # CTF-Standard: Monster und Tomahawk aus (im Menü änderbar)
             self.ctf_prev = (c.get("mobs"), c.get("tomahawk"))
@@ -118663,11 +116096,19 @@ class Game(ShowBase):
 
     def bonus_cfg(self):
         """Bonuskisten (Kisten auf der Karte, goldene Titan-Kiste) und Bonushasen (Fluchttiere mit Beute) an/aus.
-        Nicht gewählt (None): Kisten an, in Experimental wie bisher aus; Hasen an."""
+        Nicht gewählt (None): in allen Modi an. Die Weiteren Einstellungen schalten beides aus und an."""
         c = self.cfg
-        exp = isinstance(self, ExpGame) or c.get("mode") == "experimental"
         bc, bh = c.get("bcr"), c.get("bha")
-        return {"crates": (not exp) if bc is None else bool(bc), "hares": True if bh is None else bool(bh)}
+        return {"crates": True if bc is None else bool(bc), "hares": True if bh is None else bool(bh)}
+
+    def world_rules(self):
+        """(Spielmodus, Regelsatz Experimental) aus den Einstellungen. Experimental läuft als King of the Hill oder
+        Deathmatch (Untermodus cfg['exp_sub']); auf Minecraft-Karten nur als Deathmatch."""
+        c = self.cfg
+        if c.get("mode") != "experimental":
+            return c.get("mode", "koth"), False
+        sub = "dm" if self.cfg_is_mc() else (c.get("exp_sub") if c.get("exp_sub") in EXP_MODES else "koth")
+        return sub, True
 
     def set_cfg(self, key, v):
         """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus)."""
@@ -118743,7 +116184,7 @@ class Game(ShowBase):
                 if dx:
                     self.set_limit(self.cfg["limit"] + dx)
                 elif dy:
-                    ok = [m for m in MODES if m != "experimental" and not (self.cfg_is_mc() and m not in MC_MODES)]
+                    ok = [m for m in MODES if not (self.cfg_is_mc() and m not in MC_MODES)]
                     cur = self.cfg["mode"]
                     self.setup_mode(ok[(ok.index(cur) + 1) % len(ok)] if cur in ok else ok[0])
                 return
@@ -118840,12 +116281,12 @@ class Game(ShowBase):
                     self.set_cfg("mobs", d - 1)
         elif self.mode == "play":
             if self.player.hp <= 0:
-                self.pick_loadout(d)               # tot: Waffen für den nächsten Spawn wählen
+                if not self.world.exp:             # Experimental: keine Ausrüstungswahl (Start mit der Pistole)
+                    self.pick_loadout(d)           # tot: Waffen für den nächsten Spawn wählen
             elif 1 <= d <= 2:
                 self.request_weapon(d - 1)
             elif d == 3:
-                if self.player.slots[SPECIAL_SLOT] is not None and not (
-                        self.player.gad_n > 0 or (self.player.gadget == GAD_C4 and self.world.has_c4(self.player.pid))):
+                if self.player.slots[SPECIAL_SLOT] is not None and not self.gadgets_held():
                     self.request_weapon(SPECIAL_SLOT)      # Spezialwaffe aus der Kiste, wenn kein Gadget übrig ist
                 else:
                     self.toggle_gadget()
@@ -118919,12 +116360,6 @@ class Game(ShowBase):
                 return
             found = self.listener.hosts.get(ip) if self.listener is not None else None
             port = found["port"] if found else NET_PORT
-            if found and bool(found.get("exp")) != isinstance(self, ExpGame):
-                if found.get("exp"):                       # Experimental-Host: im selben Fenster in den Experimental-Teil wechseln
-                    self.launch_experimental({"do": "connect", "ip": ip, "port": port})
-                    return
-                self.menu_msg = "Dieser Host spielt das Hauptspiel - bitte im Hauptmenü beitreten."
-                return
             self.connect_now(ip, port)             # erst laden; die Ausrüstung wählt man dann im Spiel
 
     def dead_screen_now(self):
@@ -118983,7 +116418,8 @@ class Game(ShowBase):
         c = self.cfg
         self.cfg_backup = dict(c)
         c["map"] = getattr(w, "map_path", c.get("map"))
-        c["mode"] = w.mode if w.mode in MODES else c["mode"]
+        c["mode"] = "experimental" if w.exp else (w.mode if w.mode in MODES else c["mode"])
+        c["exp_sub"] = w.mode if w.exp and w.mode in EXP_MODES else "koth"
         c["ff"], c["plim"] = bool(w.ctf_ff), int(w.score_limit)     # CTF-Regeln der laufenden Runde
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
@@ -119063,7 +116499,10 @@ class Game(ShowBase):
             self.reload_world()
             return
         lvl = mob_level_of(c["mobs"])
-        mode = c["mode"] if c["mode"] in MODES else w.mode
+        mode, wexp = self.world_rules()
+        if wexp != w.exp:                               # Regelsatz gewechselt (Experimental <-> andere): Welt neu aufbauen
+            self.reload_world()
+            return
         old_mode = w.mode
         w.mode = "dm" if w.mc else mode
         w.ctf_apply_cfg(self.ctf_cfg_dict())            # 11: CTF-Regeln
@@ -119098,7 +116537,7 @@ class Game(ShowBase):
                                   mode=m.get("mode") if m.get("mode") in MODES else "koth",
                                   limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
                                   mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
-                                  ctf=m.get("ctf") if isinstance(m.get("ctf"), dict) else {},
+                                  ctf=m.get("ctf") if isinstance(m.get("ctf"), dict) else {}, exp=bool(m.get("exp")),
                                   map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
                                   close=lambda: cs.conn.close("abgebrochen"))
         except (KeyError, TypeError, ValueError):
@@ -119153,7 +116592,19 @@ class Game(ShowBase):
 
     LOBBY_EQ_BTN = (-0.60, 0.60, -0.90, -0.76)
 
-    LOBBY_EQUIP = True          # Ausrüstungsmenü-Knopf in der Lobby (im Experimental gibt es keins: immer Pistole)
+    @property
+    def LOBBY_EQUIP(self):
+        """Ausrüstungsmenü in der Lobby benutzbar (im Regelsatz Experimental nicht: immer Pistole)."""
+        return not getattr(getattr(self, "world", None), "exp", False)
+
+    @property
+    def LOBBY_EQ_LOCKED(self):
+        return not self.LOBBY_EQUIP                  # Knopf trotzdem zeigen, aber ausgegraut; beim Darüberfahren erscheint der Hinweis
+
+    LOBBY_EQ_TIP = "In diesem Spielmodus nicht verfügbar."
+    PING_T = 3.0          # (alt, 10h: ersetzt durch ENEMY_PING_T)
+    PING_SEG = 40
+    TOMA_FAR = 420.0      # Kamera-Sichtweite ist 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
 
     def back_btn_rect(self):
         a = float(self.getAspectRatio())
@@ -119179,7 +116630,7 @@ class Game(ShowBase):
         elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             if self.net_mode == "host" and self.world.lobby:
                 if self.world.players_ready():      # nur der Host startet, und erst wenn alle 'Bereit' gedrückt haben
-                    self.fire_lock = True
+                    self.lock_trigger()
                     self.world.start_round()
             elif self.net_mode == "client":
                 self.toggle_ready()
@@ -119222,10 +116673,17 @@ class Game(ShowBase):
         eq.setTransparency(TransparencyAttrib.MAlpha)
         btn3d(eq)
         eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                            shadow=(0, 0, 0, 0.8), mayChange=False)
+                            shadow=(0, 0, 0, 0.8), mayChange=True)
+        tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
+                           bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
+        tip.setColorScale(1, 1, 1, 1)
+        tip.setBin("gui-popup", 100)                 # nach allem im Standard-Bin (Lobby-Karten), sonst liegt der Knopf darüber
+        tip.setDepthTest(False)
+        tip.setDepthWrite(False)
+        tip.hide()
         root.hide()
         self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
-                         "start_t": start_t, "eq": eq, "eq_t": eq_t}
+                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip}
 
     def update_lobby_ui(self, show, mpos):
         ui = getattr(self, "lobby_ui", None)
@@ -119285,10 +116743,23 @@ class Game(ShowBase):
                 ui["start"].setColor(*START_BTN_HOT) if hov_c else ui["start"].setColor(*START_BTN)
                 self.set_text(ui["start_t"], "BEREIT")
         e = self.LOBBY_EQ_BTN
-        hov_e = self.LOBBY_EQUIP and mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
+        over_e = mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
+        hov_e = self.LOBBY_EQUIP and over_e
         for nd in (ui["eq"], ui["eq_t"]):
-            (nd.show if self.LOBBY_EQUIP else nd.hide)()
-        ui["eq"].setColor(*(BTN_HC if hov_e else BTN_C))
+            (nd.show if (self.LOBBY_EQUIP or self.LOBBY_EQ_LOCKED) else nd.hide)()
+        if self.LOBBY_EQ_LOCKED and not self.LOBBY_EQUIP:        # ausgegraut + Hinweis beim Darüberfahren
+            ui["eq"].setColor(0.11, 0.12, 0.14, 0.8)
+            ui["eq_t"].setFg((0.45, 0.47, 0.50, 1))
+            if over_e:
+                asp = float(self.getAspectRatio())
+                ui["tip"].setPos(max(-asp + 0.5, min(asp - 0.5, mpos[0])), mpos[1] + 0.07)
+                ui["tip"].show()
+            else:
+                ui["tip"].hide()
+        else:
+            ui["tip"].hide()
+            ui["eq_t"].setFg((1, 1, 1, 1))
+            ui["eq"].setColor(*(BTN_HC if hov_e else BTN_C))
 
     def build_respawn_btn(self):
         cm = CardMaker("respbtn")
@@ -119595,10 +117066,28 @@ class Game(ShowBase):
         self.strike_sel = None
         self.strike_ui = (mp, tgt)
         self.strike_root, self.strike_dots = root, {}
-        if self.net_mode != "single":
+        if self.net_mode != "single" and TOMA_SHOW_PLAYERS:
             cap = OnscreenText(text="Rote Punkte: Gegner (live)", pos=(H + 0.05, cz + H - 0.06), scale=0.04,
                                fg=(1.0, 0.4, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft, mayChange=False)
             cap.reparentTo(root)
+        # Countdown-Länge (früher die Schalttafel neben dem Knopf): rechts neben der Karte wählbar
+        if self.world.strike_dur not in TOMA_DURATIONS:
+            self.world.strike_dur = float(STRIKE_T)
+        self.strike_dur_sel = int(self.world.strike_dur)
+        ct = OnscreenText(text="Countdown:", pos=(H + 0.2, cz + 0.22), scale=0.05, fg=(1, 0.85, 0.3, 1),
+                          shadow=(0, 0, 0, 0.9), mayChange=False)
+        ct.reparentTo(root)
+        ct.setBin("fixed", 95)
+        self.strike_dur_txt = {}
+        dur_hots = []
+        for k, sec in enumerate(TOMA_DURATIONS):
+            zz = cz + 0.1 - k * 0.1
+            t = OnscreenText(text="", pos=(H + 0.2, zz), scale=0.055, fg=Hot.BASE, shadow=(0, 0, 0, 0.9),
+                             mayChange=True)
+            t.setBin("fixed", 95)
+            self.strike_dur_txt[sec] = t
+            dur_hots.append(Hot(t, H + 0.2, zz, 0.055, (lambda v=sec: self.strike_pick_dur(v)), f"[ {sec} s ]"))
+        self.strike_pick_dur(self.strike_dur_sel, quiet=True)
         title = OnscreenText(text="TOMAHAWK - Einschlagpunkt wählen", pos=(0, 0.88), scale=0.07, fg=(1, 0.85, 0.3, 1),
                              shadow=(0, 0, 0, 0.9), mayChange=False)
         title.setBin("fixed", 95)
@@ -119615,15 +117104,16 @@ class Game(ShowBase):
         self.strike_hint = hint
         hots = [Hot(fire_t, -0.45, cz - H - 0.2, 0.065, self.strike_fire, "[ Abfeuern ]"),
                 Hot(canc_t, 0.45, cz - H - 0.2, 0.065, self.close_quit_box, "[ Abbrechen ]"),
-                Hot(hint, 0.0, cz - H - 0.08, 0.042, None, "")]
+                Hot(hint, 0.0, cz - H - 0.08, 0.042, None, "")] + dur_hots
         self.quit_box = (root, title, hots)
         self.overlay_kind = "strike"
         if self.mode == "play":
             self.set_capture(False)
 
     def update_strike_map(self):
-        """Zielkarte (nur Mehrspieler): aktuelle Positionen aller anderen menschlichen Spieler."""
-        if self.net_mode == "single" or self.quit_box is None or self.overlay_kind != "strike":
+        """Zielkarte (nur Mehrspieler, nur mit TOMA_SHOW_PLAYERS): aktuelle Positionen der anderen Spieler."""
+        if (self.net_mode == "single" or not TOMA_SHOW_PLAYERS or self.quit_box is None
+                or self.overlay_kind != "strike"):
             return
         root, dots = self.strike_root, self.strike_dots
         H, cz = self.STRIKE_MAP_HALF, self.STRIKE_MAP_Z
@@ -119668,12 +117158,13 @@ class Game(ShowBase):
             self.strike_hint.setText("Bitte zuerst ein Ziel auf der Karte wählen!")
             return
         x, y = self.strike_sel
+        dur = getattr(self, "strike_dur_sel", int(STRIKE_T))
         self.close_quit_box()
         if self.net_mode == "client":
             if self.client is not None and not self.client.lost:
-                self.client.send_strike(x, y)
+                self.client.send_strike(x, y, dur)
         else:
-            self.world.press_button(self.player, x, y)
+            self.world.press_button(self.player, x, y, dur)
 
     def show_pause(self, kind="main"):
         """Pause-Menü (Esc im Spiel): weiterspielen, Einstellungen, zum Hauptmenü, beenden."""
@@ -120000,16 +117491,18 @@ class Game(ShowBase):
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
-        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}
+        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
+        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
         self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
-        self.drop_pop = {}
+        self.whiz_prev, self.whizzed = {}, set()
         for nd in (getattr(self, "rock_views", None) or {}).values():
             nd.removeNode()
         self.rock_views = None
         self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
+        self.shadow_gz = {}                                    # 12: Bodenhöhen-Cache der Schatten leeren
         self.strike_fx = None
-        self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # Blendung vorbei
+        self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # 10e: Blendung vorbei, Ton normal
         self.apply_volume()
         self.water_nps = []
         self.town_np = None
@@ -120017,6 +117510,7 @@ class Game(ShowBase):
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
+        self.intel_reset()
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
         self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
@@ -120048,8 +117542,6 @@ class Game(ShowBase):
         self.world = self.player = None
         self.dead_free = False
         self.show_menu("main")
-        if isinstance(self, ExpGame):                      # Experimental: im selben Fenster zurück ins Hauptspiel
-            _pb_back(self)
 
     def menu_task(self, dt):
         self.animate_menu_bg(dt)
@@ -120067,15 +117559,7 @@ class Game(ShowBase):
             self.menu_refresh()
         elif st == "connecting" and self.attempt is not None:
             res = self.attempt.poll()
-            if res == "ready" and bool(self.attempt.exp) != isinstance(self, ExpGame):
-                a = self.attempt
-                a.close()
-                if a.exp:                              # per IP beigetreten, aber der Host spielt Experimental
-                    netlog(f"Client: Host {a.host} läuft in Experimental - wechsle in den Experimental-Teil")
-                    self.launch_experimental({"do": "connect", "ip": a.host, "port": a.thread.addr[1]})
-                else:
-                    self.show_menu("join", "Dieser Host spielt das Hauptspiel - bitte im Hauptmenü beitreten.")
-            elif res == "ready":
+            if res == "ready":
                 self.start_game("client", self.attempt)
             elif res == "failed":
                 self.show_menu("join", self.attempt.msg)
@@ -120182,38 +117666,8 @@ class Game(ShowBase):
                 pass
         self.load_nodes = []
 
-    # ------------------------------------------------------------ Experimental (Robins Spielversion)
-    def start_experimental(self):
-        """Start im Modus Experimental: Robins Spielversion mit den hier gewählten Einstellungen."""
-        c, mc = self.cfg, self.cfg_is_mc()
-        cfg = {"mode": "dm" if mc else "koth", "limit": int(c["limit"]), "map": c.get("map")}
-        for k in ("mobs", "tomahawk", "cd", "regen", "resp", "bcr", "bha"):
-            if isinstance(c.get(k), (int, float)):
-                cfg[k] = c[k]
-        self.launch_experimental({"do": "host", "cfg": cfg})
-
-    def launch_experimental(self, spec):
-        """Wechselt im selben Fenster zu Robins Version (nächster Frame, siehe _pb_to_exp)."""
-        spec = dict(spec, name=self.my_name, gfx=self.gfx, sens=self.sens_mult, fps=self.fps_limit,
-                    fov=self.fov_base, inv=1 if self.invert_y else 0)
-        try:
-            self.save_prefs()
-        except Exception:
-            pass
-        try:                                      # Ladebild sofort zeigen: das Laden von Experimental dauert, sonst bleibt das Hauptmenü stehen
-            att = None
-            if spec.get("do") != "host":
-                att = SimpleNamespace(map_raw={"name": "Verbinde ..."})
-            self.show_loading("host" if att is None else "client", att)
-        except Exception:
-            pass
-        self.taskMgr.add(lambda task: _pb_to_exp(task, self, spec), "pb-switch", sort=-100)
-
     def start_game(self, mode, attempt=None):
         """mode: 'single' (allein), 'host' (Spiel eröffnen) oder 'client' (beitreten)."""
-        if mode in ("single", "host") and self.cfg.get("mode") == "experimental":
-            self.start_experimental()
-            return
         self.show_loading(mode, attempt)         # erscheint sofort, noch vor dem Laden der Karte
         try:
             self._start_game(mode, attempt)
@@ -120237,8 +117691,11 @@ class Game(ShowBase):
                     mapdata, raw = pt_mapdata(path)
                 elif attempt.map_raw is not None:
                     raw, mapdata = attempt.map_raw, sanitize_map(attempt.map_raw)
-                else:
-                    raise ValueError("Der Host nutzt eine alte Spielversion (ohne Kartendatei)")
+                else:                                          # Host spielt die Standardkarte: das neue Polytown
+                    path = pt_find()
+                    if path is None:
+                        raise ValueError("Karte 'Polytown' fehlt - die Datei polytown.ptmap muss im Ordner 'maps' liegen")
+                    mapdata, raw = pt_mapdata(path)
             except (ValueError, OSError, zlib.error, struct.error) as e:
                 attempt.close()
                 netlog(f"Client: Karte des Hosts unlesbar: {e}")
@@ -120246,7 +117703,8 @@ class Game(ShowBase):
                 return
             self.loading_step(0.08, "Welt wird erzeugt ...")
             world = World(attempt.seed, spawn_mobs=False, mode=attempt.mode, limit=attempt.limit, mapdata=mapdata,
-                          tomahawk=getattr(attempt, "tomahawk", True), ctf=getattr(attempt, "ctf", None))
+                          tomahawk=getattr(attempt, "tomahawk", True), ctf=getattr(attempt, "ctf", None),
+                          exp=bool(getattr(attempt, "exp", False)))
             if attempt.props != world.prop_count():
                 attempt.close()
                 netlog(f"Client: Weltprüfung fehlgeschlagen: Host {attempt.props} Props, lokal {world.prop_count()}")
@@ -120266,7 +117724,7 @@ class Game(ShowBase):
                     self.cfg["map"] = None
                     self.show_menu("setup", f"Karte nicht ladbar: {e}")
                     return
-            else:                                              # Standardkarte: Polytown aus Blender (maps/polytown.ptmap)
+            else:                                              # Standardkarte: immer das neue Polytown aus Blender (keine alte Karte mehr)
                 pp = pt_find()
                 if not pp:
                     self.show_menu("setup", "Karte 'Polytown' fehlt - die Datei polytown.ptmap muss im Ordner 'maps' liegen")
@@ -120278,10 +117736,12 @@ class Game(ShowBase):
                     return
             self.loading_step(0.08, "Welt wird erzeugt ...")
             lvl = mob_level_of(self.cfg["mobs"])
-            world = World(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
+            wmode, wexp = self.world_rules()
+            world = World(SEED, spawn_mobs=lvl > 0, mode=wmode,
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict(), bonus=self.bonus_cfg())
+                          tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict(), bonus=self.bonus_cfg(),
+                          exp=wexp)
         world.map_raw = raw
         world.map_path = self.cfg.get("map") if mode != "client" else None
         host = None
@@ -120310,6 +117770,7 @@ class Game(ShowBase):
             world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
+        self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
             world.shot_sink = self.client.send_shot
@@ -120324,6 +117785,7 @@ class Game(ShowBase):
                                     build_pt_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)) if world.pt else
                                     build_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)))
         self.loading_step(0.78, "Szene wird eingerichtet ...")
+        prewarm_mob_models()   # 12: Monster-Modelle jetzt bauen, nicht beim ersten Auftauchen
         self.land_np = self.render.attachNewNode(land)
         if world.mc:
             self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
@@ -120339,6 +117801,7 @@ class Game(ShowBase):
             for wd in extra[4]:
                 par = self.town_np if wd["lit"] else free_np
                 wnp = par.attachNewNode(wd["node"])
+                wnp.setZ(wd["z"])                                   # 9a: Eckpunkte liegen relativ zum Höhenband
                 if wd["kind"] in ("reed", "grass", "bush"):
                     wnp.setTwoSided(True)
                 self.wind_nodes.append((wnp, wd["x"], wd["y"], wd["z"], wd["kind"]))
@@ -120406,7 +117869,7 @@ class Game(ShowBase):
             zp.setFogOff()
         fog = Fog("nebel")
         fog.setColor(*SKY)
-        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 else 0.012))          # Minecraft-Karte: weite Sicht über das Meer
+        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
@@ -120418,9 +117881,8 @@ class Game(ShowBase):
         self.build_toma()
         self.build_hud()
         if host is not None:
-            OnscreenText(text=f"Mehrspieler: Freunde wählen 'Spiel beitreten' (IP {host.ip_label})",
-                         parent=self.a2dTopCenter, pos=(0, -0.07), scale=0.04,
-                         fg=(0.6, 1, 0.6, 1), shadow=(0, 0, 0, 0.8), mayChange=False)
+            self.host_ip = host.ip_label                 # steht in der Tab-Übersicht; zu Beginn kurz als Hinweis
+            self.toast_later = (f"Freunde wählen 'Spiel beitreten'  (IP {host.ip_label})", (0.6, 1, 0.6), 6.0)
         self.lost_text = OnscreenText(text="", pos=(0, 0.35), scale=0.08, fg=(1, 0.3, 0.2, 1),
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.lost_text.hide()
@@ -120746,9 +118208,6 @@ class Game(ShowBase):
                                      shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
         self.pop_text.hide()
         self.pop_pct, self.pop_age, self.pop_col = 0, 99.0, (1, 1, 1, 1)
-        self.toast_text = OnscreenText(text="", pos=(0, 0.42), scale=0.052, fg=(1, 0.85, 0.3, 1),
-                                       shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.toast_t = 0.0
 
         # Rotes Aufblitzen bei Schaden
         cm = CardMaker("hurt")
@@ -120848,10 +118307,10 @@ class Game(ShowBase):
             n.setDepthWrite(False)
             return n
 
-        self.bar_root.setX(-0.26)                      # Platz für Nahkampf und Granaten rechts der Waffenkarten
+        self.bar_root.setX(-0.08)                      # Platz für Nahkampf und Granaten rechts
         self.slot_frames, self.slot_icons, self.slot_labels = [], [], []
-        for i in range(3):
-            x = -0.34 + i * 0.34
+        for i in range(N_SLOTS):                       # Waffenslots (kein Gadget-Slot in Experimental)
+            x = (i - N_SLOTS / 2) * 0.34
             self.slot_frames.append(hud_card(x, 0.32, 0.17, (0.4, 0.4, 0.4, 0.6), 19))
             hud_card(x, 0.30, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
             holder = self.bar_root.attachNewNode("slot_holder")   # eigener Halter je Karte
@@ -120870,7 +118329,7 @@ class Game(ShowBase):
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
         # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
-        mx_ = 0.66                                    # rechts neben der dritten Waffenkarte (Breite 0.32 / Nahkampf 0.26)
+        mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
         self.melee_holder = self.bar_root.attachNewNode("melee_holder")
@@ -120923,13 +118382,17 @@ class Game(ShowBase):
                                       mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
         self.gren_more.setBin("fixed", 25)
         # Gadget: dritter Slot der Waffenleiste, Stückzahl rechts unten in der Karte
-        self.gad_count = OnscreenText(text="", parent=self.bar_root, pos=(0.34 + 0.15, 0.065), scale=0.05,
+        self.gad_count = OnscreenText(text="", parent=self.bar_root, pos=((N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.15, 0.065), scale=0.05,
                                       fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight, mayChange=True)
         self.gad_count.setBin("fixed", 25)
         self.build_gren_hud()
         self.build_heli_hud()
         self.speed_text = OnscreenText(text="", pos=(0, -0.7), scale=0.08, fg=(1, 0.9, 0.3, 1),
                                        shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.death_picker = Picker(self.aspect2d, self.weapon_icons, 0.22, -0.10, -0.42, flat=True)   # wie im Hauptmenü
+        self.death_picker.hide()
+        self.build_respawn_btn()
+        self.build_lobby_ui()
         cm = CardMaker("deadbtn")
         cm.setFrame(*self.DEAD_BTN)
         self.dead_btn = self.aspect2d.attachNewNode(cm.generate())
@@ -120942,34 +118405,35 @@ class Game(ShowBase):
         self.dead_btn_text.hide()
         self.dead_hint = OnscreenText(text="", pos=(0, -0.94), scale=0.055, fg=(0.95, 0.8, 0.8, 1),
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.death_picker = Picker(self.aspect2d, self.weapon_icons, 0.22, -0.10, -0.42, flat=True)   # wie im Hauptmenü
-        self.death_picker.hide()
-        self.build_respawn_btn()
-        self.build_lobby_ui()
         self.reload_text = OnscreenText(text="NACHLADEN", pos=(0, -0.35), scale=0.06,
                                         fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.8), mayChange=True)
         self.reload_text.hide()
-        self.kill_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.08),
+        self.kill_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.08),   # nicht mehr im HUD
                                       scale=0.05, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                       align=TextNode.ARight, mayChange=True)
-        self.timer_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.16),
+        self.kill_text.hide()
+        self.timer_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.09),
                                        scale=0.06, fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.9),
                                        mayChange=True)
-        self.score_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.28),
+        self.score_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.28),   # -> Tab
                                        scale=0.042, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                        align=TextNode.ARight, mayChange=True)
-        self.feed_text = OnscreenText(text="", parent=self.a2dTopLeft, pos=(0.04, -0.33),
-                                      scale=0.042, fg=(1, 0.9, 0.7, 1), shadow=(0, 0, 0, 0.8),
+        self.score_text.hide()
+        self.feed_text = OnscreenText(text="", parent=self.a2dTopLeft, pos=(HUD_MARGIN, -0.08),   # Killfeed
+                                      scale=HUD_TEXT, fg=(1, 0.92, 0.78, 1), shadow=(0, 0, 0, 0.8),
                                       align=TextNode.ALeft, mayChange=True)
         self.prompt_text = OnscreenText(text="", pos=(0, -0.55), scale=0.055, fg=(1, 0.95, 0.5, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # Drop ansehen
+        self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # 7b: Drop ansehen
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.toast_text = OnscreenText(text="", pos=(0, 0.42), scale=0.052, fg=(1, 0.85, 0.3, 1),
+                                       shadow=(0, 0, 0, 0.9), mayChange=True)   # kurzer Hinweis, verschwindet
+        self.toast_t = 0.0
         self.dead_text = OnscreenText(text="", pos=(0, 0.74), scale=0.07, fg=(0.95, 0.8, 0.8, 1),
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.over_text = OnscreenText(text="", pos=(0, 0.55), scale=0.065, fg=(1, 0.95, 0.6, 1),
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.strike_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.3), scale=0.075,
+        self.strike_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.2), scale=0.065,
                                         fg=(1, 0.25, 0.15, 1), shadow=(0, 0, 0, 0.95), mayChange=True)
         self._txt = {}
 
@@ -121058,7 +118522,7 @@ class Game(ShowBase):
         self.rscope = rs
         rs.hide()
         self.show_fps = False
-        self.fps_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.14), scale=0.04,
+        self.fps_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.08), scale=0.04,
                                      fg=(0.7, 1, 0.7, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight,
                                      mayChange=True)
         self.fps_text.hide()
@@ -121341,6 +118805,7 @@ class Game(ShowBase):
             return
         self.tab_held = False
         self.tab_root.hide()
+        self.tip_root.hide()
         if self.mode == "play" and self.quit_box is None and not getattr(self, "insp_on", False):
             self.set_capture(True)
 
@@ -121352,7 +118817,7 @@ class Game(ShowBase):
         if code >= 0 and msg in (1, 2, 3):
             si, v = divmod(code, ATT_CODE)
             nm = att_name(si, v)
-            wn = EXP_WEAPONS[wi].name if 0 <= wi < len(EXP_WEAPONS) else ""
+            wn = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
             if msg == 1:
                 self.toast(f"{nm} an {wn} angebracht", (0.55, 1.0, 0.55), 2.0)
             elif msg == 2:
@@ -121362,10 +118827,11 @@ class Game(ShowBase):
             self.att_panel_key = None                       # Fenster neu aufbauen
 
     def att_equip(self, wi, si, v):
-        """Aufsatz aus dem Lager aufstecken (Fenster der Inspektion). Hier gehört die Ausrüstung dem Spieler."""
-        code = att_equip_local(self.player, wi, si, v)
-        if code is not None:
-            self.att_notice(3, code, wi)
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_atteq(wi, si, v)
+        else:
+            self.world.equip_att(self.player, wi, si, v)
 
     def insp_ok(self):
         """9b: darf jetzt inspiziert werden (lebt, Schusswaffe in der Hand, nicht im Fahrzeug)?"""
@@ -121394,7 +118860,7 @@ class Game(ShowBase):
         wi = pl.cur
         tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
         if not tabs:
-            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            self.toast(f"{WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
             return
         if self.tab_held:
             self.tab_up()
@@ -121444,7 +118910,7 @@ class Game(ShowBase):
 
     def insp_anchor(self, wi, si):
         """9b: Punkt (Waffenkoordinaten) der Markierung für Platz si."""
-        wn = EXP_WEAPONS[wi].name
+        wn = WEAPONS[wi].name
         if si == ATT_SCOPE:
             sy_, sz_ = SCOPE_MOUNT.get(wn, (0.1, 0.04))
             return (0.0, sy_, sz_ + 0.035)
@@ -121528,7 +118994,7 @@ class Game(ShowBase):
     def open_att_panel(self, wi):
         tabs = [si for si in (ATT_SCOPE, 0, 1, 2) if att_fits(wi, si)]
         if not tabs:
-            self.toast(f"{EXP_WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
+            self.toast(f"{WEAPONS[wi].name}: keine Aufsätze möglich", (0.95, 0.85, 0.6), 1.8)
             self.close_att_panel()
             return
         self.att_panel_wi, self.att_panel_tabs = wi, tabs
@@ -121574,7 +119040,7 @@ class Game(ShowBase):
         bg.setColor(0.02, 0.03, 0.06, 1.0)
         cm.setFrame(-W, W, Z1 - 0.006, Z1)
         root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        OnscreenText(text=f"Aufsätze: {EXP_WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
+        OnscreenText(text=f"Aufsätze: {WEAPONS[wi].name}", parent=root, pos=(-W + 0.04, Z1 - 0.06), scale=0.05,
                      fg=(1.0, 0.8, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft)
         OnscreenText(text=f"Lager: {len(pl.att_store)} Teil(e)   -   Klick = aufstecken, T / Esc = zu", parent=root,
                      pos=(W - 0.04, Z1 - 0.06), scale=0.034, fg=(0.8, 0.85, 0.9, 1), align=TextNode.ARight)
@@ -121769,9 +119235,9 @@ class Game(ShowBase):
         nd = d["nodes"].get(key)
         if nd is None:
             if isinstance(key, tuple) and key[0] == "a":
-                nd = exp_weapon_icon(wi, extra=loadout_extra(wi, scope, att), scope=scope)
+                nd = weapon_icon(wi, extra=loadout_extra(wi, scope, att), scope=scope)
             else:
-                nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else exp_weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
+                nd = gadget_icon(wi[1]) if isinstance(wi, tuple) else weapon_icon(wi)   # frisch erzeugt, mit niemandem geteilt
             nd.setBin("fixed", 21)
             nd.setDepthTest(False)
             nd.setDepthWrite(False)
@@ -121818,8 +119284,22 @@ class Game(ShowBase):
                          fg=(1.0, 0.8, 0.4, 1), align=TextNode.ALeft, mayChange=False)
             OnscreenText(text="\n".join(w for _k, w in part), parent=root, pos=(x0 + 0.2, -0.1), scale=0.036,
                          fg=(0.88, 0.9, 0.95, 1), align=TextNode.ALeft, mayChange=False)
+        OnscreenText(text="Maus über Waffen, Ausrüstung oder Buff: Infos", parent=root, pos=(0, -0.59), scale=0.032,
+                     fg=(0.65, 0.7, 0.8, 1), mayChange=False)
         root.hide()
         self.tab_root = root
+        tip = self.aspect2d.attachNewNode("tip")
+        tip.setBin("fixed", 80)
+        tip.setDepthTest(False)
+        cm = CardMaker("tipbg")
+        cm.setFrame(0, 1, -1, 0)
+        self.tip_bg = tip.attachNewNode(cm.generate())
+        self.tip_bg.setColor(0.02, 0.03, 0.05, 0.9)
+        self.tip_bg.setTransparency(TransparencyAttrib.MAlpha)
+        self.tip_text = OnscreenText(text="", parent=tip, pos=(0.025, -0.05), scale=0.036, fg=(1, 1, 1, 1),
+                                     align=TextNode.ALeft, mayChange=True)
+        tip.hide()
+        self.tip_root = tip
 
     def update_tab_overlay(self):
         mw = self.mouseWatcherNode                   # Tab-Loslassen verpasst (Fenster gewechselt)? dann zu
@@ -121845,20 +119325,20 @@ class Game(ShowBase):
                                        CTF_TEAM_NAMES[tm] if tm in (0, 1) else "-", p.kills, p.deaths, fc, fr)):
                     cols[c].append(str(v))
         else:
-            heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten"]
+            heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
             cols = [[] for _ in heads]
         for i, p in enumerate(world.ranking()[:8] if world.mode != "ctf" else ()):
-            mk, cr = stat_summary(p)
+            mk, cr, bf = stat_summary(p)
             val = f"{int(p.score)}" if koth else f"{p.kills / max(1, p.deaths):.2f}"
             for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")), val,
-                                   p.kills, p.deaths, mk, cr)):
+                                   p.kills, p.deaths, mk, cr, bf)):
                 cols[c].append(str(v))
         for (hd, rw), h, vals in zip(self.tab_cols, heads, cols):
             self.set_text(hd, h)
             self.set_text(rw, "\n".join(vals))
         ip = getattr(self, "host_ip", None)
         self.set_text(self.tab_ip, f"Host-IP {ip}" if ip and self.net_mode == "host" else "")
-        pass
+        self.update_tooltip()
 
     def damage_popup(self, pct, head):
         """Zahl '+NN%' neben dem Treffermarker: Schaden in Prozent der Lebenspunkte des Ziels."""
@@ -121893,10 +119373,8 @@ class Game(ShowBase):
             self.sight_off = pos
         self.hitmark.root.setPos(self.sight_off[0], 0, self.sight_off[1])
 
-    def toast(self, text, col=(1, 0.85, 0.3), dur=3.0):
-        """Hinweis in der Bildmitte (CTF-Meldungen), blendet nach dur Sekunden aus."""
-        if getattr(self, "toast_text", None) is None:
-            return
+    def toast(self, text, col=(1, 0.85, 0.3), dur=TOAST_T):
+        """Kurzer, deutlicher Hinweis in der Bildmitte (Buff erhalten, "Hast du schon" ...)."""
         self.toast_text.setText(text)
         self.toast_text.setFg(tuple(col) + (1,))
         self.toast_text.setAlphaScale(1.0)
@@ -122175,17 +119653,34 @@ class Game(ShowBase):
 
     # ------------------------------------------------------------ Eingabe
     def toggle_gadget(self):
-        """Taste 3: Gadget in die Hand nehmen bzw. wieder wegstecken."""
+        """Taste 3: Gadget (C4, Claymore, Funkbake) in die Hand nehmen; weiter drücken wechselt zur nächsten Art, nach
+        der letzten wird weggesteckt."""
         pl = self.player
         if pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        if pl.gad_out:
+        has = self.gadgets_held()
+        if not has:
             pl.gad_out = False
-        elif pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid)):
-            pl.gad_out, pl.ads = True, False
-            pl.melee_out = False
+            self.toast("Kein Gadget - C4, Claymore und Funkbake gibt es im Menü und als Beute", (0.9, 0.85, 0.7), 1.8)
+            return
+        if pl.gad_out and pl.gadget in has:
+            i = has.index(pl.gadget)
+            if i + 1 < len(has):
+                pl.gadget = has[i + 1]
+            else:
+                pl.gad_out = False
+                return
         else:
-            self.gad_msg = (f"Keine {GADGETS[pl.gadget]} mehr übrig", time.time())
+            if pl.gadget not in has:
+                pl.gadget = has[0]
+            pl.gad_out, pl.ads, pl.melee_out = True, False, False
+        pl.gad_n = pl.gad_stock[pl.gadget]
+        self.toast(f"{GADGETS[pl.gadget]}  x{pl.gad_n}", (1.0, 0.9, 0.55), 1.2)
+
+    def gadgets_held(self):
+        """Gadget-Arten, die der Spieler gerade benutzen kann (Vorrat oder ausgelegtes C4 zum Zünden)."""
+        pl = self.player
+        return [k for k in range(3) if pl.gad_stock[k] > 0 or (k == GAD_C4 and self.world.has_c4(pl.pid))]
 
     def gadget_hand(self, pl, ads, edge, select, over):
         """Gadget in der Hand: Rechtsklick stellt es auf, Linksklick zündet C4 (bei den anderen: aufstellen).
@@ -122225,16 +119720,17 @@ class Game(ShowBase):
             self.sel_req = wi
 
     def cycle_weapon(self, d):
-        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern."""
+        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern.
+        10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
-        if self.g_hold_t >= 0:                      # bei gehaltenem G: Granatenart wechseln
+        if self.g_hold_t >= 0:
             self.on_gren_next(d)
             return
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and self.world.has_c4(pl.pid))
+        gad_ok = bool(self.gadgets_held())
         order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else []) + [MELEE_SEL]
         if not order:
             return
@@ -122265,7 +119761,7 @@ class Game(ShowBase):
         pl = self.player
         if pl.hp > 0 or self.world.phase != "play" or getattr(self.world, "lobby", False):
             return
-        self.fire_lock = True                       # der Klick auf den Knopf darf nicht gleich als Schuss zählen
+        self.lock_trigger()                         # der Klick auf den Knopf darf nicht gleich als Schuss zählen
         if self.net_mode == "client":
             waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
             if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
@@ -122904,7 +120400,8 @@ class Game(ShowBase):
         pl, world = self.player, self.world
         if not alt and pl.hp > 0 and world.phase == "play" and world.strike == 0:
             r = world.nearest_use(pl)
-            if r is not None and r[0] == "button":          # Tomahawk: erst Ziel auf der Karte wählen
+            if r is not None and r[0] == "button" and (not world.exp or (
+                    world.toma_ready() and world.toma_lock.get(self.my_id, 0.0) <= 0)):   # Tomahawk: erst Ziel auf der Karte wählen
                 self.open_strike_map()
                 return
             if r is None:                                   # nichts zu benutzen: Schlag mit der Waffe
@@ -122915,6 +120412,498 @@ class Game(ShowBase):
                 self.client.send_use(alt)
         else:
             self.world.use_object(self.player, alt)
+
+    def strike_pick_dur(self, sec, quiet=False):
+        """Countdown-Länge auf der Zielkarte wählen (die gewählte steht in Klammern)."""
+        if sec not in TOMA_DURATIONS:
+            return
+        self.strike_dur_sel = sec
+        for v, t in getattr(self, "strike_dur_txt", {}).items():
+            t.setText(f"[ {v} s ]" if v == sec else f"  {v} s  ")
+        if not quiet:
+            self.sfx.ui_click()
+
+    def apply_att_state(self, atts, scopes, store, msg=0, code=-1, wi=-1):
+        """7b: Aufsätze/Visiere/Lager übernehmen (beim Host sind sie schon gesetzt) und kurz Bescheid geben."""
+        pl = self.player
+        if self.net_mode == "client":
+            pl.att = {}
+            for k, v in (atts or {}).items():
+                a = att_valid(v)
+                if a is not None and str(k).isdigit() and int(k) < len(WEAPONS):
+                    pl.att[int(k)] = a
+            pl.scopes = {int(k): v for k, v in (scopes or {}).items()
+                         if str(k).isdigit() and isinstance(v, int) and 0 <= v < len(ATT_SCOPE_NAMES)}
+            pl.att_store = [c for c in (store or []) if isinstance(c, int)]
+            for k in list(pl.att):
+                if k < len(pl.guns):
+                    clamp_ammo(pl, k)
+        self.att_notice(msg, code, wi)
+
+    def apply_gain(self, wi, slots, dup, atts=None):
+        """Eigene Waffe aus Kiste oder vom Boden erhalten (Ereignis 'loot'/'pickup'). Beim Host und im Einzelspiel
+        hat die Welt die Slots schon umgestellt (take_weapon); als Mitspieler übernimmt man die Belegung des Hosts."""
+        pl = self.player
+        if not 0 <= wi < len(WEAPONS):
+            return
+        if self.net_mode == "client":
+            new = [None] * N_SLOTS
+            for i, v in enumerate(list(slots or ())[:N_SLOTS]):
+                if isinstance(v, int) and 0 <= v < len(WEAPONS):
+                    new[i] = v
+            pl.slots = new
+            a = att_valid(atts)                      # 7b: Aufsätze der Waffe übernimmt man vom Host
+            if a is not None and a != ATT_NONE:
+                pl.att[wi] = a
+            else:
+                pl.att.pop(wi, None)
+            for k in [k for k in pl.att if k not in pl.slots]:
+                del pl.att[k]
+            if dup:
+                stock_ammo(pl, wi)
+            else:
+                pl.guns[wi] = GunState(pl.wp(wi))
+            if pl.cur not in pl.slots:               # die Waffe in der Hand wurde getauscht
+                pl.cur = pl.switch_to = wi
+                pl.switch_t, pl.reload_t = SWITCH_T * 0.5, 0.0
+            note_hand(pl)
+        if not dup:
+            self.sel_req = wi                        # gleich zur neuen Waffe wechseln
+        pl.gad_out = False
+
+    def lock_trigger(self):
+        """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
+        INPUT_LOCK_T s (Spielstart, Respawn, Menü/Karte geschlossen, Fenster zurück im Vordergrund)."""
+        self.trig_need_up = True
+        self.trig_lock_t = INPUT_LOCK_T
+
+    def hover_targets(self):
+        """(Mitte x, Mitte z, halbe Breite, halbe Höhe, Infotext) der HUD-Elemente mit Mausover-Info."""
+        pl, out = self.player, []
+        a2 = self.aspect2d
+        for i, fr in enumerate(self.slot_frames):
+            wi = pl.slots[i] if i < len(pl.slots) else None
+            if wi is not None:
+                p = fr.getPos(a2)
+                out.append((p[0], p[2], 0.16, 0.085, weapon_info(wi, pl.guns[wi], pl.att.get(wi), pscope(pl, wi))
+                                                        + "\n(Klick: Aufsätze wechseln)"))
+        for sl, tl in self.gear_tiles.items():
+            gi = pl.gear.get(sl)
+            if gi is not None and pl.heli < 0:
+                p = tl["tile"].getPos(a2)
+                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
+        p = self.melee_frame.getPos(a2)
+        out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee, pl)))
+        b = getattr(pl, "buff", None)
+        ic = self.ability_icons.get("buff")
+        if b in BUFF_T and pl.buff_t > 0 and ic is not None:
+            p = ic.root.getPos(a2)
+            out.append((p[0], p[2], 0.065, 0.065, buff_info(b, pl)))
+        for key, gk in (("dash", "dash"), ("jet", "jetpack")):
+            gi = next((g for g in pl.gear.values() if g is not None and GEAR[g].kind == gk), None)
+            ic = self.ability_icons.get(key)
+            if gi is not None and ic is not None:
+                p = ic.root.getPos(a2)
+                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi, pl)))
+        return out
+
+    def update_tooltip(self):
+        mw = self.mouseWatcherNode
+        if not self.tab_held or mw is None or not mw.hasMouse():
+            self.tip_root.hide()
+            return
+        mx, mz = mw.getMouseX() * self.getAspectRatio(), mw.getMouseY()
+        for cx, cz, hw, hh, text in self.hover_targets():
+            if abs(mx - cx) <= hw and abs(mz - cz) <= hh:
+                self.set_text(self.tip_text, text)
+                lines = text.split("\n")
+                w = 0.05 + 0.036 * 0.6 * max(len(ln) for ln in lines)
+                h = 0.03 + 0.036 * 1.2 * len(lines)
+                gi = GEAR_IDX.get(lines[0].split("  (")[0]) if "  (" in lines[0] else None   # 9d: Symbol im Hinweis
+                if getattr(self, "tip_icon_gi", None) != gi:
+                    ti = getattr(self, "tip_icon", None)
+                    if ti is not None:
+                        ti.removeNode()
+                    self.tip_icon = None
+                    if gi is not None:
+                        self.tip_icon = gear_icon(gi, 0.2, 0.15)
+                        self.tip_icon.reparentTo(self.tip_root)
+                        self.tip_icon.setBin("fixed", 92)
+                        self.tip_icon.setDepthTest(False)
+                        self.tip_icon.setDepthWrite(False)
+                    self.tip_icon_gi = gi
+                if gi is not None:
+                    w += 0.26
+                    self.tip_icon.setPos(w - 0.14, 0, -0.1)
+                ar = self.getAspectRatio()
+                x = mx + 0.04 if mx < 0 else mx - w - 0.04       # zur Bildmitte hin aufklappen
+                x = min(max(x, -ar + 0.02), ar - w - 0.02)
+                z = min(max(mz + h + 0.04, -1 + h + 0.02), 0.98)
+                self.tip_root.setPos(x, 0, z)
+                self.tip_bg.setScale(w, 1, h)
+                self.tip_root.show()
+                return
+        self.tip_root.hide()
+
+    def bullet_whiz(self, bullets):
+        """Vorbeizischende Kugeln: fliegt eine fremde Kugel nah am eigenen Kopf vorbei, zischt es - aus der
+        Richtung des Vorbeiflugs, je näher, desto lauter (WHIZ_FULL voll, bis WHIZ_MAX leiser, dann nichts).
+        Geprüft wird die Strecke seit dem letzten Bild (jeder Rechner für die Kugeln, die er ohnehin zeigt)."""
+        prev = getattr(self, "whiz_prev", {})
+        if not hasattr(self, "whizzed"):
+            self.whizzed = set()
+        me = self.player
+        nxt = {}
+        if me.hp > 0:
+            head = (me.x, me.y, me.z + eye_h(me))
+            for b in bullets:
+                cur = (b.x, b.y, b.z)
+                nxt[b] = cur
+                if b.owner == self.my_id or self.is_rocket(b) or b in self.whizzed:
+                    continue
+                p0 = prev.get(b)
+                if p0 is None:                               # neu: ein kurzes Stück zurück (Mündung)
+                    p0 = (b.x - b.vx * 0.04, b.y - b.vy * 0.04, b.z - b.vz * 0.04)
+                ab = (cur[0] - p0[0], cur[1] - p0[1], cur[2] - p0[2])
+                l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+                if l2 < 1e-9:
+                    continue
+                t = ((head[0] - p0[0]) * ab[0] + (head[1] - p0[1]) * ab[1] + (head[2] - p0[2]) * ab[2]) / l2
+                if not 0.0 <= t < 1.0:                       # noch nicht am Kopf vorbei (oder schon lange)
+                    continue
+                c = (p0[0] + ab[0] * t, p0[1] + ab[1] * t, p0[2] + ab[2] * t)
+                d = math.dist(c, head)
+                if d >= WHIZ_MAX:
+                    continue
+                self.whizzed.add(b)
+                vol = 1.0 if d <= WHIZ_FULL else 1.0 - (d - WHIZ_FULL) / (WHIZ_MAX - WHIZ_FULL)
+                self.sfx.play("whiz", c, WHIZ_VOL * vol, self.prng.uniform(0.9, 1.15))
+        self.whiz_prev = nxt
+        alive = set(bullets)
+        self.whizzed = {b for b in self.whizzed if b in alive}
+
+    def intel_reset(self):
+        """10h: Lärm-Pings und Sichtungen vergessen (neue Runde / neues Spiel)."""
+        for pg in getattr(self, "enemy_pings", ()):
+            for key in ("mm", "bm"):
+                if pg.get(key) is not None:
+                    pg[key][0].removeNode()
+        self.enemy_pings = []                      # je Ping: dict(pid, x, y, r, t0, mm=(Knoten, Daten), bm=...)
+        self.enemy_ping_last = {}                  # Gegner-ID -> Zeit des letzten Pings (ENEMY_PING_CD)
+        self.sightings = {}                        # Beobachter-ID -> {Gegner-ID: (Zeit, x, y)} - pro Spieler (Team-fähig)
+        self.intel_clock = self.intel_veh_clock = 0.0
+        for d in (getattr(self, "mm_dots", {}), getattr(self, "bm_dots", {})):
+            for n in d.values():
+                n.hide()
+
+    def intel_allies(self):
+        """10h: Spieler, deren Sichtungen und gehörte Pings man teilt: man selbst und (Team-Modi) die Verbündeten."""
+        w = self.world
+        return [p for pid, p in w.players.items() if w.allied(self.my_id, pid)]
+
+    def heard_noise(self, src, x, y, z, r):
+        """10h: Ein anderer Spieler (src) macht lauten Lärm bei (x, y, z) mit Radius r. Hört man es (oder ein Verbündeter
+        - ENEMY_PING_HEAR_ONLY), erscheint ein grober Kreis auf der Minimap; Mitte zufällig versetzt (der Gegner liegt
+        darin), höchstens alle ENEMY_PING_CD s je Gegner."""
+        w = self.world
+        if not ENEMY_PINGS or src is None or src < 0 or w.allied(self.my_id, src) or r <= 0:
+            return
+        if not hasattr(self, "enemy_pings"):
+            self.intel_reset()
+        now = time.time()
+        if now - self.enemy_ping_last.get(src, -1e9) < ENEMY_PING_CD:
+            return
+        if z is None:
+            z = w.height(x, y) + 1.0
+        if ENEMY_PING_HEAR_ONLY:
+            heard = False
+            for p in self.intel_allies():
+                if p.hp <= 0:
+                    continue
+                dz = (p.z + 1.0 - z) if NOISE_SPHERE else 0.0
+                if (p.x - x) ** 2 + (p.y - y) ** 2 + dz * dz <= r * r:
+                    heard = True
+                    break
+            if not heard:
+                return
+        self.enemy_ping_last[src] = now
+        rr = max(ENEMY_PING_MIN_R, r)
+        a, d = self.prng.uniform(0, 2 * math.pi), rr * ENEMY_PING_OFFSET * math.sqrt(self.prng.random())
+        self.enemy_pings.append(dict(pid=src, x=x + math.cos(a) * d, y=y + math.sin(a) * d, r=rr, t0=now,
+                                     mm=None, bm=None))
+        if len(self.enemy_pings) > 12:
+            old = self.enemy_pings.pop(0)
+            for key in ("mm", "bm"):
+                if old[key] is not None:
+                    old[key][0].removeNode()
+
+    def ping_geom(self, parent, sort):
+        """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
+        wird er am Rand abgeschnitten)."""
+        n = self.PING_SEG
+        fmt = GeomVertexFormat.getV3c4()
+        vd = GeomVertexData("ping", fmt, Geom.UHDynamic)
+        vd.setNumRows(1 + 2 * n)
+        cw = GeomVertexWriter(vd, "color")
+        vw = GeomVertexWriter(vd, "vertex")
+        r_, g_, b_ = ENEMY_PING_COL
+        cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
+        vw.addData3(0, 0, 0)
+        for i in range(n):
+            cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)          # innerer Ring (Ende der Fläche)
+            vw.addData3(0, 0, 0)
+        for i in range(n):
+            cw.addData4(r_, g_, b_, 0.75)                      # äusserer Ring (Rand)
+            vw.addData3(0, 0, 0)
+        prim = GeomTriangles(Geom.UHStatic)
+        for i in range(n):
+            j = (i + 1) % n
+            prim.addVertices(0, 1 + i, 1 + j)
+            prim.addVertices(1 + i, 1 + n + i, 1 + n + j)
+            prim.addVertices(1 + i, 1 + n + j, 1 + j)
+        geom = Geom(vd)
+        geom.addPrimitive(prim)
+        gn = GeomNode("ping")
+        gn.addGeom(geom)
+        np_ = parent.attachNewNode(gn)
+        np_.setTwoSided(True)
+        np_.setLightOff()
+        np_.setTransparency(TransparencyAttrib.MAlpha)
+        np_.setBin("fixed", sort)
+        np_.setDepthTest(False)
+        np_.setDepthWrite(False)
+        return np_, vd
+
+    def ping_fill(self, vd, pts, ctr):
+        """10h: Kreis-Punkte (pts = äusserer Rand) und Mitte ctr ins Mesh schreiben."""
+        vw = GeomVertexWriter(vd, "vertex")
+        vw.addData3(ctr[0], 0, ctr[1])
+        for px, py in pts:
+            vw.addData3(ctr[0] + (px - ctr[0]) * 0.94, 0, ctr[1] + (py - ctr[1]) * 0.94)
+        for px, py in pts:
+            vw.addData3(px, 0, py)
+
+    def update_intel(self):
+        """10h: Sichtkontakte prüfen (pro verbündetem Beobachter), Fahrzeug-/Heli-Lärm hören und alles auf der
+        Minimap zeichnen: Lärm-Pings als Kreise, gesichtete Gegner als roter Punkt (+ ENEMY_SEEN_GLOW Nachleuchten)."""
+        if not hasattr(self, "enemy_pings"):
+            self.intel_reset()
+        w, pl, now = self.world, self.player, time.time()
+        allies = self.intel_allies()
+        enemies = [p for pid, p in w.players.items() if not w.allied(self.my_id, pid) and p.hp > 0]
+        if now - self.intel_clock >= 1.0 / ENEMY_SIGHT_RATE:
+            self.intel_clock = now
+            half = math.radians(ENEMY_SIGHT_FOV / 2.0)
+            for ob in allies:
+                seen = self.sightings.setdefault(ob.pid, {})
+                if ob.hp <= 0 or getattr(ob, "prespawn", False):
+                    continue
+                h = math.radians(ob.heading)
+                lx, ly = -math.sin(h), math.cos(h)
+                eye = (ob.x, ob.y, ob.z + body_h(ob) - 0.15)
+                for tg in enemies:
+                    dx, dy, dz = tg.x - ob.x, tg.y - ob.y, tg.z + 1.0 - eye[2]
+                    d = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    if d > ENEMY_SIGHT_R:
+                        continue
+                    dh = math.hypot(dx, dy)
+                    if dh > 1.5 and (dx * lx + dy * ly) / dh < math.cos(half):
+                        continue                               # ausserhalb des Blickfelds
+                    vis = False
+                    for zz in (body_h(tg) * 0.85, body_h(tg) * 0.45):    # Kopf oder Körper frei
+                        tp = (tg.x, tg.y, tg.z + zz)
+                        if w.los(eye, tp) and not (w.smokes and w.smoke_blocks(eye, tp)):
+                            vis = True
+                            break
+                    if vis:
+                        seen[tg.pid] = (now, tg.x, tg.y)
+        if now - self.intel_veh_clock >= NOISE_TICK:            # Fahrzeuge/Heli der Gegner: Lärm wie Monster ihn hören
+            self.intel_veh_clock = now
+            for tg in enemies:
+                if tg.vehicle >= 0 or tg.heli >= 0 or tg.mount >= 0:
+                    r = w.player_noise(tg)
+                    if r > 0:
+                        self.heard_noise(tg.pid, tg.x, tg.y, w.noise_z(tg), r)
+        # gesichtete Gegner: neueste Sichtung aller Verbündeten
+        best = {}
+        for ob in allies:
+            for tid, (t, x, y) in self.sightings.get(ob.pid, {}).items():
+                if tid not in best or t > best[tid][0]:
+                    best[tid] = (t, x, y)
+        self.intel_seen = best
+        shown = set()
+        for tid, (t, x, y) in best.items():
+            tg = w.players.get(tid)
+            age = now - t
+            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
+                continue
+            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
+            px, py = (tg.x, tg.y) if live else (x, y)
+            p = self.mm_xy(px, py, False)
+            if p is None:
+                continue
+            n = self.mm_dots.get(tid)
+            if n is None:
+                n = self.mm_dots[tid] = self.mm_dot_factory(0.012, (1.0, 0.2, 0.15, 1))
+            n.show()
+            n.setPos(p[0], 0, p[1])
+            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
+            shown.add(tid)
+        for tid, n in self.mm_dots.items():
+            if tid not in shown:
+                n.hide()
+        # Lärm-Pings
+        R = self.mm_R
+        k = R / self.mm_vis
+        keep = []
+        for pg in self.enemy_pings:
+            age = now - pg["t0"]
+            if age > ENEMY_PING_T:
+                for key in ("mm", "bm"):
+                    if pg[key] is not None:
+                        pg[key][0].removeNode()
+                continue
+            keep.append(pg)
+            if pg["mm"] is None:
+                pg["mm"] = self.ping_geom(self.mm_root, 22)
+            np_, vd = pg["mm"]
+            c = self.mm_xy(pg["x"], pg["y"], False)
+            if c is None:                                         # Mitte ausserhalb: Lage trotzdem rechnen
+                h = math.radians(pl.heading)
+                dx, dy = pg["x"] - pl.x, pg["y"] - pl.y
+                c = ((dx * math.cos(h) + dy * math.sin(h)) * k, (-dx * math.sin(h) + dy * math.cos(h)) * k)
+            rr = pg["r"] * k
+            if math.hypot(*c) - rr > R:
+                np_.hide()
+                continue
+            lim = R * 0.985
+            pts = []
+            for i in range(self.PING_SEG):
+                a = 2 * math.pi * i / self.PING_SEG
+                qx, qy = c[0] + math.cos(a) * rr, c[1] + math.sin(a) * rr
+                dq = math.hypot(qx, qy)
+                if dq > lim:                                      # am Rand der Minimap abschneiden
+                    qx, qy = qx / dq * lim, qy / dq * lim
+                pts.append((qx, qy))
+            dc = math.hypot(*c)
+            cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
+            self.ping_fill(vd, pts, cc)
+            np_.show()
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, age))
+        self.enemy_pings = keep
+
+    def draw_intel_big(self):
+        """10h: dieselben Pings und Sichtungen auf der grossen Karte (M)."""
+        if not hasattr(self, "enemy_pings"):
+            return
+        w, now, H = self.world, time.time(), self.BIGMAP_H
+        k = 2 * H / WORLD
+        for pg in self.enemy_pings:
+            if pg["bm"] is None:
+                pg["bm"] = self.ping_geom(self.bm_root, 62)
+            np_, vd = pg["bm"]
+            c = self.bm_xy(pg["x"], pg["y"])
+            rr = pg["r"] * k
+            pts = []
+            for i in range(self.PING_SEG):
+                a = 2 * math.pi * i / self.PING_SEG
+                pts.append((max(-H, min(H, c[0] + math.cos(a) * rr)), max(-H, min(H, c[1] + math.sin(a) * rr))))
+            self.ping_fill(vd, pts, c)
+            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, now - pg["t0"]))
+        shown = set()
+        for tid, (t, x, y) in getattr(self, "intel_seen", {}).items():
+            tg = w.players.get(tid)
+            age = now - t
+            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
+                continue
+            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
+            q = self.bm_xy(*((tg.x, tg.y) if live else (x, y)))
+            n = self.bm_dots.get(tid)
+            if n is None:
+                n = self.bm_dots[tid] = self.bm_dot_factory(0.016, (1.0, 0.2, 0.15, 1))
+            n.show()
+            n.setPos(q[0], 0, q[1])
+            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
+            shown.add(tid)
+        for tid, n in self.bm_dots.items():
+            if tid not in shown:
+                n.hide()
+
+    def update_noise_debug(self):
+        """NOISE_DEBUG: Lärmradien der letzten Geräusche als Ringe am Boden (nur wo die Welt simuliert wird)."""
+        if not hasattr(self, "noise_rings"):
+            m = Mesh(lit=False)
+            for i in range(40):
+                a0, a1 = math.tau * i / 40, math.tau * (i + 1) / 40
+                pp = lambda r, a: (math.cos(a) * r, math.sin(a) * r, 0.0)      # noqa: E731
+                m.tri(pp(0.97, a0), pp(1.0, a0), pp(1.0, a1), (1.0, 0.9, 0.2), ref=(0, 0, -5))
+                m.tri(pp(0.97, a0), pp(1.0, a1), pp(0.97, a1), (1.0, 0.9, 0.2), ref=(0, 0, -5))
+            self.noise_ring_np = NodePath(m.node("laerm"))
+            self.noise_rings = []
+        log = self.world.noise_log[-30:]
+        while len(self.noise_rings) < len(log):
+            n = self.noise_ring_np.copyTo(self.render)
+            n.setTwoSided(True)
+            n.setFogOff()
+            n.setLightOff()
+            self.noise_rings.append(n)
+        for i, n in enumerate(self.noise_rings):
+            if i < len(log):
+                x, y, r, _t = log[i]
+                n.setPos(x, y, self.world.height(x, y) + 0.15)
+                n.setScale(r)
+                n.show()
+            else:
+                n.hide()
+
+    def update_toma(self, dt):
+        """Säule am aktiven Ort zeigen (fährt hoch, Knopf leuchtet) bzw. die benutzte versinken lassen;
+        Rakete im Anflug mit Rauchschweif und Ton. Sichtbar nur in Sichtweite (TOMA_SEE_R) - auch beim Host."""
+        if getattr(self, "toma_np", None) is None:
+            return
+        w, pl = self.world, self.player
+        cam = (pl.x, pl.y)
+
+        def visible(i):
+            if not 0 <= i < len(w.toma_spots):
+                return False
+            x, y, _z, _h = w.toma_spots[i]
+            return math.hypot(cam[0] - x, cam[1] - y) <= TOMA_SEE_R
+
+        i_up = w.toma_idx if visible(w.toma_idx) else -1
+        i_sink = w.toma_sink_idx if (i_up < 0 and visible(w.toma_sink_idx)) else -1
+        shown = i_up if i_up >= 0 else i_sink
+        if (i_up, i_sink) != self.toma_seen:
+            prev = self.toma_seen
+            self.toma_seen = (i_up, i_sink)
+            if shown >= 0:
+                x, y, z, h = w.toma_spots[shown]
+                self.toma_np.setPos(x, y, z)
+                self.toma_np.setH(h)
+                self.toma_np.show()
+                if i_up >= 0 and w.toma_age < 1.0:
+                    self.sfx.play("servo", (x, y, z + 1.0), 1.0, 1.0)        # fährt hoch
+                elif i_sink >= 0 and prev[0] == i_sink:
+                    self.sfx.play("servo", (x, y, z + 1.0), 0.9, 0.6)        # versinkt (tiefer, langsamer)
+            else:
+                self.toma_np.hide()
+        if shown >= 0:
+            if i_up >= 0:
+                u = max(0.0, min(1.0, w.toma_age / TOMA_RISE_T))
+                hgt = u * u * (3 - 2 * u)
+                ready = w.toma_age >= TOMA_RISE_T
+                blink = 0.6 + 0.4 * math.sin(time.time() * 6.0)
+                self.toma_knob.setColorScale(1.0, 1.0, 1.0, 1.0) if ready else self.toma_knob.setColorScale(
+                    0.5, 0.5, 0.5, 1.0)
+                self.toma_beam.show()
+                self.toma_beam.setColorScale(1, 1, 1, (0.3 + 0.7 * blink) * hgt if ready else 0.0)
+            else:
+                u = max(0.0, min(1.0, w.toma_sink_t / TOMA_SINK_T))
+                hgt = 1.0 - u * u * (3 - 2 * u)
+                self.toma_knob.setColorScale(0.25, 0.25, 0.25, 1.0)              # unbrauchbar: Knopf aus
+                self.toma_beam.hide()
+            self.toma_col.setSz(max(0.02, hgt))
+        self.update_toma_rocket(dt)
 
     def do_melee(self):
         """F ohne etwas Benutzbares: sofort ein Schlag mit der Nahkampfwaffe (Sinans Schnellschlag). Ist sie noch
@@ -122961,10 +120950,10 @@ class Game(ShowBase):
         t.heading, t.pitch = pl.heading % 360.0, pl.pitch
 
     def fly_heli_ctl(self, hc, inp, dt, trigger, ads):
-        """Helikopter steuern: WASD fliegen, Leertaste steigen, Shift sinken, Maus zielt (der Rumpf dreht nach),
-        Linke Maus Minigun, Rechte Maus Rakete."""
+        """Helikopter steuern: WASD fliegen, Leertaste steigen, Strg sinken (10a: wie das Jetpack; vorher Shift),
+        Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete."""
         pl, world = self.player, self.world
-        up = (1 if inp.jump else 0) - (1 if inp.run else 0)
+        up = (1 if inp.jump else 0) - (1 if getattr(inp, "duck", False) else 0)
         pl.pitch = clampf(pl.pitch, -75.0, 25.0)
         fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
         if self.net_mode != "client" and hc.impact > 0:       # Einzelspiel/Host: Aufprall gleich auswerten
@@ -122983,62 +120972,6 @@ class Game(ShowBase):
             else:
                 world.heli_rocket(pl)
         self.heli_ads = bool(ads)
-
-    def held_slot(self):
-        """Slot (0/1) der Waffe in der Hand."""
-        pl = self.player
-        for s in (0, 1):
-            if pl.slots[s] == pl.cur:
-                return s
-        return 0
-
-    def equip_loot(self, wi, atts=None, scope=-1):
-        """Kistenwaffe erhalten: sie ersetzt die Waffe in der Hand (eine bereits getragene Kistenwaffe
-        wird stattdessen ersetzt). Das Gadget bleibt im dritten Slot."""
-        pl = self.player
-        s = next((i for i in (0, 1) if pl.loot >= 0 and pl.slots[i] == pl.loot), self.held_slot())
-        old = pl.slots[s]
-        pl.slots[s] = wi
-        pl.slots[1 - s] = pl.slots[1 - s] if pl.slots[1 - s] != wi else None
-        pl.loot = wi
-        self.gun_extras(old, wi, atts, scope)
-        pl.guns[wi] = GunState(pl.wp(wi))
-        pl.gad_out = False
-        self.sel_req = wi
-
-    def equip_drop(self, wi, atts=None, scope=-1):
-        """Aufgehobene Waffe: tauscht mit der Waffe in der Hand (mit frischer Munition). atts/scope: ihre Aufsätze."""
-        pl = self.player
-        if WEAPONS[wi].kind == "loot":
-            self.equip_loot(wi, atts, scope)
-            return
-        s = self.held_slot()
-        old = pl.slots[s]
-        if pl.loot >= 0 and pl.slots[s] == pl.loot:
-            pl.loot = -1
-        pl.slots[s] = wi
-        if pl.slots[1 - s] == wi:
-            pl.slots[1 - s] = None
-        self.gun_extras(old, wi, atts, scope)
-        pl.guns[wi] = GunState(pl.wp(wi))
-        pl.gad_out = False
-        self.sel_req = wi
-
-    def gun_extras(self, old, wi, atts, scope):
-        """Waffe gewechselt: die Aufsätze der abgegebenen Waffe gehen mit ihr, die der neuen (vom Boden) kommen dazu."""
-        pl = self.player
-        if old is not None and old != wi and old not in pl.slots:
-            pl.att.pop(old, None)
-            pl.scopes.pop(old, None)
-        a = att_valid(atts)
-        if a is not None and a != ATT_NONE and att_fits(wi):
-            pl.att[wi] = a
-        else:
-            pl.att.pop(wi, None)
-        if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
-            pl.scopes[wi] = scope
-        else:
-            pl.scopes.pop(wi, None)
 
     def my_vehicle(self):
         pl = self.player
@@ -123060,8 +120993,11 @@ class Game(ShowBase):
             self.sp_pitch.kick(-90)
 
     def set_capture(self, on):
+        if on:
+            self.lock_trigger()
         self.captured = on
         self.mouse_prev = None
+        self.warp_ref = None
         if not hasattr(self.win, "requestProperties"):   # z.B. Offscreen-Test
             return
         props = WindowProperties()
@@ -123076,24 +121012,28 @@ class Game(ShowBase):
             self.set_capture(not self.captured)
 
     def recenter(self):
-        self.warp_frames = 0
+        self.warp_ref = None
         if self.win.movePointer(0, self.win.getXSize() // 2, self.win.getYSize() // 2):
             self.warp_pending = True
+            self.warp_frames = 0
 
     def mouse_look(self):
-        """Liest die Mausbewegung als Differenz zur letzten Position und wendet sie
-        an - unabhängig von Tasten und Bewegung. Der Zeiger wird nur dann zur
-        Fenstermitte zurückgesetzt, wenn er den mittleren Bereich verlässt (nicht
-        mehr in jedem Frame), und veraltete Zeigerwerte direkt nach dem
-        Zurücksetzen werden ignoriert. Rückgabe: (dx, dy) in Pixeln."""
+        """Liest die Mausbewegung als Differenz zur letzten Position und wendet sie an. Verlässt der Zeiger den
+        mittleren Bereich, wird er zur Fenstermitte zurückgesetzt. Das Zurücksetzen kommt beim System oft erst
+        ein paar Frames später an (vor allem bei niedriger Bildrate) - bis dahin meldet es weiter die alte
+        Position. Jede Meldung danach wird deshalb auf zwei Arten gedeutet: "noch nicht zurückgesetzt"
+        (Bewegung ab der letzten gezählten Position) oder "schon zurückgesetzt" (Bewegung ab der Mitte). Die
+        kleinere Bewegung ist die echte - so wird jede Mausbewegung genau einmal gezählt: kein Einfrieren
+        (frühere Version) und kein Überdrehen (doppelt gezählte Bewegung). Rückgabe: (dx, dy) in Pixeln."""
         if not self.captured or not hasattr(self.win, "getPointer"):
             return 0, 0
         if not self.win.getProperties().getForeground():
-            self.mouse_prev = None
+            self.mouse_prev, self.warp_ref = None, None
             self.had_focus = False
             return 0, 0
         if not getattr(self, "had_focus", True):      # Fenster hat den Fokus zurück: Maus neu einfangen
             self.had_focus = True
+            self.lock_trigger()                         # 7a: der Klick ins Fenster schiesst nicht
             self.recenter()
             self.mouse_prev = None
             self.warp_frames = 0
@@ -123103,27 +121043,38 @@ class Game(ShowBase):
         sx, sy = self.win.getXSize(), self.win.getYSize()
         cx, cy = sx // 2, sy // 2
         outside = abs(x - cx) > sx * 0.25 or abs(y - cy) > sy * 0.25
-        if self.warp_pending:
-            if outside:                    # System meldet noch die alte Position
-                self.warp_frames = getattr(self, "warp_frames", 0) + 1
-                if self.warp_frames % 4 == 0:        # Windows hat das Zurücksetzen verschluckt: erneut versuchen
-                    self.win.movePointer(0, cx, cy)
-                if self.warp_frames > 30:            # nie dauerhaft warten, sonst steht die Kamera für immer
-                    self.warp_pending = False
-                    self.mouse_prev = (x, y)
+        if self.warp_pending and self.warp_ref is None:     # Maus gerade eingefangen: auf die Mitte warten
+            self.warp_frames += 1
+            if outside and self.warp_frames <= MOUSE_WARP_GRACE:
                 return 0, 0
             self.warp_frames = 0
             self.warp_pending = False
             self.mouse_prev = (x, y)
             return 0, 0
-        if self.mouse_prev is None:
-            self.mouse_prev = (x, y)
-            return 0, 0
-        dx, dy = x - self.mouse_prev[0], y - self.mouse_prev[1]
+        if self.warp_ref is not None:                        # Zurücksetzen unterwegs
+            rx, ry = self.warp_ref
+            m1 = (x - rx, y - ry)                            # noch alte Zeigerposition
+            m2 = (x - cx, y - cy)                            # schon in der Mitte angekommen
+            self.warp_frames += 1
+            if m2[0] * m2[0] + m2[1] * m2[1] <= m1[0] * m1[0] + m1[1] * m1[1]:
+                dx, dy = m2
+                self.warp_ref = None
+                self.warp_pending = False
+            else:
+                dx, dy = m1
+                self.warp_ref = (x, y)
+                if self.warp_frames >= MOUSE_WARP_RETRY and self.win.movePointer(0, cx, cy):
+                    self.warp_frames = 0                     # kam nicht an: nochmal
+        else:
+            if self.mouse_prev is None:
+                self.mouse_prev = (x, y)
+                return 0, 0
+            dx, dy = x - self.mouse_prev[0], y - self.mouse_prev[1]
         self.mouse_prev = (x, y)
-        if outside and self.win.movePointer(0, cx, cy):
+        if self.warp_ref is None and outside and self.win.movePointer(0, cx, cy):
+            self.warp_ref = (x, y)                           # bis hierher ist alles gezählt
             self.warp_pending = True
-            self.mouse_prev = (cx, cy)
+            self.warp_frames = 0
         if dx or dy:
             pl = self.player
             sens = MOUSE_SENS * self.sens_mult * self.fov_cur / self.fov_base      # beim Zoomen feinfühliger
@@ -123391,5276 +121342,6 @@ class Game(ShowBase):
         for i, wn in enumerate(self.water_nps):
             wn.setTexOffset(TextureStage.getDefault(), t * (0.021 if i == 0 else -0.016),
                             t * (0.012 if i == 0 else 0.019))
-        self.update_wind(t, (self.player.x, self.player.y))
-        self.update_shadows()
-        if self.sun_np is not None:
-            pl = self.player
-            self.sun_np.setPos(pl.x + SUN[0] * 100, pl.y + SUN[1] * 100, pl.z + SUN[2] * 100)
-            self.sun_np.lookAt(pl.x, pl.y, pl.z)
-
-    WIND_AMP = {"tree": 0.022, "bush": 0.03, "reed": 0.12, "grass": 0.14}
-
-    def update_wind(self, t, cp):
-        """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe)."""
-        for snp, spd, h0, sx_, sy_, roll in self.spin_nodes:           # Radarantennen und Muehlenfluegel drehen sich immer (auch weit weg)
-            if roll:
-                snp.setHpr(h0, 0.0, (t * spd) % 360.0)                 # Muehlenfluegel: Welle zeigt nach vorn (+y), Drehung um sie
-            else:
-                snp.setH(h0 + (t * spd) % 360.0)
-        for qx, qy, qz, puffs in getattr(self, "smoke", ()):            # Schornsteinrauch: steigt auf, weht mit dem Wind, wird grösser und verblasst
-            if abs(qx - cp[0]) > 110 or abs(qy - cp[1]) > 110:
-                for pn in puffs:
-                    pn.hide()
-                continue
-            for k, pn in enumerate(puffs):
-                ph = (t / SMOKE_PERIOD + k / len(puffs) + (qx + qy) * 0.37) % 1.0
-                a = min(1.0, ph * 6.0) * (1.0 - ph) ** 1.1 * 0.92
-                drift = 9.0 * ph * ph
-                pn.show()
-                pn.setPos(qx + 0.82 * drift + 0.25 * math.sin(ph * 9.0 + qx), qy + 0.57 * drift + 0.25 * math.cos(ph * 7.0 + qy), qz + 0.2 + 16.0 * ph)
-                pn.setScale(0.7 + 3.4 * ph)
-                pn.setColorScale(0.09, 0.09, 0.09, a)
-        if not self.wind_nodes and not self.flag_nodes:
-            return
-        cx, cy = cp[0], cp[1]
-        wd = math.radians(35.0)
-        dx, dy = math.cos(wd), math.sin(wd)
-        for wnp, x, y, zref, kind in self.wind_nodes:
-            if abs(x - cx) > 150 or abs(y - cy) > 150:
-                continue
-            ph = (x + y) * 0.045
-            g = (0.55 + 0.30 * math.sin(t * 0.9 + ph) + 0.22 * math.sin(t * 2.3 + ph * 1.7)
-                 + 0.12 * math.sin(t * 5.1 + ph * 0.6))
-            a = g * self.WIND_AMP.get(kind, 0.03)
-            sx, sy = dx * a, dy * a
-            wnp.setShear(0, sx, sy)
-            wnp.setPos(-sx * zref, -sy * zref, 0)
-        for fnp, x, y, ang in self.flag_nodes:
-            if abs(x - cx) > 200 or abs(y - cy) > 200:
-                continue
-            ph = (x + y) * 0.05
-            fnp.setH(ang + 10.0 * math.sin(t * 2.1 + ph) + 5.0 * math.sin(t * 4.3 + ph * 1.3))
-
-    def update_shadows(self):
-        """Runde bzw. längliche weiche Schatten unter Figuren, Fahrzeugen und Helikoptern."""
-        world = self.world
-        if not hasattr(self, "shadow_tpl"):
-            self.shadow_tpl = self.flat_card("schatten", "blob")
-            self.shadow_tpl.setTransparency(TransparencyAttrib.MAlpha)
-            self.shadow_tpl.setDepthWrite(False)
-            self.shadow_tpl.setLightOff()
-            self.shadow_tpl.setBin("transparent", 2)
-            self.shadow_tpl.setDepthOffset(2)
-        seen = set()
-
-        def put(key, x, y, z, rx, ry, heading, alpha, fly=False):
-            gz = world.floor_at(x, y, z + (0.3 if not fly else 0.0))
-            if fly:
-                gz = max(gz, world.ground_for(x, y, z))
-                alpha *= max(0.0, 1.0 - (z - gz) / 28.0)
-                rx *= 1.0 + (z - gz) * 0.03
-                ry *= 1.0 + (z - gz) * 0.03
-            if alpha < 0.03:
-                return
-            np = self.shadows.get(key)
-            if np is None:
-                np = self.shadows[key] = self.shadow_tpl.copyTo(self.render)
-            seen.add(key)
-            np.show()
-            np.setPos(x - SUN[0] * 0.25, y - SUN[1] * 0.25, gz + 0.09)
-            np.setScale(rx, ry, 1)
-            np.setH(heading)
-            np.setColor(0, 0, 0, alpha)
-
-        for m in self.mob_views:
-            if m.state != "dead":
-                put(("m", id(m)), m.x, m.y, m.z, 0.62 * m.scale, 0.62 * m.scale, 0.0, 0.5)
-        for pid in self.player_views:
-            p = world.players.get(pid)
-            if p is not None and p.hp > 0 and p.heli < 0 and p.vehicle < 0:
-                put(("p", pid), p.x, p.y, p.z, 0.6, 0.6, 0.0, 0.5)
-        for v in self.veh_views:
-            put(("v", id(v)), v.x, v.y, v.z, 1.25, 2.1, v.heading, 0.55)
-        for q in self.heli_views:
-            put(("h", id(q)), q.x, q.y, q.z, 1.8, 3.2, q.heading, 0.5, fly=True)
-        for k in [k for k in self.shadows if k not in seen]:
-            self.shadows.pop(k).removeNode()
-
-    def place_camera(self):
-        pl = self.player
-        if getattr(pl, "prespawn", False) and pl.hp <= 0:       # Ausrüstungsmenü vor dem Spawn: Blick von vorne über die Karte
-            cx, cy = CENTER, CENTER - WORLD * 0.46
-            gz = max(self.world.height(cx, cy), self.world.height(CENTER, CENTER))
-            cz = gz + WORLD * 0.16 + 12.0
-            pit = -math.degrees(math.atan2(cz - gz - 6.0, WORLD * 0.46))
-            self.camera.setPos(cx, cy, cz)
-            self.camera.setHpr(0.0, pit, 0.0)
-            return
-        bob = math.sin(pl.phase) * 0.045 if pl.moving and pl.on_ground else 0.0
-        t = self.death_t if hasattr(self, "death_t") else 0.0
-        eye = pl.z + (eye_h(pl) + bob) * (1 - t) + 0.35 * t
-        pitch = pl.pitch * (1 - t) + (self.sp_cam.x if hasattr(self, "sp_cam") else 0.0)
-        roll = (self.sp_hurt.x if hasattr(self, "sp_hurt") else 0.0) + 70.0 * t
-        roll += pl.lean / LEAN_MAX * LEAN_ROLL * (1 - t)          # Lehnen: Kopf kippt zur Seite
-        hc = self.my_heli() if pl.hp > 0 else None
-        if hc is not None:                                        # Verfolgerkamera: Blick = Zielrichtung, Waffen schiessen entlang der Sichtlinie
-            hr, pr = math.radians(pl.heading), math.radians(pitch)
-            fx, fy, fz = -math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr)
-            cx, cy, cz = hc.x - fx * 14.0, hc.y - fy * 14.0, hc.z + 2.5 - fz * 14.0
-            cz = max(cz, self.world.height(cx, cy, cz) + 0.8)
-            self.camera.setPos(cx, cy, cz)
-            self.camera.setHpr(pl.heading, pitch, roll + hc.roll * 0.2)
-            self.cam_state = (cx, cy, cz, pl.heading, pitch, roll + hc.roll * 0.2)
-            return
-        tur = self.my_turret() if pl.hp > 0 else None
-        if tur is not None:                                       # hinter dem Rohr
-            hr, pr = math.radians(pl.heading), math.radians(pitch)
-            fx, fy = -math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr)
-            dn = clampf(-pitch, 0.0, 65.0) / 65.0               # beim Blick nach unten höher und weiter hinten
-            self.camera.setPos(tur.x - fx * (0.15 + 0.6 * dn), tur.y - fy * (0.15 + 0.6 * dn), tur.z + 0.55 + 0.6 * dn)
-            self.camera.setHpr(pl.heading, pitch, roll * 0.3)
-            return
-        veh = self.my_vehicle() if pl.hp > 0 else None
-        if veh is not None:                                       # Verfolgerkamera hinter dem Wagen
-            hr, pr = math.radians(pl.heading), math.radians(pitch)
-            fx, fy, fz = -math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr)
-            cx, cy, cz = veh.x - fx * 7.0, veh.y - fy * 7.0, veh.z + 2.2 - fz * 7.0
-            cz = max(cz, self.world.height(cx, cy, cz) + 0.6)
-            self.camera.setPos(cx, cy, cz)
-            self.camera.setHpr(pl.heading, pitch, roll)
-            return
-        self.camera.setPos(pl.x, pl.y, eye)
-        self.camera.setHpr(pl.heading, pitch, roll)
-
-    def update_task(self, task):
-        dt = min(globalClock.getDt(), 0.1)  # noqa: F821  (von Panda3D bereitgestellt)
-        self.sfx.menu_music(dt, self.mode == "menu")
-        if self.mode == "menu":
-            self.menu_task(dt)
-            return task.cont
-        mw = self.mouseWatcherNode
-        if mw is None:
-            return task.cont
-        if self.quit_box is not None:
-            self.update_hover()
-            if self.slider_drag:
-                self.slider_follow()
-
-        def down(btn):
-            return mw.is_button_down(btn)
-
-        k = KeyboardButton.ascii_key
-        trig = down(MouseButton.one())
-        edge = trig and not self.prev_trig
-        self.prev_trig = trig
-        if getattr(self, "fire_lock", False):  # nach dem Klick auf 'Spawn' / 'Spiel starten': erst Maustaste loslassen
-            if trig:
-                trig = edge = False
-            else:
-                self.fire_lock = False
-        if getattr(self, "end", None) is not None:     # Rundenendmenü: Maus bleibt frei, kein Schiessen
-            trig = edge = False
-            if self.captured and self.quit_box is None:
-                self.set_capture(False)
-        if self.quit_box is not None or getattr(self, "insp_on", False):   # Abfrage/Inspektion: kein Schuss, kein Einfangen
-            trig = edge = False
-        elif not self.captured and edge and not self.dead_free:      # Klick fängt die Maus wieder ein
-            self.set_capture(True)
-            trig = edge = False
-        elif not self.captured:
-            trig = edge = False
-        inp = SimpleNamespace(
-            forward=down(k("w")) - down(k("s")), strafe=down(k("d")) - down(k("a")),
-            run=down(KeyboardButton.shift()), jump=down(KeyboardButton.space()),
-            turn=down(KeyboardButton.left()) - down(KeyboardButton.right()),
-            look=down(KeyboardButton.up()) - down(KeyboardButton.down()),
-            lean=down(k("e")) - down(k("q")),
-            duck=down(KeyboardButton.control()) or self.duck_lock,
-            trigger=trig, edge=edge, ads=down(MouseButton.three()) and self.captured,
-            reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
-            throw=self.throw_req, mdx=0, mdy=0)
-        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])))   # G halten = Wurf aufladen, Loslassen wirft
-        if self.quit_box is not None:
-            inp = SimpleNamespace(forward=0, strafe=0, run=False, jump=False, turn=0, look=0, lean=0,
-                                  duck=False, trigger=False, edge=False, ads=False, reload=False, select=None,
-                                  use=False, alt=False, throw=False, mdx=0, mdy=0)
-        self.reload_req = False
-        self.use_req = False
-        self.alt_req = False
-        self.throw_req = False
-        self.sel_req = None
-        inp.mdx, inp.mdy = self.mouse_look()
-        self.tick(dt, inp)
-        return task.cont
-
-    def tick(self, dt, inp):
-        """Ein Spielschritt (Logik + Darstellung). Getrennt von der Eingabe,
-        damit man ihn auch ohne Fenster testen kann."""
-        pl, world = self.player, self.world
-        if self.net_mode == "client" and getattr(pl, "shock_cd", 0.0) > 0:
-            pl.shock_cd = max(0.0, pl.shock_cd - dt)          # beim Host zählt die Welt
-        if self.net_mode == "client":                         # Essen, Pfannen-Sperre, verstärkte Fähigkeiten
-            tick_melee_timers(pl, dt)
-            pl.eat_t = max(0.0, pl.eat_t - dt)
-            if pl.hp <= 0:
-                pl.eat_t, pl.slam_pending, pl.leap_t = 0.0, False, 0.0
-        nsub = max(1, int(math.ceil(dt / 0.034)))
-        dead = pl.hp <= 0
-        if getattr(pl, "stun_t", 0.0) > 0 and not dead:   # betäubt (Drohne): nicht bewegen, schiessen, steuern;
-            if self.net_mode == "client":                 # umschauen (Maus/Pfeiltasten) geht
-                pl.stun_t = max(0.0, pl.stun_t - dt)
-            inp = SimpleNamespace(**vars(inp))
-            inp.forward = inp.strafe = inp.lean = 0
-            inp.run = inp.jump = inp.trigger = inp.edge = inp.ads = inp.reload = False
-            inp.use = inp.alt = inp.throw = False
-            inp.select = None
-        over = world.phase != "play"              # Rundenende: Rangliste, kein Schiessen mehr
-        hold_key = False
-        self.hold_shown = False
-        if dead:
-            forward = strafe = 0
-            run = jump = trigger = edge = reload_req = ads = False
-            select = None
-        else:
-            forward, strafe, run, jump = inp.forward, inp.strafe, inp.run, inp.jump
-            trigger, edge, reload_req, ads, select = inp.trigger, inp.edge, inp.reload, inp.ads, inp.select
-            hold_key = self.hold_shown = bool(run)                 # Shift: im Sniper-Visier Luft anhalten
-            if ads and self.cur_sight() == "sniper":
-                run = False                                        # ... und nicht rennen
-            if over:
-                trigger = edge = reload_req = ads = False
-        if not dead:                                  # Tastenflanken für Dash (Shift) und Doppelsprung (Leertaste)
-            pl.run_edge = pl.run_edge or (bool(run) and not getattr(self, "prev_run", False))
-            pl.jump_edge = pl.jump_edge or (bool(jump) and not getattr(self, "prev_jump", False))
-        self.prev_run, self.prev_jump = bool(run), bool(jump)
-        self.run_now, self.key_turn = bool(run), inp.turn
-        self.trig_now = bool(trigger)
-        if dead or over_or_driving(self):
-            self.duck_lock = False
-        if dead:
-            pl.gad_out = False
-        pl.heading += inp.turn * KEY_TURN * dt
-        pl.pitch = clampf(pl.pitch + inp.look * KEY_TURN * 0.6 * dt, -85.0, 85.0)
-        pl.gren_cd = max(0.0, pl.gren_cd - dt)
-        world.sync_turret_pos()
-        veh = None if dead else self.my_vehicle()
-        hc = None if dead else self.my_heli()
-        tur = None if dead else self.my_turret()
-        if tur is None:
-            pl.trig = False
-        seated = veh is not None or hc is not None or tur is not None
-        if seated and not self.was_seated:
-            self.pre_seat = (pl.cur, pl.gad_out)                 # Waffe merken, die beim Einsteigen in der Hand war
-        elif self.was_seated and not seated and not dead and self.pre_seat is not None:
-            cur0, gad0 = self.pre_seat                           # ... und beim Aussteigen wieder in die Hand nehmen
-            if cur0 in pl.slots or WEAPONS[cur0].kind == "loot":
-                pl.cur = pl.switch_to = cur0
-                pl.switch_t = pl.reload_t = 0.0
-            pl.gad_out = bool(gad0)
-            self.pre_seat = None
-        self.was_seated = seated
-        pl.duck = bool(getattr(inp, "duck", False)) and not dead and veh is None and hc is None and tur is None
-        update_crouch(pl, dt, world)
-        if hc is None:
-            self.heli_ads = True               # erst nach neuem Drücken der rechten Maustaste feuert die Rakete
-        if hc is not None:                     # im Cockpit
-            self.fly_heli_ctl(hc, inp, dt, trigger and not over, ads and not over)
-        elif tur is not None:                  # am Geschütz (Turm, Flak, Wagen-Heck)
-            self.operate_turret(tur, trigger and not over, ads)
-        elif veh is not None:                  # am Steuer: das Fahrzeug bewegt die Figur
-            for _ in range(nsub):              # bei niedriger Bildrate in kleinen Schritten (keine Tunnel, kein Zeitlupen-Auto)
-                if veh.stall_t > 0:            # Drohne hat den Motor lahmgelegt: kein Gas, Lenkung schwach
-                    drive(veh, 0, strafe * VEH_STALL_STEER, jump, dt / nsub, world)
-                else:
-                    drive(veh, forward, strafe, jump, dt / nsub, world)
-            pl.x, pl.y, pl.z, pl.vz, pl.on_ground = veh.x, veh.y, veh.z + 0.3, 0.0, True
-            pl.moving, pl.ads = False, False
-            update_lean(pl, 0, dt * 4, world)  # Lehnen beenden
-        else:
-            for _ in range(nsub):
-                step(pl, forward, strafe, run, jump, dt / nsub, world)
-            self.apply_fall(pl)
-            if not dead:
-                update_lean(pl, getattr(inp, "lean", 0) if not over else 0, dt, world)
-            elif pl.lean:
-                update_lean(pl, 0, dt, world)
-        if not dead:
-            if veh is None and hc is None and tur is None:
-                if select == MELEE_SEL:
-                    pl.gad_out = False                         # Nahkampfwaffe ziehen: Gadget wegstecken
-                if self.gadget_hand(pl, ads, edge, select, over):
-                    trigger = edge = reload_req = ads = False
-                self.scope_breath(pl, dt, hold_key and not over)
-                update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select)
-                if getattr(inp, "throw", False) and not over:
-                    self.throw_grenade()
-            if getattr(self, "quick_melee", False) and pl.swing_t <= 0:   # Schnellschlag (F) vorbei: wieder wegstecken
-                self.quick_melee = False
-                if pl.melee_out and pl.switch_t <= 0:
-                    pl.melee_out = False
-            if pl.swing_t > getattr(self, "prev_swing", 0.0) + 0.01:     # eigener Schlag: Ton
-                self.sfx.melee(self.my_id, False, 0.85 if pl.melee >= 3 else 1.0)
-                self.noise_wave(pl.x, pl.y, NOISE_MELEE)
-            self.prev_swing = pl.swing_t
-            if veh is not None or hc is not None or tur is not None:
-                pl.gad_out = False
-                self.prev_gad_ads = bool(ads)
-            if getattr(inp, "use", False) and not over:
-                self.use_object()
-            if getattr(inp, "alt", False) and not over:
-                if world.alt_seat(pl) is not None or seated:
-                    self.use_object(True)                          # V am Wagen: Schützensitz
-                else:
-                    self.toggle_fire_mode()                        # sonst: Auto/Semi beim Sturmgewehr
-        if self.net_mode == "client":
-            self.tick_client(dt)
-        else:                              # Einzelspiel oder Host: die Welt läuft hier
-            if self.host is not None:
-                self.host.poll(dt)         # Eingaben und Schüsse der Mitspieler
-            for _ in range(nsub):
-                world.update(dt / nsub)
-            if self.host is not None:
-                self.host.queue_events(world.events)
-                self.host.send(dt)         # Snapshot an alle Mitspieler
-        self.handle_events()
-        self.update_views(dt, inp.mdx, inp.mdy)
-
-    def toggle_fire_mode(self):
-        """V: Sturmgewehr zwischen Automatik und Einzelfeuer umschalten (kleine Wackelbewegung der Waffe)."""
-        pl = self.player
-        if pl.hp <= 0 or pl.cur not in SELECTIVE_FIRE or pl.switch_t > 0 or pl.reload_t > 0 or pl.gad_out:
-            return
-        g = pl.guns[pl.cur]
-        g.semi = not g.semi
-        self.sp_back.kick(0.9)
-        self.sp_pitch.kick(-40)
-        self.sp_roll.kick(18 if g.semi else -18)
-        if self.cur_sight() in ("acog", "sniper") and self.ads_t > 0.85:
-            self.sp_cam.kick(7.0)                    # Waffe ist im Zielfernrohr nicht zu sehen: kleiner Ruck am Bild
-            self.sp_hurt.kick(self.prng.choice((-1, 1)) * 6.0)
-        sfx = getattr(self, "sfx", None)
-        if sfx is not None:
-            try:
-                sfx.ui_click()
-            except Exception:
-                pass
-
-    def scope_breath(self, pl, dt, hold):
-        """Sniper-Visier: Die Waffe schwankt mit der Atmung. Shift hält die Luft an (ruhiges Bild), aber nur einige
-        Sekunden; danach atmet man wieder und muss sich erst erholen. Es gibt dazu absichtlich keine Anzeige."""
-        st = getattr(self, "br", None)
-        if not isinstance(st, dict):
-            st = self.br = dict(t=0.0, air=1.0, lock=False, k=1.0, sc=0.0, dh=0.0, dp=0.0)
-        w = WEAPONS[pl.cur]
-        scoped = pl.hp > 0 and pl.ads and self.cur_sight() == "sniper" and pl.mount < 0 and pl.vehicle < 0 and pl.heli < 0
-        holding = bool(hold and scoped and not st["lock"] and st["air"] > 0.0)
-        sfx = getattr(self, "sfx", None)
-        if holding:
-            if not st.get("was_hold"):                  # Shift gedrückt: einatmen
-                st["hb_next"] = 0.6
-                if sfx is not None:
-                    st["snd_in"] = sfx.play("breath_in", None, 0.45, 1.0)
-            st["air"] = max(0.0, st["air"] - dt / BREATH_HOLD)
-            held = (1.0 - st["air"]) * BREATH_HOLD
-            if held >= st["hb_next"]:                   # Herzschlag setzt nach kurzer Zeit ein und wird schneller
-                f = min(1.0, held / BREATH_HOLD)
-                if sfx is not None:
-                    sfx.play("heartbeat", None, 0.5 + 0.3 * f, 1.0 + 0.3 * f)
-                st["hb_next"] = held + 1.0 / (1.0 + 0.3 * f)
-            if st["air"] <= 0.0:
-                st["lock"] = True                       # nach 2 s ausser Atem: Ton läuft, bis er zu Ende ist
-                st["lock_t"] = st["lock_dur"] = BREATH_OOB_T
-                if sfx is not None:
-                    sfx.play("breath_out", None, 0.5, 1.0)
-        else:
-            if st.get("was_hold") and not st["lock"] and st.get("snd_in") is not None:
-                try:
-                    st["snd_in"].stop()                 # früh losgelassen: Einatmen abbrechen
-                except Exception:
-                    pass
-                st["snd_in"] = None
-            if st["lock"]:
-                st["lock_t"] -= dt
-                st["air"] = min(1.0, 1.0 - max(0.0, st["lock_t"]) / st["lock_dur"])
-                if st["lock_t"] <= 0.0:                 # Ton zu Ende -> Luft anhalten wieder möglich
-                    st["lock"], st["air"] = False, 1.0
-            else:
-                st["air"] = min(1.0, st["air"] + dt / BREATH_REGEN)
-        st["was_hold"] = holding
-        st["t"] += dt
-        st["k"] += ((0.0 if holding else 1.0) - st["k"]) * min(1.0, dt * 7.0)
-        st["sc"] += ((1.0 if scoped else 0.0) - st["sc"]) * min(1.0, dt * 8.0)
-        gasp = 1.0 + (0.5 * (1.0 - st["air"] / BREATH_LOCK_UNTIL) if st["lock"] else 0.0)    # nach Luftnot etwas wilder
-        t = st["t"]
-        size = (w.ads_fov / 14.0) if w.scope else 1.0           # breiteres Sichtfeld (Railgun): grössere Winkel
-        amp = st["k"] * st["sc"] * gasp * size
-        ph = 2 * math.pi * t / BREATH_PERIOD
-        tp = amp * (0.30 * math.sin(ph) + 0.07 * math.sin(2.3 * ph + 1.0))
-        th = amp * (0.17 * math.sin(0.62 * ph + 0.8) + 0.05 * math.sin(1.7 * ph))
-        pl.pitch = clampf(pl.pitch + (tp - st["dp"]), -85.0, 85.0)
-        pl.heading += th - st["dh"]
-        st["dp"], st["dh"] = tp, th
-
-    def apply_fall(self, pl):
-        """Fallschaden aus step() verrechnen: im Einzelspiel/als Host direkt, als Mitspieler beim Host melden."""
-        dmg = getattr(pl, "fall_dmg", 0.0)
-        if dmg <= 0.0:
-            return
-        pl.fall_dmg = 0.0
-        if pl.hp <= 0 or self.world.phase != "play" or pl.protect > 0:
-            return
-        sfx = getattr(self, "sfx", None)
-        if sfx is not None:
-            sfx.play("step_hard", None, 1.0, 0.5)              # dumpfer Aufprall
-        if self.net_mode == "client":
-            if self.client is not None:
-                self.client.send_fall(dmg)
-        else:
-            self.world.damage_player(pl, dmg, -1, WI_FALL)
-
-    # ------------------------------------------------------------ Effekte
-    def add_particle(self, pos, vel, col, size, life, bounce=0.3, spin=0.0, shrink=True):
-        if len(self.parts) > 320:
-            self.parts.pop(0).np.removeNode()
-        np = self.cube_np.instanceTo(self.render)
-        np.setScale(*size) if isinstance(size, tuple) else np.setScale(size)
-        np.setColorScale(col[0], col[1], col[2], 1)
-        np.setPos(*pos)
-        np.setHpr(self.prng.uniform(0, 360), self.prng.uniform(0, 360), self.prng.uniform(0, 360))
-        self.parts.append(Particle(np, pos, vel, life, bounce, spin, shrink))
-
-    def burst(self, pos, kind, d=None):
-        col, n, spd, size = {
-            "ground": ((0.45, 0.36, 0.22), 6, 2.5, 0.05),
-            "rock": ((0.8, 0.8, 0.85), 7, 4.0, 0.035),
-            "tree": ((0.55, 0.38, 0.22), 6, 3.0, 0.05),
-            "water": ((0.75, 0.88, 1.0), 10, 3.5, 0.045),
-            "blood": ((0.75, 0.05, 0.05), 28, 3.6, 0.032),
-            "kill": ((0.7, 0.05, 0.05), 22, 4.0, 0.06),
-            "boom": ((1.0, 0.55, 0.12), 46, 9.0, 0.13),
-        }[kind]
-        r = self.prng
-        for _ in range(n):
-            v = [r.uniform(-1, 1) * spd * 0.6, r.uniform(-1, 1) * spd * 0.6, r.uniform(0.4, 1.0) * spd]
-            if d is not None and kind in ("blood", "kill"):
-                v[0] += d[0] * spd * 0.7
-                v[1] += d[1] * spd * 0.7
-            self.add_particle(pos, v, col, size, r.uniform(0.5, 1.0), bounce=0.3)
-        if kind == "blood" and len(self.fx) < 60:        # leichter roter Sprühnebel
-            self.fx_spawn(self.sphere_np, pos, 0.45, 0.06, 0.24, (0.65, 0.03, 0.03), (0.3, 0.0, 0.0), p=1.0, rise=0.2)
-        if kind in ("ground", "rock", "tree") and r.random() < 0.4:
-            self.smoke_puff(pos, 0.12, 0.7, 0.62 if kind != "tree" else 0.45)     # Staubwölkchen
-
-    def fx_spawn(self, model, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0, fog=True):
-        """Animierten Effekt (Fx) anlegen: Instanz eines Effektmodells, transparent."""
-        if len(self.fx) > 90:
-            self.fx.pop(0).np.removeNode()
-        np = model.instanceTo(self.render)
-        np.setTransparency(TransparencyAttrib.MAlpha)
-        np.setDepthWrite(False)
-        np.setLightOff()
-        if not fog:
-            np.setFogOff()
-        f = Fx(np, pos, life, s0, s1, c0, c1, p, rise)
-        f.update(0.0)
-        self.fx.append(f)
-        return f
-
-    def update_fx(self, dt):
-        keep = []
-        for f in self.fx:
-            if f.update(dt):
-                keep.append(f)
-            else:
-                f.np.removeNode()
-        self.fx = keep
-
-    def smoke_puff(self, pos, size=0.3, life=1.4, grey=0.55):
-        r = self.prng
-        self.fx_spawn(self.sphere_np, (pos[0] + r.uniform(-0.1, 0.1), pos[1] + r.uniform(-0.1, 0.1), pos[2]),
-                      life, size * 0.5, size * 1.8, (grey, grey, grey), (grey * 0.5,) * 3,
-                      p=1.0, rise=r.uniform(0.3, 0.9))
-
-    def explosion_fx(self, pos, rad):
-        """Explosionsanimation: weisser Blitz, Feuerball (gelb -> rot -> schwarz), Druckwelle am Boden,
-        aufsteigender Rauch, Funken und Trümmer."""
-        x, y, z = pos
-        r = self.prng
-        self.fx_spawn(self.sphere_np, pos, 0.16, rad * 0.12, rad * 0.42, (1.0, 1.0, 0.9), (1.0, 0.9, 0.5),
-                      p=0.5, fog=False)
-        self.fx_spawn(self.sphere_np, pos, 0.65, rad * 0.15, rad * 0.62, (1.0, 0.78, 0.22), (0.55, 0.08, 0.03),
-                      p=0.9, fog=False)
-        self.fx_spawn(self.sphere_np, (x, y, z + rad * 0.15), 0.9, rad * 0.1, rad * 0.45,
-                      (0.95, 0.45, 0.1), (0.15, 0.05, 0.04), p=0.8, rise=rad * 0.35, fog=False)
-        gz = self.world.ground_for(x, y, z + 0.5)
-        self.fx_spawn(self.disc_np, (x, y, max(gz, z - 1.5) + 0.12), 0.5, rad * 0.15, rad * 1.25,
-                      (1.0, 0.85, 0.6), (0.7, 0.55, 0.4), p=1.3, fog=False)
-        for _ in range(6):
-            off = (x + r.uniform(-0.3, 0.3) * rad, y + r.uniform(-0.3, 0.3) * rad, z + r.uniform(0, 0.3) * rad)
-            self.fx_spawn(self.sphere_np, off, r.uniform(1.4, 2.4), rad * 0.12, rad * r.uniform(0.35, 0.55),
-                          (0.30, 0.28, 0.27), (0.08, 0.08, 0.08), p=0.8, rise=r.uniform(1.0, 2.2))
-        if z - gz < rad * 1.5:                                        # Brandfleck, der langsam verblasst
-            self.fx_spawn(self.scorch_np, (x, y, gz + 0.1), 16.0, rad * 0.9, rad * 1.0,
-                          (0.04, 0.035, 0.03), (0.04, 0.035, 0.03), p=0.7)
-        self.burst(pos, "boom")
-        for _ in range(10):                                           # Trümmer
-            v = [r.uniform(-1, 1) * 5.0, r.uniform(-1, 1) * 5.0, r.uniform(4.0, 9.0)]
-            self.add_particle(pos, v, (0.2, 0.18, 0.16), r.uniform(0.07, 0.16), r.uniform(0.8, 1.6), 0.35, 1.0)
-
-    def rocket_launch_fx(self):
-        """Rückstrahl hinten und Qualm vorn beim Abfeuern der Rakete (eigene Waffe)."""
-        pl = self.player
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        base = (pl.x, pl.y, pl.z + eye_h(pl) - 0.15)
-        for i in range(7):
-            k = self.prng.uniform(0.2, 1.6)
-            self.smoke_puff((base[0] + f[0] * k, base[1] + f[1] * k, base[2] + f[2] * k), 0.35, 1.2, 0.7)
-        for i in range(5):
-            k = self.prng.uniform(0.6, 1.4)
-            self.smoke_puff((base[0] - f[0] * k, base[1] - f[1] * k, base[2] - f[2] * k + 0.1), 0.3, 1.0, 0.6)
-
-    def eject_shell(self, w):
-        pl = self.player
-        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
-        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
-        r = (math.cos(hr), math.sin(hr), 0.0)
-        rr = self.prng
-        pos = (pl.x + f[0] * 0.35 + r[0] * 0.15, pl.y + f[1] * 0.35 + r[1] * 0.15,
-               pl.z + eye_h(pl) - 0.12 + f[2] * 0.35)
-        sr, su, sf = rr.uniform(1.3, 2.4), rr.uniform(1.4, 2.4), rr.uniform(-0.3, 0.5)
-        vel = (r[0] * sr + f[0] * sf, r[1] * sr + f[1] * sf, su)
-        if w.pellets > 1:
-            self.add_particle(pos, vel, (0.8, 0.12, 0.1), (0.03, 0.03, 0.07), 6.0, 0.35, 1.0, False)
-        else:
-            self.add_particle(pos, vel, (0.95, 0.72, 0.2), (0.015, 0.015, 0.05), 6.0, 0.4, 1.0, False)
-
-    def pname(self, pid):
-        p = self.world.players.get(pid)
-        return p.name if p is not None else "?"
-
-    def feed_add(self, text):
-        self.feed.append((text, time.time()))
-
-    def ctf_event(self, e):
-        """11: CTF-Ereignis ("ctf", Art, Spieler-ID, Flaggen-ID, Team) -> Killfeed, Hinweis, Ton."""
-        if len(e) < 5:
-            return
-        kind, pid, _fid, team = e[1], e[2], e[3], e[4]
-        w = self.world
-        me = pid == self.my_id
-        my_t = w.team_of.get(self.my_id)
-        who = self.pname(pid) if pid is not None and pid >= 0 else ""
-        fl = self.ctf_flag_name(team)
-        col = tuple(min(1.0, c * 1.2 + 0.2) for c in self.ctf_flag_col(team))
-        if kind == "take":
-            self.feed_add(f"{who} hat {fl} genommen")
-            if me:
-                self.toast("DU HAST DIE FLAGGE!  Bring sie in deine Basis", col, 3.0)
-            self.sfx.play("ctf_alert", None, 0.8, 1.0 if me or w.team_of.get(pid) == my_t else 0.85)
-        elif kind == "drop":
-            self.feed_add(f"{who} hat {fl} verloren" if who else f"{fl[0].upper()}{fl[1:]} ist gefallen")
-        elif kind == "ret":
-            self.feed_add(f"{who} hat {fl} zurückgebracht")
-            self.sfx.play("ctf_alert", None, 0.6, 1.25)
-        elif kind == "auto":
-            self.feed_add(f"{fl[0].upper()}{fl[1:]} ist zurück in der Basis")
-        elif kind == "cap":
-            t = team if team in (0, 1) else w.team_of.get(pid)
-            tn = CTF_TEAM_NAMES[t] if t in (0, 1) else "?"
-            self.feed_add(f"{who} punktet für Team {tn}!")
-            tc = tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[t]) if t in (0, 1) else (1, 1, 1)
-            self.toast(f"TEAM {tn.upper()} PUNKTET!   BLAU {w.team_score[0]} : {w.team_score[1]} ROT", tc, 3.0)
-            self.sfx.play("ctf_cap", None, 0.9 if t == my_t else 0.6, 1.0 if t == my_t else 0.8)
-        elif kind == "needhome" and me:
-            self.toast("Eure eigene Flagge muss in der Basis sein!", (1.0, 0.6, 0.4), 2.5)
-        elif kind == "noveh" and me:
-            self.toast("Mit der Flagge kein Fahrzeug", (1.0, 0.6, 0.4), 1.6)
-
-    def handle_events(self):
-        for e in self.world.events:
-            kind = e[0]
-            if kind == "ctf":
-                self.ctf_event(e)
-                continue
-            if kind == "shot":
-                if e[2] == self.my_id:
-                    self.sfx.shot(e[1], e[2])
-                    if 0 <= e[1] < len(WEAPONS):
-                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud)
-                if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse (fremde: siehe 'shotpos')
-                    continue
-                w = WEAPONS[e[1]]
-                rr = self.prng
-                self.sp_back.kick(w.kick_back * 0.2)
-                self.sp_pitch.kick(w.kick_back * 18)
-                self.sp_roll.kick(rr.uniform(-1, 1) * w.kick_back * 6)
-                self.sp_cam.kick(w.kick * 22)
-                self.flash_t = 0.05
-                self.gun_flash[e[1]].setR(rr.uniform(0, 360))
-                self.gun_flash[e[1]].setScale(rr.uniform(0.8, 1.4) * (1.6 if w.pellets > 1 else 1.0))
-                if w.blast_r <= 0:
-                    self.eject_shell(w)
-                else:
-                    self.rocket_launch_fx()
-            elif kind == "impact":
-                self.burst(e[1], e[2])
-            elif kind == "throw":                   # Handgranate geworfen (alle Spieler)
-                pw = self.world.players.get(e[1])
-                if e[1] == self.my_id:
-                    pass                            # eigener Wurf: Ton kam schon beim Klick
-                elif pw is not None:
-                    self.sfx.play("gren_throw", (pw.x, pw.y, pw.z + 1.4), 0.8, 1.0)
-                    v = self.player_views.get(e[1])
-                    if v is not None:
-                        gk_ = e[2] if len(e) > 2 and isinstance(e[2], int) and 0 <= e[2] < len(GREN_KINDS) else 0
-                        v.start_throw(GREN_KINDS[gk_])
-            elif kind == "gren_inv":           # 10e: Granaten-Inventar (Host entscheidet)
-                if e[1] == self.my_id and isinstance(e[2], list):
-                    pl = self.player
-                    pl.gren = {k_: int(n_) for k_, n_ in zip(GREN_KINDS, e[2]) if n_}
-                    gren_fix_sel(pl)
-                    if len(e) > 4 and isinstance(e[3], int) and 0 <= e[3] < len(GREN_KINDS) and e[4] > 0:
-                        k_ = GREN_KINDS[e[3]]
-                        self.toast(f"+{e[4]} {GREN_NAMES[k_]}", tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k_]), 1.6)
-            elif kind == "decoy":              # 10e: Decoy "schiesst" (nur Lärm)
-                pos_ = (e[2], e[3], e[4])
-                clip = ("ar_single", "pistol_single", "smg_single", "shotgun_shot")[e[5] % 4] if len(e) > 5 else "rifle"
-                if clip not in self.sfx.pool:
-                    clip = "rifle"
-                self.sfx.play(clip, pos_, 0.9, self.prng.uniform(0.97, 1.03))
-                self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.3), 0.08, 0.05, 0.25, (1.0, 0.9, 0.5),
-                              (1.0, 0.6, 0.2), p=0.5, fog=False)
-            elif kind == "flash":              # 10e: Blendgranate
-                self.flash_hit(e[1], e[2] if len(e) > 2 else -1)
-            elif kind == "smoke":              # 10e: Rauchgranate zündet (die Wolke baut die Ansicht selbst)
-                self.sfx.play("gas", (e[2], e[3], e[4]), 0.9, 1.2)
-                for _ in range(8):
-                    self.smoke_puff((e[2], e[3], e[4] + 0.2), 0.6, 2.0, 0.72)
-            elif kind == "molo":               # 10e: Molotow zerschellt (e[3]: 1 brennt, 0 im Wasser)
-                pos_ = e[2]
-                self.sfx.play("glass", tuple(pos_), 1.0, self.prng.uniform(0.95, 1.05))
-                if e[3]:
-                    self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.4), 0.5, 0.3, MOLO_R * 0.8,
-                                  (1.0, 0.75, 0.25), (0.8, 0.25, 0.05), p=1.0, fog=False)
-                else:
-                    self.burst((pos_[0], pos_[1], pos_[2] + 0.05), "water")
-            elif kind == "flare":              # 10e: Airdrop-Fackel brennt
-                self.sfx.play("pin", (e[2], e[3], e[4]), 0.9, 0.6)
-                ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
-                if ad_ is not None and ad_.owner == self.my_id:
-                    self.toast("Airdrop angefordert - Flugzeug im Anflug", (1.0, 0.45, 0.35), 2.5)
-            elif kind == "airland":            # 10e: Kiste gelandet
-                if "thud" in self.sfx.pool:
-                    self.sfx.play("thud", (e[3], e[4], e[5]), 1.0, 0.8)
-                for _ in range(5):
-                    self.smoke_puff((e[3], e[4], e[5] + 0.1), 0.5, 1.4, 0.6)
-            elif kind == "pdrone":             # 10e: eigene Drohne steigt auf
-                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.7, 1.3)
-                if e[1] == self.my_id:
-                    self.toast("Drohne gestartet", (0.85, 0.55, 1.0), 1.5)
-            elif kind == "tempdown":           # 10e: eigene Drohne erlischt
-                for _ in range(8):
-                    self.add_particle((e[2], e[3], e[4]), (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2),
-                                                           self.prng.uniform(0, 3)), (0.85, 0.5, 1.0), 0.04, 0.5, 0.2)
-            elif kind == "explosion":
-                if len(e) > 4 and e[4] == self.my_id:
-                    self.noise_wave(e[1][0], e[1][1], NOISE_EXPLOSION)
-                self.explosion_fx(e[1], e[2])
-                self.sfx.explosion(e[1], e[2], e[3] if len(e) > 3 else None)
-                pl = self.player
-                d = math.dist(e[1], (pl.x, pl.y, pl.z + 1.0))
-                if d < 25:                  # Kamera wackelt bei Explosionen in der Nähe
-                    self.sp_hurt.kick(self.prng.choice((-1, 1)) * (60 - d * 2))
-            elif kind == "mob_hit":
-                self.burst(e[1], "blood", e[2])
-                if e[5] == self.my_id:      # Treffermarker nur für den eigenen Treffer
-                    self.hit_t = 0.14
-                    self.sfx.hitmark()
-                    self.hitmark.setFg((1, 0.85, 0.2, 1) if e[4] else (1, 1, 1, 1))
-                    self.damage_popup(e[6] if len(e) > 6 else 0, e[4])
-            elif kind == "pl_hit":          # Spieler trifft Spieler
-                self.burst(e[1], "blood", e[2])
-                if e[5] == self.my_id:
-                    self.hit_t = 0.14
-                    self.sfx.hitmark()
-                    self.hitmark.setFg((1, 0.85, 0.2, 1) if e[4] else (1, 1, 1, 1))
-                    self.damage_popup(e[6] if len(e) > 6 else 0, e[4])
-            elif kind == "veh_hit":         # eine Waffe hat ein Fahrzeug (Wagen, Heli) getroffen
-                if len(e) >= 3 and e[1] == self.my_id:
-                    self.hit_t = 0.3 if e[2] else 0.14
-                    self.sfx.hitmark()
-                    self.hitmark.setFg((1, 0.15, 0.1, 1) if e[2] else (1, 1, 1, 1))
-            elif kind == "gplace":
-                if e[1] == self.my_id:
-                    self.sfx.play("step_hard", None, 0.9, 1.5)
-            elif kind == "zap":                # Drohne schiesst: Blitz von der Drohne zum Ziel
-                fl = e[4] if len(e) > 4 else 0
-                self.zap_fx(e[1], e[2], bool(e[3]), col=((1.0, 0.72, 0.25) if fl == 2 else (0.85, 0.5, 1.0) if fl
-                                                          else (0.6, 0.9, 1.0)))
-            elif kind == "stun":
-                if e[1] == self.my_id:
-                    pl = self.player
-                    pl.stun_t = max(pl.stun_t, float(e[2]))
-                    pl.ads = False
-                    self.toast(f"BETÄUBT  {float(e[2]):.1f} s", (0.5, 0.75, 1.0), 1.5)
-            elif kind == "stall":              # Drohne hat ein Fahrzeug lahmgelegt
-                mine = (self.world.own_vehicle_id(self.my_id) == e[2] if e[1] == "car"
-                        else self.my_heli() is not None and self.my_heli().id == e[2])
-                if mine:
-                    what = "Motor" if e[1] == "car" else "Antrieb"
-                    self.toast(f"Drohne: {what} ausgefallen!  {float(e[3]):.1f} s", (0.5, 0.75, 1.0), 2.0)
-            elif kind == "slam":               # Koloss-Bodenschlag: Staubwelle, Beben, dumpfer Knall
-                self.slam_fx(e[1], e[2])
-            elif kind == "rockkick":           # Titan reisst einen Brocken aus dem Boden
-                x, y, z = e[1]
-                for _ in range(16):
-                    self.add_particle((x, y, z + 0.3), (self.prng.uniform(-3, 3), self.prng.uniform(-3, 3),
-                                                        self.prng.uniform(3, 8)), (0.42, 0.36, 0.28), 0.14, 1.2, 0.3)
-                for _ in range(4):
-                    self.smoke_puff((x + self.prng.uniform(-1, 1), y + self.prng.uniform(-1, 1), z + 0.4), 0.9, 1.6, 0.5)
-                self.sfx.play("rip", (x, y, z), MOB_VOL["titan_rip"], self.prng.uniform(0.85, 1.0))
-            elif kind == "rockhit":            # Brocken schlägt ein: Staubwelle, Splitter, Beben
-                self.slam_fx(e[1], e[2] * 0.7)
-                for _ in range(14):
-                    self.add_particle(e[1], (self.prng.uniform(-6, 6), self.prng.uniform(-6, 6), self.prng.uniform(2, 7)),
-                                      (0.45, 0.42, 0.38), 0.12, 1.2, 0.3)
-            elif kind == "mob_kill":
-                self.burst(e[1], "kill")
-                if e[2] == self.my_id:
-                    self.hit_t = 0.3
-                    self.sfx.hitmark()
-                    self.hitmark.setFg((1, 0.15, 0.1, 1))
-            elif kind == "reward":          # Munition für den Schützen des Todesschusses
-                if e[1] == self.my_id:
-                    for i_, g in enumerate(self.player.guns):
-                        w = self.player.wp(i_)
-                        g.reserve = min(w.max_reserve, g.reserve + w.pickup)
-            elif kind == "player_hurt":
-                if e[2] == self.my_id:
-                    self.hurt_flash = min(0.75, self.hurt_flash + 0.25 + e[1] * 0.012)
-                    self.sp_hurt.kick(self.prng.choice((-1, 1)) * (25 + e[1] * 1.5))
-            elif kind == "kill":            # (Killer oder -1 = Monster, Opfer, Waffe)
-                victim = self.pname(e[2])
-                wn = weapon_name(e[3])
-                if e[1] < 0 and e[3] == WI_TURRET:
-                    self.feed_add(f"{victim} wurde vom Geschütz erledigt")
-                elif e[1] < 0 and e[3] == WI_TOMAHAWK:
-                    self.feed_add(f"{victim} starb im Tomahawk-Angriff")
-                elif e[1] < 0 and e[3] == WI_FALL:
-                    self.feed_add(f"{victim} ist in den Tod gestürzt")
-                elif e[1] < 0 and e[3] != -1:
-                    self.feed_add(f"{victim} hat sich selbst erledigt  [{wn}]")
-                elif e[1] < 0:
-                    self.feed_add(f"{victim} wurde von einem Monster erledigt")
-                else:
-                    self.feed_add(f"{self.pname(e[1])}  [{wn}]  {victim}")
-                if e[1] == self.my_id:
-                    self.hit_t = 0.3
-                    self.sfx.hitmark()
-                    self.hitmark.setFg((1, 0.15, 0.1, 1))
-            elif kind == "wreload":
-                if e[1] == self.my_id:
-                    if len(e) <= 3:                 # (Echo vom Host ignorieren)
-                        self.sfx.reload(e[2])
-                        if self.net_mode == "client" and self.client is not None and not self.client.lost:
-                            self.client.send_reload(e[2])      # damit der Host (und alle) die Animation sehen
-                else:
-                    v = self.player_views.get(e[1])
-                    if v is not None:
-                        v.start_reload(e[2])
-            elif kind == "shotpos":         # fremder Schuss -> Punkt auf der Minimap
-                if e[1] != self.my_id:
-                    op = self.world.players.get(e[1])
-                    if op is not None:
-                        self.sfx.shot(op.cur, e[1])
-                        v_ = self.player_views.get(e[1])
-                        if v_ is not None:          # Mündungsfeuer und Rückstoss an der fremden Figur
-                            v_.fire(op.cur)
-                    self.pings[e[1]] = (time.time(), e[2], e[3])
-            elif kind == "pickup":
-                if e[1] == self.my_id:
-                    self.equip_drop(e[2], e[3] if len(e) > 3 else None, e[4] if len(e) > 4 else -1)
-                    a_ = att_valid(e[3] if len(e) > 3 else None) or ATT_NONE
-                    names_ = [att_name(i_, v_) for i_, v_ in enumerate(a_) if v_]
-                    self.toast(f"Aufgehoben: {WEAPONS[e[2]].name}" + (f"  ({', '.join(names_)})" if names_ else ""),
-                               (1, 1, 1), 1.8)
-                self.feed_add(f"{self.pname(e[1])} hebt auf: {WEAPONS[e[2]].name}")
-            elif kind == "attgain":            # 7b: Aufsatz aufgehoben - an die Waffe in der Hand oder ins Lager
-                if e[1] == self.my_id:
-                    self.att_notice(*att_give(self.player, e[2], e[3]))
-            elif kind == "lootpop":            # 7b: Beute fliegt aus der Kiste / dem Monster vor den Spieler
-                self.drop_pop[e[2]] = (time.time(), (e[4], e[5], e[6]))
-                self.sfx.play("gren_throw", (e[4], e[5], e[6]), 0.7, 1.35)
-                if e[1] == self.my_id:
-                    ck = e[3] if isinstance(e[3], int) and 0 <= e[3] < len(CRATE_KINDS) else 0
-                    nm = CRATE_NAMES[CRATE_KINDS[ck]]
-                    self.toast(f"{nm[:1].upper()}{nm[1:]} geöffnet - schau es dir an, F nimmt es", (1, 1, 1), 2.0)
-            elif kind == "droplock":           # 7b: Beute gehört noch kurz dem Öffnenden
-                if e[1] == self.my_id:
-                    self.toast(f"Gehört noch {int(math.ceil(e[3]))} s {self.pname(e[2])}", (0.95, 0.85, 0.6), 1.5)
-            elif kind == "titanloot":          # Titan erlegt: goldene Kiste mit Lichtsäule
-                self.feed_add("Der Titan ist gefallen!")
-                self.toast("TITAN BESIEGT - eine goldene Kiste liegt an seiner Stelle", (1.0, 0.82, 0.25), 3.5)
-            elif kind == "venter":
-                if e[1] == self.my_id:
-                    v = self.world.vehicle_by_id(e[2])
-                    if v is not None:
-                        self.player.vehicle = v.id
-                        self.player.heading = v.heading
-                        self.player.pitch = -8.0
-                        v.driver, v.speed = self.my_id, 0.0
-            elif kind == "vexit":
-                if e[1] == self.my_id:
-                    pl = self.player
-                    pl.vehicle = -1
-                    pl.x, pl.y, pl.z, pl.vz = e[2], e[3], e[4], 0.0
-                    pl.lean = pl.lean_x = pl.lean_y = 0.0
-                    pl.duck, pl.crouch = False, 0.0
-                    pl.pitch = 0.0
-            elif kind == "tmount":
-                if e[1] == self.my_id and 0 <= e[2] < len(self.world.turrets):
-                    t = self.world.turrets[e[2]]
-                    pl = self.player
-                    pl.mount = t.id
-                    pl.heading, pl.pitch = t.heading, clampf(t.pitch, t.pmin, t.pmax)
-            elif kind == "tshot":
-                self.sfx.turret(e[1])
-                if self.player.mount == e[1]:
-                    self.sp_cam.kick(0.9)
-                    self.sp_hurt.kick(self.prng.choice((-1, 1)) * 4.0)
-                    tt = next((t for t in self.world.turrets if t.id == e[1]), None)
-                    if tt is not None:                 # eigenes Geschütz feuert: Schallwelle auf der Minimap (wie Waffenschuss)
-                        self.noise_wave(tt.x, tt.y, NOISE_SHOT * 1.2)
-            elif kind == "henter":
-                if e[1] == self.my_id:
-                    q = self.world.heli_by_id(e[2])
-                    if q is not None:
-                        pl = self.player
-                        pl.heli, pl.heading, pl.pitch = q.id, q.heading, 0.0
-                        q.driver, q.speed = self.my_id, 0.0
-            elif kind == "hrk":
-                self.sfx.heli_rocket(e[1])
-                if e[1] == self.my_id:
-                    self.sp_cam.kick(8.0)
-                    self.sp_back.kick(2.0)
-            elif kind == "hboom":
-                self.feed_add("Ein Helikopter wurde zerstört")
-            elif kind == "hreset":
-                self.feed_add("Ein neuer Helikopter steht auf dem Helipad")
-            elif kind == "reload":
-                pass
-            elif kind == "strikeready":
-                self.feed_add("Der Tomahawk ist wieder einsatzbereit")
-            elif kind == "timer":
-                pass                      # kein Eintrag im Ereignis-Feed: die Zeit steht im Hinweis am Zeitwahl-Gerät
-            elif kind == "respawn":
-                if e[1] == self.my_id:
-                    self.apply_respawn(e[2], e[3])
-            elif kind == "strike":
-                self.feed_add(f"{self.pname(e[1])} hat den TOMAHAWK-ANGRIFF gestartet!")
-            elif kind == "tomahawk":
-                tx, ty = (e[1], e[2]) if len(e) >= 3 else (CENTER, CENTER)
-                if self.world.strike_by == self.my_id:
-                    self.noise_wave(tx, ty, NOISE_TOMAHAWK)
-                self.sfx.play("explosion", (tx, ty, 20.0), 1.0, 0.6)
-                pl = self.player
-                d = math.dist((tx, ty), (pl.x, pl.y))
-                if d < 120:                 # gewaltiges Beben
-                    self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
-                    self.sp_cam.kick(10)
-                    self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
-            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen
-                cx_, cy_, cz_ = e[2], e[3], e[4] + 1.0
-                for k_ in range(12):
-                    a_ = k_ * math.tau / 12
-                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * SHOCK_R, cy_ + math.sin(a_) * SHOCK_R,
-                                                  cz_ - 0.6 + 0.4 * math.sin(k_ * 1.7)), True)
-                for k_ in range(36):
-                    a_ = k_ * math.tau / 36
-                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * SHOCK_R * 2.2, math.sin(a_) * SHOCK_R * 2.2, 0.6),
-                                      (0.5, 0.85, 1.0), 0.05, 0.45, 0.0)
-                self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
-                if e[1] == self.my_id:
-                    self.player.shock_cd = SHOCK_CD
-                    self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
-            elif kind == "gdrone":             # 10h: Abwehrdrohne steigt auf
-                self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.6, 1.6)
-                if e[1] == self.my_id:
-                    self.toast("Abwehrdrohne aktiv", (1.0, 0.65, 0.25), 1.5)
-            elif kind == "hcrash":
-                if self.my_heli() is not None and self.my_heli().id == e[1]:
-                    self.toast(f"Harte Landung! ({e[2]} m/s)", (1, 0.6, 0.4), 2.0)
-                    self.hurt_flash = max(self.hurt_flash, 0.5)
-            elif kind == "buff":
-                if e[1] == self.my_id:
-                    pl = self.player
-                    pl.buff, pl.buff_t = e[2], float(e[3])
-                    if len(e) > 4:
-                        pl.max_hp = float(e[4])
-                    self.toast(f"Buff: {buff_text(e[2], pl.max_hp)}  -  {int(e[3])} s",
-                               self.BUFF_LOOK.get(e[2], ("", (1, 0.85, 0.3)))[1])
-                    self.sfx.ui_click()
-            elif kind in ("gear", "gearbreak"):    # Ausrüstung angelegt / Helm bzw. Platte hat gerettet
-                gi = e[2] if 0 <= e[2] < len(GEAR) else None
-                if e[1] == self.my_id:
-                    pl = self.player
-                    gl = e[3] if len(e) > 3 and isinstance(e[3], list) else gear_list(pl)
-                    pl.gear = {sl: (v if isinstance(v, int) and 0 <= v < len(GEAR) else None)
-                               for sl, v in zip(GEAR_SLOTS, gl)}
-                    if kind == "gearbreak":
-                        self.toast(f"{'Helm' if GEAR[gi].slot == 'head' else 'Rüstung'} zerstört - hat dich gerettet!",
-                                   (1, 0.55, 0.4), 2.5)
-                        self.hurt_flash = 0.75
-                        self.sp_hurt.kick(80)
-                        self.sfx.play("railgun", None, 0.8, 1.6)
-                if kind == "gear" and gi is not None and e[1] == self.my_id:
-                    self.toast(f"Angelegt: {GEAR[gi].name}", tuple(c * 0.6 + 0.4 for c in GEAR[gi].col), 1.8)
-            elif kind == "mswing":             # fremder Nahkampf-Schlag: Ton + Animation
-                if e[1] != self.my_id:
-                    op = self.world.players.get(e[1])
-                    if op is not None:
-                        self.sfx.melee(e[1], False)
-                    v = self.player_views.get(e[1])
-                    if v is not None:
-                        v.swing_t = 0.35
-            elif kind == "mhit":               # Nahkampf-Treffer: Ton (Pfanne: BONG) + Spritzer
-                pos = tuple(e[1])
-                self.sfx.play(e[2] if e[2] in ("slash", "bong") else "slash", pos, 1.0, self.prng.uniform(0.92, 1.08))
-                if e[2] != "bong":
-                    self.sfx.melee_hit(pos)                # deine Aufnahme des Treffers kommt dazu
-                self.burst(pos, "blood")
-                if len(e) > 3 and e[3] == self.my_id:
-                    self.sp_cam.kick(1.5)
-            elif kind == "melee":              # neue Nahkampfwaffe aus Kiste / vom Boden
-                if e[1] == self.my_id and 0 <= e[2] < len(MELEE):
-                    self.player.melee = e[2]
-                    self.toast(f"Nahkampf: {MELEE[e[2]].name}", (1.0, 0.85, 0.5), 1.8)
-            elif kind == "hasmelee":
-                if e[1] == self.my_id:
-                    self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
-            elif kind == "pan":                # 9c: Ladung der Bratpfanne (für Anzeige und Essen in der Pfanne)
-                op = self.world.players.get(e[1])
-                if op is not None:
-                    old = op.pan_pts
-                    op.pan_pts = e[2]
-                    if e[1] == self.my_id and e[2] > old:
-                        st = pan_stage(e[2])
-                        self.toast(f"Pfanne +{e[3]}  ({e[2]} Punkte" + (f", Stufe {st} - T: essen)" if st else ")"),
-                                   (1.0, 0.8, 0.4), 1.6)
-                        self.sfx.play("chew", None, 0.35, 1.4)
-            elif kind == "eat":                # 9c: jemand isst (Stufe, Dauer)
-                op = self.world.players.get(e[1])
-                if op is not None:
-                    op.eat_stage, op.eat_dur, op.eat_k = e[2], e[3], e[4]
-                    if self.net_mode == "client" or e[1] != self.my_id:
-                        op.eat_t = e[3]
-                    op.eat_bites = 0
-                    if e[1] == self.my_id:
-                        self.player.amp.discard("pan")
-                        self.toast(f"Mahlzeit! Stufe {e[2]}" + (" (x2)" if e[4] > 1 else ""), (1.0, 0.8, 0.4), 1.6)
-                v = self.player_views.get(e[1])
-                if v is not None:
-                    v.eat_t = e[3]
-                if e[2] < 3:
-                    self.sfx.play("chew", self.ppos(e[1]), 0.9, 1.0)
-            elif kind == "bite":               # 9c: Stufe 3 - ein Bissen
-                self.sfx.play("chew", self.ppos(e[1]), 1.0, self.prng.uniform(0.92, 1.06))
-                if e[1] == self.my_id:
-                    self.bite_t = 0.0
-            elif kind == "burp":               # 9c: der Rülpser (nur für Spieler hörbar, kein Monster-Lärm)
-                self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
-                if e[1] == self.my_id:
-                    self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
-            elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
-                if e[1] == self.my_id:
-                    self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
-            elif kind == "drain":              # 9c: Erschöpfungsdolch trifft einen Spieler
-                me_a, me_t = e[1] == self.my_id, e[2] == self.my_id
-                if self.net_mode == "client" and (me_a or me_t):
-                    apply_drain(self.player if me_a else None, self.player if me_t else None)
-                if me_t:
-                    self.toast("Erschöpft! Alle Fähigkeiten auf Abklingzeit", (0.8, 0.45, 1.0), 2.0)
-                    self.sp_hurt.kick(3.0)
-                elif me_a:
-                    self.toast(f"Kraft entzogen: Fähigkeiten bereit, nächster Einsatz x{DAGGER_AMP:g}", (0.85, 0.6, 1.0), 2.0)
-                self.sfx.play("zap", self.ppos(e[2]), 0.5, 0.6)
-            elif kind == "mspec":              # 9c: Katana-Rundumschlag / Schwert-Aufschlag
-                pos = (e[3], e[4], e[5] + 0.3)
-                self.spawn_slash_fx(e[2], (e[3], e[4], e[5]), e[6])        # 10d: Ring / Windstoss + Schockwelle
-                if e[2] == "spin":
-                    self.sfx.play("swoosh", pos, 1.0, 0.8)
-                    self.sfx.play("swing", pos, 0.8, 1.2)
-                    for k_ in range(24):
-                        a_ = k_ * math.tau / 24
-                        self.add_particle((pos[0] + math.cos(a_) * 0.6, pos[1] + math.sin(a_) * 0.6, pos[2] + 0.8),
-                                          (math.cos(a_) * KATANA_SPIN_R * 2.5, math.sin(a_) * KATANA_SPIN_R * 2.5, 0.2),
-                                          (0.85, 0.9, 1.0), 0.03, 0.3, 0.0)
-                else:
-                    self.sfx.play("thud", pos, 1.0, 0.9)
-                    self.sfx.play("explosion", pos, 0.25, 1.6)
-                    h_ = math.radians(e[6])
-                    for k_ in range(30):
-                        a_ = h_ + math.radians(self.prng.uniform(-SWORD_SLAM_ARC, SWORD_SLAM_ARC))
-                        dx_, dy_ = -math.sin(a_), math.cos(a_)
-                        self.add_particle((pos[0] + dx_ * 0.8, pos[1] + dy_ * 0.8, pos[2]),
-                                          (dx_ * SWORD_SLAM_R * 1.6, dy_ * SWORD_SLAM_R * 1.6, 1.5), (0.45, 0.36, 0.22),
-                                          0.06, 0.6, 0.3)
-                    if e[1] == self.my_id:
-                        self.sp_cam.kick(4.0)
-                v = self.player_views.get(e[1])
-                if v is not None:
-                    v.spec = (e[2], 0.5)
-                if e[1] == self.my_id:
-                    self.spec_fp = (e[2], 0.0)
-            elif kind == "hasgear":
-                if e[1] == self.my_id:
-                    self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
-            elif kind == "shieldhit":
-                if e[1] == self.my_id:
-                    self.hurt_flash = max(0.0, self.hurt_flash - 0.2)
-                    self.shield_flash = 0.4
-            elif kind == "buffend":
-                if e[1] == self.my_id:
-                    self.toast("Buff abgelaufen", (0.85, 0.85, 0.9), 1.5)
-            elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
-                self.open_end_screen(e[1])
-            elif kind == "newmatch":
-                self.feed.clear()
-                self.pings.clear()
-                self.close_end_screen()
-        self.world.events.clear()
-
-    def reload_pose(self, u, magp, mag, ej):
-        """Handposition (im Waffenraum) und Magazinteile für den Nachladefortschritt u = 0..1."""
-        def lp(a, b, k):
-            return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
-        rest = (-0.30, 0.10, -0.40)
-        if magp is None:                                   # Raketenwerfer: Hand schiebt die Rakete hinein
-            slide = smoothstep(0.35, 0.85, u)
-            off = 1 - slide                                # Rakete kommt von links unten ins Bild, die Hand fasst sie von der Seite
-            tgt = (-0.07 - 0.28 * off, 0.5 + 0.9 * off, -0.05 - 0.12 * off)
-            if u < 0.35:
-                return lp(rest, (-0.35, 1.4, -0.17), smoothstep(0.0, 0.3, u))
-            if u > 0.9:
-                return lp(tgt, rest, smoothstep(0.9, 1.0, u))
-            return tgt
-        sx, sy, sz = magp[0], magp[1], magp[2]
-        slot = (sx, sy, sz - 0.02)
-        pulled = (sx - 0.03, sy, sz - 0.12)
-        fetch = (-0.14, sy, sz - 0.15)
-        up = (0.0, 0.0, 0.02)
-        if u < 0.18:
-            pos = lp(rest, slot, smoothstep(0.0, 0.18, u))
-        elif u < 0.38:
-            pos = lp(slot, pulled, smoothstep(0.18, 0.38, u))
-        elif u < 0.58:
-            pos = lp(pulled, fetch, smoothstep(0.38, 0.58, u))
-        elif u < 0.66:
-            pos = fetch
-        elif u < 0.88:
-            pos = lp(fetch, slot, smoothstep(0.66, 0.88, u))
-        else:
-            pos = lp(slot, rest, smoothstep(0.88, 1.0, u))
-        # altes Magazin: in der Hand, dann im Bogen weggeworfen
-        if mag is not None and 0.18 <= u < 0.66:
-            mag.hide()
-        if ej is not None and 0.18 <= u < 0.62:
-            if u < 0.38:
-                p0 = (pos[0], pos[1], pos[2] + up[2])
-                ej.setR(0)
-            else:
-                t = (u - 0.38) / 0.24
-                p0 = (pulled[0] - 0.12 * t, pulled[1] + 0.05 * t, pulled[2] + 0.02 - 1.1 * t * t)
-                ej.setR(220 * t)
-            ej.setPos(*p0)
-            ej.show()
-        # neues Magazin folgt der Hand, bis es sitzt
-        if mag is not None and 0.58 <= u < 0.88:
-            mag.setPos(pos[0], pos[1], pos[2] + up[2])
-            mag.show()
-        return pos
-
-    def cur_sight(self):
-        """Aktives Visier der Waffe in der Hand: iron | red | acog | sniper | rocket."""
-        pl = self.player
-        w = WEAPONS[pl.cur]
-        if w.sight == "rocket":
-            return "rocket"
-        if w.scope:
-            return "sniper"                                   # Railgun
-        if w.name in SCOPE_MOUNT:                             # 7b: Visier je Waffe (Aufsatz)
-            return SIGHT_NAMES[pscope(pl, pl.cur)]
-        return "iron"
-
-    def ads_fov(self, pl, w, sight):
-        if sight == "iron":
-            return w.ads_fov if w.ads_fov >= 40 else 58.0
-        if sight == "red":
-            return 52.0
-        if sight == "acog":
-            return 27.0
-        if sight == "sniper":
-            return w.ads_fov if w.scope else 14.0
-        return w.ads_fov
-
-    def ads_z(self, pl, w):
-        if w.name in SCOPE_MOUNT:
-            return scope_ads_z(pscope(pl, pl.cur), w.name)
-        return ADS_Z.get(w.name, ADS_Z_DEFAULT)
-
-    # ------------------------------------------------------------ Darstellung
-    def update_views(self, dt, mdx, mdy):
-        pl, world = self.player, self.world
-        w = WEAPONS[pl.cur]
-        g = pl.guns[pl.cur]
-
-        # Zoom
-        sight = self.cur_sight()
-        target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) * (self.fov_base / FOV) if pl.ads else self.fov_base
-        self.fov_cur += (target - self.fov_cur) * min(1.0, 14 * dt)
-        self.camLens.setFov(self.fov_cur)
-        self.gun_lens.setAspectRatio(self.getAspectRatio())
-        self.ads_t += ((1.0 if pl.ads else 0.0) - self.ads_t) * min(1.0, 14 * dt)
-        self.death_t = min(1.0, self.death_t + dt * 1.5) if pl.hp <= 0 else 0.0
-
-        # Federn
-        for s in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt,
-                  self.sw_h, self.sw_p):
-            s.step(dt)
-        self.sw_h.kick(mdx * 0.9)
-        self.sw_p.kick(mdy * 0.9)
-        self.sw_h.x = clampf(self.sw_h.x, -8, 8)
-        self.sw_p.x = clampf(self.sw_p.x, -8, 8)
-
-        # Waffenmodell
-        a = self.ads_t
-        self.bob_amp += ((1.0 if pl.moving and pl.on_ground else 0.0) - self.bob_amp) * min(1.0, 8 * dt)
-        bob = self.bob_amp * (1 - 0.7 * a)
-        px = 0.16 * (1 - a) + 0.0 * a + math.sin(pl.phase) * 0.012 * bob
-        py = 0.55 * (1 - a) + 0.50 * a - self.sp_back.x
-        pz = -0.16 * (1 - a) - self.ads_z(pl, w) * a + abs(math.cos(pl.phase)) * 0.014 * bob
-        pitch = self.sp_pitch.x + self.sw_p.x
-        roll = self.sp_roll.x + pl.lean / LEAN_MAX * LEAN_ROLL
-        px += pl.lean / LEAN_MAX * 0.03
-        driving = pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0
-        # Raketenwerfer: die Rakete steckt im Rohr; nach dem Schuss fehlt sie, beim Nachladen wird
-        # sie von vorn ins Rohr geschoben
-        if pl.cur == ROCKET_WI:
-            if pl.reload_t > 0:
-                u = 1.0 - pl.reload_t / w.reload
-                slide = smoothstep(0.35, 0.85, u)
-                self.vm_rocket.setPos(-0.28 * (1 - slide), 0.5 + 0.9 * (1 - slide), 0.02 - 0.12 * (1 - slide))
-                (self.vm_rocket.show if u > 0.05 else self.vm_rocket.hide)()
-            elif g.mag > 0:
-                self.vm_rocket.setPos(0, 0.5, 0.02)
-                self.vm_rocket.show()
-            else:
-                self.vm_rocket.hide()
-        # Rennhaltung: Pistolen mit hochgehaltenem Lauf, grosse Waffen quer vor dem Körper
-        self.sprinting = bool(self.run_now and pl.moving and pl.on_ground and pl.crouch < 0.3
-                              and not driving and pl.hp > 0)
-        want = 1.0 if (self.sprinting and not pl.ads and pl.reload_t <= 0 and pl.switch_t <= 0
-                       and not self.trig_now) else 0.0
-        self.spr_t += (want - self.spr_t) * min(1.0, 9 * dt)
-        e = self.spr_t
-        hdg_add = 0.0
-        if e > 0.001:
-            sd = SPRINT_POSE.get(w.name, SPRINT_POSE_DEFAULT)
-            sw_ = math.sin(pl.phase)
-            px += (sd[0] + sw_ * 0.035) * e
-            py += sd[1] * e
-            pz += (sd[2] + abs(math.cos(pl.phase)) * 0.03) * e
-            hdg_add = (sd[3] + sw_ * 2.5) * e
-            pitch += sd[4] * e
-            roll += (sd[5] + sw_ * 3.0) * e
-        # Nachladen: linke Hand zieht das Magazin heraus, wirft es weg, holt ein neues und schiebt es hinein
-        self.hand_pos = None
-        mag_n, ej_n, magp = self.vm_mags[pl.cur]
-        if mag_n is not None:
-            mag_n.setPos(magp[0], magp[1], magp[2])
-            mag_n.show()
-        for _m, e_, _p in self.vm_mags:
-            if e_ is not None:
-                e_.hide()
-        self.vm_shell.hide()
-        sg_on = w.name == SG_NAME and pl.reload_t > 0
-        if hasattr(self, "sg_hinge"):
-            self.sg_hinge.setP(0.0)
-        if not sg_on:
-            self.sg_ev = -1
-        if sg_on:                                 # Schrotflinte: Lauf aufklappen, Patronen einlegen, zuklappen
-            tt = max(0.0, pl.reload_tot - pl.reload_t)
-            n = sg_count(pl.reload_tot)
-            ang, lift, hp_, shell = sg_pose(tt, n)
-            self.sg_hinge.setP(ang)
-            pz += 0.13 * lift
-            py += 0.07 * lift
-            pitch += 16 * lift
-            roll += 8 * lift
-            self.hand_pos = hp_
-            if shell is not None:
-                self.vm_shell.setPos(*shell[0])
-                self.vm_shell.setHpr(0, shell[1], 0)
-                self.vm_shell.show()
-            for k_, te in enumerate(sg_events(n)):  # Klänge im Takt der Bewegung
-                if tt >= te and k_ > self.sg_ev:
-                    self.sg_ev = k_
-                    self.sfx.play("sg_open" if k_ == 0 else ("sg_close" if k_ == n + 1 else "sg_shell_%d" % k_), None, 0.9, 1.0)
-        elif pl.reload_t > 0:
-            u = 1.0 - pl.reload_t / w.reload
-            dip = smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
-            pz += 0.16 * dip                    # Waffe wird angehoben und nach oben geneigt, damit man
-            py += 0.08 * dip                    # die Hand am Magazin sieht
-            pitch += 20 * dip
-            roll += 10 * dip
-            if magp is not None and 0.88 <= u < 0.95:           # Magazin einrasten: kleiner Ruck
-                pitch -= 5.0 * math.sin(math.pi * (u - 0.88) / 0.07)
-            self.hand_pos = self.reload_pose(u, magp, mag_n, ej_n)
-        if pl.switch_t > 0:                       # Wechsel: Waffe senken, tauschen, heben
-            dip = math.sin(math.pi * (1 - pl.switch_t / SWITCH_T))
-            pz -= 0.45 * dip
-            pitch -= 50 * dip
-        if self.melee_t > 0:                      # Schlag: ausholen (Waffe hoch, zurück, seitlich), zuschlagen, zurück
-            self.melee_t = max(0.0, self.melee_t - dt)
-            u = 1.0 - self.melee_t / MELEE_T
-            wind, hit = melee_curve(u)
-            k = 1.0 - 0.8 * a                     # beim Zielen kleiner
-            px += (0.10 * wind - 0.20 * hit) * k
-            py += (-0.10 * wind + 0.30 * hit) * k
-            pz += (0.10 * wind - 0.09 * hit) * k
-            pitch += melee_pitch(u) * k
-            roll += (-25.0 * wind + 35.0 * hit) * k
-            hdg_add += (18.0 * wind - 30.0 * hit) * k
-        if pl.melee_out and pl.swing_t > 0:       # Nahkampf: ausholen (rechts oben), Hieb nach links unten
-            mw = MELEE[pl.melee] if 0 <= pl.melee < len(MELEE) else MELEE[START_MELEE]
-            u = 1.0 - pl.swing_t / max(mw.interval, 0.05)
-            if u < 0.22:
-                k = u / 0.22
-                hdg_add -= 30 * k
-                pitch += 22 * k
-                px += 0.06 * k
-                pz += 0.05 * k
-            elif u < 0.5:
-                k = (u - 0.22) / 0.28
-                hdg_add += -30 + 100 * k
-                pitch += 22 - 50 * k
-                roll += 35 * k
-                px += 0.06 - 0.2 * k
-                pz += 0.05 - 0.1 * k
-            else:
-                k = 1.0 - (u - 0.5) / 0.5
-                hdg_add += 70 * k
-                pitch -= 28 * k
-                roll += 35 * k
-                px -= 0.14 * k
-                pz -= 0.05 * k
-        if pl.melee_out:                          # 9c: Laden, Sprungangriff, Sonderattacke, Essen
-            ch = clampf((pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START), 0.0, 1.0) \
-                if pl.chg_hold > MELEE_HOLD_START else 0.0
-            if ch > 0:
-                full = ch >= 1.0
-                py -= 0.10 * ch
-                pz += 0.06 * ch
-                pitch += 30 * ch
-                roll += 25 * ch
-                if full:
-                    hdg_add += 1.5 * math.sin(time.time() * 47.0)        # zittert vor Kraft
-            if pl.slam_pending:
-                pitch += 60.0
-                pz += 0.12
-            sp_ = getattr(self, "spec_fp", None)
-            if sp_ is not None:
-                k_, t_ = sp_
-                t_ += dt
-                self.spec_fp = (k_, t_) if t_ < 0.5 else None
-                u_ = min(1.0, t_ / 0.45)
-                if k_ == "spin":
-                    hdg_add += 360.0 * u_
-                    roll += 70.0 * math.sin(math.pi * u_)
-                    px += 0.12 * math.sin(math.pi * u_)
-                else:
-                    pitch -= 75.0 * math.sin(math.pi * min(1.0, u_ * 1.5))
-                    pz -= 0.08 * math.sin(math.pi * u_)
-            if pl.eat_t > 0:                      # Pfanne vor das Gesicht; Stufe 3: je Sekunde ein Bissen zum Mund
-                el = pl.eat_dur - pl.eat_t
-                bite = math.sin(math.pi * (el % 1.0)) ** 2 if pl.eat_stage >= 3 else 0.25 + 0.15 * math.sin(el * 7.0)
-                px += (-0.04 - px) * 0.8
-                py += (0.40 - 0.16 * bite - py) * 0.8
-                pz += (-0.10 + 0.06 * bite - pz) * 0.8
-                pitch += 20.0 + 18.0 * bite
-        if self.pan_food_fp:
-            n_ = pan_food_count(pl.pan_pts)
-            if pl.eat_t > 0:
-                n0 = pan_food_count(PAN_STAGES[max(0, pl.eat_stage - 1)][0])
-                n_ = int(math.ceil(n0 * pl.eat_t / max(0.1, pl.eat_dur)))
-            if n_ != getattr(self, "pan_food_n", -1):
-                show_food(self.pan_food_fp, n_)
-                self.pan_food_n = n_
-        if self.gren_anim_t > 0 or self.g_hold_t >= 0:   # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
-            self.gren_anim_t = max(0.0, self.gren_anim_t - dt)
-            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T if self.gren_anim_t > 0 else 0.15 * smoothstep(0.0, 0.18, self.g_hold_t)
-            dipg = smoothstep(0.0, 0.15, ug) * (1.0 - smoothstep(0.7, 1.0, ug))
-            pz -= 0.30 * dipg
-            pitch -= 25 * dipg
-            roll += 8 * dipg
-        hdg = self.sw_h.x + hdg_add
-        ins = 1.0 if getattr(self, "insp_on", False) else 0.0       # 9b: Inspektion - Waffe von der Seite präsentieren
-        self.insp_t = getattr(self, "insp_t", 0.0)
-        self.insp_t += (ins - self.insp_t) * min(1.0, INSPECT_BLEND * dt)
-        if self.insp_t > 0.002:
-            e_ = smoothstep(0.0, 1.0, self.insp_t)
-            ix, iy, iz, ih, ip, ir = self.insp_pose(w, time.time())
-            px, py, pz = px + (ix - px) * e_, py + (iy - py) * e_, pz + (iz - pz) * e_
-            hdg, pitch, roll = hdg + (ih - hdg) * e_, pitch + (ip - pitch) * e_, roll + (ir - roll) * e_
-        self.gun_pivot.setPos(px, py, pz)
-        self.gun_pivot.setHpr(hdg, pitch, roll)
-        self.update_inspect(dt)
-        self.update_gren_arm(pl, driving)
-        scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and self.melee_t <= 0
-        rsc = w.sight == "rocket" and self.ads_t > 0.6 and pl.hp > 0 and not driving
-        gad_show = pl.gad_out and pl.hp > 0 and not driving
-        self.gad_anim += ((1.0 if gad_show else 0.0) - self.gad_anim) * min(1.0, 9.0 * dt)
-        for k, nd in enumerate(self.gad_hand):
-            (nd.show if gad_show and k == pl.gadget else nd.hide)()
-        self.update_gad_arms(pl, dt, gad_show)
-        red_on = sight == "red" and self.ads_t > 0.75 and pl.hp > 0 and not driving and self.melee_t <= 0
-        hidden = scoped or rsc or gad_show
-        for i, m in enumerate(self.gun_models):
-            (m.show if i == pl.cur and not pl.melee_out and not hidden and pl.hp > 0 and not driving else m.hide)()
-        for i, m in enumerate(self.melee_models):
-            (m.show if pl.melee_out and i == pl.melee and pl.hp > 0 and not driving else m.hide)()
-        rh = RHAND_GRIP.get(w.name) if (pl.reload_t > 0 and pl.switch_t <= 0) else None
-        if rh is not None and self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
-            self.vm_rhand.setPos(*rh[:3])           # rechte Hand umfasst den Griff, die Waffe schwebt nicht mehr
-            self.vm_rhand.setP(rh[3])
-            self.vm_rhand.show()
-        else:
-            self.vm_rhand.hide()
-        if self.hand_pos is not None and not hidden and pl.hp > 0 and not driving:
-            self.vm_hand.setPos(*self.hand_pos)
-            self.vm_hand.show()
-        else:
-            self.vm_hand.hide()
-            if ej_n is not None:
-                ej_n.hide()
-        self.flash_t = max(0.0, self.flash_t - dt)
-        self.sfx.update(dt)
-        for i, f in enumerate(self.gun_flash):
-            (f.show if self.flash_t > 0 and i == pl.cur and not hidden and not driving else f.hide)()
-        (self.scope.show if scoped and sight == "sniper" and pl.hp > 0 and not driving else self.scope.hide)()
-        (self.acog.show if scoped and sight == "acog" and pl.hp > 0 and not driving else self.acog.hide)()
-        if red_on and w.name in SCOPE_MOUNT:                       # der Punkt sitzt im Glas, auch beim Lehnen
-            try:
-                ym_, zt_ = SCOPE_MOUNT[w.name]
-                self.rd_anchor.setPos(0, ym_, zt_ + SCOPE_AXIS[SC_RED])
-                p3_ = self.gun_cam.getRelativePoint(self.rd_anchor, Point3(0, 0, 0))
-                p2_ = Point2()
-                if self.gun_lens.project(p3_, p2_):
-                    self.reddot.setPos(p2_.x * float(self.getAspectRatio()), 0, p2_.y)
-            except Exception:
-                self.reddot.setPos(0, 0, 0)
-        (self.reddot.show if red_on else self.reddot.hide)()
-        att_ = pl.att.get(pl.cur) or ATT_NONE                     # montierte Ausrüstungsteile zeigen
-        for (si_, v_), nds_ in self.att_nodes[pl.cur].items():
-            for nd_ in nds_:
-                (nd_.show if att_[si_] == v_ else nd_.hide)()
-        if pl.cur < len(self.gun_flash):                          # Mündungsfeuer sitzt am Ende des Laufaufsatzes
-            self.gun_flash[pl.cur].setY(GUN_PARTS[w.name][1][1] + ATT_MUZZLE_EXT[att_[0]])
-        for sc_, nd_ in self.scope_nodes[pl.cur].items():          # montiertes Visier der Primärwaffe zeigen
-            (nd_.show if sc_ == pscope(pl, pl.cur) and w.name in SCOPE_MOUNT else nd_.hide)()
-            if sc_ == 0 and w.name == SG_NAME and getattr(self, "sg_front", None) is not None:
-                (self.sg_front.show if sc_ == pscope(pl, pl.cur) else self.sg_front.hide)()
-        if rsc:
-            self.rscope.show()
-            self.update_rocket_sight()
-        else:
-            self.rscope.hide()
-        tur_now = self.my_turret() if pl.hp > 0 else None
-        if tur_now is not None:
-            self.tsight.show()
-            self.update_turret_sight(tur_now)
-        else:
-            self.tsight.hide()
-
-        # Kugeln als Leuchtspur; Raketen mit Flamme und Rauchspur
-        current = set(world.bullets)
-        for b in world.bullets:
-            np = self.bullet_nodes.get(b)
-            if np is None:
-                if self.is_rocket(b):      # Rakete: eigener Halter mit Rakete und Flamme als Kindern
-                    np = self.render.attachNewNode("rocket")
-                    self.rocket_np.instanceTo(np)
-                    fl = self.flame_np.instanceTo(np)
-                    fl.setTwoSided(True)
-                    self.flames[b] = fl
-                else:
-                    np = self.tracer_np.instanceTo(self.render)
-                    if b.blast_r > 0:      # Flak-Granate: dicker Leuchtstrich
-                        np.setScale(2.6, 1.8, 2.6)
-                np.setFogOff()
-                self.bullet_nodes[b] = np
-            np.setPos(b.x, b.y, b.z)
-            np.lookAt(b.x + b.vx, b.y + b.vy, b.z + b.vz)
-            rk = self.is_rocket(b)
-            shown = b.travel > (1.0 if rk else 5.0)
-            (np.show if shown else np.hide)()
-            if rk and shown:
-                fl = self.flames.get(b)
-                if fl is not None:
-                    fl.setScale(self.prng.uniform(0.8, 1.2), self.prng.uniform(0.7, 1.5), self.prng.uniform(0.8, 1.2))
-                sp = math.sqrt(b.vx ** 2 + b.vy ** 2 + b.vz ** 2) or 1.0
-                self.trail_t[b] = self.trail_t.get(b, 0.0) - dt
-                if self.trail_t[b] <= 0:                  # Rauchspur hinter der Rakete
-                    self.trail_t[b] = 0.025
-                    self.smoke_puff((b.x - b.vx / sp * 0.8, b.y - b.vy / sp * 0.8, b.z - b.vz / sp * 0.8),
-                                    0.22, 1.5, 0.75)
-        for b in [b for b in self.bullet_nodes if b not in current]:
-            self.bullet_nodes.pop(b).removeNode()
-            self.trail_t.pop(b, None)
-            self.flames.pop(b, None)
-
-        # Granaten, Waffen am Boden, Fahrzeuge, Effekte
-        self.update_objects(dt)
-
-        # Mobs
-        current = set(world.mobs)
-        for m in world.mobs:
-            v = self.mob_views.get(m)
-            if v is None:
-                v = self.mob_views[m] = MobView(m)
-                v.root.reparentTo(self.render)
-            v.update(m)
-        for m in [m for m in self.mob_views if m not in current]:
-            self.mob_views.pop(m).root.removeNode()
-
-        # Mitspieler
-        others = {pid for pid in world.players if pid != self.my_id}
-        for pid in others:
-            p = world.players[pid]
-            v = self.player_views.get(pid)
-            if v is not None and (v.team != getattr(p, "team", None) or v.look_code != getattr(p, "look", "")):
-                self.player_views.pop(pid).root.removeNode()     # 11: Team (Armbinde) oder Aussehen gewechselt
-                v = None
-            if v is None:
-                v = self.player_views[pid] = PlayerView(p)
-                v.root.reparentTo(self.render)
-            v.update(p, dt)
-        for pid in [pid for pid in self.player_views if pid not in others]:
-            self.player_views.pop(pid).root.removeNode()
-        self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
-
-        # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände
-        keep = []
-        for p in self.parts:
-            p.age += dt
-            if p.age >= p.life:
-                p.np.removeNode()
-                continue
-            p.vz -= 9.81 * dt
-            p.x += p.vx * dt
-            p.y += p.vy * dt
-            p.z += p.vz * dt
-            gz = world.ground_for(p.x, p.y, p.z + 0.3)
-            if p.z < gz + 0.01:
-                p.z = gz + 0.01
-                if p.bounce > 0 and p.vz < -0.6:
-                    p.vz = -p.vz * p.bounce
-                    p.vx *= 0.6
-                    p.vy *= 0.6
-                else:
-                    p.vz = 0.0
-                    fr = math.exp(-8 * dt)
-                    p.vx *= fr
-                    p.vy *= fr
-                    p.spin = 0.0
-            p.np.setPos(p.x, p.y, p.z)
-            if p.spin:
-                p.np.setH(p.np.getH() + 700 * dt)
-                p.np.setP(p.np.getP() + 500 * dt)
-            if p.shrink and p.life - p.age < 0.25:
-                s = (p.life - p.age) / 0.25
-                p.np.setScale(p.scale * max(s, 0.01))
-            keep.append(p)
-        self.parts = keep
-
-        self.update_crates()
-        self.update_toma_rocket(dt)
-        self.update_gfx(dt)
-        self.update_hud(dt)
-        self.update_flash()                     # Blendgranate
-        self.place_camera()
-
-    def update_objects(self, dt):
-        """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
-        world, now = self.world, time.time()
-        self.update_rocks_view(dt)
-        cur = set(world.grenades)
-        for g in world.grenades:
-            np = self.gren_views.get(g)
-            if np is None:                                     # 10e: Modell je Granatenart
-                np = self.gren_views[g] = self.render.attachNewNode("gren")
-                gren_inst(np, g.kind, 0.24)
-                if g.kind == "molotov":                        # brennender Lappen im Flug
-                    np.setPythonTag("flame", gren_flame_node(np, (0.017, 0.007, 0.15), 0.08))
-            np.setPos(g.x, g.y, g.z + 0.04)
-            moving = g.vx * g.vx + g.vy * g.vy + g.vz * g.vz > 1.0
-            if moving:
-                np.setHpr(now * 420.0 + g.gid * 40, now * 300.0, 0)
-            else:                                              # liegt: auf die Seite gekippt
-                np.setHpr(g.gid * 47.0, 90.0 if g.kind not in ("drone", "frag", "guard") else 0.0, 0)
-            fl = np.getPythonTag("flame")
-            if fl is not None:
-                flame_flicker(fl)
-            if g.kind == "frag" and g.fuse < 1.0 and int(now * 10) % 2 == 0:   # kurz vor der Explosion blinkt sie rot
-                np.setColorScale(2.2, 0.5, 0.4, 1)
-            elif g.kind == "decoy" and g.active and int(now * 6) % 2 == 0:
-                np.setColorScale(1.6, 1.4, 0.6, 1)
-            else:
-                np.clearColorScale()
-            if g.kind == "smoke" and g.active and self.prng.random() < 0.12:  # Rauchgranate qualmt
-                self.smoke_puff((g.x, g.y, g.z + 0.15), 0.35, 1.6, 0.7)
-        for g in [g for g in self.gren_views if g not in cur]:
-            self.gren_views.pop(g).removeNode()
-        self.update_smoke_views(dt)                            # 10e: Rauchwolken, Flammen, Airdrops
-        self.update_fire_views(dt)
-        self.update_airdrop_views(dt)
-
-        cur = set(world.gadgets)
-        for g in world.gadgets:
-            v = self.gad_views.get(g)
-            if v is None:
-                v = self.gad_views[g] = self.render.attachNewNode(f"gad{g.gid}")
-                body = self.gad_models[g.kind].copyTo(v)
-                v.setPythonTag("body", body)
-                if g.kind == GAD_BEACON:
-                    v.setPythonTag("led", True)
-            body = v.getPythonTag("body")
-            v.setPos(g.x, g.y, g.z)
-            if g.nz > 0.8:
-                v.setHpr(g.yaw, 0, 0)
-                body.setP(0)
-            else:
-                v.lookAt(Point3(g.x + g.nx, g.y + g.ny, g.z + g.nz), Vec3(0, 0, 1) if abs(g.nz) < 0.99 else Vec3(0, 1, 0))
-                body.setP(-90)
-            if g.kind == GAD_CLAY and g.arm > 0:
-                v.setColorScale(0.7, 0.7, 0.7, 1)
-            elif g.kind == GAD_BEACON and int(now * 2) % 2 == 0:
-                v.setColorScale(1.35, 1.35, 1.5, 1)
-            else:
-                v.clearColorScale()
-        for g in [g for g in self.gad_views if g not in cur]:
-            self.gad_views.pop(g).removeNode()
-
-        cur = set(world.drops)
-        for d in world.drops:
-            v = self.drop_views.get(d)
-            if v is None:
-                v = self.drop_views[d] = self.render.attachNewNode(f"drop{d.did}")
-                if d.gren > 0:                                 # 10b: Granaten-Päckchen (10e: Modell der Art)
-                    mdl = v.attachNewNode("gren")
-                    for k_ in range(min(3, d.gren)):
-                        gg = gren_inst(mdl, d.gk, 0.24)
-                        gg.setPos((k_ - (min(3, d.gren) - 1) / 2.0) * 0.22, 0, 0.12)
-                elif d.att >= 0 and d.att in self.att_drop_models:
-                    mdl = self.att_drop_models[d.att].copyTo(v)
-                elif d.melee >= 0:
-                    mdl = self.melee_drop_models[d.melee].copyTo(v)
-                else:
-                    mdl = (self.gear_models[d.gear] if d.gear >= 0 else self.drop_models[d.wi]).copyTo(v)
-                    mdl.setScale(1.4 if d.gear < 0 else 1.0)
-                beam = Mesh(lit=False)
-                box(beam, 0, 0, 0.9, 0.05, 0.05, 1.8, (0.4, 1.0, 0.45) if d.att >= 0 else (1.0, 0.9, 0.3))
-                bn = v.attachNewNode(beam.node("beam"))
-                bn.setTransparency(TransparencyAttrib.MAlpha)
-                bn.setColorScale(1, 1, 1, 0.45)
-                bn.setFogOff()
-                v.setPythonTag("model", mdl)
-                v.setPythonTag("beam", bn)
-            v.setPos(d.x, d.y, d.z)
-            pop = self.drop_pop.get(d.did)
-            if pop is not None:                                # 7b: fliegt im Bogen aus der Kiste
-                u = (now - pop[0]) / LOOT_POP_T
-                if u >= 1.0:
-                    del self.drop_pop[d.did]
-                else:
-                    sx_, sy_, sz_ = pop[1]
-                    v.setPos(sx_ + (d.x - sx_) * u, sy_ + (d.y - sy_) * u,
-                             sz_ + (d.z - sz_) * u + LOOT_POP_H * 4.0 * u * (1.0 - u) - 0.6 * (1.0 - u))
-            mdl = v.getPythonTag("model")
-            mdl.setPos(0, 0, 0.6 + 0.1 * math.sin(now * 2.2 + d.did))
-            mdl.setH(now * 80.0)
-            if d.life < 8.0:                                   # läuft gleich ab: blinkt
-                (mdl.show if int(now * 6) % 2 == 0 else mdl.hide)()
-            else:
-                mdl.show()
-        for d in [d for d in self.drop_views if d not in cur]:
-            self.drop_views.pop(d).removeNode()
-        if len(self.drop_pop) > 40:
-            self.drop_pop.clear()
-
-        for v in world.vehicles:
-            vv = self.veh_views.get(v)
-            if vv is None:
-                vv = self.veh_views[v] = VehicleView(v)
-                vv.root.reparentTo(self.render)
-            vv.update(v, dt, world, self)
-            if v.hp > 0 and v.stall_t > 0:     # von der Drohne lahmgelegt: blaues Flackern
-                self.stall_flicker(vv.root, (v.x, v.y, v.z + 1.0))
-        for q in world.helis:
-            pv = self.heli_views.get(q)
-            if pv is None:
-                pv = self.heli_views[q] = HeliView(q)
-                pv.root.reparentTo(self.render)
-            pv.update(q, dt, world, self, q is self.my_heli())
-            if q.hp > 0 and q.stall_t > 0:
-                self.stall_flicker(pv.root, (q.x, q.y, q.z + 1.5))
-        for t in world.turrets:
-            tv = self.tur_views.get(t)
-            if tv is None:
-                tv = self.tur_views[t] = TurretView(t)
-                tv.root.reparentTo(self.render)
-            tv.update(t, dt, self)
-        self.update_fx(dt)
-
-    def rank_line(self, i, p):
-        mark = ">" if p.pid == self.my_id else " "
-        if self.world.mode == "koth":
-            return f"{mark}{i + 1}. {p.name[:12]}   {int(p.score)} P   {p.kills}/{p.deaths}"
-        return f"{mark}{i + 1}. {p.name[:12]}   K/D {p.kills / max(1, p.deaths):.2f}   ({p.kills}/{p.deaths})"
-
-    def update_hud(self, dt):
-        pl, world = self.player, self.world
-        w = WEAPONS[pl.cur]
-        g = pl.guns[pl.cur]
-        now = time.time()
-        mx = getattr(pl, "max_hp", PLAYER_HP)
-        ratio = max(0.0, min(1.0, pl.hp / mx))
-        self.hp_fg.setSx(max(0.55 * ratio, 0.0001))
-        if mx > PLAYER_HP:                                 # Tank-Buff: goldener Balken, "180 / 200"
-            self.hp_fg.setColor(0.95, 0.8, 0.25, 1)
-            self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))} / {int(mx)}")
-        else:
-            self.hp_fg.setColor(*((0.2, 0.8, 0.2, 1) if ratio > 0.5 else
-                                  (0.95, 0.75, 0.1, 1) if ratio > 0.25 else (0.9, 0.15, 0.1, 1)))
-            self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))}")
-        self.update_ability_icons()
-        tur, hc = self.my_turret(), self.my_heli()
-        car = self.my_vehicle() if pl.hp > 0 else None
-        if pl.hp <= 0:
-            tur = hc = None
-        self.update_tacho(car)
-        self.update_heli_hud(hc)
-        # Gadget (Slot 3): Stückzahl
-        placed = sum(1 for g in world.gadgets if g.owner == pl.pid and g.kind == pl.gadget)
-        self.set_text(self.gad_count, f"x{pl.gad_n}" + (f"+{placed}" if placed and pl.gadget == GAD_C4 else ""))
-        if car is not None:
-            self.set_text(self.ammo_text, "")                      # im Auto: Tacho statt Waffe und Munition
-            self.set_text(self.name_text, "")
-        elif hc is not None:
-            self.set_text(self.ammo_text, f"MG {int(hc.mg)}   Raketen {hc.rk}")
-            self.set_text(self.name_text, "Helikopter")
-        elif tur is not None:
-            self.set_text(self.ammo_text, "")                      # Hitze zeigt nur der Balken im Visier
-            self.set_text(self.name_text, TURRET_NAMES.get(tur.kind, "Geschütz"))
-        elif pl.melee_out and not (pl.switch_t > 0 and pl.switch_to != MELEE_SEL):
-            self.set_text(self.ammo_text, "")
-            self.set_text(self.name_text, MELEE[pl.melee].name)
-        else:
-            ins = 0
-            if w.name == SG_NAME and pl.reload_t > 0:          # Kipplauf: Anzeige zählt mit jeder eingelegten Patrone hoch
-                ins = max(0, min(sg_count(pl.reload_tot), int(getattr(self, "sg_ev", 0)), g.reserve))
-            self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}")
-            self.set_text(self.name_text, w.name + (("   " + ("Semi" if g.semi else "Auto")) if pl.cur in SELECTIVE_FIRE else ""))
-        want = pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur)
-        if self.melee_icon_cur != pl.melee:                 # Nahkampf-Karte: Bild der getragenen Waffe
-            for nd in self.melee_icons.values():
-                nd.detachNode()
-            nd = self.melee_icons.get(pl.melee)
-            if nd is None:
-                nd = self.melee_icons[pl.melee] = melee_icon(pl.melee)
-                nd.setBin("fixed", 21)
-                nd.setDepthTest(False)
-                nd.setDepthWrite(False)
-            nd.reparentTo(self.melee_holder)
-            self.melee_icon_cur = pl.melee
-        mact = want == MELEE_SEL and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-        if MELEE[pl.melee].name == PAN_NAME:              # 9c: Pfannen-Ladung (Stufe, Punkte bis zur nächsten)
-            st = pan_stage(pl.pan_pts)
-            nxt = PAN_STAGES[st][0] if st < len(PAN_STAGES) else None
-            self.set_text(self.pan_text, ("Essen ..." if pl.eat_t > 0 else
-                                          f"St.{st}  {pl.pan_pts}/{nxt}" if nxt else f"St.{st}  voll - T"))
-        else:
-            self.set_text(self.pan_text, "")
-        ch = (pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START)
-        if pl.melee_out and pl.chg_hold > MELEE_HOLD_START and pl.hp > 0:       # 9c: Ladebalken
-            ch = min(1.0, ch)
-            self.chg_root.show()
-            self.chg_fg.setSx(max(0.001, ch))
-            full = ch >= 1.0
-            self.chg_fg.setColor(*((1.0, 0.85, 0.2, 1) if full else (0.6, 0.8, 1.0, 1)))
-            kind = MELEE_SPECIAL.get(MELEE[pl.melee].name)
-            self.set_text(self.chg_txt, ("Loslassen: " + ("Rundumschlag!" if kind == "spin" else "Sprungangriff!"))
-                          if full else "Aufladen ...")
-            if full and not self.chg_full:
-                self.sfx.play("click", None, 0.9, 1.4)
-            elif not full and not getattr(self, "chg_on", False):
-                self.sfx.play("charge", None, 0.5, 1.3)
-            self.chg_full, self.chg_on = full, True
-        else:
-            self.chg_root.hide()
-            self.chg_full = self.chg_on = False
-        if pl.amp and pl.hp > 0:                          # 9c: verstärkte Fähigkeiten (Erschöpfungsdolch)
-            nm = {"dash": "Dash", "jet": "Jetpack", "shock": "Stromstoss", "pan": "Pfanne"}
-            self.set_text(self.amp_text, f"x{DAGGER_AMP:g} bereit: " + ", ".join(nm[a] for a in ("dash", "jet", "shock", "pan")
-                                                                              if a in pl.amp) + f"  ({int(math.ceil(pl.amp_t))} s)")
-        else:
-            self.set_text(self.amp_text, "")
-        self.melee_frame.setColor(*((1.0, 0.85, 0.2, 1.0) if mact else (0.4, 0.4, 0.4, 0.6)))
-        self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
-        gad_ok = pl.gad_n > 0 or (pl.gadget == GAD_C4 and world.has_c4(pl.pid))
-        for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget (oder Spezialwaffe, wenn kein Gadget da ist)
-            spec = i == 2 and pl.slots[2] is not None and not gad_ok
-            wi = pl.slots[i] if (i < 2 or spec) else ("g", pl.gadget)
-            if i < 2 or spec:
-                self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
-                                   pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
-            else:
-                self.set_slot_icon(i, wi)
-            on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-            if i == 2 and not spec:
-                active = pl.gad_out and on_foot
-            else:
-                active = wi is not None and wi == want and on_foot and not pl.gad_out
-            self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
-            self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
-        self.update_gren_hud(pl)                       # gewählte Granatenart, Anzahl, Ladebalken, Bogen
-        veh = self.my_vehicle() if pl.hp > 0 else None
-        txt = ""
-        if hc is not None:
-            txt = ""                                                # Flugdaten stehen im Höhenband rechts
-            if hc.ground and world.on_pad(hc.x, hc.y) and (hc.rk < HELI_RK_MAX or hc.mg < HELI_MG_MAX - 1
-                                                          or hc.hp < HELI_HP - 0.5):
-                txt += "Munition wird aufgeladen, Rumpf repariert ..." if hc.hp < HELI_HP - 0.5 else "Munition wird aufgeladen ..."
-            elif hc.ground and not world.on_pad(hc.x, hc.y) and (hc.rk < HELI_RK_MAX or hc.mg < HELI_MG_MAX * 0.5):
-                txt += "Munition nachladen: auf dem Helipad landen"
-        elif veh is not None:
-            txt = ""                                                # Tempo und Zustand stehen im Tacho
-        self.set_text(self.speed_text, txt)
-        (self.reload_text.show if pl.reload_t > 0 else self.reload_text.hide)()
-        if self.tab_held:
-            self.update_tab_overlay()
-        alive = sum(1 for m in world.mobs if m.state != "dead")
-        info = f"Monster {alive}   erlegt {world.kills}" if world.mobs_on or self.net_mode == "client" else ""
-        self.set_text(self.kill_text, info)
-        if self.show_fps:
-            try:
-                self.set_text(self.fps_text, f"{int(globalClock.getAverageFrameRate())} FPS")  # noqa: F821
-            except NameError:
-                pass
-        self.hit_t = max(0.0, self.hit_t - dt)
-        (self.hitmark.show if self.hit_t > 0 else self.hitmark.hide)()
-        self.hitmark.pop(self.hit_t / 0.3)
-        self.update_popup(dt)
-        self.update_toast(dt)
-        scoped = self.cur_sight() in ("sniper", "acog") and self.ads_t > 0.85
-        scoped = scoped and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-        snip = scoped and self.cur_sight() == "sniper" and pl.hp > 0 and self.melee_t <= 0
-        (self.bar_root.hide if snip else self.bar_root.show)()
-        if getattr(self, "mm_root", None) is not None:
-            (self.mm_root.hide if snip else self.mm_root.show)()           # Minimap im Sniper-Visier ausblenden
-        if getattr(self, "mm_zoom_text", None) is not None:
-            (self.mm_zoom_text.hide if snip else self.mm_zoom_text.show)()  # Zoom-Hinweis ebenso             # Waffenleiste im Sniper-Visier ausblenden
-        (self.breath_hint.show if snip and getattr(self, "hold_shown", False) is not True else self.breath_hint.hide)()       # Hinweis zum Luftanhalten im schwarzen Bereich
-        rocket_view = w.sight == "rocket" and self.ads_t > 0.6 and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-        (self.cross.hide if scoped or rocket_view or pl.hp <= 0 or pl.mount >= 0 or self.sprinting or pl.ads
-         or hc is not None or pl.vehicle >= 0 else self.cross.show)()
-        self.update_heli_sight(hc if pl.hp > 0 else None)
-        spin = min(1.0, (abs(self.sw_h.x) + abs(self.sw_p.x)) / 5.0 + (0.6 if self.key_turn else 0.0))
-        mv = 1.0 if pl.moving and pl.on_ground else 0.0
-        self.cross.update(dt, walk=mv, run=mv if self.run_now and pl.crouch < 0.5 else 0.0, turn=spin,
-                          air=0.0 if pl.on_ground else 1.0, bloom=min(2.0, pl.bloom), crouch=pl.crouch,
-                          hip=0.022 if w.name == "Scharfschütze" else 0.0)
-        self.hurt_flash = max(0.0, self.hurt_flash - 1.5 * dt)
-        low = 0.35 * max(0.0, 1 - pl.hp / 40.0) if pl.hp > 0 else 0.5
-        if pl.hp <= 0:                                    # tot: neutraler grauer Hintergrund statt Rot
-            # Esc-Menü offen: kein Grauschleier, das Bild sieht aus wie bei einem lebenden Spieler
-            self.hurt_card.setColor(0.15, 0.16, 0.18, 0.0 if self.quit_box is not None else 0.86)
-        elif getattr(pl, "stun_t", 0.0) > 0:
-            f = 0.5 + 0.5 * math.sin(time.time() * 35.0)
-            self.hurt_card.setColor(0.25, 0.55, 1.0, 0.18 + 0.22 * f)
-            if self.prng.random() < 0.3:
-                h = math.radians(pl.heading)
-                self.add_particle((pl.x - math.sin(h) * 0.6, pl.y + math.cos(h) * 0.6, pl.z + 1.4),
-                                  (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2), self.prng.uniform(0, 3)),
-                                  (0.6, 0.9, 1.0), 0.015, 0.25, 0.0)
-        elif getattr(self, "shield_flash", 0.0) > 0:      # Schild hat abgefangen: kurz blau
-            self.shield_flash = max(0.0, self.shield_flash - dt)
-            self.hurt_card.setColor(0.3, 0.6, 1.0, self.shield_flash * 0.5)
-        else:
-            self.hurt_card.setColor(0.8, 0, 0, min(0.8, self.hurt_flash + low))
-
-        # Zeit, Modus, Rangliste
-        t = max(0.0, world.time_left)
-        zone = ""
-        if world.mode == "koth" and pl.hp > 0 and world.in_zone(pl):
-            zone = "   IN DER BURG  +1/s"
-        self.set_text(self.timer_text, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
-        rank = world.ranking()
-        head = "Punkte   Kills/Tode" if world.mode == "koth" else "K/D   (Kills/Tode)"
-        self.set_text(self.score_text, "\n".join([head] + [self.rank_line(i, p) for i, p in enumerate(rank[:8])]))
-
-        # Kill-Anzeige
-        self.feed = [f for f in self.feed if now - f[1] < 6.0][-6:]
-        self.set_text(self.feed_text, "\n".join(f[0] for f in self.feed))
-
-        # Hinweis: Spawnschutz oder etwas in Reichweite, das F benutzen kann
-        prompt = ""
-        if pl.hp > 0 and world.phase == "play":
-            if pl.protect > 0:
-                prompt = "Spawnschutz"
-            if world.in_tunnel(pl.x, pl.y) and pl.z < -1.0:
-                prompt = "Tunnel"
-            use = world.nearest_use(pl)
-            if use is not None:
-                kind, o = use
-                if kind == "crate" and getattr(o, "air", False):
-                    prompt = "F   Versorgungskiste öffnen"
-                elif kind == "crate":
-                    prompt = f"F   {CRATE_NAMES.get(o.kind, 'Kiste')[0].upper()}{CRATE_NAMES.get(o.kind, 'Kiste')[1:]} öffnen"
-                elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
-                    si_, v_ = divmod(o.att, ATT_CODE)
-                    nm_ = att_name(si_, v_)
-                    if pl.melee_out or pl.gad_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
-                        prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - T: Waffe ansehen)"
-                    else:
-                        old_ = pscope(pl, pl.cur) if si_ == ATT_SCOPE else (pl.att.get(pl.cur) or ATT_NONE)[si_]
-                        prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
-                        if old_:
-                            prompt += f"   ({att_name(si_, old_)} ins Lager)"
-                elif kind == "drop" and o.melee >= 0:
-                    prompt = f"F   Aufheben: {MELEE[o.melee].name}"
-                    if pl.melee == o.melee:
-                        prompt += "   (Hast du schon)"
-                    elif pl.melee != START_MELEE:
-                        prompt += f"   (tauscht gegen {MELEE[pl.melee].name})"
-                elif kind == "drop" and o.gear >= 0:
-                    g_ = GEAR[o.gear]
-                    prompt = f"F   Aufheben: {g_.name}"
-                    cur_ = pl.gear.get(g_.slot)
-                    if cur_ == o.gear:
-                        prompt += "   (Hast du schon)"
-                    elif cur_ is not None:
-                        prompt += f"   (tauscht gegen {GEAR[cur_].name})"
-                elif kind == "drop" and o.gren > 0:
-                    prompt = f"F   Aufheben: {GREN_NAMES.get(o.gk, 'Granate')} x{o.gren}"
-                elif kind == "drop":
-                    prompt = f"F   Waffe aufheben: {WEAPONS[o.wi].name}"
-                    if o.lock > 0 and o.owner >= 0 and o.owner != pl.pid and o.owner in world.players:
-                        prompt += f"   (gehört noch {int(math.ceil(o.lock))} s {self.pname(o.owner)})"
-                elif kind == "vehicle":
-                    ct = world.car_turret(o)
-                    if o.driver < 0:
-                        prompt = "F   Geländewagen fahren" + ("      V   als Schütze aufsteigen" if ct is not None and ct.op < 0 else "")
-                    else:
-                        prompt = "F   als Schütze aufsteigen"
-                elif kind == "turret":
-                    prompt = "F   Flak-Geschütz bedienen" if o.kind == "flak" else "F   Geschütz bedienen"
-                elif kind == "heli":
-                    prompt = "F   Helikopter fliegen"
-                elif kind == "exit_heli":
-                    prompt = "F   aussteigen" if o.ground and o.speed < 4.0 else ""
-                elif kind == "exit_turret":
-                    prompt = "F   Geschütz verlassen      Linke Maus schiessen   Rechte Maus Zoom"
-                elif kind == "timer":
-                    prompt = f"F   Tomahawk-Countdown ändern: {int(world.strike_dur)} s"
-                elif kind == "button":
-                    if world.strike == 2:
-                        prompt = (f"Tomahawk lädt nach: noch {int(math.ceil(world.strike_wait))} s"
-                                  if world.strike_wait > 0 else "Tomahawk in dieser Runde schon eingesetzt")
-                    else:
-                        prompt = "F   Tomahawk: Einschlagpunkt auf der Karte wählen"
-                else:
-                    prompt = "F   aussteigen"
-        if pl.hp > 0 and pl.gad_out and world.phase == "play":
-            prompt = {GAD_C4: "Rechtsklick  C4 ankleben      Linksklick  alle zünden",
-                      GAD_CLAY: "Rechtsklick  Claymore aufstellen   (nur Boden)",
-                      GAD_BEACON: "Rechtsklick  Funkbake aufstellen   (nur Boden)"}[pl.gadget]
-        if now - self.gad_msg[1] < 2.0 and self.gad_msg[0] and pl.hp > 0:
-            prompt = self.gad_msg[0]
-        if getattr(self, "att_panel", None) is not None:
-            prompt = ""                                       # Aufsatz-Fenster offen: kein Hinweis darüber
-        self.set_text(self.prompt_text, prompt)
-        self.set_text(self.look_text, self.look_info() if pl.hp > 0 and world.phase == "play" else "")
-        if world.strike == 1 and world.phase == "play":
-            left = int(math.ceil(max(0.0, world.strike_t)))
-            self.set_text(self.strike_text, f"ACHTUNG: TOMAHAWK-ANGRIFF IN {left} s")      # Ziel bleibt unbekannt
-            self.strike_text.setFg((1, 1, 0.3, 1) if (left <= 5 and int(now * 4) % 2 == 0) else (1, 0.25, 0.15, 1))
-        else:
-            self.set_text(self.strike_text, "")
-
-        # Todes-Bildschirm mit Waffenwahl (Bilder) / Rundenende mit Rangliste
-        dead_screen = pl.hp <= 0 and world.phase == "play"
-        lobby = dead_screen and bool(getattr(world, "lobby", False))
-        wait = 0.0
-        if dead_screen:
-            if self.dead_since is None:
-                self.dead_since = now
-            pre = getattr(pl, "prespawn", False)
-            wait = 0.0 if pre else world.respawn_delay - (now - self.dead_since)
-        else:
-            self.dead_since = None
-        hint = ""
-        # Maus auf dem Todesbildschirm freigeben (Klick auf Karten und Knopf), beim Respawn wieder einfangen
-        if dead_screen and (not self.dead_free or self.captured) and self.quit_box is None:
-            self.dead_free = True                      # (auch wenn die Maus zwischendurch eingefangen wurde)
-            self.set_capture(False)
-        elif not dead_screen and self.dead_free:
-            self.dead_free = False
-            if self.loadscreen is not None and self.mode == "play":
-                self.close_loadscreen()
-            if self.quit_box is None and self.mode == "play":
-                self.set_capture(True)
-        equip_view = lobby and self.LOBBY_EQUIP and getattr(self, "lobby_equip", False) and self.loadscreen is None
-        if not lobby:
-            self.lobby_equip = False
-        show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
-        self.set_text(self.dead_hint, hint if show_dead else "")
-        txt_ = ("AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:")
-        if show_dead and self.world.mode == "ctf" and self.world.team_of.get(self.my_id) in (0, 1):
-            txt_ = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt_   # CTF: Teamname im Todesbildschirm
-        self.set_text(self.dead_text, txt_ if show_dead else "")
-        mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        if show_dead:
-            card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
-            self.death_picker.update(self.loadout, card)
-            self.death_picker.show()
-            self.tip_show(card, mpos)
-            b = self.DEAD_BTN
-            hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
-            self.dead_btn.setColor(*(BTN_HC if hov else BTN_C))
-            self.dead_btn.show()
-            self.dead_btn_text.show()
-        else:
-            self.tip_hide()
-            self.death_picker.hide()
-            self.dead_btn.hide()
-            self.dead_btn_text.hide()
-        rb = self.right_btn_rect()
-        if show_dead and not lobby:                       # grüner Respawn-Knopf unten rechts (kein R mehr)
-            ready = wait <= 0
-            hov = ready and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
-            self.resp_btn.setPos(rb[0], 0, rb[2])
-            self.resp_btn.setSx(rb[1] - rb[0])
-            self.resp_btn_text.setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
-            self.resp_btn.setColor(*(START_BTN_HOT if hov else START_BTN) if ready else (0.12, 0.2, 0.14, 0.85))
-            self.set_text(self.resp_btn_text, "SPAWN" if ready else f"SPAWN IN {int(math.ceil(wait))} S")
-            self.resp_btn.show()
-            self.resp_btn_text.show()
-        else:
-            self.resp_btn.hide()
-            self.resp_btn_text.hide()
-        self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None, mpos)
-        if lobby and self.loadscreen is None and self.quit_box is None:       # Knopf unten links
-            bb = self.back_btn_rect()
-            hov = mpos is not None and bb[0] <= mpos[0] <= bb[1] and bb[2] <= mpos[1] <= bb[3]
-            self.back_btn.setPos(bb[0], 0, bb[2])
-            self.back_btn.setSx(bb[1] - bb[0])
-            self.back_btn_text.setPos((bb[0] + bb[1]) / 2, bb[2] + 0.062)
-            self.back_btn.setColor(*(BTN_HC if hov else BTN_C))
-            self.set_text(self.back_btn_text, "ZURÜCK ZUR LOBBY" if equip_view else "ZURÜCK INS HAUPTMENÜ")
-            self.back_btn.show()
-            self.back_btn_text.show()
-        else:
-            self.back_btn.hide()
-            self.back_btn_text.hide()
-        if dead_screen != self.hud_dead_hidden:           # Todesbildschirm: kein Spieler-HUD (Minimap, Slots, Munition ...)
-            self.hud_dead_hidden = dead_screen
-            for nm in ("a2dTopCenter", "a2dTopLeft", "a2dTopRight", "a2dBottomCenter", "a2dBottomLeft",
-                       "a2dBottomRight", "a2dLeftCenter", "a2dRightCenter"):
-                nd = getattr(self, nm, None)
-                if nd is not None:
-                    (nd.hide if dead_screen else nd.show)()
-        if dead_screen:
-            self.hitmark.hide()
-            self.pop_text.hide()
-            self.set_text(self.prompt_text, "")
-        if dead_screen and self.loadscreen is not None:
-            self.loadscreen.hover(mpos)
-        self.set_text(self.over_text, "")             # (Banner ersetzt durch den Endbildschirm)
-        self.update_end_screen()
-        self.update_minimap()
-        self.update_strike_map()
-        if self.quit_box is not None and self.overlay_kind == "strike" and (world.strike != 0 or pl.hp <= 0):
-            self.close_quit_box()                      # jemand war schneller / du bist tot
-
-    # ------------------------------------------------------------ Minimap
-    MM_S = 0.42           # Durchmesser der runden Minimap (Bildschirmeinheiten)
-
-    MM_VIS = 50.0         # sichtbarer Radius in Metern (Standard)
-
-    MM_LEVELS = (25.0, 35.0, 50.0, 75.0, 110.0)      # Zoomstufen (X = heraus, Y = hinein)
-
-    MAP_MARGIN, MAP_PPM = 50.0, 3.0      # Rand um die Karte (m) und Auflösung der Kartentextur (Pixel/m)
-
-    def build_map_texture(self):
-        """Karte als Textur (Burg, Gebäude, Teiche, Tunneleingänge, Raster). Gemeinsam für die Minimap
-        und die Tomahawk-Zielkarte. None, wenn Panda3D (Tests) fehlt."""
-        if not REAL_PANDA:
-            return None
-        world, M, ppm = self.world, self.MAP_MARGIN, self.MAP_PPM
-        size = int((WORLD + 2 * M) * ppm)
-        img = PNMImage(size, size, 3)
-        img.fill(0.07, 0.09, 0.12)
-
-        def px(x):
-            return int((x + M) * ppm)
-
-        def py(y):
-            return size - 1 - int((y + M) * ppm)
-
-        def rect(x0, y0, x1, y1, col):
-            xa, xb = max(0, px(x0)), min(size - 1, px(x1))
-            ya, yb = max(0, py(y1)), min(size - 1, py(y0))
-            for yy in range(ya, yb + 1):
-                for xx in range(xa, xb + 1):
-                    img.setXel(xx, yy, *col)
-
-        def disc(cx, cy, r, col):
-            for yy in range(max(0, py(cy + r)), min(size - 1, py(cy - r)) + 1):
-                wy = (size - 1 - yy) / ppm - M
-                dx2 = r * r - (wy - cy) ** 2
-                if dx2 < 0:
-                    continue
-                dx = math.sqrt(dx2)
-                for xx in range(max(0, px(cx - dx)), min(size - 1, px(cx + dx)) + 1):
-                    img.setXel(xx, yy, *col)
-
-        rect(0, 0, WORLD, WORLD, (0.20, 0.34, 0.17))
-        if getattr(world, "pt", None):                              # Polytown aus Blender: fertige Draufsicht aus der Kartendatei
-            n = int((WORLD + 2 * M) / 2.0)
-            sm = PNMImage(n, n, 3)
-            mm, mn = world.pt["minimap"], world.pt["meta"]["mm"]
-            for j in range(n):
-                wy = (n - 1 - j + 0.5) * 2.0 - M
-                for i in range(n):
-                    wx = (i + 0.5) * 2.0 - M
-                    ii, jj = int(wx / 2.0), int(wy / 2.0)
-                    if 0 <= ii < mn and 0 <= jj < mn and wx >= 0.0 and wy >= 0.0:
-                        k = (jj * mn + ii) * 3
-                        sm.setXel(i, j, mm[k] / 255.0, mm[k + 1] / 255.0, mm[k + 2] / 255.0)
-                    else:
-                        sm.setXel(i, j, 0.07, 0.09, 0.12)
-            img.quickFilterFrom(sm)
-        elif getattr(world, "cm", None) is not None:                # Netz-Karte: Draufsicht aus den Dreiecken (2 m Raster)
-            n = int((WORLD + 2 * M) / 2.0)
-            sm = PNMImage(n, n, 3)
-            for j in range(n):
-                wy = (n - 1 - j + 0.5) * 2.0 - M
-                for i in range(n):
-                    wx = (i + 0.5) * 2.0 - M
-                    z = world.cm.top(wx, wy)
-                    if z is None:
-                        sm.setXel(i, j, 0.07, 0.09, 0.12)
-                        continue
-                    zl = world.cm.top(wx + 3.0, wy + 3.0) or z
-                    lit = 0.85 + 0.05 * (z - zl)
-                    if z > 14.0:
-                        col = (0.50, 0.46, 0.40)
-                    elif z > 5.0:
-                        k = (z - 5.0) / 9.0
-                        col = (0.26 + 0.24 * k, 0.40 + 0.06 * k, 0.17 + 0.23 * k)
-                    else:
-                        col = (0.24, 0.40, 0.17)
-                    sm.setXel(i, j, *(min(1.0, max(0.0, c_ * lit)) for c_ in col))
-            img.quickFilterFrom(sm)
-        if world.mc:                                                # Minecraft-Karte: Draufsicht aus der Kartendatei
-            mm, n = world.mc["minimap"], world.mc["meta"]["mm"]
-            for yy in range(size):
-                j = int((size - 1 - yy) / ppm - M)
-                if not 0 <= j < n:
-                    continue
-                row = (n - 1 - j) * n * 3
-                for xx in range(size):
-                    i = int(xx / ppm - M)
-                    if 0 <= i < n:
-                        k = row + i * 3
-                        img.setXel(xx, yy, mm[k] / 255.0, mm[k + 1] / 255.0, mm[k + 2] / 255.0)
-        grid = (0.24, 0.39, 0.21)
-        for g in range(25, int(WORLD), 25):                         # Raster alle 25 m
-            if not world.mc:
-                rect(g - 0.15, 0, g + 0.15, WORLD, grid)
-                rect(0, g - 0.15, WORLD, g + 0.15, grid)
-        for ppx, ppy, r in world.ponds:
-            disc(ppx, ppy, r * 1.3, (0.20, 0.42, 0.70))
-        for x0, y0, x1, y1, hw, _k in getattr(world, "roads", ()):      # Wege der Stadt
-            ln = math.hypot(x1 - x0, y1 - y0)
-            for i in range(max(1, int(ln / 1.5)) + 1):
-                t = i / max(1, int(ln / 1.5))
-                rx, ry = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
-                rect(rx - hw, ry - hw, rx + hw, ry + hw, (0.50, 0.45, 0.34))
-        for mx, my, a, o0, _o1, _o2, o3, _dp in getattr(world, "moats", ()):   # Wassergraben mit Brücken
-            ro = 8.0
-            rect(mx - a - ro, my - a, mx + a + ro, my + a, (0.20, 0.42, 0.70))
-            rect(mx - a, my - a - ro, mx + a, my + a + ro, (0.20, 0.42, 0.70))
-            for sx in (-1, 1):
-                for sy in (-1, 1):
-                    disc(mx + sx * a, my + sy * a, ro, (0.20, 0.42, 0.70))
-            rect(mx - a - o0, my - a - o0, mx + a + o0, my + a + o0, (0.30, 0.38, 0.22))
-            for r_ in getattr(world, "vis", ()):
-                if r_.get("k") == "bridge":
-                    rect(r_["x0"], r_["y0"], r_["x1"], r_["y1"], (0.55, 0.40, 0.24) if r_.get("style") == "wood" else (0.62, 0.60, 0.56))
-        if world.mode == "koth":
-            disc(CENTER, CENTER, ZONE_R, (0.62, 0.55, 0.15))
-            disc(CENTER, CENTER, ZONE_R - 0.6, (0.28, 0.36, 0.16))
-        if world.runway is not None:
-            rect(*world.runway, (0.30, 0.30, 0.34))
-        for ppx, ppy in world.pads:
-            rect(ppx - 8, ppy - 8, ppx + 8, ppy + 8, (0.45, 0.45, 0.5))
-        for b in world.boxes:
-            if b.mm:
-                rect(b.x0, b.y0, b.x1, b.y1, (0.72, 0.70, 0.66))
-        for x0, y0, x1, y1 in world.voids:                      # Tunneleingänge: orange Quadrate
-            rect(x0 - 2.0, y0 - 2.0, x1 + 2.0, y1 + 2.0, (0.95, 0.55, 0.10))
-        tex = Texture("karte")
-        tex.load(img)
-        tex.setWrapU(Texture.WMClamp)
-        tex.setWrapV(Texture.WMClamp)
-        tex.setMinfilter(Texture.FTLinear)
-        tex.setMagfilter(Texture.FTLinear)
-        return tex
-
-    def build_minimap(self):
-        """Runde Karte, die sich mit dir dreht: dein Pfeil zeigt immer nach oben. Gegner erscheinen nur kurz,
-        wenn sie schiessen."""
-        world = self.world
-        R = self.MM_S / 2.0
-        self.mm_R = R
-        self.mm_root = self.a2dBottomLeft.attachNewNode("minimap")
-        self.mm_root.setPos(0.07 + R, 0, 0.24 + R)
-        self.map_tex = self.build_map_texture()
-
-        def marker(n, sort):
-            n.setTransparency(TransparencyAttrib.MAlpha)
-            n.setBin("fixed", sort)
-            n.setDepthTest(False)
-            n.setDepthWrite(False)
-            return n
-
-        # Scheibe mit Kartentextur; die Texturkoordinaten werden pro Bild neu gesetzt (Drehung)
-        self.mm_n = 64
-        self.mm_disc = None
-        try:
-            fmt = GeomVertexFormat.getV3t2()
-            vd = GeomVertexData("mmdisc", fmt, Geom.UHDynamic)
-            vd.setNumRows(self.mm_n + 1)
-            vw = GeomVertexWriter(vd, "vertex")
-            vw.addData3(0.0, 0.0, 0.0)
-            for i in range(self.mm_n):
-                a = 2 * math.pi * i / self.mm_n
-                vw.addData3(math.cos(a) * R, 0.0, math.sin(a) * R)
-            tw = GeomVertexWriter(vd, "texcoord")
-            for _ in range(self.mm_n + 1):
-                tw.addData2(0.0, 0.0)
-            prim = GeomTriangles(Geom.UHStatic)
-            for i in range(self.mm_n):
-                prim.addVertices(0, 1 + i, 1 + (i + 1) % self.mm_n)
-            geom = Geom(vd)
-            geom.addPrimitive(prim)
-            gn = GeomNode("mmdisc")
-            gn.addGeom(geom)
-            disc = self.mm_root.attachNewNode(gn)
-            disc.setLightOff()
-            disc.setTwoSided(True)
-            if self.map_tex is not None:
-                disc.setTexture(self.map_tex)
-            disc.setTransparency(TransparencyAttrib.MAlpha)
-            disc.setColorScale(1, 1, 1, 0.92)
-            marker(disc, 21)
-            self.mm_disc = (disc, vd)
-        except Exception as e:
-            print("Minimap-Scheibe nicht verfügbar:", e)
-        ring = Mesh(lit=False)                       # Rahmen: dunkler Rand mit hellem Innenring
-
-        def band(r0, r1, col, n=64):
-            for i in range(n):
-                a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-                p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)       # noqa: E731
-                ring.tri(p(r0, a0), p(r1, a0), p(r1, a1), col, ref=(0, 5, 0))
-                ring.tri(p(r0, a0), p(r1, a1), p(r0, a1), col, ref=(0, 5, 0))
-
-        band(R - 0.002, R + 0.012, (0.05, 0.06, 0.08))
-        band(R - 0.002, R + 0.003, (0.85, 0.88, 0.92))
-        rn = self.mm_root.attachNewNode(ring.node("mmring"))
-        rn.setTwoSided(True)
-        marker(rn, 24)
-
-        def dot(size, col):
-            c = CardMaker("dot")
-            c.setFrame(-size, size, -size, size)
-            n = self.mm_root.attachNewNode(c.generate())
-            n.setColor(*col)
-            return marker(n, 22)
-
-        def arrow(size, col):
-            """Pfeil mit dunklem Rand, Spitze nach oben; gedreht wird per setR."""
-            am = Mesh(lit=False)
-            for s, c in ((size * 1.35, (0, 0, 0)), (size, (1, 1, 1))):
-                tip, l, nt, r = (0, 0, s), (-0.62 * s, 0, -0.72 * s), (0, 0, -0.30 * s), (0.62 * s, 0, -0.72 * s)
-                am.tri(tip, l, nt, c)
-                am.tri(tip, nt, r, c)
-            n = self.mm_root.attachNewNode(am.node("arrow"))
-            n.setTwoSided(True)
-            n.setColorScale(*col)
-            return marker(n, 23)
-
-        self.mm_me = arrow(0.022, (0.3, 1.0, 0.3, 1))
-        self.mm_dots = {}                          # Spieler-ID -> Pfeil (nur kurz nach einem Schuss)
-        self.mm_arrow_factory = arrow
-        self.mm_vehs = {v.id: dot(0.009, (1.0, 0.85, 0.2, 1)) for v in world.vehicles}
-        self.mm_helis = {q.id: dot(0.012, (0.45, 0.85, 1.0, 1)) for q in world.helis}
-        # eigener Lärm: Fläche + Rand (Einheitskreis, skaliert); Wellen bei Schuss/Explosion
-        self.mm_zoom_hold = 0.0
-        nm = Mesh(lit=False)
-        for i in range(48):
-            a0, a1 = 2 * math.pi * i / 48, 2 * math.pi * (i + 1) / 48
-            p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)        # noqa: E731
-            nm.tri((0, 0, 0), p(0.97, a0), p(0.97, a1), (1, 1, 1, NOISE_MM_ALPHA), ref=(0, 5, 0))
-            nm.tri(p(0.97, a0), p(1.0, a0), p(1.0, a1), (1, 1, 1, NOISE_MM_ALPHA * 3), ref=(0, 5, 0))
-            nm.tri(p(0.97, a0), p(1.0, a1), p(0.97, a1), (1, 1, 1, NOISE_MM_ALPHA * 3), ref=(0, 5, 0))
-        self.mm_noise = marker(self.mm_root.attachNewNode(nm.node("mmnoise")), 22)
-        self.mm_noise.setTwoSided(True)
-        self.mm_noise.hide()
-        wm = Mesh(lit=False)
-        for i in range(48):
-            a0, a1 = 2 * math.pi * i / 48, 2 * math.pi * (i + 1) / 48
-            p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)        # noqa: E731
-            wm.tri(p(0.93, a0), p(1.0, a0), p(1.0, a1), (1, 1, 1), ref=(0, 5, 0))
-            wm.tri(p(0.93, a0), p(1.0, a1), p(0.93, a1), (1, 1, 1), ref=(0, 5, 0))
-        self.mm_wave_tpl = wm
-        self.mm_waves = []                         # [Knoten, Start, Radius (m), x, y]
-        self.mm_north = OnscreenText(text="N", parent=self.mm_root, pos=(0, 0), scale=0.04,
-                                     fg=(1.0, 0.35, 0.3, 1), shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.mm_north.setBin("fixed", 25)
-        self.mm_vis = self.MM_LEVELS[self.mm_level]
-        self.mm_gads, self.mm_bdots = {}, {}          # Funkbaken-Markierungen und von ihnen entdeckte Spieler
-        self.mm_dot_factory = dot
-        self.mm_zoom_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.07, 0.24 + 2 * R + 0.03),
-                                         scale=0.032, fg=(0.85, 0.9, 0.95, 1), shadow=(0, 0, 0, 0.9),
-                                         align=TextNode.ALeft, mayChange=True)
-        self.build_bigmap()
-
-    # ------------------------------------------------------------ grosse Karte (M)
-    BIGMAP_H = 0.80       # halbe Kantenlänge der grossen Karte (Bildschirmeinheiten)
-
-    def build_bigmap(self):
-        """Die ganze Karte gross vor dir (M ein/aus). Das Spiel läuft weiter, man kann sich dabei bewegen."""
-        H = self.BIGMAP_H
-        root = self.aspect2d.attachNewNode("bigmap")
-
-        def lay(n, sort):
-            n.setTransparency(TransparencyAttrib.MAlpha)
-            n.setBin("fixed", sort)
-            n.setDepthTest(False)
-            n.setDepthWrite(False)
-            return n
-
-        bg = CardMaker("bmbg")
-        bg.setFrame(-H - 0.025, H + 0.025, -H - 0.025, H + 0.025)
-        b = lay(root.attachNewNode(bg.generate()), 60)
-        b.setColor(0.03, 0.04, 0.06, 0.82)
-        mm = CardMaker("bmmap")
-        mm.setFrame(-H, H, -H, H)
-        try:
-            M, T = self.MAP_MARGIN, WORLD + 2 * self.MAP_MARGIN
-            from panda3d.core import LPoint2f
-            mm.setUvRange(LPoint2f(M / T, M / T), LPoint2f((M + WORLD) / T, (M + WORLD) / T))
-        except Exception:
-            pass
-        mp = lay(root.attachNewNode(mm.generate()), 61)
-        mp.setLightOff()
-        if self.map_tex is not None:
-            mp.setTexture(self.map_tex)
-        else:
-            mp.setColor(0.2, 0.34, 0.17, 1)
-
-        def arrow(size, col):
-            am = Mesh(lit=False)
-            for s_, c_ in ((size * 1.35, (0, 0, 0)), (size, (1, 1, 1))):
-                am.tri((0, 0, s_), (-0.62 * s_, 0, -0.72 * s_), (0, 0, -0.30 * s_), c_)
-                am.tri((0, 0, s_), (0, 0, -0.30 * s_), (0.62 * s_, 0, -0.72 * s_), c_)
-            n = root.attachNewNode(am.node("arrow"))
-            n.setTwoSided(True)
-            n.setColorScale(*col)
-            return lay(n, 63)
-
-        def dot(size, col):
-            c = CardMaker("dot")
-            c.setFrame(-size, size, -size, size)
-            n = root.attachNewNode(c.generate())
-            n.setColor(*col)
-            return lay(n, 62)
-
-        self.bm_arrow = arrow
-        self.bm_dot_factory = dot
-        self.bm_me = arrow(0.034, (0.3, 1.0, 0.3, 1))
-        self.bm_dots = {}                                   # Spieler-ID -> Pfeil (kurz nach einem Schuss)
-        self.bm_vehs = {v.id: dot(0.012, (1.0, 0.85, 0.2, 1)) for v in self.world.vehicles}
-        self.bm_helis = {q.id: dot(0.016, (0.45, 0.85, 1.0, 1)) for q in self.world.helis}
-        hint = OnscreenText(text="M   Karte schliessen", parent=root, pos=(0, -H - 0.085), scale=0.04,
-                            fg=(0.85, 0.9, 0.95, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
-        hint.setBin("fixed", 63)
-        root.hide()
-        self.bm_root, self.bm_open = root, False
-
-    def toggle_bigmap(self):
-        if self.mode != "play" or self.quit_box is not None or getattr(self, "bm_root", None) is None:
-            return
-        self.bm_open = not self.bm_open
-        (self.bm_root.show if self.bm_open else self.bm_root.hide)()
-
-    def bm_xy(self, x, y):
-        H = self.BIGMAP_H
-        return (-H + max(0.0, min(WORLD, x)) / WORLD * 2 * H, -H + max(0.0, min(WORLD, y)) / WORLD * 2 * H)
-
-    def update_bigmap(self):
-        if not getattr(self, "bm_open", False):
-            return
-        pl = self.player
-        p = self.bm_xy(pl.x, pl.y)
-        self.bm_me.setPos(p[0], 0, p[1])
-        self.bm_me.setR(-pl.heading)
-        now = time.time()
-        for pid, (t0, _x, _y) in list(self.pings.items()):          # schiessende Spieler: wie auf der Minimap, kurz sichtbar
-            age = now - t0
-            n = self.bm_dots.get(pid)
-            if n is None:
-                n = self.bm_dots[pid] = self.bm_arrow(0.028, (1.0, 0.25, 0.2, 1))
-            other = self.world.players.get(pid)
-            if age > self.PING_T or other is None or other.hp <= 0:
-                n.hide()
-                continue
-            q = self.bm_xy(other.x, other.y)
-            n.show()
-            n.setPos(q[0], 0, q[1])
-            n.setR(-other.heading)
-            n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
-        self.update_ctf_map(big=True)
-        for v in self.world.vehicles:
-            n = self.bm_vehs.get(v.id)
-            if n is not None:
-                q = self.bm_xy(v.x, v.y)
-                n.setPos(q[0], 0, q[1])
-        for q_ in self.world.helis:
-            n = self.bm_helis.get(q_.id)
-            if n is not None:
-                q = self.bm_xy(q_.x, q_.y)
-                n.setPos(q[0], 0, q[1])
-                (n.show if q_.hp > 0 else n.hide)()
-
-    def on_mm_zoom(self, d):
-        """X (d=+1) zoomt heraus, Y (d=-1) hinein."""
-        if self.mode != "play" or self.quit_box is not None:
-            return
-        self.mm_level = max(0, min(len(self.MM_LEVELS) - 1, self.mm_level + d))
-        self.mm_vis = self.MM_LEVELS[self.mm_level]
-
-    def on_y(self):
-        if self.quit_box is not None or (self.mode == "menu" and self.menu_state == "quit"):
-            self.on_confirm(True)
-        else:
-            self.on_mm_zoom(-1)
-
-    PING_T = 3.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
-
-    # ------------------------------------------------------------ 11: Capture the Flag (Anzeige)
-    @staticmethod
-    def ctf_flag_col(team):
-        return CTF_TEAM_COLS[team if team in (0, 1) else 0]
-
-    @staticmethod
-    def ctf_flag_name(team):
-        """'die blaue Flagge' / 'die rote Flagge' / 'die Flagge' (neutral)."""
-        return {0: "die blaue Flagge", 1: "die rote Flagge"}.get(team, "die Flagge")
-
-    def ctf_ui_build(self):
-        """HUD und Minimap-Marker des CTF (einmal je Spiel; cleanup_scene räumt die Knoten mit dem HUD ab)."""
-        ui = {}
-        tc = self.a2dTopCenter
-        for key, x, al in (("s0", -0.035, TextNode.ARight), ("sep", 0.0, TextNode.ACenter), ("s1", 0.035, TextNode.ALeft)):
-            ui[key] = OnscreenText(text="", parent=tc, pos=(x, -0.235), scale=0.056, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                                   shadow=(0, 0, 0, 0.9), align=al, mayChange=True)
-        ui["s0"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[0]) + (1,))
-        ui["s1"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[1]) + (1,))
-        ui["status"] = OnscreenText(text="", parent=tc, pos=(0, -0.285), scale=0.036, fg=(0.9, 0.92, 0.95, 1),
-                                    shadow=(0, 0, 0, 0.9), mayChange=True)
-        ui["team"] = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.36), scale=0.05, font=BOLD_FONT,
-                                  fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
-        am = Mesh(lit=False)                               # Pfeil zur eigenen Basis (nur für den Flaggenträger)
-        for sz, c in ((0.062, (0, 0, 0)), (0.048, (1, 1, 1))):
-            tip, lft, nt, rgt = (0, 0, sz), (-0.62 * sz, 0, -0.72 * sz), (0, 0, -0.30 * sz), (0.62 * sz, 0, -0.72 * sz)
-            am.tri(tip, lft, nt, c)
-            am.tri(tip, nt, rgt, c)
-        arrow = tc.attachNewNode(am.node("ctf_pfeil"))
-        arrow.setTwoSided(True)
-        arrow.setPos(0, 0, -0.38)
-        arrow.hide()
-        ui["arrow"] = arrow
-        ui["carry"] = OnscreenText(text="", parent=tc, pos=(0, -0.48), scale=0.044, font=BOLD_FONT, fg=(1, 0.88, 0.35, 1),
-                                   shadow=(0, 0, 0, 0.9), mayChange=True)
-        ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"] = {}, {}, {}, {}, {}
-        ui["ping_t"], ui["myteam"] = 0.0, -2
-        self.ctf_ui = ui
-        return ui
-
-    def ctf_ring(self, r, col, alpha=0.45):
-        """Leuchtender Ring am Boden (Flaggenstand, Abgabezone)."""
-        m = Mesh(lit=False)
-        n = 40
-        for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            p = lambda rr, a: (math.cos(a) * rr, math.sin(a) * rr, 0.0)     # noqa: E731
-            m.tri(p(r * 0.86, a0), p(r, a0), p(r, a1), col + (alpha,), ref=(0, 0, -1))
-            m.tri(p(r * 0.86, a0), p(r, a1), p(r * 0.86, a1), col + (alpha,), ref=(0, 0, -1))
-            m.tri((0, 0, 0), p(r * 0.86, a0), p(r * 0.86, a1), col + (alpha * 0.22,), ref=(0, 0, -1))
-        nd = self.render.attachNewNode(m.node("ctf_ring"))
-        nd.setTransparency(TransparencyAttrib.MAlpha)
-        nd.setDepthWrite(False)
-        nd.setLightOff()
-        nd.setTwoSided(True)
-        nd.setBin("transparent", 3)
-        return nd
-
-    def ctf_clear(self):
-        """CTF-Anzeige abbauen (anderer Modus / neue Runde ohne CTF)."""
-        ui = getattr(self, "ctf_ui", None)
-        if ui is None:
-            return
-        for d in (ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"]):
-            for v in d.values():
-                for nd in (v if isinstance(v, (list, tuple)) else (v,)):
-                    if hasattr(nd, "removeNode"):
-                        nd.removeNode()
-            d.clear()
-        for key in ("s0", "sep", "s1", "status", "carry", "team"):
-            self.set_text(ui[key], "")
-        ui["arrow"].hide()
-
-    def update_ctf(self, dt):
-        """11: Flaggen in der Welt (am Ständer, am Boden, am Rücken des Trägers), Ringe, HUD (Teampunkte, Status,
-        Pfeil zur Basis für den Träger) und alle CTF_PING_T s ein grober Kreis um jeden Flaggenträger auf der Minimap."""
-        w, pl = self.world, self.player
-        ui = getattr(self, "ctf_ui", None)
-        if w is None or pl is None or w.mode != "ctf" or not w.ctf_bases:
-            if ui is not None and (ui["views"] or ui["rings"] or ui["mm"]):
-                self.ctf_clear()
-            return
-        if ui is None:
-            ui = self.ctf_ui_build()
-        now = time.time()
-        my_t = w.team_of.get(self.my_id)
-        if my_t != ui["myteam"]:
-            ui["myteam"] = my_t
-            self.refresh_fp_arms()                         # Armbinde in der Ego-Ansicht in der Teamfarbe
-        # --- Abgabezonen / Flaggenstände (Ringe am Boden)
-        for t, (bx, by, bz) in enumerate(w.ctf_bases[:2]):
-            if t not in ui["rings"]:
-                rg = self.ctf_ring(CTF_PICK_R * 1.25, CTF_TEAM_COLS[t])
-                rg.setPos(bx, by, bz + 0.04)
-                ui["rings"][t] = rg
-            ui["rings"][t].setColorScale(1, 1, 1, 0.75 + 0.25 * math.sin(now * 2.4 + t))
-        # --- Flaggen
-        seen = set()
-        for f in w.flags:
-            seen.add(f.fid)
-            col = self.ctf_flag_col(f.team)
-            v = ui["views"].get(f.fid)
-            if v is None:
-                root, cloth = build_ctf_flag(col, 1.0, base=True)
-                root.reparentTo(self.render)
-                glow = self.ctf_ring(CTF_PICK_R, col, 0.55)
-                v = ui["views"][f.fid] = (root, cloth, glow)
-            root, cloth, glow = v
-            if f.state == "carried":
-                root.hide()
-                glow.hide()
-            else:
-                root.show()
-                glow.show()
-                root.setPos(f.x, f.y, f.z)
-                glow.setPos(f.x, f.y, f.z + 0.03)
-                if f.state == "dropped":                   # liegt: schräg, blinkt leicht
-                    root.setHpr((f.fid * 47) % 360, 0, 28.0)
-                    glow.setColorScale(1, 1, 1, 0.5 + 0.5 * math.sin(now * 6.0))
-                else:
-                    root.setHpr(0, 0, 0)
-                    glow.setColorScale(1, 1, 1, 0.8)
-                cloth.setH(12.0 * math.sin(now * 2.2 + f.fid) + 6.0 * math.sin(now * 4.7 + f.fid * 1.3))
-        for fid in [k for k in ui["views"] if k not in seen]:
-            for nd in ui["views"].pop(fid):
-                nd.removeNode()
-        # --- Flagge am Rücken des Trägers (andere Spieler; die eigene sieht man in der Ego-Ansicht nicht)
-        carried = {f.carrier: f for f in w.flags if f.state == "carried" and f.carrier != self.my_id}
-        for pid in list(ui["back"]):
-            pv = self.player_views.get(pid)
-            nd, key = ui["back"][pid]
-            if pid not in carried or pv is None or key != (id(pv), carried[pid].team):
-                nd.removeNode()
-                del ui["back"][pid]
-        for pid, f in carried.items():
-            pv = self.player_views.get(pid)
-            if pv is None or pid in ui["back"]:
-                if pid in ui["back"]:
-                    cl = ui["back"][pid][0].find("**/tuch")
-                    if not cl.isEmpty():
-                        cl.setH(15.0 * math.sin(now * 3.1 + pid))
-                continue
-            holder = pv.torso.attachNewNode("ctf_ruecken")
-            holder.setPos(0.12, -0.24, -0.28)
-            holder.setP(14.0)                              # leicht nach hinten geneigt
-            root, cloth = build_ctf_flag(self.ctf_flag_col(f.team), 0.62, base=False)
-            root.reparentTo(holder)
-            root.setH(-90.0)                               # Tuch weht nach hinten
-            ui["back"][pid] = (holder, (id(pv), f.team))
-        # --- Grober Kreis um jeden Träger (alle sehen ihn, alle CTF_PING_T s; Mitte zufällig versetzt)
-        if now - ui["ping_t"] >= CTF_PING_T:
-            ui["ping_t"] = now
-            for f in w.flags:
-                if f.state != "carried" or f.carrier == self.my_id:
-                    continue
-                c = w.players.get(f.carrier)
-                if c is None or c.hp <= 0:
-                    continue
-                a, d = self.prng.uniform(0, 2 * math.pi), CTF_PING_R * 0.85 * math.sqrt(self.prng.random())
-                self.noise_wave(c.x + math.cos(a) * d, c.y + math.sin(a) * d, CTF_PING_R)
-        # --- HUD: Teampunkte, Flaggenstatus, eigene Rolle
-        s0, s1 = w.team_score[0], w.team_score[1]
-        lim = f"   (bis {w.score_limit})" if w.score_limit > 0 else ""
-        self.set_text(ui["s0"], f"BLAU {s0}")
-        self.set_text(ui["sep"], ":")
-        self.set_text(ui["s1"], f"{s1} ROT" + lim)
-        parts = []
-        for f in w.flags:
-            nm = "Blaue Flagge" if f.team == 0 else "Rote Flagge"
-            if f.state == "home":
-                st = "in der Basis"
-            elif f.state == "carried":
-                c = w.players.get(f.carrier)
-                st = "getragen von " + (c.name[:12] if c is not None else "?")
-            else:
-                st = f"liegt  ({int(math.ceil(max(0.0, f.drop_t)))} s)"
-            parts.append(f"{nm}: {st}")
-        self.set_text(ui["status"], "     ".join(parts))
-        if my_t in (0, 1):
-            self.set_text(ui["team"], f"TEAM {CTF_TEAM_NAMES[my_t].upper()}")
-            ui["team"].setFg(tuple(min(1.0, c * 1.15 + 0.15) for c in CTF_TEAM_COLS[my_t]) + (1,))
-        else:
-            self.set_text(ui["team"], "")
-        mine = w.ctf_carried(self.my_id) if pl.hp > 0 else None
-        if mine is not None and my_t in (0, 1) and my_t < len(w.ctf_bases):
-            bx, by, _bz = w.ctf_bases[my_t]
-            h = math.radians(pl.heading)
-            dx, dy = bx - pl.x, by - pl.y
-            fwd = dx * -math.sin(h) + dy * math.cos(h)
-            rgt = dx * math.cos(h) + dy * math.sin(h)
-            ui["arrow"].setR(math.degrees(math.atan2(rgt, fwd)))
-            ui["arrow"].setColorScale(*(tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1.0,)))
-            ui["arrow"].setScale(1.0 + 0.08 * math.sin(now * 6.0))
-            ui["arrow"].show()
-            own = next((q for q in w.flags if q.team == my_t), None)
-            extra = ("   -   EIGENE FLAGGE ZURÜCKHOLEN!" if CTF_NEED_HOME and own is not None and own.state != "home" else "")
-            self.set_text(ui["carry"], f"DU HAST DIE FLAGGE  -  ZUR BASIS  {int(math.hypot(dx, dy))} m{extra}")
-        else:
-            ui["arrow"].hide()
-            self.set_text(ui["carry"], "")
-
-    def update_ctf_map(self, big=False):
-        """11: Minimap (bzw. grosse Karte): Basen (eigene deutlich, als Träger pulsierend), sichtbare Flaggen (am Ständer,
-        am Boden) und die Mitspieler des eigenen Teams als Pfeile in der Teamfarbe."""
-        w, pl, ui = self.world, self.player, getattr(self, "ctf_ui", None)
-        if ui is None or w is None or w.mode != "ctf":
-            return
-        store = ui["bm"] if big else ui["mm"]
-        dotf = self.bm_dot_factory if big else self.mm_dot_factory
-        arrf = self.bm_arrow if big else self.mm_arrow_factory
-        xy = (lambda x, y: self.bm_xy(x, y)) if big else (lambda x, y: self.mm_xy(x, y))
-        now = time.time()
-        my_t = w.team_of.get(self.my_id)
-        carrying = w.ctf_carried(self.my_id) is not None and pl.hp > 0
-        shown = set()
-
-        def put(key, x, y, size, col, pulse=False):
-            n = store.get(key)
-            if n is None:
-                n = store[key] = dotf(size, col + (1,))
-                n.setR(45.0)                               # Raute
-            p = xy(x, y)
-            n.setPos(p[0], 0, p[1])
-            n.setScale(1.0 + (0.35 + 0.35 * math.sin(now * 7.0) if pulse else 0.0))
-            n.show()
-            shown.add(key)
-
-        for t, (bx, by, _bz) in enumerate(w.ctf_bases[:2]):
-            own = t == my_t
-            put(("base", t), bx, by, (0.016 if own else 0.011) * (1.4 if big else 1.0), CTF_TEAM_COLS[t],
-                pulse=own and carrying)
-        for f in w.flags:
-            if f.state in ("home", "dropped"):
-                put(("flag", f.fid), f.x, f.y, 0.009 * (1.4 if big else 1.0),
-                    tuple(min(1.0, c * 1.2 + 0.25) for c in self.ctf_flag_col(f.team)), pulse=f.state == "dropped")
-        for pid, p in w.players.items():                   # Teamkameraden
-            if pid == self.my_id or p.hp <= 0 or my_t not in (0, 1) or w.team_of.get(pid) != my_t:
-                continue
-            key = ("ally", pid)
-            n = store.get(key)
-            if n is None:
-                n = store[key] = arrf(0.016 if not big else 0.022, tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1,))
-            q = xy(p.x, p.y)
-            n.setPos(q[0], 0, q[1])
-            n.setR(-(p.heading - (0.0 if big else pl.heading)))
-            n.show()
-            shown.add(key)
-        for key, n in store.items():
-            if key not in shown:
-                n.hide()
-
-    def mm_xy(self, x, y, clamp=True):
-        """Weltpunkt -> Position auf der runden Karte (relativ zu dir und deiner Blickrichtung).
-        Ausserhalb des Kreises wird der Punkt an den Rand gesetzt (clamp) bzw. None geliefert."""
-        pl = self.player
-        h = math.radians(pl.heading)
-        dx, dy = x - pl.x, y - pl.y
-        sx = dx * math.cos(h) + dy * math.sin(h)            # nach rechts
-        sy = -dx * math.sin(h) + dy * math.cos(h)           # nach vorn = oben
-        k = self.mm_R / self.mm_vis
-        sx, sy = sx * k, sy * k
-        d = math.hypot(sx, sy)
-        lim = self.mm_R * 0.94
-        if d > lim:
-            if not clamp:
-                return None
-            sx, sy = sx / d * lim, sy / d * lim
-        return sx, sy
-
-    def noise_wave(self, x, y, r):
-        """Eigener Lärm (Schuss, Explosion): Ring breitet sich auf der Minimap bis r m aus."""
-        if not NOISE_MINIMAP or r <= 0 or not hasattr(self, "mm_waves"):
-            return
-        now = time.time()
-        if self.mm_waves and now - self.mm_waves[-1][1] < 0.04 and abs(self.mm_waves[-1][2] - r) < 1.0:
-            return                                 # dieselbe Welle doppelt (Ereignis lokal + vom Host)
-        n = self.mm_root.attachNewNode(self.mm_wave_tpl.node("wave"))
-        n.setTwoSided(True)
-        n.setTransparency(TransparencyAttrib.MAlpha)
-        n.setBin("fixed", 22)
-        n.setDepthTest(False)
-        n.setDepthWrite(False)
-        self.mm_waves.append([n, now, r, x, y])
-        if len(self.mm_waves) > 8:
-            self.mm_waves.pop(0)[0].removeNode()
-        base = self.MM_LEVELS[self.mm_level]
-        if NOISE_MINIMAP_ZOOM and r > base * 0.92:                 # zu gross für den Ausschnitt: herauszoomen
-            self.mm_zoom_hold = max(self.mm_zoom_hold, min(NOISE_ZOOM_MAX, r * 1.1))
-            self.mm_zoom_until = now + self.wave_t(r) + 0.5
-
-    @staticmethod
-    def wave_t(r):
-        return NOISE_WAVE_T * max(0.6, min(2.2, math.sqrt(r / NOISE_SHOT)))
-
-    def update_noise_map(self, dt):
-        """Eigener Lärmkreis (Laufen/Rennen/Ducken/Fahren) und die Wellen; Zoom der Minimap."""
-        pl, now = self.player, time.time()
-        base = self.MM_LEVELS[self.mm_level]
-        # Zoom: bei grosser Welle weich heraus, danach wieder zurück auf die gewählte Stufe
-        want = self.mm_zoom_hold if now < getattr(self, "mm_zoom_until", 0.0) else base
-        if now >= getattr(self, "mm_zoom_until", 0.0):
-            self.mm_zoom_hold = 0.0
-        self.mm_vis += (max(want, base) - self.mm_vis) * min(1.0, dt * (6.0 if want > self.mm_vis else 2.5))
-        k = self.mm_R / self.mm_vis
-        r = self.world.player_noise(pl) if NOISE_MINIMAP and pl.hp > 0 else 0.0
-        if r > 0:
-            self.mm_noise.setScale(min(r * k, self.mm_R * 0.97))
-            self.mm_noise.show()
-        else:
-            self.mm_noise.hide()
-        keep = []
-        for w in self.mm_waves:
-            n, t0, rmax, x, y = w
-            u = (now - t0) / self.wave_t(rmax)
-            if u >= 1.0:
-                n.removeNode()
-                continue
-            keep.append(w)
-            p = self.mm_xy(x, y)
-            n.setPos(p[0], 0, p[1])
-            rad = rmax * (1.0 - (1.0 - u) ** 2) * k
-            n.setScale(max(0.002, min(rad, self.mm_R * 0.98)))
-            n.setColorScale(1, 1, 1, 0.55 * (1.0 - u) ** 1.3)
-        self.mm_waves = keep
-
-    def update_minimap(self):
-        pl = self.player
-        R = self.mm_R
-        now_ = time.time()
-        self.update_noise_map(min(0.1, max(0.0, now_ - getattr(self, "mm_last_t", now_))))
-        self.mm_last_t = now_
-        h = math.radians(pl.heading)
-        ch, sh = math.cos(h), math.sin(h)
-        if self.mm_disc is not None:
-            _disc, vd = self.mm_disc
-            T = WORLD + 2 * self.MAP_MARGIN
-            vis = self.mm_vis / R
-            try:
-                tw = GeomVertexWriter(vd, "texcoord")
-                for i in range(self.mm_n + 1):
-                    if i == 0:
-                        sx = sy = 0.0
-                    else:
-                        a = 2 * math.pi * (i - 1) / self.mm_n
-                        sx, sy = math.cos(a) * R * vis, math.sin(a) * R * vis    # in Metern
-                    wx = pl.x + sx * ch - sy * sh
-                    wy = pl.y + sx * sh + sy * ch
-                    tw.addData2((wx + self.MAP_MARGIN) / T, (wy + self.MAP_MARGIN) / T)
-            except Exception:
-                pass
-        self.mm_me.setPos(0, 0, 0)
-        self.mm_me.setR(0)                          # eigener Pfeil zeigt immer nach oben
-        self.mm_north.setPos(sh * R * 0.84, ch * R * 0.84 - 0.014)
-        now = time.time()
-        for pid, (t0, _x, _y) in list(self.pings.items()):
-            age = now - t0
-            n = self.mm_dots.get(pid)
-            if n is None:
-                n = self.mm_dots[pid] = self.mm_arrow_factory(0.019, (1.0, 0.25, 0.2, 1))
-            other = self.world.players.get(pid)
-            p = self.mm_xy(other.x, other.y, False) if other is not None else None
-            if age > self.PING_T or other is None or other.hp <= 0 or p is None:
-                n.hide()
-                continue
-            n.show()                               # folgt dem Spieler, solange er sichtbar ist
-            n.setPos(p[0], 0, p[1])
-            n.setR(-(other.heading - pl.heading))
-            n.setColorScale(1.0, 0.25, 0.2, 1.0 - smoothstep(0.15, self.PING_T, age))
-        self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
-        self.update_bigmap()
-        self.update_ctf_map()                       # 11: Basen, Flaggen, Teamkameraden
-        # Funkbaken: eigene Baken als Punkte, alle Spieler in ihrem Radius als Pfeile
-        mine = [g for g in self.world.gadgets if g.kind == GAD_BEACON and g.owner == self.my_id]
-        ids = {g.gid for g in mine}
-        for g in mine:
-            n = self.mm_gads.get(g.gid)
-            if n is None:
-                n = self.mm_gads[g.gid] = self.mm_dot_factory(0.012, (0.3, 0.85, 1.0, 1))
-            p = self.mm_xy(g.x, g.y)
-            n.setPos(p[0], 0, p[1])
-            n.show()
-        for gid in [i for i in self.mm_gads if i not in ids]:
-            self.mm_gads.pop(gid).removeNode()
-        found = set()
-        if mine and pl.hp > 0:
-            for pid, other in self.world.players.items():
-                if pid == self.my_id or other.hp <= 0:
-                    continue
-                if not any(math.hypot(other.x - g.x, other.y - g.y) <= BEACON_R for g in mine):
-                    continue
-                p = self.mm_xy(other.x, other.y, False)
-                if p is None:
-                    continue
-                n = self.mm_bdots.get(pid)
-                if n is None:
-                    n = self.mm_bdots[pid] = self.mm_arrow_factory(0.019, (1.0, 0.6, 0.15, 1))
-                n.show()
-                n.setPos(p[0], 0, p[1])
-                n.setR(-(other.heading - pl.heading))
-                found.add(pid)
-        for pid, n in self.mm_bdots.items():
-            if pid not in found:
-                n.hide()
-        for v in self.world.vehicles:
-            n = self.mm_vehs.get(v.id)
-            if n is not None:
-                p = self.mm_xy(v.x, v.y)
-                n.setPos(p[0], 0, p[1])
-                (n.show if v.hp > 0 else n.hide)()
-        for q in self.world.helis:
-            n = self.mm_helis.get(q.id)
-            if n is not None:
-                p = self.mm_xy(q.x, q.y)
-                n.setPos(p[0], 0, p[1])
-                (n.show if q.hp > 0 else n.hide)()
-
-    # ------------------------------------------------------------ Lootkisten
-    def build_toma(self):
-        """Rakete für den sichtbaren Anflug des Tomahawk (erscheint nur während des Countdowns)."""
-        self.toma_rk = None
-        self.toma_trail, self.toma_trail_t, self.toma_whistled = [], 0.0, False
-        rk, fl = build_rocket(False)
-        rr = self.render.attachNewNode("tomahawk_rocket")
-        rk.reparentTo(rr)
-        fl.reparentTo(rr)
-        glow = Mesh(alpha=0.45, lit=False)
-        box(glow, 0, -0.85, 0, 0.28, 0.6, 0.28, (1.0, 0.45, 0.1))          # Triebwerksglühen
-        gn = rr.attachNewNode(glow.node("glow"))
-        gn.setTransparency(TransparencyAttrib.MAlpha)
-        gn.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd))
-        gn.setDepthWrite(False)
-        rr.setScale(10.0)                                 # gross genug, um sie am Himmel zu sehen
-        rr.setFogOff()
-        rr.setLightOff()
-        rr.hide()
-        self.toma_rk = rr
-
-    def toma_rocket_pos(self, u):
-        """Flugbahn der Tomahawk-Rakete (u = 0 Start .. 1 Einschlag): von weit ausserhalb der Karte aus der
-        Richtung strike_ang in einem hohen Bogen genau auf den Zielpunkt. Jeder rechnet sie selbst aus."""
-        w = self.world
-        tx, ty = w.strike_x, w.strike_y
-        tz = w.height(tx, ty)
-        dist = max(TOMA_ROCKET_MIN, TOMA_ROCKET_SPEED * max(1.0, w.strike_dur))
-        a = math.radians(w.strike_ang)
-        sx, sy = tx + math.cos(a) * dist, ty + math.sin(a) * dist
-        u = max(0.0, min(1.0, u))
-        x, y = sx + (tx - sx) * u, sy + (ty - sy) * u
-        z = tz + TOMA_ROCKET_ALT * (1.0 - u ** 5) + 40.0 * math.sin(math.pi * u) * (1.0 - u)   # hoch, dann Sturzflug
-        return x, y, z
-
-    def update_toma_rocket(self, dt):
-        """Anflug der Tomahawk-Rakete während des Countdowns - für alle sichtbar (auf jeder Karte); der Zielort
-        wird nirgends angezeigt, man sieht nur, wohin sie fliegt."""
-        w = self.world
-        rr = getattr(self, "toma_rk", None)
-        if rr is None:
-            return
-        flying = w.strike == 1 and w.strike_dur > 0 and w.phase == "play"
-        if not flying:
-            rr.hide()
-            self.sfx.jet_sound(None)
-            self.toma_whistled = False
-        else:
-            u = 1.0 - max(0.0, w.strike_t) / w.strike_dur
-            p = self.toma_rocket_pos(u)
-            q = self.toma_rocket_pos(min(1.0, u + 0.002)) if u < 0.998 else self.toma_rocket_pos(u)
-            if q == p:
-                q2 = self.toma_rocket_pos(u - 0.002)
-                q = (2 * p[0] - q2[0], 2 * p[1] - q2[1], 2 * p[2] - q2[2])
-            rr.setPos(*p)
-            rr.lookAt(*q)                                    # Spitze (+y) in Flugrichtung
-            rr.setScale(10.0)
-            self.toma_far(rr, p, 10.0)
-            rr.show()
-            self.sfx.jet_sound(p, w.strike_t)
-            if w.strike_t <= TOMA_LOUD_T and not self.toma_whistled:
-                self.toma_whistled = True
-                self.sfx.play("whistle", None, TOMA_WHISTLE_VOL, 2.8 / max(0.5, TOMA_LOUD_T))   # passt in die Zeit
-            self.toma_trail_t -= dt
-            if self.toma_trail_t <= 0:                       # Rauchschweif hinter dem Triebwerk
-                self.toma_trail_t = 0.05
-                d = (p[0] - q[0], p[1] - q[1], p[2] - q[2])
-                ln = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2) or 1.0
-                tail = (p[0] + d[0] / ln * 9.0, p[1] + d[1] / ln * 9.0, p[2] + d[2] / ln * 9.0)
-                np_ = self.sphere_np.copyTo(self.render)        # Kopie: jede Wolke hat eigene Position/Grösse
-                np_.setTransparency(TransparencyAttrib.MAlpha)
-                np_.setDepthWrite(False)
-                np_.setLightOff()
-                np_.setFogOff()
-                f = Fx(np_, tail, 7.0, 3.0, 12.0, (0.62, 0.6, 0.58), (0.4, 0.4, 0.42), p=1.1, rise=0.6)
-                f.update(0.0)
-                self.toma_trail.append(f)
-                if len(self.toma_trail) > 140:
-                    self.toma_trail.pop(0).np.removeNode()
-        keep = []
-        for f in self.toma_trail:
-            if f.update(dt):
-                self.toma_far(f.np, (f.x, f.y, f.z), f.np.getScale()[0])
-                keep.append(f)
-            else:
-                f.np.removeNode()
-        self.toma_trail = keep
-
-    TOMA_FAR = 420.0      # Kamera-Sichtweite ist mindestens 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
-
-    def toma_far(self, np_, pos, scale):
-        """Rakete und Rauchschweif auch hinter der Sichtweite der Kamera zeigen: in derselben Richtung auf
-        TOMA_FAR heranziehen und im gleichen Verhältnis verkleinern - sieht gleich aus, wird nicht abgeschnitten."""
-        c = self.camera.getPos(self.render)
-        d = math.dist(pos, (c[0], c[1], c[2]))
-        if d > self.TOMA_FAR:
-            k = self.TOMA_FAR / d
-            np_.setPos(c[0] + (pos[0] - c[0]) * k, c[1] + (pos[1] - c[1]) * k, c[2] + (pos[2] - c[2]) * k)
-            np_.setScale(max(0.01, scale * k))
-
-    def stall_flicker(self, root, pos):
-        """Lahmgelegtes Fahrzeug: blau flackern (für alle sichtbar), ab und zu ein Blitz-Funke."""
-        k = 0.5 + 0.5 * math.sin(time.time() * 38.0)
-        root.setColorScale(0.6 + 0.2 * k, 0.75 + 0.2 * k, 1.3 + 0.5 * k, 1)
-        if self.prng.random() < 0.12:
-            p = (pos[0] + self.prng.uniform(-1, 1), pos[1] + self.prng.uniform(-1, 1), pos[2] + self.prng.uniform(-0.3, 0.6))
-            self.zap_fx(p, (p[0] + self.prng.uniform(-0.8, 0.8), p[1] + self.prng.uniform(-0.8, 0.8), p[2] + 0.5),
-                        False, sound=self.prng.random() < 0.25)
-
-    def update_rocks_view(self, dt):
-        """Steinbrocken des Titans: Felsmodell, dreht sich im Flug; zwischen den Snapshots weiter geflogen."""
-        views = getattr(self, "rock_views", None)
-        if views is None:
-            views = self.rock_views = {}
-            m = Mesh()
-            blob(m, 0, 0, 0, ROCK_SIZE * 0.5, ROCK_SIZE * 0.45, ROCK_SIZE * 0.42, (0.42, 0.39, 0.35), random.Random(9),
-                 jitter=0.18)
-            box(m, 0.1, 0.0, -ROCK_SIZE * 0.35, ROCK_SIZE * 0.5, ROCK_SIZE * 0.4, 0.2, (0.33, 0.27, 0.2))   # Erde dran
-            self.rock_np = NodePath(m.node("rock"))
-        live = {}
-        for r in self.world.rocks:
-            nd = views.get(r.rid)
-            if nd is None:
-                nd = self.rock_np.copyTo(self.render)
-                nd.setPos(r.x, r.y, r.z)
-            live[r.rid] = nd
-            if self.net_mode == "client":               # zwischen den Snapshots selbst weiterfliegen
-                r.vz -= ROCK_GRAV * dt
-                r.x += r.vx * dt
-                r.y += r.vy * dt
-                r.z += r.vz * dt
-            nd.setPos(r.x, r.y, r.z)
-            nd.setHpr(nd.getH() + 200 * dt, nd.getP() + 340 * dt, 0)
-        for rid, nd in views.items():
-            if rid not in live:
-                nd.removeNode()
-        self.rock_views = live
-
-    def zap_fx(self, src, dst, hit, sound=True, col=(0.6, 0.9, 1.0)):
-        """Elektroblitz: gezackte blaue Linie aus kurzen Stücken, Funken am Ziel, Knistern (10e: eigene Drohne lila)."""
-        r = self.prng
-        n = 7
-        pts = [src]
-        for i in range(1, n):
-            t = i / n
-            pts.append((src[0] + (dst[0] - src[0]) * t + r.uniform(-0.25, 0.25),
-                        src[1] + (dst[1] - src[1]) * t + r.uniform(-0.25, 0.25),
-                        src[2] + (dst[2] - src[2]) * t + r.uniform(-0.25, 0.25)))
-        pts.append(dst)
-        for a, b in zip(pts, pts[1:]):
-            ln = math.dist(a, b)
-            np_ = self.cube_np.copyTo(self.render)
-            np_.setPos((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
-            np_.lookAt(*b)
-            np_.setScale(0.05, ln, 0.05)
-            np_.setColorScale(col[0], col[1], col[2], 1)
-            np_.setLightOff()
-            np_.setFogOff()
-            self.parts.append(Particle(np_, np_.getPos(), (0.0, 0.0, 0.0), 0.16, 0.0, 0.0, False))
-            self.parts[-1].x, self.parts[-1].y, self.parts[-1].z = np_.getX(), np_.getY(), np_.getZ()
-        if hit:
-            for _ in range(10):
-                self.add_particle(dst, (r.uniform(-3, 3), r.uniform(-3, 3), r.uniform(1, 4)), col,
-                                  0.04, 0.4, 0.2)
-        if sound:
-            self.sfx.play("zap", tuple(src), 1.0, self.prng.uniform(0.95, 1.05))
-
-    def slam_fx(self, pos, rad):
-        """Koloss-Bodenschlag: flache Staubwelle bis zum Radius, Brocken, dumpfer Knall, Beben in der Nähe."""
-        x, y, z = pos
-        r = self.prng
-        self.fx_spawn(self.disc_np, (x, y, z + 0.2), 0.7,
-                      0.5, rad, (0.75, 0.68, 0.55), (0.5, 0.45, 0.38), p=1.0)
-        for i in range(14):
-            a = i * math.tau / 14
-            self.smoke_puff((x + math.cos(a) * rad * 0.6, y + math.sin(a) * rad * 0.6, z + 0.3), 0.9, 1.4, 0.6)
-            self.add_particle((x, y, z + 0.4), (math.cos(a) * r.uniform(3, 7), math.sin(a) * r.uniform(3, 7),
-                                                r.uniform(2, 5)), (0.45, 0.4, 0.32), 0.12, 1.2, 0.3, 4.0)
-        self.sfx.play("explosion", (x, y, z), 1.0, 0.55)
-        pl = self.player
-        d = math.hypot(pl.x - x, pl.y - y)
-        if d < rad * 3:                                  # Beben: je näher, desto stärker
-            self.sp_cam.kick((1.0 - d / (rad * 3)) * 9.0)
-            self.sp_hurt.kick(self.prng.choice((-1, 1)) * (1.0 - d / (rad * 3)) * 60.0)
-
-
-class ExpGame(Game):
-    """Game im Modus Experimental (Robins Regeln)."""
-
-    def __init__(self, adopt=False):
-        if not adopt:
-            ShowBase.__init__(self)
-            load_ui_fonts(self.loader)
-        self.disableMouse()
-        self.setBackgroundColor(*SKY)
-        self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
-        st = load_settings()
-        self.gfx = "standard"                    # überall Standardgrafik (alte Einstellung "hoch" wird ignoriert)
-        vd = st.get("vd")
-        self.view_pct = int(vd) if isinstance(vd, (int, float)) and not isinstance(vd, bool) and 25 <= vd <= 300 else 100   # Sichtweite in %
-        self.fog, self.fog_dens, self.far_base = None, 0.012, 450.0
-        sv = st.get("sens")
-        self.sens_mult = float(sv) if isinstance(sv, (int, float)) and not isinstance(sv, bool) and 0.5 <= sv <= 2.0 else 1.0
-        fv = st.get("fov")
-        self.fov_base = float(fv) if isinstance(fv, (int, float)) and not isinstance(fv, bool) and 60 <= fv <= 110 else FOV   # Sichtfeld
-        self.invert_y = bool(st.get("inv"))      # Maus hoch/runter invertiert
-        vm = st.get("vm")
-        self.vol_music = int(vm) if isinstance(vm, (int, float)) and not isinstance(vm, bool) and 0 <= vm <= 100 else 100      # Hintergrundmusik in %
-        vs_ = st.get("vs")
-        self.vol_sfx = int(vs_) if isinstance(vs_, (int, float)) and not isinstance(vs_, bool) and 0 <= vs_ <= 100 else 100        # Soundeffekte in %
-        self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
-        lk = st.get("look")
-        self.look_code = lk if look_valid(lk) else look_default(random.randrange(100000))     # Aussehen des Charakters
-        self.apply_fps()
-        self.overlay_kind = self.overlay_yes = None
-        self.amb_np = None
-        self.sky_root = self.sky_clouds = self.sun_np = self.filters = None
-        self.vignette = self.land_np = None
-        self.water_nps = []
-        self.town_np = None                    # Stadt-Details (Bloecke, Wind, Fahnen)
-        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
-        self.shadows = {}
-        self.camLens.setFov(self.fov_base)
-        self.camLens.setNearFar(0.1, 450)      # grosse Karten: siehe build_world (Fernsicht)
-        self.fov_cur = self.fov_base
-        self.prng = random.Random()
-
-        # Spielzustand: erst das Startmenü, Welt und HUD entstehen in start_game()
-        self.mode = "menu"          # menu | play
-        self.net_mode = "single"    # single | host | client
-        self.my_id = 0
-        self.my_name = str(st.get("name") or (socket.gethostname() or "Spieler"))[:16]
-        self.world = None
-        self.player = None
-        self.host = None            # HostSession (nur beim Host)
-        self.client = None          # ClientSession (nur beim Mitspieler)
-        self.listener = None        # Host-Suche im Menü
-        self.attempt = None         # laufender Verbindungsversuch
-        self.menu_items = []
-        self.menu_lines = []                  # anklickbare Menüzeilen (Hot)
-        self.menu_last = None
-        self.menu_state = "name"
-        self.menu_msg = ""
-        self.ip_text = ""
-        self.ip_edited = False
-        self.lost_text = None
-        self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
-                        resp=RESPAWN_DEFAULT, map=None, bcr=None, bha=None)   # Host-Einstellungen (bcr/bha: Bonuskisten/-hasen)
-        self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
-        self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
-        self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
-        self.menu_cards = []                  # Kacheln hinter den Menüknöpfen (Hot, Knoten)
-        self.setup_for = "single"
-        self.map_page = 0                     # Seite der Kartenauswahl
-        self.slider_drag = False              # Zeitlimit-Slider wird gezogen
-        self.ui_sliders = []                  # Regler (UiSlider) im Menü bzw. Pause-Overlay
-        self.prefs_dirty = False              # Regler verändert: beim Loslassen speichern
-        self.setup_page = None                # SetupPage (Menü 'setup')
-        self.prev_mode = None                 # Modus vor der Wahl einer Minecraft-Karte
-        self._prev_tex = {}
-        self.loadout = list(DEFAULT_LOADOUT) + [ATT_NONE, ATT_NONE]   # [Hauptwaffe, Kleinwaffe, Gadget, Visier, Aufsätze Haupt, Aufsätze Klein] für den nächsten Spawn
-        self.scopes = dict(DEFAULT_SCOPE)     # gewähltes Visier je Primärwaffe
-        self.feed = []                        # Kill-Anzeige: (Text, Zeit)
-        self.pings = {}                       # Minimap: Spieler-ID -> (Zeit, x, y) des letzten Schusses
-        self.mm_level = 2                     # Minimap-Zoomstufe (Index in MM_LEVELS)
-        self.gad_views, self.gad_msg, self.prev_gad_ads, self.gad_anim = {}, ("", 0.0), False, 0.0
-        self.was_seated, self.pre_seat = False, None
-        self.hud_dead_hidden = False
-        self.melee_t = 0.0                    # laufende Schlaganimation (Sekunden bis zum Ende)
-        self.melee_next = 0.0
-        self.crate_views = {}
-        self._txt = {}
-        self.quit_box = None                  # Sicherheitsabfrage beim Beenden (Text + Hintergrund)
-        self.end = None                       # Endbildschirm nach Rundenende
-        self.end_cfg = None                   # Rundeneinstellungen im Endbildschirm: None | "setup" | "more"
-        self.cfg_backup = None
-        self.reuse_host = self.reuse_info = None   # Kartenwechsel: bestehende Verbindungen behalten (5f)
-        self.menu_picker = None               # Waffenwahl mit Bildern im Menü
-        self.card_hover = None
-        self.loadscreen = None                # "Loadout konfigurieren" (Menü und Todesbildschirm)
-        self.tipbox = None                    # Hover-Hinweis (Stats) neben der Maus
-        self.dead_free = False                # Maus ist auf dem Todesbildschirm freigegeben
-        self.death_picker = None
-        self.fx = []                          # Feuerball, Druckwelle, Rauch
-        self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
-        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
-        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
-        self.insp_on, self.insp_t = False, 0.0           # 9b: Waffen-Inspektion (T) offen / Überblendung
-        self.gad_views = {}
-        self.tur_views = {}
-        self.heli_views = {}
-        self.heli_ads = True
-        self.strike_fx = None                 # Tomahawk: Rakete im Anflug, Warnring
-        self.trail_t = {}                     # Rakete -> Zeit bis zur nächsten Rauchwolke
-        self.flames = {}                      # Rakete -> Flammen-Knoten
-        self.throw_req = False
-
-        self.setFrameRateMeter(False)         # Bildrate nur auf Wunsch (F3)
-        self.build_assets()
-        self.build_viewmodel()
-        self.gun_dr.setActive(False)   # Waffe erst im Spiel zeigen
-
-        # Federn für Rückstoss und Waffenschwingen
-        self.sp_back = Spring(180, 14)    # Waffe nach hinten (m)
-        self.sp_pitch = Spring(180, 14)   # Waffe nach oben kippen (Grad)
-        self.sp_roll = Spring(180, 14)
-        self.sp_cam = Spring(120, 12)     # Kamera-Ruck nach oben (Grad)
-        self.sp_hurt = Spring(120, 10)    # Kamera-Wackeln bei Treffern (Grad Roll)
-        self.sw_h = Spring(90, 12)        # Waffe hinkt der Mausdrehung hinterher
-        self.sw_p = Spring(90, 12)
-        self.ads_t = 0.0
-        self.bob_amp = 0.0
-        self.flash_t = 0.0
-        self.hit_t = 0.0
-        self.hurt_flash = 0.0
-        self.death_t = 0.0
-        self.parts = []
-        self.bullet_nodes = {}
-        self.mob_views = {}
-        self.player_views = {}
-
-        # Eingabe
-        self.sel_req = None
-        self.reload_req = False
-        self.use_req = False
-        self.alt_req = False
-        self.prev_trig = False
-        try:        # sonst heisst "R" bei gehaltener Shift-Taste "shift-r" und das Nachladen beim Rennen ginge nicht
-            from panda3d.core import ModifierButtons
-            self.buttonThrowers[0].node().setModifierButtons(ModifierButtons())
-        except Exception:
-            pass
-        self.accept("mouse1", self.on_click)
-        self.accept("mouse1-up", self.on_mouse_up)
-        self.accept("w", self.on_w)
-        for _k, _dx, _dy in (("arrow_left", -1, 0), ("arrow_right", 1, 0), ("arrow_up", 0, -1), ("arrow_down", 0, 1)):
-            self.accept(_k, self.on_arrow, [_dx, _dy])
-            self.accept(_k + "-repeat", self.on_arrow, [_dx, _dy])
-        self.accept("escape", self.on_escape)
-        self.accept("q", self.on_q)          # im Spiel lehnt Q (wird per Tastenabfrage gelesen)
-        self.accept("f", self.on_use)
-        self.accept("f3", self.toggle_fps)
-        self.accept("f11", self.toggle_fullscreen)
-        self.accept("c", self.toggle_duck)
-        self.duck_lock = False
-        self.accept("m", self.toggle_bigmap)
-        self._hover_hit = None
-        self.sfx = Sfx(self)
-        self.apply_volume()
-        self.accept("v", self.on_alt)
-        self.accept("g", self.on_grenade)
-        self.accept(GREN_KEY_NEXT, self.on_gren_next, [1])      # 10e: Granatenart wechseln
-        self.g_hold_t = -1.0                                   # 10e: so lange wird G schon gehalten (-1 = nicht)
-        self.g_throw_charge = 0.0
-        self.accept(KEYS["ability"], self.on_ability)          # 7c: Set-Fähigkeit (Stromstoss)
-        self.accept("j", self.on_confirm, [True])
-        self.accept("y", self.on_y)
-        self.accept("x", self.on_mm_zoom, [1])
-        self.accept("n", self.on_confirm, [False])
-        self.accept("arrow_left", self.end_key, [-1])
-        self.accept("arrow_right", self.end_key, [1])
-        self.accept("tab", self.tab_down)
-        self.accept("tab-up", self.tab_up)
-        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
-        self.accept("r", self.on_r)
-        for i in range(10):          # Ziffern: Waffenwahl im Spiel, Auswahl/IP-Eingabe im Menü
-            self.accept(str(i), self.on_digit, [i])
-        bt = getattr(self, "buttonThrowers", None)
-        if bt:                       # Texteingabe (Name, IP) über Tastenanschläge
-            bt[0].node().setKeystrokeEvent("keystroke")
-            self.accept("keystroke", self.on_keystroke)
-        self.accept("backspace", self.menu_backspace)
-        self.accept("backspace-repeat", self.menu_backspace)
-        self.accept("enter", self.menu_enter)
-        self.accept("wheel_up", self.cycle_weapon, [-1])
-        self.accept("wheel_down", self.cycle_weapon, [1])
-
-        self.captured = False
-        self.mouse_prev = None
-        self.warp_pending = False
-        self.warp_frames = 0                  # so viele Frames wartet die Maussteuerung schon auf die Fenstermitte
-        self.warp_ref = None                  # letzte (schon gezählte) Zeigerposition vor dem Zurücksetzen
-        self.warp_frames = 0
-        self.had_focus = True
-        sticky_keys_off()
-        import atexit
-        atexit.register(sticky_keys_restore)
-        self.taskMgr.add(self.update_task, "update")
-        self._keep = []                       # feste Knoten; alles andere gehört zu einem Spiel (leave_game)
-        for name in ("render", "aspect2d", "render2d", "a2dTopCenter", "a2dTopLeft", "a2dTopRight",
-                     "a2dBottomCenter", "a2dBottomLeft", "a2dBottomRight", "a2dLeftCenter", "a2dRightCenter"):
-            node = getattr(self, name, None)
-            if node is not None:
-                self._keep.append((node, set(node.getChildren())))
-        self.show_menu("main" if str(st.get("name") or "").strip() else "name")
-
-    def on_click(self):
-        """Linke Maustaste: Menüpunkt, Waffenkarte oder Schaltfläche der Beenden-Abfrage."""
-        if getattr(self, "end", None) is not None and self.quit_box is None:
-            self.end_click()
-            return
-        if self.quit_box is None and self.loadscreen is not None:
-            self.loadscreen.click(self.mouse_2d())
-            return
-        if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
-            self.dead_click(self.mouse_2d())
-            return
-        if self.mode == "play" and self.quit_box is None and getattr(self, "insp_on", False):
-            self.insp_click(self.mouse_2d())                 # 9b: Inspektion - Markierung/Aufsatz anklicken
-            return
-        if self.mode != "menu" and self.quit_box is None:
-            return
-        hit, card = self.update_hover()
-        if hit is None and self.ui_sliders and self.ui_slider_press(self.mouse_2d()):
-            return
-        if hit is None and self.quit_box is not None and self.overlay_kind == "strike":
-            self.strike_pick(self.mouse_2d())
-        elif hit is not None:
-            hit.action()
-        elif card is not None:
-            self.set_loadout_card(card[0], card[1])
-            if self.menu_picker is not None:
-                self.menu_picker.update(self.loadout, card)
-            self.menu_refresh()
-
-    def setup_mode(self, mode):
-        if self.cfg_is_mc() or mode not in EXP_MODES:
-            return                                    # Minecraft-Karten kennen nur Deathmatch
-        self.cfg["mode"] = mode
-        self.menu_refresh()
-
-    def on_arrow(self, dx, dy):
-        if getattr(self, "end_cfg", None) is not None:      # Rundeneinstellungen im Endbildschirm
-            if self.end_cfg == "setup" and self.quit_box is None:
-                if dx:
-                    self.set_limit(self.cfg["limit"] + dx)
-                elif dy and not self.cfg_is_mc():
-                    self.setup_mode(EXP_MODES[(EXP_MODES.index(self.cfg["mode"]) + 1) % len(EXP_MODES)])
-            return
-        if self.mode != "menu" or self.menu_state != "setup" or self.quit_box is not None:
-            return
-        if dx:
-            self.set_limit(self.cfg["limit"] + dx)
-        elif dy and not self.cfg_is_mc():
-            self.setup_mode(EXP_MODES[(EXP_MODES.index(self.cfg["mode"]) + 1) % len(EXP_MODES)])
-
-    def on_digit(self, d):
-        if self.quit_box is not None:
-            return
-        if getattr(self, "end", None) is not None:      # Endbildschirm: Ziffern wählen den Reiter
-            if self.end_cfg == "setup":
-                self.setup_pick(d - 1)
-            elif self.end_cfg == "more":
-                if 1 <= d <= len(MOB_LEVELS):
-                    self.set_cfg("mobs", d - 1)
-            else:
-                self.show_end_tab(d - 1)
-            return
-        if self.mode == "menu":
-            st = self.menu_state
-            if st == "main":
-                if d == 1:
-                    self.open_setup("host")
-                elif d == 2:
-                    self.ip_text, self.ip_edited = "", False
-                    self.show_menu("join")
-                elif d == 3:
-                    self.show_menu("char")
-                elif d == 4:
-                    self.show_menu("settings")
-                elif d == 5:
-                    self.show_menu("loadout")
-            elif st == "loadout":
-                self.pick_loadout(d)
-                if self.menu_picker is not None:
-                    self.menu_picker.update(self.loadout, self.card_hover)
-            elif st == "multi":
-                if d == 1:
-                    self.open_setup("host")
-                elif d == 2:
-                    self.ip_text, self.ip_edited = "", False
-                    self.show_menu("join")
-            elif st == "settings":
-                if d == 1:
-                    self.name_back = "settings"
-                    self.show_menu("name")
-                elif d == 2:
-                    self.toggle_invert()
-                    self.menu_refresh()
-            elif st == "setup":
-                self.setup_pick(d - 1)
-            elif st == "setup2":
-                if 1 <= d <= len(MOB_LEVELS):
-                    self.set_cfg("mobs", d - 1)
-        elif self.mode == "play":
-            if self.player.hp <= 0:
-                pass                               # tot: keine Ausrüstungswahl (Robins Regel: Start mit Pistole)
-            elif 1 <= d <= N_SLOTS:
-                self.request_weapon(d - 1)
-            elif self.player.hp > 0 and d == N_SLOTS + 1:      # 4 = Nahkampfwaffe
-                self.sel_req = MELEE_SEL
-            elif self.player.hp > 0 and d == N_SLOTS + 2:      # 5 = Gadget (aus Beute)
-                self.toggle_gadget()
-
-    def on_keystroke(self, ch):
-        """Texteingabe im Menü (Name, IP-Adresse)."""
-        if self.mode != "menu" or not ch or not ch.isprintable() or self.quit_box is not None:
-            return
-        if self.menu_state == "setup2":
-            if ch in "tT":
-                self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
-            return
-        if self.menu_state == "name" and len(self.my_name) < 16:
-            self.my_name += ch
-        elif self.menu_state == "join" and (ch.isdigit() or ch == "."):
-            if not self.ip_edited:
-                self.ip_text, self.ip_edited = "", True
-            if len(self.ip_text) < 15:
-                self.ip_text += ch
-            self.menu_msg = ""
-
-    def dead_click(self, m):
-        """Klick auf dem Todesbildschirm: Waffenkarte, Gadget oder 'Loadout konfigurieren'."""
-        if m is None or not self.dead_free:
-            return
-        if getattr(self.world, "lobby", False):
-            self.lobby_click(m)
-            return
-        rb = self.right_btn_rect()
-        if rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
-            self.do_respawn()
-
-    def end_cfg_open(self):
-        """Host: 'Rundeneinstellungen ändern' - dieselbe Seite wie beim Hosten, mit den Werten der laufenden Runde."""
-        w, e = self.world, self.end
-        if e is None or not self.can_edit_round():
-            return
-        c = self.cfg
-        self.cfg_backup = dict(c)
-        c["map"] = getattr(w, "map_path", c.get("map"))
-        c["mode"] = w.mode if w.mode in EXP_MODES else c["mode"]
-        c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
-        c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
-        c["tomahawk"] = bool(w.tomahawk_on)
-        c["bcr"], c["bha"] = bool(w.bonus_crates), bool(w.bonus_hares)
-        self.map_list = list_maps()
-        if c.get("map") not in [pp for _n, pp in self.map_list]:
-            c["map"] = None
-        self.setup_for = self.net_mode
-        self.map_page, self.prev_mode, self.menu_msg = 0, None, ""
-        e["root"].hide()
-        self.end_cfg = "setup"
-        self.end_cfg_show()
-
-    def end_cfg_show(self):
-        self.clear_menu()
-        cm = CardMaker("endcfgbg")
-        cm.setFrame(-3, 3, -1, 1)
-        bg = self.aspect2d.attachNewNode(cm.generate())
-        bg.setColor(0.05, 0.07, 0.11, 1.0)
-        self.menu_items.append(Deco(bg))
-        self.menu_last = (self.end_cfg, "")
-        self.setup_page = ExpEndSetupPage(self) if self.end_cfg == "setup" else MorePage(self)
-
-    def end_cfg_back(self):
-        if self.end_cfg == "more":
-            self.end_cfg = "setup"
-            self.end_cfg_show()
-        else:
-            self.end_cfg_cancel()
-
-    def end_cfg_apply(self):
-        self.end_cfg_close()
-        self.apply_round_settings()
-
-    def apply_round_settings(self):
-        """Host/Einzelspiel: gewählte Rundeneinstellungen übernehmen, ohne dass jemand getrennt wird.
-        Gleiche Karte: Werte der laufenden Welt ändern, Mitspieler bekommen sie per 'cfg'.
-        Andere Karte: Welt für alle neu aufbauen (Verbindungen bleiben, alle landen wieder in der Lobby)."""
-        w, c = self.world, self.cfg
-        if w is None or self.net_mode == "client":
-            return
-        try:
-            self.save_prefs()
-        except Exception:
-            pass
-        if c.get("map") != getattr(w, "map_path", None):
-            self.reload_world()
-            return
-        lvl = mob_level_of(c["mobs"])
-        mode = c["mode"] if c["mode"] in ("koth", "dm") else w.mode
-        w.mode = "dm" if w.mc else mode
-        w.limit = float(c["limit"]) * 60.0
-        w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
-        w.tomahawk_on = bool(c.get("tomahawk", True))
-        b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
-        w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
-        w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
-        if self.host is not None:
-            self.host.send_cfg()
-        netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
-        self.end_note("Rundeneinstellungen übernommen - sie gelten ab der nächsten Runde")
-
-    def client_reload(self, cs):
-        """Mitspieler: der Host hat die Karte gewechselt - Welt neu bauen, die Verbindung bleibt."""
-        m, cs.reload = cs.reload, None
-        try:
-            att = SimpleNamespace(conn=cs.conn, extra=[], my_id=cs.my_id, seed=int(m["seed"]), props=int(m["props"]),
-                                  mode=m.get("mode") if m.get("mode") in EXP_MODES else "koth",
-                                  limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
-                                  mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
-                                  map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
-                                  close=lambda: cs.conn.close("abgebrochen"))
-        except (KeyError, TypeError, ValueError):
-            return
-        netlog("Client: Host wechselt die Karte - baue die Welt neu auf")
-        self.client = None
-        self.reload_session("client", attempt=att)
-
-    LOBBY_EQUIP = False          # Ausrüstungsmenü in der Lobby benutzbar (im Experimental nicht: immer Pistole)
-
-    LOBBY_EQ_LOCKED = True       # Knopf trotzdem zeigen, aber ausgegraut; beim Darüberfahren erscheint der Hinweis
-
-    LOBBY_EQ_TIP = "In diesem Spielmodus nicht verfügbar."
-
-    def lobby_click(self, m):
-        rb = self.right_btn_rect()
-        e = self.LOBBY_EQ_BTN
-        bb = self.back_btn_rect()
-        equip = self.LOBBY_EQUIP and getattr(self, "lobby_equip", False)
-        if bb[0] <= m[0] <= bb[1] and bb[2] <= m[1] <= bb[3]:
-            if equip:
-                self.lobby_equip = False            # zurück zur Lobby
-            else:
-                self.show_pause("leave")            # zurück ins Hauptmenü (mit Sicherheitsabfrage)
-        elif equip:                                 # Waffenmenü: Karten wählen, unten 'Loadout konfigurieren'
-            card = self.death_picker.hit(m[0], m[1])
-            b = self.DEAD_BTN
-            if card is not None:
-                self.set_loadout_card(card[0], card[1])
-            elif b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
-                self.open_loadscreen()
-        elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
-            if self.net_mode == "host" and self.world.lobby:
-                if self.world.players_ready():      # nur der Host startet, und erst wenn alle 'Bereit' gedrückt haben
-                    self.lock_trigger()
-                    self.world.start_round()
-            elif self.net_mode == "client":
-                self.toggle_ready()
-        elif self.LOBBY_EQUIP and e[0] <= m[0] <= e[1] and e[2] <= m[1] <= e[3]:
-            self.lobby_equip = True                 # erst das Waffenmenü
-
-    def build_lobby_ui(self):
-        """Runden-Lobby (vor dem ersten Spawn von Host und Mitspielern): Spielerliste, 'Spiel starten', Ausrüstungsmenü."""
-        root = self.aspect2d.attachNewNode("lobby")
-        cm = CardMaker("lobbybg")
-        cm.setFrame(-0.92, 0.92, -0.40, 0.80)
-        bg = root.attachNewNode(cm.generate())
-        bg.setColor(0.04, 0.06, 0.10, 0.84)
-        bg.setTransparency(TransparencyAttrib.MAlpha)
-        cm.setFrame(-0.55, 0.55, 0.655, 0.663)
-        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        OnscreenText(text="RUNDEN-LOBBY", parent=root, pos=(0, 0.69), scale=0.085, fg=(1.0, 0.62, 0.14, 1),
-                     shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
-        info = OnscreenText(text="", parent=root, pos=(0, 0.585), scale=0.045, fg=(0.75, 0.85, 0.95, 1), mayChange=True)
-        rows = []
-        for i in range(MAX_PLAYERS):
-            y = 0.47 - i * 0.078
-            nm = OnscreenText(text="", parent=root, pos=(-0.74, y), scale=0.055, fg=(1, 1, 1, 1), align=TextNode.ALeft,
-                              shadow=(0, 0, 0, 0.8), mayChange=True)
-            tg = OnscreenText(text="", parent=root, pos=(0.74, y), scale=0.042, fg=(0.6, 0.75, 0.9, 1),
-                              align=TextNode.ARight, mayChange=True)
-            rows.append((nm, tg))
-        addr = OnscreenText(text="", parent=root, pos=(0, -0.20), scale=0.043, fg=(0.7, 0.9, 0.7, 1), mayChange=True)
-        hint = OnscreenText(text="", parent=root, pos=(0, -0.30), scale=0.042, fg=(0.85, 0.85, 0.9, 1), mayChange=True)
-        cm.setFrame(0, 1, 0, 0.18)
-        start = root.attachNewNode(cm.generate())
-        start.setColor(*START_BTN)
-        start.setTransparency(TransparencyAttrib.MAlpha)
-        btn3d(start)
-        start_t = OnscreenText(text="SPIEL STARTEN", parent=root, pos=(0, 0), scale=0.07, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                               shadow=(0, 0, 0, 0.8), mayChange=True)
-        cm.setFrame(*self.LOBBY_EQ_BTN)
-        eq = root.attachNewNode(cm.generate())
-        eq.setColor(*BTN_C)
-        eq.setTransparency(TransparencyAttrib.MAlpha)
-        btn3d(eq)
-        eq_t = OnscreenText(text="AUSRÜSTUNGSMENÜ", parent=root, pos=(0, -0.855), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                            shadow=(0, 0, 0, 0.8), mayChange=True)
-        tip = OnscreenText(text=self.LOBBY_EQ_TIP, parent=root, pos=(0, 0), scale=0.045, fg=(1, 1, 1, 1),
-                           bg=(0.04, 0.06, 0.09, 1.0), shadow=(0, 0, 0, 0), mayChange=True, font=BOLD_FONT)
-        tip.setColorScale(1, 1, 1, 1)
-        tip.setBin("gui-popup", 100)                 # nach allem im Standard-Bin (Lobby-Karten), sonst liegt der Knopf darüber
-        tip.setDepthTest(False)
-        tip.setDepthWrite(False)
-        tip.hide()
-        root.hide()
-        self.lobby_ui = {"root": root, "info": info, "rows": rows, "addr": addr, "hint": hint, "start": start,
-                         "start_t": start_t, "eq": eq, "eq_t": eq_t, "tip": tip}
-
-    def update_lobby_ui(self, show, mpos):
-        ui = getattr(self, "lobby_ui", None)
-        if ui is None:
-            return
-        if not show:
-            ui["root"].hide()
-            return
-        ui["root"].show()
-        w = self.world
-        host = self.net_mode == "host"
-        pls = sorted(w.players.values(), key=lambda p: p.pid)
-        self.set_text(ui["info"], f"{EXP_MODE_NAMES.get(w.mode, w.mode)}   -   {len(pls)} / {MAX_PLAYERS} Spieler   -   "
-                                  f"{int(w.limit // 60)} Minuten")
-        for i, (nm, tg) in enumerate(ui["rows"]):
-            if i < len(pls):
-                p = pls[i]
-                tags = ((["HOST"] if p.pid == 0 else (["BEREIT"] if p.ready else ["wartet ..."]))
-                        + (["DU"] if p.pid == self.my_id else []))
-                self.set_text(nm, f"{i + 1}   {p.name}")
-                nm.setFg((1.0, 0.85, 0.3, 1) if p.pid == self.my_id else (1, 1, 1, 1))
-                self.set_text(tg, "   ".join(tags))
-            else:
-                self.set_text(nm, "")
-                self.set_text(tg, "")
-        if host:
-            ip = getattr(getattr(self, "host", None), "ip_label", "")
-            self.set_text(ui["addr"], f"Mitspieler beitreten unter: {ip}" if ip else "")
-            n_r, n_g = w.ready_counts()
-            self.set_text(ui["hint"], "Warte, bis deine Freunde da sind und 'Bereit' gedrückt haben." if n_r < n_g
-                          else "Alle sind bereit - mit 'Spiel starten' beginnt die Runde für alle.")
-        else:
-            self.set_text(ui["addr"], "")
-            self.set_text(ui["hint"], "Drücke 'Bereit', wenn du losspielen willst. Der Host startet die Runde." +
-                          (" Du kannst vorher deine Ausrüstung wählen." if self.LOBBY_EQUIP else ""))
-        rb = self.right_btn_rect()
-        hov_s = host and mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
-        ui["start"].setPos(rb[0], 0, rb[2])
-        ui["start"].setSx(rb[1] - rb[0])
-        ui["start_t"].setPos((rb[0] + rb[1]) / 2, rb[2] + 0.055)
-        if host:
-            n_r, n_g = w.ready_counts()
-            if n_r >= n_g:
-                ui["start"].setColor(*START_BTN_HOT) if hov_s else ui["start"].setColor(*START_BTN)
-                self.set_text(ui["start_t"], "SPIEL STARTEN")
-            else:
-                ui["start"].setColor(*BTN_OFF)
-                self.set_text(ui["start_t"], f"Warte auf Bereit ({n_r}/{n_g})")
-        else:
-            me_ = self.player
-            on_ = bool(me_ is not None and me_.ready)
-            hov_c = mpos is not None and rb[0] <= mpos[0] <= rb[1] and rb[2] <= mpos[1] <= rb[3]
-            if on_:
-                ui["start"].setColor(*BTN_ON)
-                self.set_text(ui["start_t"], "Bereit  (zum Abbrechen klicken)")
-            else:
-                ui["start"].setColor(*START_BTN_HOT) if hov_c else ui["start"].setColor(*START_BTN)
-                self.set_text(ui["start_t"], "BEREIT")
-        e = self.LOBBY_EQ_BTN
-        over_e = mpos is not None and e[0] <= mpos[0] <= e[1] and e[2] <= mpos[1] <= e[3]
-        hov_e = self.LOBBY_EQUIP and over_e
-        for nd in (ui["eq"], ui["eq_t"]):
-            (nd.show if (self.LOBBY_EQUIP or self.LOBBY_EQ_LOCKED) else nd.hide)()
-        if self.LOBBY_EQ_LOCKED and not self.LOBBY_EQUIP:        # ausgegraut + Hinweis beim Darüberfahren
-            ui["eq"].setColor(0.11, 0.12, 0.14, 0.8)
-            ui["eq_t"].setFg((0.45, 0.47, 0.50, 1))
-            if over_e:
-                asp = float(self.getAspectRatio())
-                ui["tip"].setPos(max(-asp + 0.5, min(asp - 0.5, mpos[0])), mpos[1] + 0.07)
-                ui["tip"].show()
-            else:
-                ui["tip"].hide()
-        else:
-            ui["tip"].hide()
-            ui["eq_t"].setFg((1, 1, 1, 1))
-            ui["eq"].setColor(*(BTN_HC if hov_e else BTN_C))
-
-    def on_escape(self):
-        if getattr(self, "insp_on", False) and self.quit_box is None:
-            self.close_inspect()                             # 9b: Esc schliesst die Inspektion
-            return
-        if self.loadscreen is not None and self.quit_box is None:
-            self.close_loadscreen()
-            return
-        if self.quit_box is not None:
-            if self.mode == "play" and self.overlay_kind in ("settings_gfx", "settings_game", "settings_sound", "settings_round"):
-                self.show_pause("settings")        # Esc geht eine Ebene zurück
-            elif self.mode == "play" and self.overlay_kind in ("settings", "leave"):
-                self.show_pause("main")
-            else:
-                self.close_quit_box()              # Pause-Menü bzw. Abfrage schliessen = weiterspielen
-        elif getattr(self, "end_cfg", None) is not None:
-            self.end_cfg_back()                    # Rundeneinstellungen: Weitere -> Seite 1 -> Abbrechen
-        elif self.mode == "menu" and self.menu_state == "quit":
-            self.show_menu(getattr(self, "quit_back", None) or "main")
-        elif self.mode == "menu" and self.menu_state == "setup2":
-            self.show_menu("setup")
-        elif self.mode == "menu" and self.menu_state == "setup":
-            self.show_menu("main")
-        elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout", "char"):
-            self.show_menu("main")
-        elif self.mode == "menu" and self.menu_state == "name" and self.name_back != "main":
-            self.name_back = "main"
-            self.show_menu("settings")
-        elif self.mode == "menu" and self.menu_state in ("join", "connecting"):
-            if self.attempt is not None:
-                self.attempt.close()
-            self.show_menu("main")
-        elif self.mode == "play":
-            self.show_pause("main")
-        else:
-            self.open_quit_box()
-
-    def open_strike_map(self):
-        """Tomahawk-Kommandoraum: grosse Karte, auf der man den Einschlagpunkt anklickt. Das Spiel läuft weiter."""
-        self.close_quit_box(recapture=False)
-        H, cz = self.STRIKE_MAP_HALF, self.STRIKE_MAP_Z
-        root = self.aspect2d.attachNewNode("strikemap")
-        root.setBin("fixed", 90)
-        dim = CardMaker("dim")
-        dim.setFrame(-3, 3, -1.2, 1.2)
-        d = root.attachNewNode(dim.generate())
-        d.setColor(0, 0, 0, 0.85)
-        d.setTransparency(TransparencyAttrib.MAlpha)
-        d.setBin("fixed", 90)
-        d.setDepthTest(False)
-        d.setDepthWrite(False)
-        mm = CardMaker("map")
-        mm.setFrame(-H, H, cz - H, cz + H)
-        try:
-            M, T = self.MAP_MARGIN, WORLD + 2 * self.MAP_MARGIN
-            from panda3d.core import LPoint2f
-            mm.setUvRange(LPoint2f(M / T, M / T), LPoint2f((M + WORLD) / T, (M + WORLD) / T))
-        except Exception:
-            pass
-        mp = root.attachNewNode(mm.generate())
-        mp.setLightOff()
-        if self.map_tex is not None:
-            mp.setTexture(self.map_tex)
-        else:
-            mp.setColor(0.2, 0.34, 0.17, 1)
-        mp.setBin("fixed", 91)
-        mp.setDepthTest(False)
-        mp.setDepthWrite(False)
-        # Spieler (grüner Pfeil) und Ziel (rotes Fadenkreuz)
-        pl = self.player
-        sc = 2 * H / WORLD
-        am = Mesh(lit=False)
-        for s_, c_ in ((0.034, (0, 0, 0)), (0.025, (1, 1, 1))):
-            am.tri((0, 0, s_), (-0.62 * s_, 0, -0.72 * s_), (0, 0, -0.30 * s_), c_)
-            am.tri((0, 0, s_), (0, 0, -0.30 * s_), (0.62 * s_, 0, -0.72 * s_), c_)
-        me = root.attachNewNode(am.node("me"))
-        me.setTwoSided(True)
-        me.setColorScale(0.3, 1.0, 0.3, 1)
-        me.setPos(-H + pl.x * sc, 0, cz - H + pl.y * sc)
-        me.setR(-pl.heading)
-        me.setBin("fixed", 92)
-        me.setDepthTest(False)
-        tgt = root.attachNewNode("target")
-        for fr in ((-0.05, -0.012, -0.0025, 0.0025), (0.012, 0.05, -0.0025, 0.0025),
-                   (-0.0025, 0.0025, 0.012, 0.05), (-0.0025, 0.0025, -0.05, -0.012)):
-            cm = CardMaker("t")
-            cm.setFrame(*fr)
-            tgt.attachNewNode(cm.generate()).setColor(1, 0.2, 0.15, 1)
-        if True:                                           # Wirkungsradius um das Ziel (nur für den Schützen sichtbar)
-            ring = Mesh(lit=False)
-            rr = H * 2 * STRIKE_R / WORLD
-            for i in range(32):
-                a0, a1 = 2 * math.pi * i / 32, 2 * math.pi * (i + 1) / 32
-                pp = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)        # noqa: E731
-                ring.tri(pp(rr - 0.003, a0), pp(rr + 0.003, a0), pp(rr + 0.003, a1), (1, 0.2, 0.15), ref=(0, 5, 0))
-                ring.tri(pp(rr - 0.003, a0), pp(rr + 0.003, a1), pp(rr - 0.003, a1), (1, 0.2, 0.15), ref=(0, 5, 0))
-            tgt.attachNewNode(ring.node("radius")).setTwoSided(True)
-        tgt.setBin("fixed", 93)
-        tgt.setDepthTest(False)
-        tgt.setDepthWrite(False)
-        tgt.hide()
-        self.strike_sel = None
-        self.strike_ui = (mp, tgt)
-        self.strike_root, self.strike_dots = root, {}
-        if self.net_mode != "single" and TOMA_SHOW_PLAYERS:
-            cap = OnscreenText(text="Rote Punkte: Gegner (live)", pos=(H + 0.05, cz + H - 0.06), scale=0.04,
-                               fg=(1.0, 0.4, 0.35, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ALeft, mayChange=False)
-            cap.reparentTo(root)
-        # Countdown-Länge (früher die Schalttafel neben dem Knopf): rechts neben der Karte wählbar
-        if self.world.strike_dur not in EXP_STRIKE_OPTIONS:
-            self.world.strike_dur = float(STRIKE_T)
-        self.strike_dur_sel = int(self.world.strike_dur)
-        ct = OnscreenText(text="Countdown:", pos=(H + 0.2, cz + 0.22), scale=0.05, fg=(1, 0.85, 0.3, 1),
-                          shadow=(0, 0, 0, 0.9), mayChange=False)
-        ct.reparentTo(root)
-        ct.setBin("fixed", 95)
-        self.strike_dur_txt = {}
-        dur_hots = []
-        for k, sec in enumerate(EXP_STRIKE_OPTIONS):
-            zz = cz + 0.1 - k * 0.1
-            t = OnscreenText(text="", pos=(H + 0.2, zz), scale=0.055, fg=Hot.BASE, shadow=(0, 0, 0, 0.9),
-                             mayChange=True)
-            t.setBin("fixed", 95)
-            self.strike_dur_txt[sec] = t
-            dur_hots.append(Hot(t, H + 0.2, zz, 0.055, (lambda v=sec: self.strike_pick_dur(v)), f"[ {sec} s ]"))
-        self.strike_pick_dur(self.strike_dur_sel, quiet=True)
-        title = OnscreenText(text="TOMAHAWK - Einschlagpunkt wählen", pos=(0, 0.88), scale=0.07, fg=(1, 0.85, 0.3, 1),
-                             shadow=(0, 0, 0, 0.9), mayChange=False)
-        title.setBin("fixed", 95)
-        hint = OnscreenText(text="Klick auf die Karte setzt das Ziel. Der Ort wird niemandem verraten.",
-                            pos=(0, cz - H - 0.08), scale=0.042, fg=(0.85, 0.85, 0.85, 1),
-                            shadow=(0, 0, 0, 0.9), mayChange=True)
-        hint.setBin("fixed", 95)
-        fire_t = OnscreenText(text="[ Abfeuern ]", pos=(-0.45, cz - H - 0.2), scale=0.065, fg=Hot.BASE,
-                              shadow=(0, 0, 0, 0.9), mayChange=True)
-        fire_t.setBin("fixed", 95)
-        canc_t = OnscreenText(text="[ Abbrechen ]", pos=(0.45, cz - H - 0.2), scale=0.065, fg=Hot.BASE,
-                              shadow=(0, 0, 0, 0.9), mayChange=True)
-        canc_t.setBin("fixed", 95)
-        self.strike_hint = hint
-        hots = [Hot(fire_t, -0.45, cz - H - 0.2, 0.065, self.strike_fire, "[ Abfeuern ]"),
-                Hot(canc_t, 0.45, cz - H - 0.2, 0.065, self.close_quit_box, "[ Abbrechen ]"),
-                Hot(hint, 0.0, cz - H - 0.08, 0.042, None, "")] + dur_hots
-        self.quit_box = (root, title, hots)
-        self.overlay_kind = "strike"
-        if self.mode == "play":
-            self.set_capture(False)
-
-    def strike_pick_dur(self, sec, quiet=False):
-        """Countdown-Länge auf der Zielkarte wählen (die gewählte steht in Klammern)."""
-        if sec not in EXP_STRIKE_OPTIONS:
-            return
-        self.strike_dur_sel = sec
-        for v, t in getattr(self, "strike_dur_txt", {}).items():
-            t.setText(f"[ {v} s ]" if v == sec else f"  {v} s  ")
-        if not quiet:
-            self.sfx.ui_click()
-
-    def update_strike_map(self):
-        """Zielkarte (nur Mehrspieler, nur mit TOMA_SHOW_PLAYERS): aktuelle Positionen der anderen Spieler."""
-        if (self.net_mode == "single" or not TOMA_SHOW_PLAYERS or self.quit_box is None
-                or self.overlay_kind != "strike"):
-            return
-        root, dots = self.strike_root, self.strike_dots
-        H, cz = self.STRIKE_MAP_HALF, self.STRIKE_MAP_Z
-        me = self.player
-        for pid, p in self.world.players.items():
-            if p is me or getattr(p, "pid", pid) == me.pid:
-                continue
-            n = dots.get(pid)
-            if n is None:
-                cm = CardMaker("enemy")
-                cm.setFrame(-0.011, 0.011, -0.011, 0.011)
-                n = dots[pid] = root.attachNewNode(cm.generate())
-                n.setColor(1.0, 0.15, 0.1, 1)
-                n.setBin("fixed", 94)
-                n.setDepthTest(False)
-                n.setDepthWrite(False)
-            covered = any(g.kind == GAD_BEACON and g.owner == getattr(p, "pid", pid)
-                          and math.hypot(p.x - g.x, p.y - g.y) <= BEACON_R for g in self.world.gadgets)
-            if p.hp > 0 and not covered:                # wer im Bereich seiner eigenen Funkbake steht, ist hier unsichtbar
-                n.setPos(-H + p.x / WORLD * 2 * H, 0, cz - H + p.y / WORLD * 2 * H)
-                n.show()
-            else:
-                n.hide()
-
-    def strike_fire(self):
-        if self.strike_sel is None:
-            self.strike_hint.setText("Bitte zuerst ein Ziel auf der Karte wählen!")
-            return
-        x, y = self.strike_sel
-        dur = getattr(self, "strike_dur_sel", int(STRIKE_T))
-        self.close_quit_box()
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_strike(x, y, dur)
-        else:
-            self.world.press_button(self.player, x, y, dur)
-
-    def refresh_fp_arms(self):
-        """Hände und Ärmel in der Ego-Ansicht im gewählten Aussehen (Tarnmuster, Handschuhe) neu aufbauen."""
-        L = soldier_look(self.look_code, getattr(self, "my_id", 0) or 0)
-        if getattr(self, "fp_key", None) == L["key"]:
-            return
-        self.fp_key = L["key"]
-        rng = random.Random(7)
-        for nd, length, endz, xoff, curl, s_ in ((self.vm_hand, 0.55, -0.17, -0.01, 1.0, -1),
-                                                 (self.vm_rhand, 0.55, -0.16, 0.01, 1.0, 1),
-                                                 (self.gad_arms[0], 0.5, -0.06, 0.0, 0.8, -1),
-                                                 (self.gad_arms[1], 0.5, -0.06, 0.0, 0.35, 1),
-                                                 (self.gren_arm, 0.5, -0.06, 0.0, 0.5, 1)):
-            m = Mesh()
-            if nd is self.vm_rhand:
-                fp_grip_arm_mesh(m, rng, 1, L["pal"], L["glove"])
-            else:
-                fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
-            gn, new = nd.node(), m.node("arm")
-            gn.removeAllGeoms()
-            for gi in range(new.getNumGeoms()):
-                gn.addGeom(new.modifyGeom(gi), new.getGeomState(gi))     # modifyGeom: nicht-const Geom
-
-    def cleanup_scene(self):
-        """Alles entfernen, was zu einem laufenden Spiel gehört (Szene, HUD, Effekte)."""
-        self.close_inspect(False)                            # 9b
-        self.sfx.silence()
-        self.teardown_hq()
-        keepers = [n for n in (self.sky_root, self.vignette) if n is not None]
-        for parent, keep in self._keep:
-            for ch in list(parent.getChildren()):
-                if ch not in keep and ch not in keepers:
-                    ch.removeNode()
-        try:
-            self.render.clearFog()
-        except Exception:
-            pass
-        self.fog = None
-        for v in (self.fx, self.parts):
-            v.clear()
-        self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
-        self.close_end_screen()
-        self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
-        self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
-        self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
-        self.gad_views = {}
-        self.tur_views, self.heli_views, self.crate_views = {}, {}, {}
-        self.whiz_prev, self.whizzed = {}, set()
-        for nd in (getattr(self, "rock_views", None) or {}).values():
-            nd.removeNode()
-        self.rock_views = None
-        self.trail_t, self.flames, self.shadows, self._txt = {}, {}, {}, {}
-        self.shadow_gz = {}                                    # 12: Bodenhöhen-Cache der Schatten leeren
-        self.strike_fx = None
-        self.flash_st, self.flash_ghost, self.g_hold_t = None, [], -1.0   # 10e: Blendung vorbei, Ton normal
-        self.apply_volume()
-        self.water_nps = []
-        self.town_np = None
-        self.wind_nodes, self.flag_nodes, self.spin_nodes = [], [], []
-        self.land_np = None
-        self.lost_text = None
-        self.feed, self.pings = [], {}
-        self.intel_reset()
-        for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
-            sp.x = sp.v = 0.0
-        self.ads_t = self.bob_amp = self.flash_t = self.hit_t = self.hurt_flash = self.death_t = 0.0
-        self.br = None                       # Atem im Sniper-Visier (scope_breath)
-        self.fov_cur = self.fov_base
-        self.camLens.setFov(self.fov_base)
-        self.heli_ads = True
-        if self.sky_root is not None:
-            self.sky_root.hide()
-        if self.vignette is not None:
-            self.vignette.hide()
-        self.gun_dr.setActive(False)
-
-    # ------------------------------------------------------------ Spielstart
-    def spawn_player(self):
-        x, y = self.world.first_spawn(self.my_id)
-        pl = ExpPlayer(x, y, self.world, self.my_id, self.my_name)
-        pl.look = self.look_code
-        pl.respawn(self.world, x, y, self.loadout)
-        self.world.players[self.my_id] = pl
-        return pl
-
-    def _start_game(self, mode, attempt=None):
-        self.duck_lock = False
-        raw = mapdata = None
-        if mode == "client":
-            try:
-                if attempt.map_raw is not None and attempt.map_raw.get("format") == MC_FORMAT:
-                    path = mc_find(attempt.map_raw.get("id"))
-                    if path is None:
-                        raise ValueError(f"Karte '{MAP_ALIASES.get(attempt.map_raw.get('id')) or attempt.map_raw.get('name')}' fehlt - die Datei (.mcmap) muss im Ordner 'maps' liegen")
-                    mapdata, raw = mc_mapdata(path)
-                elif attempt.map_raw is not None and attempt.map_raw.get("format") == PT_FORMAT:
-                    path = pt_find()
-                    if path is None:
-                        raise ValueError("Karte 'Polytown' fehlt - die Datei polytown.ptmap muss im Ordner 'maps' liegen")
-                    mapdata, raw = pt_mapdata(path)
-                elif attempt.map_raw is not None:
-                    raw, mapdata = attempt.map_raw, sanitize_map(attempt.map_raw)
-                else:                                          # Host spielt die Standardkarte: das neue Polytown
-                    path = pt_find()
-                    if path is None:
-                        raise ValueError("Karte 'Polytown' fehlt - die Datei polytown.ptmap muss im Ordner 'maps' liegen")
-                    mapdata, raw = pt_mapdata(path)
-            except (ValueError, OSError, zlib.error, struct.error) as e:
-                attempt.close()
-                netlog(f"Client: Karte des Hosts unlesbar: {e}")
-                self.show_menu("join", f"Karte des Hosts unlesbar: {e}")
-                return
-            self.loading_step(0.08, "Welt wird erzeugt ...")
-            world = ExpWorld(attempt.seed, spawn_mobs=False, mode=attempt.mode, limit=attempt.limit, mapdata=mapdata,
-                          tomahawk=getattr(attempt, "tomahawk", True))
-            if attempt.props != world.prop_count():
-                attempt.close()
-                netlog(f"Client: Weltprüfung fehlgeschlagen: Host {attempt.props} Props, lokal {world.prop_count()}")
-                self.show_menu("join", "Die Welt passt nicht zum Host (andere Spielversion?)")
-                return
-        else:
-            path = self.cfg.get("map")
-            if path:
-                try:
-                    if path.lower().endswith(".mcmap"):
-                        mapdata, raw = mc_mapdata(path)
-                    else:
-                        with open(path, encoding="utf-8") as f:
-                            raw = json.load(f)
-                        mapdata = sanitize_map(raw)
-                except (OSError, ValueError, zlib.error, struct.error) as e:
-                    self.cfg["map"] = None
-                    self.show_menu("setup", f"Karte nicht ladbar: {e}")
-                    return
-            else:                                              # Standardkarte: immer das neue Polytown aus Blender (keine alte Karte mehr)
-                pp = pt_find()
-                if not pp:
-                    self.show_menu("setup", "Karte 'Polytown' fehlt - die Datei polytown.ptmap muss im Ordner 'maps' liegen")
-                    return
-                try:
-                    mapdata, raw = pt_mapdata(pp)
-                except (OSError, ValueError, KeyError, zlib.error, struct.error) as e:
-                    self.show_menu("setup", f"Polytown (polytown.ptmap) nicht ladbar: {e}")
-                    return
-            self.loading_step(0.08, "Welt wird erzeugt ...")
-            lvl = mob_level_of(self.cfg["mobs"])
-            world = ExpWorld(SEED, spawn_mobs=lvl > 0, mode=self.cfg["mode"],
-                          limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
-                          respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
-                          tomahawk=bool(self.cfg.get("tomahawk", True)), bonus=self.bonus_cfg())
-        world.map_raw = raw
-        world.map_path = self.cfg.get("map") if mode != "client" else None
-        host = None
-        if mode == "host":
-            try:
-                if self.reuse_host is not None:            # Kartenwechsel: Verbindungen bleiben bestehen
-                    host = self.reuse_host
-                    host.rebind(world, self.reuse_info or {})
-                else:
-                    host = HostSession(world, self.my_name)
-            except OSError as e:
-                netlog(f"Host: Hosten nicht möglich: {e}")
-                self.show_menu("main", f"Hosten nicht möglich: {e}")
-                return
-        self.loading_step(0.40, "Mitspieler-Verbindung wird eingerichtet ..." if mode != "single" else "Figur wird aufgestellt ...")
-        self.clear_menu()
-        if self.listener is not None:
-            self.listener.close()
-            self.listener = None
-        self.mode, self.net_mode = "play", mode
-        self.world, self.host = world, host
-        self.my_id = attempt.my_id if mode == "client" else 0
-        self.player = self.spawn_player()
-        if mode in ("host", "client"):             # erst im Server: Lobby (Host startet die Runde), danach Respawn-Menü
-            self.player.hp, self.player.dead_age, self.player.prespawn = 0.0, 1e9, True
-            world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
-        self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
-        self.feed, self.pings = [], {}
-        self.intel_reset()
-        if mode == "client":
-            self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
-            world.shot_sink = self.client.send_shot
-            world.gren_sink = self.client.send_grenade
-            world.melee_sink = self.client.send_melee
-            world.mspec_sink = self.client.send_mspec
-            world.gad_sink = self.client.send_gadget
-            self.attempt = None
-
-        self.loading_step(0.48, "Minecraft-Karte wird gebaut (das dauert etwas) ..." if world.mc else "Gelände wird gebaut ...")
-        land, water, zone, extra = (build_mc_scene(world) if world.mc else
-                                    build_pt_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)) if world.pt else
-                                    build_scene(world, lambda f, t: self.loading_step(0.48 + 0.30 * f, t)))
-        self.loading_step(0.78, "Szene wird eingerichtet ...")
-        prewarm_mob_models()   # 12: Monster-Modelle jetzt bauen, nicht beim ersten Auftauchen
-        self.land_np = self.render.attachNewNode(land)
-        if world.mc:
-            self.land_np.setLightOff()                        # die Beleuchtung steckt in den Vertexfarben (wie in Minecraft)
-        lamps, grass, decals, water2 = extra[:4]
-        self.town_np = None
-        self.wind_nodes, self.flag_nodes, self.spin_nodes, self.smoke = [], [], [], []
-        if len(extra) >= 7:
-            self.town_np = self.render.attachNewNode("stadt")
-            for bn in extra[6]:
-                self.town_np.attachNewNode(bn)
-            free_np = self.render.attachNewNode("wind_frei")      # ohne Licht (Gras, Schilf)
-            free_np.setTwoSided(True)
-            for wd in extra[4]:
-                par = self.town_np if wd["lit"] else free_np
-                wnp = par.attachNewNode(wd["node"])
-                wnp.setZ(wd["z"])                                   # 9a: Eckpunkte liegen relativ zum Höhenband
-                if wd["kind"] in ("reed", "grass", "bush"):
-                    wnp.setTwoSided(True)
-                self.wind_nodes.append((wnp, wd["x"], wd["y"], wd["z"], wd["kind"]))
-            self.spin_nodes = []
-            for sd in (extra[7] if len(extra) > 7 else ()):
-                snp = self.town_np.attachNewNode(sd["node"])
-                snp.setTwoSided(True)
-                snp.setPos(sd["x"], sd["y"], sd["z"])
-                snp.setH(sd["h0"])
-                self.spin_nodes.append((snp, sd["speed"], sd["h0"], sd["x"], sd["y"], bool(sd.get("roll"))))
-            self.smoke = []                                       # Rauch aus Schornsteinen (Polytown): Qualm-Puffs, die aufsteigen
-            for (qx, qy, qz) in (extra[8] if len(extra) > 8 else ()):
-                puffs = []
-                st = mat_state("blob")
-                for k in range(SMOKE_PUFFS):
-                    cm_ = CardMaker("rauch")
-                    cm_.setFrame(-0.5, 0.5, -0.5, 0.5)
-                    pn = self.town_np.attachNewNode(cm_.generate())
-                    pn.setBillboardPointEye()
-                    if st is not None:
-                        pn.setState(st)
-                    pn.setTransparency(TransparencyAttrib.MAlpha)
-                    pn.setLightOff()
-                    pn.setDepthWrite(False)
-                    pn.setTwoSided(True)
-                    pn.setColorScale(0.09, 0.09, 0.09, 0.0)
-                    puffs.append(pn)
-                self.smoke.append((qx, qy, qz, puffs))
-            for fd in extra[5]:
-                fnp = self.town_np.attachNewNode(fd["node"])
-                fnp.setTwoSided(True)
-                fnp.setPos(fd["x"], fd["y"], fd["z"])
-                fnp.setH(fd["ang"])
-                self.flag_nodes.append((fnp, fd["x"], fd["y"], fd["ang"]))
-            if world.mc:
-                self.town_np.setLightOff()
-        self.render.attachNewNode(lamps).setTwoSided(True)
-        gr = self.render.attachNewNode("grass")
-        for gn in grass:
-            gr.attachNewNode(gn)
-        gr.setTwoSided(True)
-        dn = self.render.attachNewNode(decals)                # weiche Schatten am Boden
-        dn.setTransparency(TransparencyAttrib.MAlpha)
-        dn.setDepthWrite(False)
-        dn.setLightOff()
-        dn.setBin("transparent", 1)
-        self.water_nps = []
-        for k, node in enumerate((water, water2)):            # zwei gegenläufige Wellenschichten
-            wn = self.render.attachNewNode(node)
-            wn.setTransparency(TransparencyAttrib.MAlpha)
-            wn.setDepthWrite(False)
-            wn.setLightOff()
-            wn.setBin("transparent", 10 + k)
-            if k:
-                wn.setTexScale(TextureStage.getDefault(), 1.7, 1.7)
-            self.water_nps.append(wn)
-        if self.sky_root is None:
-            self.build_sky_nodes()
-        self.sky_root.show()
-        for zn in zone:
-            zp = self.render.attachNewNode(zn)
-            zp.setTransparency(TransparencyAttrib.MAlpha)
-            zp.setBin("transparent", 5)
-            zp.setDepthOffset(2)
-            zp.setFogOff()
-        fog = Fog("nebel")
-        fog.setColor(*SKY)
-        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
-        self.render.setFog(fog)
-        self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
-        self.apply_view()                                          # Sichtweite aus den Einstellungen
-        self.build_vignette()
-        self.apply_gfx()
-
-        self.loading_step(0.92, "Oberfläche wird aufgebaut ...")
-        self.build_crates()
-        self.build_toma()
-        self.build_hud()
-        if host is not None:
-            self.host_ip = host.ip_label                 # steht in der Tab-Übersicht; zu Beginn kurz als Hinweis
-            self.toast_later = (f"Freunde wählen 'Spiel beitreten'  (IP {host.ip_label})", (0.6, 1, 0.6), 6.0)
-        self.lost_text = OnscreenText(text="", pos=(0, 0.35), scale=0.08, fg=(1, 0.3, 0.2, 1),
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.lost_text.hide()
-        self.gun_dr.setActive(True)
-        self.dead_free = False                     # neues Spiel: Maus-Zustand neu bestimmen (Lobby gibt sie gleich frei)
-        self.set_capture(True)
-        self.loading_step(1.0, "Los geht's!")
-
-    # ------------------------------------------------------------ Aufbau
-    def build_assets(self):
-        """Gemeinsame Geometrie für Tracer, Partikel und Mündungsfeuer (Instanzen)."""
-        m = Mesh(lit=False)
-        box(m, 0, 0, 0, 0.05, 1.1, 0.05, (1.0, 0.85, 0.35))
-        self.tracer_np = NodePath(m.node("tracer"))
-        self.rocket_np, self.flame_np = build_rocket()
-        m = Mesh()
-        box(m, 0, 0, 0, 1, 1, 1, (1, 1, 1))
-        self.cube_np = NodePath(m.node("cube"))
-        # Effekte: Kugel (Feuerball, Rauch) und flacher Ring (Druckwelle), weiss und ungeleuchtet;
-        # Farbe und Deckkraft kommen pro Instanz über setColorScale
-        m = Mesh(lit=False)
-        m.mat = "fire"                                  # wolkige Struktur für Feuerball und Rauch
-        blob(m, 0, 0, 0, 1, 1, 1, (1, 1, 1), random.Random(3), jitter=0.14, subdiv=2)
-        self.sphere_np = NodePath(m.node("sphere"))
-        self.scorch_np = self.flat_card("brandfleck", "blob")
-        m = Mesh(lit=False)
-        for i in range(28):
-            a0, a1 = 2 * math.pi * i / 28, 2 * math.pi * (i + 1) / 28
-            p = [(math.cos(a0) * 0.7, math.sin(a0) * 0.7, 0), (math.cos(a0), math.sin(a0), 0),
-                 (math.cos(a1), math.sin(a1), 0), (math.cos(a1) * 0.7, math.sin(a1) * 0.7, 0)]
-            m.tri(p[0], p[1], p[2], (1, 1, 1))
-            m.tri(p[0], p[2], p[3], (1, 1, 1))
-        self.disc_np = NodePath(m.node("ring"))
-        self.disc_np.setTwoSided(True)
-        m = Mesh()                            # Handgranate
-        blob(m, 0, 0, 0, 0.11, 0.11, 0.13, (0.22, 0.30, 0.16), random.Random(4), jitter=0.05)
-        box(m, 0, 0, 0.14, 0.05, 0.05, 0.06, (0.7, 0.7, 0.7))
-        self.gren_np = NodePath(m.node("grenade"))
-        self.gad_models = [NodePath(gadget_mesh(k).node("gadget%d" % k)) for k in range(3)]
-        # Waffenbilder (Seitenansicht) für Waffenleiste und Auswahl
-        self.weapon_icons = [exp_weapon_icon(i) for i in range(len(EXP_WEAPONS))]
-        # Waffenmodelle am Boden (fallengelassene Waffen)
-        self.drop_models = []
-        rng = random.Random(9)
-        for w in EXP_WEAPONS:
-            gm = Mesh()
-            sh = GUN_SHAPES[w.name]
-            build_shapes(gm, sh["body"] + sh["barrel"] + sh["iron"], rng, (0.0, -0.2, 0.0))
-            mp_ = MAG_PARTS.get(w.name)
-            if mp_ is not None:
-                build_shapes(gm, sh["mag"], rng, (mp_[0], mp_[1] - 0.2, mp_[2]))
-            self.drop_models.append(NodePath(gm.node("drop_" + w.name)))
-        self.gear_models = [NodePath(gear_model(gi).node("gear")) for gi in range(len(GEAR))]
-        self.att_drop_models = {}             # 7b: Aufsatz am Boden - das Teil gross, auf einer grünen Plakette
-        for si_ in range(len(ATT_SLOTS)):
-            for v_ in range(1, len(ATTACHMENTS[si_])):
-                am = Mesh()
-                prts = att_parts("Sturmgewehr", si_, v_)
-                if prts:
-                    cx_ = sum(q[0] for q in prts) / len(prts)
-                    cy_ = sum(q[1] for q in prts) / len(prts)
-                    cz_ = sum(q[2] for q in prts) / len(prts)
-                    k_ = 0.42 / max(max(q[3], q[4], q[5]) for q in prts)
-                    k_ = min(k_, 7.0)
-                    for q in prts:
-                        box(am, (q[0] - cx_) * k_, (q[1] - cy_) * k_, 0.12 + (q[2] - cz_) * k_,
-                            max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
-                box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
-                self.att_drop_models[si_ * ATT_CODE + v_] = NodePath(am.node("att_drop"))
-        for v_ in range(1, len(ATT_SCOPE_NAMES)):             # 7b: Visiere am Boden
-            am = Mesh()
-            prts = scope_parts(v_, "Sturmgewehr", rel=True)
-            if prts:
-                k_ = 0.5 / max(max(q[3], q[4], q[5]) for q in prts)
-                cy_ = sum(q[1] for q in prts) / len(prts)
-                cz_ = sum(q[2] for q in prts) / len(prts)
-                for q in prts:
-                    box(am, q[0] * k_, (q[1] - cy_) * k_, 0.15 + (q[2] - cz_) * k_,
-                        max(0.02, q[3] * k_), max(0.02, q[4] * k_), max(0.02, q[5] * k_), q[6])
-            box(am, 0, 0, -0.12, 0.42, 0.42, 0.04, (0.25, 0.75, 0.3))
-            self.att_drop_models[ATT_SCOPE * ATT_CODE + v_] = NodePath(am.node("scope_drop"))
-        self.melee_drop_models = []
-        for mi in range(len(MELEE)):
-            nd = NodePath("melee_drop")
-            mm = nd.attachNewNode(melee_model(mi, 1.6).node("m"))
-            mm.setPos(0, -0.4, 0)
-            nd.setR(90)
-            self.melee_drop_models.append(nd)
-        m = Mesh(lit=False)                   # Granaten-Symbol im HUD
-        for i in range(14):
-            a0, a1 = 2 * math.pi * i / 14, 2 * math.pi * (i + 1) / 14
-            m.tri((0, 0, 0), (math.cos(a0) * 0.05, 0, math.sin(a0) * 0.05),
-                  (math.cos(a1) * 0.05, 0, math.sin(a1) * 0.05), (0.45, 0.62, 0.30))
-        box(m, 0, 0, 0.055, 0.025, 0.02, 0.03, (0.8, 0.8, 0.8))
-        self.gren_icon = NodePath(m.node("gren_icon"))
-        self.gren_icon.setTwoSided(True)
-        m = Mesh(lit=False)                   # Mündungsfeuer: Stern in der x-z-Ebene
-        pts = []
-        for i in range(8):
-            a = 2 * math.pi * i / 8
-            rr = 0.11 if i % 2 == 0 else 0.045
-            pts.append((math.cos(a) * rr, 0.0, math.sin(a) * rr))
-        for i in range(8):
-            m.tri((0, 0, 0), pts[i], pts[(i + 1) % 8], (1.0, 0.85, 0.4))
-        self.flash_np = NodePath(m.node("flash"))
-
-    def build_viewmodel(self):
-        """Waffe in eigenem Display-Region mit eigener Kamera: wird nie von
-        Bäumen oder Felsen verdeckt."""
-        self.gun_root = NodePath("gun_root")
-        self.gun_lens = PerspectiveLens()
-        self.gun_lens.setFov(62)
-        self.gun_lens.setNearFar(0.02, 20)
-        cam = Camera("gun_cam")
-        cam.setLens(self.gun_lens)
-        self.gun_cam = self.gun_root.attachNewNode(cam)
-        cam.setScene(self.gun_root)
-        dr = self.win.makeDisplayRegion()
-        dr.setSort(5)
-        dr.setClearDepthActive(True)
-        dr.setCamera(self.gun_cam)
-        self.gun_dr = dr
-        self.gun_pivot = self.gun_root.attachNewNode("pivot")
-        self.rd_anchor = self.gun_pivot.attachNewNode("rd_anchor")      # Mitte des Reflexvisiers (der Punkt folgt ihr)
-        self.gun_models, self.gun_flash = [], []
-        self.scope_nodes = []                                 # je Waffe: {Visier: Modellknoten}
-        self.vm_mags = []
-        self.att_nodes = []                                   # je Waffe: {(Platz, Aufsatz): [Knoten]}
-        rng = random.Random(7)
-        for w in EXP_WEAPONS:
-            muzzle = GUN_PARTS[w.name][1]
-            sh = GUN_SHAPES[w.name]
-            gm = Mesh()
-            magp = MAG_PARTS.get(w.name)
-            sg_h = sg_a = None
-            build_shapes(gm, sh["body"], rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
-            if w.name == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
-                gb = Mesh()
-                build_shapes(gb, sh["barrel"], rng)
-            model = self.gun_pivot.attachNewNode(w.name)
-            model.attachNewNode(gm.node("g"))
-            if w.name == SG_NAME:
-                sg_h = model.attachNewNode("sg_hinge")
-                sg_h.setPos(*SG_PIV)
-                sg_a = sg_h.attachNewNode("sg_barrel")
-                sg_a.setPos(-SG_PIV[0], -SG_PIV[1], -SG_PIV[2])
-                sg_a.attachNewNode(gb.node("b"))
-                self.sg_hinge, self.sg_front = sg_h, None
-            mag = ej = None
-            if magp is not None:
-                for k in range(2):                          # k=0: Magazin an der Waffe, k=1: ausgeworfenes
-                    mm_ = Mesh()
-                    build_shapes(mm_, sh["mag"], rng)
-                    nd = (model if k == 0 else self.gun_pivot).attachNewNode(mm_.node("mag"))
-                    nd.setPos(magp[0], magp[1], magp[2])
-                    if k == 1:
-                        nd.hide()
-                        ej = nd
-                    else:
-                        mag = nd
-            self.vm_mags.append((mag, ej, magp))
-            an = {}
-            if w.name in PRIMARY_NAMES or w.name in SECONDARY_NAMES:            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
-                for si_ in (0, 2):
-                    for v_ in (1, 2, 3):
-                        am_ = Mesh()
-                        for part in att_parts(w.name, si_, v_):
-                            box(am_, *part, rng)
-                        nd = (sg_a if (si_ == 0 and sg_a is not None) else model).attachNewNode(am_.node("att"))
-                        nd.hide()
-                        an[(si_, v_)] = [nd]
-                if magp is not None:
-                    for v_ in (1, 2, 3):
-                        lst = []
-                        for host in (mag, ej):
-                            am_ = Mesh()
-                            for part in att_parts(w.name, 1, v_):
-                                box(am_, *part, rng)
-                            nd = host.attachNewNode(am_.node("attm"))
-                            nd.hide()
-                            lst.append(nd)
-                        an[(1, v_)] = lst
-            self.att_nodes.append(an)
-            fl = (sg_a if sg_a is not None else model).attachNewNode("flash")
-            fl.setPos(*muzzle)
-            self.flash_np.instanceTo(fl)
-            fl.setTwoSided(True)
-            fl.hide()
-            self.gun_models.append(model)
-            self.gun_flash.append(fl)
-            sn = {}
-            if w.name in PRIMARY_NAMES:
-                for sc in range(4):
-                    sp = scope_parts(sc, w.name)
-                    if not sp:
-                        continue
-                    sm_ = Mesh()
-                    sm_f = Mesh() if (sc == 0 and sg_a is not None) else None     # Schrotflinte: Korn sitzt am beweglichen Lauf
-                    for part in sp:
-                        if part[6] == _RING:
-                            ring_mesh(sm_, part[0], part[1], part[2], part[5] / 2, part[5] / 2 - 0.012, part[4], part[6], rng)
-                        elif sm_f is not None and part[1] > 0.5:
-                            box(sm_f, *part, rng)
-                        else:
-                            box(sm_, *part, rng)
-                    if sm_f is not None:
-                        fnd = sg_a.attachNewNode(sm_f.node("front"))
-                        fnd.hide()
-                        self.sg_front = fnd
-                    nd = model.attachNewNode(sm_.node("scope%d" % sc))
-                    nd.setTwoSided(True)
-                    nd.hide()
-                    sn[sc] = nd
-            self.scope_nodes.append(sn)
-        # Nahkampfwaffen in der Hand (Ego-Ansicht), Klinge schräg nach vorn oben
-        self.melee_models = []
-        self.pan_food_fp = []
-        for mi in range(len(MELEE)):
-            nd = self.gun_pivot.attachNewNode("melee_" + MELEE[mi].name)
-            inner = nd.attachNewNode(melee_model(mi, 0.85).node("m"))
-            nd.setPos(0.06, 0.08, -0.02)
-            nd.setHpr(-20, 30, -25)
-            if MELEE[mi].name == PAN_NAME:                  # 9c: Kochfläche zur Kamera, darauf das Essen
-                inner.setR(PAN_FP_ROLL)
-                self.pan_food_fp = food_nodes(inner, 0.85)
-            nd.hide()
-            self.melee_models.append(nd)
-        # linke Hand (Haut + Ärmel) für das Nachladen
-        hm = Mesh()
-        fp_arm_mesh(hm, rng, 0.55, -0.17, -0.01, 1.0, -1)
-        self.vm_hand = self.gun_pivot.attachNewNode(hm.node("hand"))
-        self.vm_hand.hide()
-        self.vm_hand.setP(18)
-        # rechte Hand (Haut + Ärmel): hält beim Nachladen der Kleinwaffen den Griff, während die linke das Magazin wechselt
-        rm = Mesh()
-        fp_grip_arm_mesh(rm, rng, 1)
-        self.vm_rhand = self.gun_pivot.attachNewNode(rm.node("rhand"))
-        self.vm_rhand.hide()
-        shm = Mesh()
-        box(shm, 0, 0, 0, 0.03, 0.07, 0.03, (0.80, 0.12, 0.08), rng)
-        box(shm, 0, -0.04, 0, 0.032, 0.016, 0.032, (0.85, 0.68, 0.25), rng)
-        self.vm_shell = self.gun_pivot.attachNewNode(shm.node("shell"))
-        self.vm_shell.hide()
-        self.sg_ev = -1
-        # Gadget in der Hand (Taste 3): zwei Arme, rechts mit dem Gadget auf der Hand
-        self.gad_arms = []
-        for _side in (0, 1):
-            am = Mesh()
-            fp_arm_mesh(am, rng, 0.5, -0.06, 0.0, 0.35 if _side else 0.8, 1 if _side else -1)
-            arm = self.gun_root.attachNewNode(am.node("arm%d" % _side))
-            arm.hide()
-            self.gad_arms.append(arm)
-        self.gad_hand = []
-        for k in range(3):
-            nd = self.gad_arms[1].attachNewNode("gadhand%d" % k)
-            self.gad_models[k].copyTo(nd)
-            nd.setScale((1.7, 1.4, 1.0)[k])
-            nd.setPos(0.0, 0.01, 0.03)
-            nd.setHpr(0, 14, 0)
-            nd.hide()
-            self.gad_hand.append(nd)
-        # Wurfarm für Handgranaten (rechts, mit Granate in der Hand)
-        gm = Mesh()
-        fp_arm_mesh(gm, rng, 0.5, -0.06, 0.0, 0.5, 1)
-        self.gren_arm = self.gun_root.attachNewNode(gm.node("grenarm"))
-        self.gren_nd = self.gren_arm.attachNewNode("grenade_vm")       # 10e: je Art ein Modell in der Hand
-        self.gren_vm = {}
-        for k_ in GREN_KINDS:
-            nd = gren_inst(self.gren_nd, k_, 0.105)
-            nd.setPos(0, 0.0, 0.07)
-            nd.hide()
-            self.gren_vm[k_] = nd
-        self.gren_vm_flame = gren_flame_node(self.gren_vm["molotov"], (0.07, 0.03, 0.62), 0.32)
-        self.gren_vm_kind = None
-        self.thrown_kind = "frag"
-        self.gren_arm.hide()
-        self.gren_anim_t = 0.0
-        self.gad_amp = 0.0
-        self.spr_t, self.trig_now, self.sprinting, self.hand_pos = 0.0, False, False, None
-        # Die Rakete steckt vorn im Rohr des Raketenwerfers (wird beim Nachladen hineingeschoben)
-        self.vm_rocket = self.gun_models[ROCKET_WI].attachNewNode("vm_rocket")
-        build_rocket(lit=True)[0].copyTo(self.vm_rocket)
-        self.vm_rocket.setPos(0, 0.5, 0.02)
-        self.vm_rocket.setScale(0.9)
-
-    def build_hud(self):
-        OnscreenText(text="Esc  Menü / Maus freigeben",
-                     parent=self.a2dTopLeft, pos=(0.04, -0.07), scale=0.04,
-                     fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=False)
-        self.cross = Crosshair(self.aspect2d)
-        self.run_now, self.key_turn = False, 0
-        self.hitmark = HitMark(self.aspect2d)
-        self.hitmark.hide()
-        self.heli_sight = HeliSight(self.aspect2d)
-        self.heli_sight.hide()
-        self.sight_off = (0.0, 0.0)               # Versatz von Treffermarker und Schadenszahl (Heli-Fadenkreuz)
-        self.pop_text = OnscreenText(text="", pos=(0, 0), scale=0.055, fg=(1, 1, 1, 1),
-                                     shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
-        self.pop_text.hide()
-        self.pop_pct, self.pop_age, self.pop_col = 0, 99.0, (1, 1, 1, 1)
-
-        # Rotes Aufblitzen bei Schaden
-        cm = CardMaker("hurt")
-        cm.setFrame(-3, 3, -1, 1)
-        self.hurt_card = self.aspect2d.attachNewNode(cm.generate())
-        self.hurt_card.setTransparency(TransparencyAttrib.MAlpha)
-        self.hurt_card.setColor(0.8, 0, 0, 0)
-
-        # Healthbar
-        def card(parent, x, z, sx, sz, col):
-            c = CardMaker("c")
-            c.setFrame(0, 1, 0, 1)
-            n = parent.attachNewNode(c.generate())
-            n.setPos(x, 0, z)
-            n.setScale(sx, 1, sz)
-            n.setColor(*col)
-            n.setTransparency(TransparencyAttrib.MAlpha)
-            return n
-
-        card(self.a2dBottomLeft, 0.07, 0.065, 0.57, 0.052, (0, 0, 0, 0.55))
-        self.hp_fg = card(self.a2dBottomLeft, 0.08, 0.075, 0.55, 0.032, (0.2, 0.8, 0.2, 1))
-        self.hp_text = OnscreenText(text="100", parent=self.a2dBottomLeft, pos=(0.08, 0.13),
-                                    scale=0.07, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
-                                    align=TextNode.ALeft, mayChange=True)
-        # Schild (Ausrüstung): blauer Balken direkt unter den Lebenspunkten
-        self.shield_bg = card(self.a2dBottomLeft, 0.07, 0.035, 0.57, 0.026, (0, 0, 0, 0.55))
-        self.shield_fg = card(self.a2dBottomLeft, 0.08, 0.04, 0.55, 0.016, (0.35, 0.75, 1.0, 1))
-        self.shield_bg.hide()
-        self.shield_fg.hide()
-        # Ausrüstung: drei Plaketten (Kopf, Torso, Füsse) rechts neben den Lebenspunkten
-        # Ausrüstung: drei Kacheln senkrecht am rechten Rand (oben Kopf, Mitte Torso, unten Füsse). Im
-        # Hintergrund ein dezenter Umriss des Slots; darüber das getragene Teil. Jede Kachel hat einen eigenen
-        # Knoten "item" - später kann dort statt des Texts ein Symbol pro Teil hängen (GEAR_HUD_*).
-        self.gear_tiles = {}
-        self.gear_icon_cache = getattr(self, "gear_icon_cache", {})
-        for i, sl in enumerate(GEAR_SLOTS):
-            tile = self.a2dRightCenter.attachNewNode("gear_" + sl)
-            tile.setPos(-GEAR_HUD_W / 2 - 0.03, 0, GEAR_HUD_Y0 - i * (GEAR_HUD_H + 0.02))
-            cm = CardMaker("bg")
-            cm.setFrame(-GEAR_HUD_W / 2, GEAR_HUD_W / 2, -GEAR_HUD_H / 2, GEAR_HUD_H / 2)
-            bg = tile.attachNewNode(cm.generate())
-            bg.setColor(0.04, 0.05, 0.08, 0.7)
-            bg.setTransparency(TransparencyAttrib.MAlpha)
-            sym = tile.attachNewNode(slot_symbol(sl).node("sym"))
-            sym.setScale(GEAR_HUD_H * 0.42)
-            sym.setTransparency(TransparencyAttrib.MAlpha)
-            sym.setColorScale(1, 1, 1, 0.16)
-            item = tile.attachNewNode("item")                    # Platz für Text oder (später) Symbol
-            label = OnscreenText(text="", parent=item, pos=(0, -GEAR_HUD_H / 2 + 0.012), scale=GEAR_HUD_TEXT * 0.72,
-                                 fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=True)
-            ico = item.attachNewNode("icon")                     # 9d: Symbol des getragenen Teils
-            ico.setZ(0.014)
-            self.gear_tiles[sl] = {"tile": tile, "bg": bg, "sym": sym, "item": item, "label": label, "ico": ico,
-                                   "gi": None}
-        # 10h: Set komplett - Rahmen in der eigenen Spielerfarbe um den ganzen Block der drei Kacheln
-        fr = self.a2dRightCenter.attachNewNode("gear_set_frame")
-        pad, th = SET_FRAME_PAD, SET_FRAME_W
-        gx0, gx1 = -GEAR_HUD_W - 0.03 - pad, -0.03 + pad
-        gy1 = GEAR_HUD_Y0 + GEAR_HUD_H / 2 + pad
-        gy0 = GEAR_HUD_Y0 - (len(GEAR_SLOTS) - 1) * (GEAR_HUD_H + 0.02) - GEAR_HUD_H / 2 - pad
-        for a0, b0, a1, b1 in ((gx0 - th, gy1, gx1 + th, gy1 + th), (gx0 - th, gy0 - th, gx1 + th, gy0),
-                               (gx0 - th, gy0, gx0, gy1), (gx1, gy0, gx1 + th, gy1)):
-            cm = CardMaker("edge")
-            cm.setFrame(a0, a1, b0, b1)
-            fr.attachNewNode(cm.generate())
-        fr.setTransparency(TransparencyAttrib.MAlpha)
-        fr.hide()
-        self.gear_set_frame = fr
-        # Munition und Waffenwahl (Slot 1 = Hauptwaffe, 2 = Kleinwaffe, 3 = Kistenwaffe)
-        self.ammo_text = OnscreenText(text="", parent=self.a2dBottomRight, pos=(-0.08, 0.08),
-                                      scale=0.1, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ARight, mayChange=True)
-        self.build_tacho()
-        self.breath_hint = OnscreenText(text="[Shift]  Atem anhalten", parent=self.a2dBottomLeft, pos=(0.08, 0.27),
-                                        scale=0.05, fg=(0.85, 0.88, 0.92, 1), shadow=(0, 0, 0, 0.8),
-                                        align=TextNode.ALeft, mayChange=False)
-        self.breath_hint.setBin("fixed", 90)
-        self.breath_hint.setDepthTest(False)
-        self.breath_hint.setDepthWrite(False)
-        self.breath_hint.hide()
-        self.name_text = OnscreenText(text="", parent=self.a2dBottomRight, pos=(-0.08, 0.2),
-                                      scale=0.05, fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ARight, mayChange=True)
-        # Waffenleiste unten in der Mitte: drei Karten mit Waffenbild (Haupt-, Klein-, Kistenwaffe)
-        # und die Granaten. Bilder liegen in festen Zeichenreihen (fixed-Bins), Text darüber.
-        self.bar_root = self.a2dBottomCenter.attachNewNode("weapon_bar")       # alles der Waffenleiste (im Sniper-Visier aus)
-
-        def hud_card(x, w, h, col, sort):
-            c = CardMaker("c")
-            c.setFrame(-w / 2, w / 2, -h / 2, h / 2)
-            n = self.bar_root.attachNewNode(c.generate())
-            n.setPos(x, 0, 0.115)
-            n.setColor(*col)
-            n.setTransparency(TransparencyAttrib.MAlpha)
-            n.setBin("fixed", sort)
-            n.setDepthTest(False)
-            n.setDepthWrite(False)
-            return n
-
-        self.bar_root.setX(-0.08)                      # Platz für Nahkampf und Granaten rechts
-        self.slot_frames, self.slot_icons, self.slot_labels = [], [], []
-        for i in range(N_SLOTS):                       # Waffenslots (kein Gadget-Slot in Experimental)
-            x = (i - N_SLOTS / 2) * 0.34
-            self.slot_frames.append(hud_card(x, 0.32, 0.17, (0.4, 0.4, 0.4, 0.6), 19))
-            hud_card(x, 0.30, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
-            holder = self.bar_root.attachNewNode("slot_holder")   # eigener Halter je Karte
-            holder.setPos(x, 0, 0.115)
-            holder.setScale(0.7)
-            icons = {"holder": holder, "cur": None, "nodes": {}}
-            self.slot_icons.append(icons)
-            lab = OnscreenText(
-                text=str(i + 1) + (" Spezial" if i == SPECIAL_SLOT else ""), parent=self.bar_root, pos=(x - 0.135, 0.165), scale=0.04,
-                fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
-            lab.setBin("fixed", 25)
-            self.slot_labels.append(lab)
-        # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
-        self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
-                              "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
-                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
-                              "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
-        # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
-        mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
-        self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
-        hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
-        self.melee_holder = self.bar_root.attachNewNode("melee_holder")
-        self.melee_holder.setPos(mx_, 0, 0.11)
-        self.melee_icons, self.melee_icon_cur = {}, None
-        self.melee_label = OnscreenText(text="4 Nahkampf", parent=self.bar_root, pos=(mx_ - 0.115, 0.165),
-                                        scale=0.034, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft,
-                                        mayChange=True)
-        self.melee_label.setBin("fixed", 25)
-        self.pan_text = OnscreenText(text="", parent=self.bar_root, pos=(mx_ + 0.12, 0.05), scale=0.028,
-                                     fg=(1.0, 0.8, 0.4, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
-        self.pan_text.setBin("fixed", 25)                 # 9c: Ladestand der Bratpfanne an der Nahkampf-Kachel
-        self.chg_root = self.aspect2d.attachNewNode("ladebalken")      # 9c: Katana/Schwert laden
-        cm_ = CardMaker("chg")
-        cm_.setFrame(-0.16, 0.16, -0.205, -0.185)
-        self.chg_bg = self.chg_root.attachNewNode(cm_.generate())
-        self.chg_bg.setColor(0.05, 0.05, 0.08, 0.75)
-        self.chg_bg.setTransparency(TransparencyAttrib.MAlpha)
-        cm_.setFrame(0.0, 0.32, -0.202, -0.188)
-        self.chg_fg = self.chg_root.attachNewNode(cm_.generate())
-        self.chg_fg.setX(-0.16)
-        self.chg_txt = OnscreenText(text="", parent=self.chg_root, pos=(0, -0.25), scale=0.04, fg=(1, 0.85, 0.3, 1),
-                                    shadow=(0, 0, 0, 1), align=TextNode.ACenter, mayChange=True)
-        self.chg_root.hide()
-        self.chg_full = False
-        self.amp_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.06, 0.88), scale=0.034,
-                                     fg=(0.85, 0.6, 1.0, 1), shadow=(0, 0, 0, 1), align=TextNode.ALeft, mayChange=True)
-        gx_ = mx_ + 0.25
-        self.gren_frame = hud_card(gx_, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
-        hud_card(gx_, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
-        self.gren_icons = {}                           # 10e: Symbol je Granatenart (die gewählte wird gezeigt)
-        for k_ in GREN_KINDS:
-            gi = self.bar_root.attachNewNode(gren_icon_mesh(k_, 0.042).node("gren_icon_" + k_))
-            gi.setPos(gx_ - 0.035, 0, 0.11)
-            gi.setTwoSided(True)
-            gi.setBin("fixed", 21)
-            gi.setDepthTest(False)
-            gi.setDepthWrite(False)
-            gi.hide()
-            self.gren_icons[k_] = gi
-        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.045, 0.095),
-                                      scale=0.055, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ACenter, mayChange=True)
-        self.gren_text.setBin("fixed", 25)
-        self.gren_label = OnscreenText(text="G", parent=self.bar_root, pos=(gx_ - 0.085, 0.165), scale=0.034,
-                                       fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
-        self.gren_label.setBin("fixed", 25)
-        self.gren_more = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.215), scale=0.026,
-                                      fg=(0.85, 0.88, 0.95, 0.85), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
-                                      mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
-        self.gren_more.setBin("fixed", 25)
-        self.gad_hud = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.265), scale=0.03,
-                                    fg=(0.85, 0.88, 0.95, 0.9), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
-                                    mayChange=True)                # 5: Gadget-Vorrat (nur wenn vorhanden)
-        self.gad_hud.setBin("fixed", 25)
-        self.build_gren_hud()
-        self.build_heli_hud()
-        self.speed_text = OnscreenText(text="", pos=(0, -0.7), scale=0.08, fg=(1, 0.9, 0.3, 1),
-                                       shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.death_picker = Picker(self.aspect2d, self.weapon_icons, 0.22, -0.10, -0.42, flat=True)   # wie im Hauptmenü
-        self.death_picker.hide()
-        self.build_respawn_btn()
-        self.build_lobby_ui()
-        cm = CardMaker("deadbtn")
-        cm.setFrame(*self.DEAD_BTN)
-        self.dead_btn = self.aspect2d.attachNewNode(cm.generate())
-        self.dead_btn.setColor(*BTN_C)
-        self.dead_btn.setTransparency(TransparencyAttrib.MAlpha)
-        btn3d(self.dead_btn)
-        self.dead_btn_text = OnscreenText(text="LOADOUT KONFIGURIEREN", pos=(0, -0.825), scale=0.05, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                                          shadow=(0, 0, 0, 0.8), mayChange=False)
-        self.dead_btn.hide()
-        self.dead_btn_text.hide()
-        self.dead_hint = OnscreenText(text="", pos=(0, -0.94), scale=0.055, fg=(0.95, 0.8, 0.8, 1),
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.reload_text = OnscreenText(text="NACHLADEN", pos=(0, -0.35), scale=0.06,
-                                        fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.8), mayChange=True)
-        self.reload_text.hide()
-        self.kill_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.08),   # nicht mehr im HUD
-                                      scale=0.05, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ARight, mayChange=True)
-        self.kill_text.hide()
-        self.timer_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.09),
-                                       scale=0.06, fg=(1, 0.9, 0.3, 1), shadow=(0, 0, 0, 0.9),
-                                       mayChange=True)
-        self.score_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-0.05, -0.28),   # -> Tab
-                                       scale=0.042, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
-                                       align=TextNode.ARight, mayChange=True)
-        self.score_text.hide()
-        self.feed_text = OnscreenText(text="", parent=self.a2dTopLeft, pos=(HUD_MARGIN, -0.08),   # Killfeed
-                                      scale=HUD_TEXT, fg=(1, 0.92, 0.78, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ALeft, mayChange=True)
-        self.prompt_text = OnscreenText(text="", pos=(0, -0.55), scale=0.055, fg=(1, 0.95, 0.5, 1),
-                                        shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # 7b: Drop ansehen
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.toast_text = OnscreenText(text="", pos=(0, 0.42), scale=0.052, fg=(1, 0.85, 0.3, 1),
-                                       shadow=(0, 0, 0, 0.9), mayChange=True)   # kurzer Hinweis, verschwindet
-        self.toast_t = 0.0
-        self.dead_text = OnscreenText(text="", pos=(0, 0.74), scale=0.07, fg=(0.95, 0.8, 0.8, 1),
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.over_text = OnscreenText(text="", pos=(0, 0.55), scale=0.065, fg=(1, 0.95, 0.6, 1),
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.strike_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.2), scale=0.065,
-                                        fg=(1, 0.25, 0.15, 1), shadow=(0, 0, 0, 0.95), mayChange=True)
-        self._txt = {}
-
-        # Zielfernrohr (nur Scharfschütze/Railgun beim Zielen)
-        sm = Mesh(lit=False)
-        n, r0, r1 = 64, 0.92, 4.0
-
-        def pt(r, a):
-            return (math.cos(a) * r, 0.0, math.sin(a) * r)
-
-        for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            sm.tri(pt(r0, a0), pt(r1, a0), pt(r1, a1), (0, 0, 0), ref=(0, 5, 0))
-            sm.tri(pt(r0, a0), pt(r1, a1), pt(r0, a1), (0, 0, 0), ref=(0, 5, 0))
-        self.scope = self.aspect2d.attachNewNode(sm.node("scope"))
-        self.scope.setBin("fixed", 10)             # unter dem Atem-Hinweis
-        self.scope.setDepthTest(False)
-        self.scope.setDepthWrite(False)
-        for fr in ((-0.92, 0.92, -0.0015, 0.0015), (-0.0015, 0.0015, -0.92, 0.92)):
-            cm = CardMaker("lines")
-            cm.setFrame(*fr)
-            self.scope.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
-        self.scope.hide()
-        # ACOG: kleineres Sehfeld mit Strichmarke (Chevron) und Entfernungsstrichen
-        am = Mesh(lit=False)
-        for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            am.tri(pt(0.66, a0), pt(r1, a0), pt(r1, a1), (0, 0, 0), ref=(0, 5, 0))
-            am.tri(pt(0.66, a0), pt(r1, a1), pt(0.66, a1), (0, 0, 0), ref=(0, 5, 0))
-        am.tri((0, 0, 0.012), (-0.026, 0, -0.04), (0.026, 0, -0.04), (1.0, 0.12, 0.08), ref=(0, 5, 0))
-        am.tri((0, 0, -0.004), (-0.012, 0, -0.04), (0.012, 0, -0.04), (0.0, 0.0, 0.0), ref=(0, 5, 0))
-        self.acog = self.aspect2d.attachNewNode(am.node("acog"))
-        for fr in ((-0.0012, 0.0012, -0.66, -0.06), (-0.3, -0.07, -0.0012, 0.0012), (0.07, 0.3, -0.0012, 0.0012)):
-            cm = CardMaker("alines")
-            cm.setFrame(*fr)
-            self.acog.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
-        for k, zz in enumerate((-0.17, -0.27, -0.38, -0.5)):
-            cm = CardMaker("abdc")
-            cm.setFrame(-0.03 + 0.006 * k, 0.03 - 0.006 * k, zz - 0.0012, zz + 0.0012)
-            self.acog.attachNewNode(cm.generate()).setColor(0, 0, 0, 1)
-        self.acog.setTwoSided(True)
-        self.acog.hide()
-        # Red Dot: Leuchtpunkt in Bildmitte
-        cm = CardMaker("rdot")
-        cm.setFrame(-0.0024, 0.0024, -0.0024, 0.0024)
-        self.reddot = self.aspect2d.attachNewNode("reddot_root")
-        dot = self.reddot.attachNewNode(cm.generate())
-        dot.setColor(1.0, 0.12, 0.08, 1)
-        cm = CardMaker("rglow")
-        cm.setFrame(-0.014, 0.014, -0.014, 0.014)
-        gl = dot.attachNewNode(cm.generate())
-        gl.setColor(1.0, 0.1, 0.06, 0.22)
-        gl.setTransparency(TransparencyAttrib.MAlpha)
-        dot.setTransparency(TransparencyAttrib.MAlpha)
-        self.reddot.setBin("fixed", 30)
-        self.reddot.setDepthTest(False)
-        self.reddot.hide()
-        # Visier des Raketenwerfers: Sichtfeld mit Vignette, Strichkreuz, Vorhaltmarken, Entfernungsmesser
-        rs = self.aspect2d.attachNewNode("rocket_sight")
-        vm = Mesh(lit=False)
-        for i in range(n):
-            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            vm.tri(pt(0.86, a0), pt(r1, a0), pt(r1, a1), (0, 0, 0), ref=(0, 5, 0))
-            vm.tri(pt(0.86, a0), pt(r1, a1), pt(0.86, a1), (0, 0, 0), ref=(0, 5, 0))
-        rs.attachNewNode(vm.node("vignette"))
-        amber = (1.0, 0.85, 0.2, 1)
-        for fr in ((-0.86, -0.07, -0.0018, 0.0018), (0.07, 0.86, -0.0018, 0.0018),
-                   (-0.0018, 0.0018, 0.07, 0.55), (-0.0018, 0.0018, -0.86, -0.07),
-                   (-0.012, 0.012, -0.0018, 0.0018)):
-            cm = CardMaker("rs_line")
-            cm.setFrame(*fr)
-            rs.attachNewNode(cm.generate()).setColor(*amber)
-        self.rs_ticks = []
-        for rng_m in (100, 200, 300, 400):
-            hold = rs.attachNewNode("rs_tick")
-            cm = CardMaker("rs_t")
-            cm.setFrame(-0.045, 0.045, -0.002, 0.002)
-            hold.attachNewNode(cm.generate()).setColor(*amber)
-            OnscreenText(text=str(rng_m), parent=hold, pos=(0.07, -0.012), scale=0.032, fg=amber,
-                         align=TextNode.ALeft, mayChange=False)
-            self.rs_ticks.append((rng_m, hold))
-        self.rs_range = OnscreenText(text="", parent=rs, pos=(0, -0.66), scale=0.07, fg=amber,
-                                     shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.rs_tag = OnscreenText(text="", parent=rs, pos=(0, 0.66), scale=0.05, fg=amber,
-                                   shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.rscope = rs
-        rs.hide()
-        self.show_fps = False
-        self.fps_text = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.08), scale=0.04,
-                                     fg=(0.7, 1, 0.7, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight,
-                                     mayChange=True)
-        self.fps_text.hide()
-        if getattr(self, "show_fps", False):          # F3 wurde schon im Menü gedrückt
-            self.fps_text.show()
-        self.build_turret_sight()
-        self.build_minimap()
-        self.build_tab_overlay()
-
-    # ------------------------------------------------------------ Eingabe
-    def toggle_gadget(self):
-        """Taste 5: Gadget (C4, Claymore, Funkbake - nur aus Beute) in die Hand nehmen; weiter drücken wechselt zur
-        nächsten Art, nach der letzten wird weggesteckt."""
-        pl = self.player
-        if pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
-            return
-        has = [k for k in range(3) if pl.gad_stock[k] > 0 or (k == GAD_C4 and self.world.has_c4(pl.pid))]
-        if not has:
-            pl.gad_out = False
-            self.toast("Kein Gadget - C4, Claymore und Funkbake gibt es nur als Beute", (0.9, 0.85, 0.7), 1.8)
-            return
-        if pl.gad_out and pl.gadget in has:
-            i = has.index(pl.gadget)
-            if i + 1 < len(has):
-                pl.gadget = has[i + 1]
-            else:
-                pl.gad_out = False
-                return
-        else:
-            if pl.gadget not in has:
-                pl.gadget = has[0]
-            pl.gad_out, pl.ads, pl.melee_out = True, False, False
-        pl.gad_n = pl.gad_stock[pl.gadget]
-        self.toast(f"{GADGETS[pl.gadget]}  x{pl.gad_n}", (1.0, 0.9, 0.55), 1.2)
-
-    def cycle_weapon(self, d):
-        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern.
-        10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
-        if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
-            return
-        if self.g_hold_t >= 0:
-            self.on_gren_next(d)
-            return
-        pl = self.player
-        if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
-            return
-        order = [wi for wi in pl.slots if wi is not None] + [MELEE_SEL]
-        if not order:
-            return
-        if pl.gad_out and "gad" in order:
-            cur = "gad"
-        else:
-            cur = self.sel_req if self.sel_req is not None else (
-                pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur))
-        i = order.index(cur) if cur in order else 0
-        nxt = order[(i + d) % len(order)]
-        if nxt == "gad":
-            if not pl.gad_out:
-                self.toggle_gadget()
-        else:
-            self.sel_req = nxt
-
-    def do_respawn(self):
-        """Klick auf den grünen Spawn-Knopf."""
-        if self.mode != "play" or self.quit_box is not None:
-            return
-        pl = self.player
-        if pl.hp > 0 or self.world.phase != "play" or getattr(self.world, "lobby", False):
-            return
-        self.lock_trigger()                         # der Klick auf den Knopf darf nicht gleich als Schuss zählen
-        if self.net_mode == "client":
-            waited = time.time() - self.dead_since if self.dead_since is not None else 0.0
-            if self.client is not None and not self.client.lost and (waited >= self.world.respawn_delay or pl.prespawn):
-                self.client.request_respawn()       # der Host sucht den Startpunkt aus
-        elif self.world.can_respawn(pl):
-            self.world.respawn_player(pl)           # Einzelspiel/Host: Ereignis 'respawn' folgt
-
-    def use_object(self, alt=False):
-        """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
-        (der Host entscheidet)."""
-        pl, world = self.player, self.world
-        if not alt and pl.hp > 0 and world.phase == "play":
-            r = world.nearest_use(pl)
-            if r is None:                                   # nichts Benutzbares in der Nähe: Schlag mit der Nahkampfwaffe
-                self.do_melee()
-                return
-        if not alt and pl.hp > 0 and world.phase == "play" and world.strike == 0:
-            r = world.nearest_use(pl)
-            if r is not None and r[0] == "button":          # Tomahawk: erst Ziel auf der Karte wählen
-                if world.toma_ready() and world.toma_lock.get(self.my_id, 0.0) <= 0:
-                    self.open_strike_map()
-                return
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_use(alt)
-        else:
-            self.world.use_object(self.player, alt)
-
-    def fly_heli_ctl(self, hc, inp, dt, trigger, ads):
-        """Helikopter steuern: WASD fliegen, Leertaste steigen, Strg sinken (10a: wie das Jetpack; vorher Shift),
-        Maus zielt (der Rumpf dreht nach), Linke Maus Minigun, Rechte Maus Rakete."""
-        pl, world = self.player, self.world
-        up = (1 if inp.jump else 0) - (1 if getattr(inp, "duck", False) else 0)
-        pl.pitch = clampf(pl.pitch, -75.0, 25.0)
-        fly_heli(hc, inp.forward, inp.strafe, up, pl.heading, dt, world, stall=hc.stall_t > 0, aim_pitch=pl.pitch)
-        if self.net_mode != "client" and hc.impact > 0:       # Einzelspiel/Host: Aufprall gleich auswerten
-            world.heli_crash(hc, hc.impact)
-            hc.impact = 0.0
-        pl.x, pl.y, pl.z, pl.vz = hc.x, hc.y, hc.z + 0.4, 0.0
-        pl.moving = pl.ads = False
-        pl.on_ground = hc.ground
-        pl.lean = pl.lean_x = pl.lean_y = 0.0
-        pl.duck, pl.crouch = False, 0.0
-        pl.trig = bool(trigger)
-        if ads and not self.heli_ads:                        # Rakete (nur beim Drücken)
-            if self.net_mode == "client":
-                if self.client is not None and not self.client.lost:
-                    self.client.send_rocket()
-            else:
-                world.heli_rocket(pl)
-        self.heli_ads = bool(ads)
-
-    def apply_att_state(self, atts, scopes, store, msg=0, code=-1, wi=-1):
-        """7b: Aufsätze/Visiere/Lager übernehmen (beim Host sind sie schon gesetzt) und kurz Bescheid geben."""
-        pl = self.player
-        if self.net_mode == "client":
-            pl.att = {}
-            for k, v in (atts or {}).items():
-                a = att_valid(v)
-                if a is not None and str(k).isdigit() and int(k) < len(EXP_WEAPONS):
-                    pl.att[int(k)] = a
-            pl.scopes = {int(k): v for k, v in (scopes or {}).items()
-                         if str(k).isdigit() and isinstance(v, int) and 0 <= v < len(ATT_SCOPE_NAMES)}
-            pl.att_store = [c for c in (store or []) if isinstance(c, int)]
-            for k in list(pl.att):
-                if k < len(pl.guns):
-                    clamp_ammo(pl, k)
-        self.att_notice(msg, code, wi)
-
-    def apply_gain(self, wi, slots, dup, atts=None):
-        """Eigene Waffe aus Kiste oder vom Boden erhalten (Ereignis 'loot'/'pickup'). Beim Host und im Einzelspiel
-        hat die Welt die Slots schon umgestellt (take_weapon); als Mitspieler übernimmt man die Belegung des Hosts."""
-        pl = self.player
-        if not 0 <= wi < len(EXP_WEAPONS):
-            return
-        if self.net_mode == "client":
-            new = [None] * N_SLOTS
-            for i, v in enumerate(list(slots or ())[:N_SLOTS]):
-                if isinstance(v, int) and 0 <= v < len(EXP_WEAPONS):
-                    new[i] = v
-            pl.slots = new
-            a = att_valid(atts)                      # 7b: Aufsätze der Waffe übernimmt man vom Host
-            if a is not None and a != ATT_NONE:
-                pl.att[wi] = a
-            else:
-                pl.att.pop(wi, None)
-            for k in [k for k in pl.att if k not in pl.slots]:
-                del pl.att[k]
-            if dup:
-                stock_ammo(pl, wi)
-            else:
-                pl.guns[wi] = GunState(pl.wp(wi))
-            if pl.cur not in pl.slots:               # die Waffe in der Hand wurde getauscht
-                pl.cur = pl.switch_to = wi
-                pl.switch_t, pl.reload_t = SWITCH_T * 0.5, 0.0
-            note_hand(pl)
-        if not dup:
-            self.sel_req = wi                        # gleich zur neuen Waffe wechseln
-        pl.gad_out = False
-
-    def lock_trigger(self):
-        """7a: Feuersperre - die Maustaste zählt erst nach Loslassen + neuem Drücken und frühestens nach
-        INPUT_LOCK_T s (Spielstart, Respawn, Menü/Karte geschlossen, Fenster zurück im Vordergrund)."""
-        self.trig_need_up = True
-        self.trig_lock_t = INPUT_LOCK_T
-
-    def set_capture(self, on):
-        if on:
-            self.lock_trigger()
-        self.captured = on
-        self.mouse_prev = None
-        self.warp_ref = None
-        if not hasattr(self.win, "requestProperties"):   # z.B. Offscreen-Test
-            return
-        props = WindowProperties()
-        props.setCursorHidden(on)
-        props.setMouseMode(WindowProperties.M_confined if on else WindowProperties.M_absolute)
-        self.win.requestProperties(props)
-        if on:
-            self.recenter()
-
-    # ------------------------------------------------------------------ Endbildschirm (5f)
-    def open_end_screen(self, data):
-        """Nach Rundenende: eigener Bildschirm im Stil des Hauptmenüs - Siegerpodest, Reiter mit Statistik
-        (Maus oder Pfeiltasten / 1-6), Countdown bis zur nächsten Runde. Das Spiel steht so lange still."""
-        self.close_end_screen()
-        if self.tab_held:
-            self.tab_up()
-        if not isinstance(data, list):
-            return
-        a2 = self.aspect2d
-        hidden = [c for c in a2.getChildren() if not c.isHidden()]
-        for c in hidden:                                  # HUD aus
-            c.hide()
-        root = a2.attachNewNode("endscreen")
-        root.setBin("gui-popup", 0)                       # über allem, was das HUD noch einblendet
-        koth = bool(data) and data[0].get("mode") == "koth"
-        cm = CardMaker("endbg")
-        cm.setFrame(-3, 3, -1, 1)
-        bg = root.attachNewNode(cm.generate())
-        bg.setColor(0.05, 0.07, 0.11, 1.0)
-        bg.setTransparency(TransparencyAttrib.MAlpha)
-        OnscreenText(text="RUNDE VORBEI", parent=root, pos=(0, 0.86), scale=0.09, fg=(1.0, 0.62, 0.14, 1),
-                     shadow=(0.35, 0.12, 0.0, 0.9), mayChange=False)
-        cm.setFrame(-0.62, 0.62, 0.83, 0.838)
-        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        # Siegerpodest: 2. links, 1. Mitte, 3. rechts
-        for place, x, h, col in ((1, 0.0, 0.26, (1.0, 0.78, 0.2)), (2, -0.5, 0.19, (0.78, 0.8, 0.85)),
-                                 (3, 0.5, 0.13, (0.8, 0.5, 0.25))):
-            if place > len(data):
-                continue
-            e = data[place - 1]
-            cm.setFrame(x - 0.21, x + 0.21, 0.3, 0.3 + h)
-            blk = root.attachNewNode(cm.generate())
-            blk.setColor(col[0] * 0.55, col[1] * 0.55, col[2] * 0.55, 1)
-            OnscreenText(text=str(place), parent=root, pos=(x, 0.3 + h * 0.35), scale=0.09, fg=col + (1,),
-                         shadow=(0, 0, 0, 0.9), mayChange=False)
-            val = f"{int(e['score'])} Punkte" if koth else f"K/D {e['kills'] / max(1, e['deaths']):.2f}"
-            OnscreenText(text=e["name"][:14], parent=root, pos=(x, 0.3 + h + 0.07), scale=0.06 if place == 1 else 0.05,
-                         fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
-            OnscreenText(text=val, parent=root, pos=(x, 0.3 + h + 0.025), scale=0.035, fg=col + (1,),
-                         mayChange=False)
-        tabs = exp_end_tabs(koth)
-        self.end = {"root": root, "data": data, "tabs": tabs, "tab": 0, "cells": [], "hidden": hidden,
-                    "koth": koth, "rects": []}
-        labels = [f"{i + 1} {t[0]}" for i, t in enumerate(tabs)]
-        widths = [len(lb) * 0.042 * 0.52 + 0.09 for lb in labels]   # Reiter nebeneinander, nach Textlänge
-        x = -sum(widths) / 2
-        for lb, wd in zip(labels, widths):
-            cx = x + wd / 2
-            t = OnscreenText(text=lb, parent=root, pos=(cx, 0.19), scale=0.042, fg=Hot.BASE, mayChange=True)
-            self.end["rects"].append((x, x + wd, 0.16, 0.24, t))
-            x += wd
-        self.end["best"] = OnscreenText(text="", parent=root, pos=(0, -0.66), scale=0.05, fg=(1.0, 0.8, 0.3, 1),
-                                        shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.end["count"] = OnscreenText(text="", parent=root, pos=(0, -0.74), scale=0.045, fg=(0.75, 0.85, 0.95, 1),
-                                         mayChange=True)
-        cmb = CardMaker("endbtn")
-        cmb.setFrame(0, 1, 0, 0.18)
-        self.end["btn"] = root.attachNewNode(cmb.generate())
-        self.end["btn"].setTransparency(TransparencyAttrib.MAlpha)
-        btn3d(self.end["btn"])
-        self.end["btn_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.06, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                                         shadow=(0, 0, 0, 0.8), mayChange=True)
-        self.end["note"] = OnscreenText(text="", parent=root, pos=(0, -0.58), scale=0.042, fg=(0.6, 1.0, 0.6, 1),
-                                        shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.end["note_t"] = 0.0
-        cmu = CardMaker("endbtn2")
-        cmu.setFrame(0, 1, 0, 1)
-        for nm in ("menu", "set"):                          # Zurück zum Hauptmenü / Rundeneinstellungen ändern
-            nd = root.attachNewNode(cmu.generate())
-            nd.setTransparency(TransparencyAttrib.MAlpha)
-            btn3d(nd)
-            self.end[nm + "_btn"] = nd
-            self.end[nm + "_t"] = OnscreenText(text="", parent=root, pos=(0, 0), scale=0.045, font=BOLD_FONT, fg=(1, 1, 1, 1),
-                                               shadow=(0, 0, 0, 0.8), mayChange=True)
-        self.show_end_tab(0)
-        self.set_capture(False)
-
-    def show_end_tab(self, i):
-        e = self.end
-        if e is None:
-            return
-        i %= len(e["tabs"])
-        e["tab"] = i
-        for x0, x1, z0, z1, t in e["rects"]:
-            t.setFg(Hot.ON if t is e["rects"][i][4] else Hot.BASE)
-        for c in e["cells"]:
-            c.destroy()
-        e["cells"] = []
-        title, cols, best_name, best_f = e["tabs"][i]
-        data = e["data"][:8]
-        root = e["root"]
-        heads = ["Spieler"] + [c[0] for c in cols]
-        n = len(cols)
-        xs = [-0.95] + [-0.3 + (j + 0.5) * (1.3 / max(1, n)) for j in range(n)]
-        z = 0.07
-        for j, h in enumerate(heads):
-            e["cells"].append(OnscreenText(text=h, parent=root, pos=(xs[j], z), scale=0.038, fg=(0.7, 0.8, 0.9, 1),
-                                           align=TextNode.ALeft if j == 0 else TextNode.ACenter, mayChange=False))
-        vals = [[c[1](row) for c in cols] for row in data]
-        bests = []
-        for j, c in enumerate(cols):                      # bester Wert je Spalte wird gold hervorgehoben
-            nums = [v[j] for v in vals if isinstance(v[j], (int, float))]
-            bests.append(max(nums) if c[2] and nums and max(nums) > 0 else None)
-        for r, row in enumerate(data):
-            z = -0.02 - r * 0.075
-            me = row["pid"] == self.my_id
-            e["cells"].append(OnscreenText(text=f"{r + 1}. {row['name'][:14]}" + ("  (du)" if me else ""), parent=root,
-                                           pos=(xs[0], z), scale=0.042, fg=(1, 0.95, 0.75, 1) if me else (1, 1, 1, 1),
-                                           align=TextNode.ALeft, mayChange=False))
-            for j, v in enumerate(vals[r]):
-                gold = bests[j] is not None and v == bests[j]
-                e["cells"].append(OnscreenText(text=str(v), parent=root, pos=(xs[j + 1], z), scale=0.042,
-                                               fg=(1.0, 0.78, 0.2, 1) if gold else (0.92, 0.94, 1, 1),
-                                               mayChange=False))
-        if best_f is None:                                # Übersicht: Sieger
-            txt = f"Sieger: {data[0]['name']}" if data else ""
-        else:
-            top = max(data, key=best_f) if data else None
-            txt = f"{best_name}: {top['name']}" if top is not None and best_f(top) > 0 else f"{best_name}: -"
-        self.set_text(e["best"], txt)
-
-    # ------------------------------------------------------------------ Tab: Scoreboard, Legende, Infos
-    def tab_down(self):
-        if getattr(self, "end", None) is not None:      # Endbildschirm: Tab blättert durch die Reiter
-            self.end_key(1)
-            return
-        """Tab gedrückt halten: Scoreboard + Tasten-Legende; die Maus ist frei (Kamera steht), Mausover über
-        Waffen, Ausrüstung und Buff zeigt Infos. Loslassen: weg, Maus wieder eingefangen."""
-        if self.mode != "play" or self.quit_box is not None or self.tab_held:
-            return
-        self.tab_held = True
-        self.tab_root.show()
-        self.update_tab_overlay()
-        if self.captured:
-            self.set_capture(False)
-
-    def att_equip(self, wi, si, v):
-        if self.net_mode == "client":
-            if self.client is not None and not self.client.lost:
-                self.client.send_atteq(wi, si, v)
-        else:
-            self.world.equip_att(self.player, wi, si, v)
-
-    def tab_up(self):
-        if not self.tab_held:
-            return
-        self.tab_held = False
-        self.tab_root.hide()
-        self.tip_root.hide()
-        if self.mode == "play" and self.quit_box is None and not getattr(self, "insp_on", False):
-            self.set_capture(True)
-
-    def build_tab_overlay(self):
-        self.tab_held = False
-        root = self.aspect2d.attachNewNode("tab")
-        root.setBin("fixed", 70)
-        root.setDepthTest(False)
-        root.setDepthWrite(False)
-        cm = CardMaker("tabbg")
-        cm.setFrame(-TAB_W, TAB_W, -0.62, 0.78)
-        bg = root.attachNewNode(cm.generate())
-        bg.setColor(0.03, 0.04, 0.07, 0.82)
-        bg.setTransparency(TransparencyAttrib.MAlpha)
-        cm.setFrame(-TAB_W, TAB_W, 0.776, 0.784)
-        root.attachNewNode(cm.generate()).setColor(1.0, 0.62, 0.14, 0.9)
-        self.tab_title = OnscreenText(text="", parent=root, pos=(0, 0.69), scale=0.06, fg=(1.0, 0.75, 0.3, 1),
-                                      shadow=(0, 0, 0, 0.9), mayChange=True)
-        self.tab_cols = []                       # Spalten: (Kopf, Zeilen) - je Spalte ein Text, sauber ausgerichtet
-        for x, al in EXP_TAB_COLS:
-            a = TextNode.ALeft if al == "l" else TextNode.ARight
-            hd = OnscreenText(text="", parent=root, pos=(x, 0.6), scale=HUD_TEXT, fg=(0.7, 0.8, 0.9, 1),
-                              align=a, mayChange=True)
-            rw = OnscreenText(text="", parent=root, pos=(x, 0.52), scale=HUD_TEXT, fg=(1, 1, 1, 1),
-                              shadow=(0, 0, 0, 0.8), align=a, mayChange=True)
-            self.tab_cols.append((hd, rw))
-        self.tab_ip = OnscreenText(text="", parent=root, pos=(TAB_W - 0.05, 0.69), scale=0.03, fg=(0.6, 0.9, 0.6, 1),
-                                   align=TextNode.ARight, mayChange=True)
-        cm.setFrame(-TAB_W + 0.04, TAB_W - 0.04, 0.0, 0.004)
-        sep = root.attachNewNode(cm.generate())
-        sep.setColor(1, 1, 1, 0.25)
-        sep.setTransparency(TransparencyAttrib.MAlpha)
-        sep.setZ(0.06)
-        OnscreenText(text="Steuerung", parent=root, pos=(0, -0.01), scale=0.048, fg=(1.0, 0.75, 0.3, 1),
-                     shadow=(0, 0, 0, 0.9), mayChange=False)
-        n3 = (len(EXP_KEY_LEGEND) + 2) // 3
-        for c in range(3):
-            part = EXP_KEY_LEGEND[c * n3:(c + 1) * n3]
-            x0 = -TAB_W + 0.08 + c * (2 * TAB_W - 0.1) / 3
-            OnscreenText(text="\n".join(k for k, _w in part), parent=root, pos=(x0, -0.1), scale=0.036,
-                         fg=(1.0, 0.8, 0.4, 1), align=TextNode.ALeft, mayChange=False)
-            OnscreenText(text="\n".join(w for _k, w in part), parent=root, pos=(x0 + 0.2, -0.1), scale=0.036,
-                         fg=(0.88, 0.9, 0.95, 1), align=TextNode.ALeft, mayChange=False)
-        OnscreenText(text="Maus über Waffen, Ausrüstung oder Buff: Infos", parent=root, pos=(0, -0.59), scale=0.032,
-                     fg=(0.65, 0.7, 0.8, 1), mayChange=False)
-        root.hide()
-        self.tab_root = root
-        tip = self.aspect2d.attachNewNode("tip")
-        tip.setBin("fixed", 80)
-        tip.setDepthTest(False)
-        cm = CardMaker("tipbg")
-        cm.setFrame(0, 1, -1, 0)
-        self.tip_bg = tip.attachNewNode(cm.generate())
-        self.tip_bg.setColor(0.02, 0.03, 0.05, 0.9)
-        self.tip_bg.setTransparency(TransparencyAttrib.MAlpha)
-        self.tip_text = OnscreenText(text="", parent=tip, pos=(0.025, -0.05), scale=0.036, fg=(1, 1, 1, 1),
-                                     align=TextNode.ALeft, mayChange=True)
-        tip.hide()
-        self.tip_root = tip
-
-    def mono_font(self):
-        """Gleichbreite Schrift für Tabellen (fällt auf die Standardschrift zurück)."""
-        if not hasattr(self, "_mono"):
-            self._mono = None
-            for path in ("C:\\Windows\\Fonts\\consola.ttf", "C:\\Windows\\Fonts\\cour.ttf",
-                         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"):
-                try:
-                    if os.path.exists(path):
-                        from panda3d.core import Filename as _Fn
-                        f = self.loader.loadFont(_Fn.fromOsSpecific(path))
-                        if f is not None and f.isValid():
-                            self._mono = f
-                            break
-                except Exception:
-                    pass
-        return self._mono
-
-    def update_tab_overlay(self):
-        mw = self.mouseWatcherNode                   # Tab-Loslassen verpasst (Fenster gewechselt)? dann zu
-        if mw is not None and hasattr(mw, "is_button_down") and not getattr(self, "tab_test", False):
-            if not mw.is_button_down(KeyboardButton.tab()):
-                self.tab_up()
-                return
-        world = self.world
-        t = max(0.0, world.time_left)
-        self.set_text(self.tab_title, f"{EXP_MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}")
-        koth = world.mode == "koth"
-        heads = ["#", "Spieler", "Punkte" if koth else "K/D", "Kills", "Tode", "Monster", "Kisten", "Buffs"]
-        cols = [[] for _ in heads]
-        for i, p in enumerate(world.ranking()[:8]):
-            mk, cr, bf = exp_stat_summary(p)
-            val = f"{int(p.score)}" if koth else f"{p.kills / max(1, p.deaths):.2f}"
-            for c, v in enumerate((f"{i + 1}.", (p.name[:14] + ("  (du)" if p.pid == self.my_id else "")), val,
-                                   p.kills, p.deaths, mk, cr, bf)):
-                cols[c].append(str(v))
-        for (hd, rw), h, vals in zip(self.tab_cols, heads, cols):
-            self.set_text(hd, h)
-            self.set_text(rw, "\n".join(vals))
-        ip = getattr(self, "host_ip", None)
-        self.set_text(self.tab_ip, f"Host-IP {ip}" if ip and self.net_mode == "host" else "")
-        self.update_tooltip()
-
-    def hover_targets(self):
-        """(Mitte x, Mitte z, halbe Breite, halbe Höhe, Infotext) der HUD-Elemente mit Mausover-Info."""
-        pl, out = self.player, []
-        a2 = self.aspect2d
-        for i, fr in enumerate(self.slot_frames):
-            wi = pl.slots[i] if i < len(pl.slots) else None
-            if wi is not None:
-                p = fr.getPos(a2)
-                out.append((p[0], p[2], 0.16, 0.085, weapon_info(wi, pl.guns[wi], pl.att.get(wi), pscope(pl, wi))
-                                                        + "\n(Klick: Aufsätze wechseln)"))
-        for sl, tl in self.gear_tiles.items():
-            gi = pl.gear.get(sl)
-            if gi is not None and pl.heli < 0:
-                p = tl["tile"].getPos(a2)
-                out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
-        p = self.melee_frame.getPos(a2)
-        out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee, pl)))
-        b = getattr(pl, "buff", None)
-        ic = self.ability_icons.get("buff")
-        if b in BUFF_T and pl.buff_t > 0 and ic is not None:
-            p = ic.root.getPos(a2)
-            out.append((p[0], p[2], 0.065, 0.065, buff_info(b, pl)))
-        for key, gk in (("dash", "dash"), ("jet", "jetpack")):
-            gi = next((g for g in pl.gear.values() if g is not None and GEAR[g].kind == gk), None)
-            ic = self.ability_icons.get(key)
-            if gi is not None and ic is not None:
-                p = ic.root.getPos(a2)
-                out.append((p[0], p[2], 0.065, 0.065, gear_info(gi, pl)))
-        return out
-
-    def update_tooltip(self):
-        mw = self.mouseWatcherNode
-        if not self.tab_held or mw is None or not mw.hasMouse():
-            self.tip_root.hide()
-            return
-        mx, mz = mw.getMouseX() * self.getAspectRatio(), mw.getMouseY()
-        for cx, cz, hw, hh, text in self.hover_targets():
-            if abs(mx - cx) <= hw and abs(mz - cz) <= hh:
-                self.set_text(self.tip_text, text)
-                lines = text.split("\n")
-                w = 0.05 + 0.036 * 0.6 * max(len(ln) for ln in lines)
-                h = 0.03 + 0.036 * 1.2 * len(lines)
-                gi = GEAR_IDX.get(lines[0].split("  (")[0]) if "  (" in lines[0] else None   # 9d: Symbol im Hinweis
-                if getattr(self, "tip_icon_gi", None) != gi:
-                    ti = getattr(self, "tip_icon", None)
-                    if ti is not None:
-                        ti.removeNode()
-                    self.tip_icon = None
-                    if gi is not None:
-                        self.tip_icon = gear_icon(gi, 0.2, 0.15)
-                        self.tip_icon.reparentTo(self.tip_root)
-                        self.tip_icon.setBin("fixed", 92)
-                        self.tip_icon.setDepthTest(False)
-                        self.tip_icon.setDepthWrite(False)
-                    self.tip_icon_gi = gi
-                if gi is not None:
-                    w += 0.26
-                    self.tip_icon.setPos(w - 0.14, 0, -0.1)
-                ar = self.getAspectRatio()
-                x = mx + 0.04 if mx < 0 else mx - w - 0.04       # zur Bildmitte hin aufklappen
-                x = min(max(x, -ar + 0.02), ar - w - 0.02)
-                z = min(max(mz + h + 0.04, -1 + h + 0.02), 0.98)
-                self.tip_root.setPos(x, 0, z)
-                self.tip_bg.setScale(w, 1, h)
-                self.tip_root.show()
-                return
-        self.tip_root.hide()
-
-    def recenter(self):
-        self.warp_ref = None
-        if self.win.movePointer(0, self.win.getXSize() // 2, self.win.getYSize() // 2):
-            self.warp_pending = True
-            self.warp_frames = 0
-
-    def mouse_look(self):
-        """Liest die Mausbewegung als Differenz zur letzten Position und wendet sie an. Verlässt der Zeiger den
-        mittleren Bereich, wird er zur Fenstermitte zurückgesetzt. Das Zurücksetzen kommt beim System oft erst
-        ein paar Frames später an (vor allem bei niedriger Bildrate) - bis dahin meldet es weiter die alte
-        Position. Jede Meldung danach wird deshalb auf zwei Arten gedeutet: "noch nicht zurückgesetzt"
-        (Bewegung ab der letzten gezählten Position) oder "schon zurückgesetzt" (Bewegung ab der Mitte). Die
-        kleinere Bewegung ist die echte - so wird jede Mausbewegung genau einmal gezählt: kein Einfrieren
-        (frühere Version) und kein Überdrehen (doppelt gezählte Bewegung). Rückgabe: (dx, dy) in Pixeln."""
-        if not self.captured or not hasattr(self.win, "getPointer"):
-            return 0, 0
-        if not self.win.getProperties().getForeground():
-            self.mouse_prev, self.warp_ref = None, None
-            self.had_focus = False
-            return 0, 0
-        if not getattr(self, "had_focus", True):      # Fenster hat den Fokus zurück: Maus neu einfangen
-            self.had_focus = True
-            self.lock_trigger()                         # 7a: der Klick ins Fenster schiesst nicht
-            self.recenter()
-            self.mouse_prev = None
-            self.warp_frames = 0
-            return 0, 0
-        p = self.win.getPointer(0)
-        x, y = p.getX(), p.getY()
-        sx, sy = self.win.getXSize(), self.win.getYSize()
-        cx, cy = sx // 2, sy // 2
-        outside = abs(x - cx) > sx * 0.25 or abs(y - cy) > sy * 0.25
-        if self.warp_pending and self.warp_ref is None:     # Maus gerade eingefangen: auf die Mitte warten
-            self.warp_frames += 1
-            if outside and self.warp_frames <= MOUSE_WARP_GRACE:
-                return 0, 0
-            self.warp_frames = 0
-            self.warp_pending = False
-            self.mouse_prev = (x, y)
-            return 0, 0
-        if self.warp_ref is not None:                        # Zurücksetzen unterwegs
-            rx, ry = self.warp_ref
-            m1 = (x - rx, y - ry)                            # noch alte Zeigerposition
-            m2 = (x - cx, y - cy)                            # schon in der Mitte angekommen
-            self.warp_frames += 1
-            if m2[0] * m2[0] + m2[1] * m2[1] <= m1[0] * m1[0] + m1[1] * m1[1]:
-                dx, dy = m2
-                self.warp_ref = None
-                self.warp_pending = False
-            else:
-                dx, dy = m1
-                self.warp_ref = (x, y)
-                if self.warp_frames >= MOUSE_WARP_RETRY and self.win.movePointer(0, cx, cy):
-                    self.warp_frames = 0                     # kam nicht an: nochmal
-        else:
-            if self.mouse_prev is None:
-                self.mouse_prev = (x, y)
-                return 0, 0
-            dx, dy = x - self.mouse_prev[0], y - self.mouse_prev[1]
-        self.mouse_prev = (x, y)
-        if self.warp_ref is None and outside and self.win.movePointer(0, cx, cy):
-            self.warp_ref = (x, y)                           # bis hierher ist alles gezählt
-            self.warp_pending = True
-            self.warp_frames = 0
-        if dx or dy:
-            pl = self.player
-            sens = MOUSE_SENS * self.sens_mult * self.fov_cur / self.fov_base      # beim Zoomen feinfühliger
-            pl.heading -= dx * sens
-            pl.pitch = clampf(pl.pitch + (dy if self.invert_y else -dy) * sens, -85.0, 85.0)
-        return dx, dy
-
-    def update_gfx(self, dt):
-        """Pro Bild: Himmel folgt der Kamera, Wolken ziehen, Wasser plätschert, Blob-Schatten, Sonnenlicht."""
-        t = time.time()
-        cp = self.camera.getPos(self.render)
-        if self.sky_root is not None:
-            self.sky_root.setPos(cp)
-            self.sky_clouds.setTexOffset(TextureStage.getDefault(), cp[0] / TILE["cloud"],
-                                         cp[1] / TILE["cloud"])               # Wolken stehen fest am Himmel
-        for i, wn in enumerate(self.water_nps):
-            wn.setTexOffset(TextureStage.getDefault(), t * (0.021 if i == 0 else -0.016),
-                            t * (0.012 if i == 0 else 0.019))
         if getattr(self, "slash_fx", None):
             self.update_slash_fx()
         self.update_wind(t, (self.player.x, self.player.y))
@@ -128669,6 +121350,8 @@ class ExpGame(Game):
             pl = self.player
             self.sun_np.setPos(pl.x + SUN[0] * 100, pl.y + SUN[1] * 100, pl.z + SUN[2] * 100)
             self.sun_np.lookAt(pl.x, pl.y, pl.z)
+
+    WIND_AMP = {"tree": 0.022, "bush": 0.03, "reed": 0.12, "grass": 0.14}
 
     def update_wind(self, t, cp):
         """Wind: Baumkronen, Buesche, Schilf, hohes Gras und Fahnen schwingen (Scherung um die Bodenhoehe).
@@ -128965,7 +121648,7 @@ class ExpGame(Game):
             self.pre_seat = (pl.cur, pl.gad_out)                 # Waffe merken, die beim Einsteigen in der Hand war
         elif self.was_seated and not seated and not dead and self.pre_seat is not None:
             cur0, gad0 = self.pre_seat                           # ... und beim Aussteigen wieder in die Hand nehmen
-            if cur0 in pl.slots or EXP_WEAPONS[cur0].kind == "special":
+            if cur0 in pl.slots or WEAPONS[cur0].kind == "special":
                 pl.cur = pl.switch_to = cur0
                 pl.switch_t = pl.reload_t = 0.0
             pl.gad_out = bool(gad0)
@@ -128998,6 +121681,8 @@ class ExpGame(Game):
                 update_lean(pl, 0, dt, world)
         if not dead:
             if veh is None and hc is None and tur is None:
+                if select == MELEE_SEL:
+                    pl.gad_out = False                         # Nahkampfwaffe ziehen: Gadget wegstecken
                 if self.gadget_hand(pl, ads, edge, select, over):
                     trigger = edge = reload_req = ads = False
                 self.scope_breath(pl, dt, hold_key and not over)
@@ -129035,6 +121720,99 @@ class ExpGame(Game):
         self.handle_events()
         self.update_views(dt, inp.mdx, inp.mdy)
 
+    def toggle_fire_mode(self):
+        """V: Sturmgewehr zwischen Automatik und Einzelfeuer umschalten (kleine Wackelbewegung der Waffe)."""
+        pl = self.player
+        if pl.hp <= 0 or pl.cur not in SELECTIVE_FIRE or pl.switch_t > 0 or pl.reload_t > 0 or pl.gad_out:
+            return
+        g = pl.guns[pl.cur]
+        g.semi = not g.semi
+        self.sp_back.kick(0.9)
+        self.sp_pitch.kick(-40)
+        self.sp_roll.kick(18 if g.semi else -18)
+        if self.cur_sight() in ("acog", "sniper") and self.ads_t > 0.85:
+            self.sp_cam.kick(7.0)                    # Waffe ist im Zielfernrohr nicht zu sehen: kleiner Ruck am Bild
+            self.sp_hurt.kick(self.prng.choice((-1, 1)) * 6.0)
+        sfx = getattr(self, "sfx", None)
+        if sfx is not None:
+            try:
+                sfx.ui_click()
+            except Exception:
+                pass
+
+    def scope_breath(self, pl, dt, hold):
+        """Sniper-Visier: Die Waffe schwankt mit der Atmung. Shift hält die Luft an (ruhiges Bild), aber nur einige
+        Sekunden; danach atmet man wieder und muss sich erst erholen. Es gibt dazu absichtlich keine Anzeige."""
+        st = getattr(self, "br", None)
+        if not isinstance(st, dict):
+            st = self.br = dict(t=0.0, air=1.0, lock=False, k=1.0, sc=0.0, dh=0.0, dp=0.0)
+        w = WEAPONS[pl.cur]
+        scoped = pl.hp > 0 and pl.ads and self.cur_sight() == "sniper" and pl.mount < 0 and pl.vehicle < 0 and pl.heli < 0
+        holding = bool(hold and scoped and not st["lock"] and st["air"] > 0.0)
+        sfx = getattr(self, "sfx", None)
+        if holding:
+            if not st.get("was_hold"):                  # Shift gedrückt: einatmen
+                st["hb_next"] = 0.6
+                if sfx is not None:
+                    st["snd_in"] = sfx.play("breath_in", None, 0.45, 1.0)
+            st["air"] = max(0.0, st["air"] - dt / BREATH_HOLD)
+            held = (1.0 - st["air"]) * BREATH_HOLD
+            if held >= st["hb_next"]:                   # Herzschlag setzt nach kurzer Zeit ein und wird schneller
+                f = min(1.0, held / BREATH_HOLD)
+                if sfx is not None:
+                    sfx.play("heartbeat", None, 0.5 + 0.3 * f, 1.0 + 0.3 * f)
+                st["hb_next"] = held + 1.0 / (1.0 + 0.3 * f)
+            if st["air"] <= 0.0:
+                st["lock"] = True                       # nach 2 s ausser Atem: Ton läuft, bis er zu Ende ist
+                st["lock_t"] = st["lock_dur"] = BREATH_OOB_T
+                if sfx is not None:
+                    sfx.play("breath_out", None, 0.5, 1.0)
+        else:
+            if st.get("was_hold") and not st["lock"] and st.get("snd_in") is not None:
+                try:
+                    st["snd_in"].stop()                 # früh losgelassen: Einatmen abbrechen
+                except Exception:
+                    pass
+                st["snd_in"] = None
+            if st["lock"]:
+                st["lock_t"] -= dt
+                st["air"] = min(1.0, 1.0 - max(0.0, st["lock_t"]) / st["lock_dur"])
+                if st["lock_t"] <= 0.0:                 # Ton zu Ende -> Luft anhalten wieder möglich
+                    st["lock"], st["air"] = False, 1.0
+            else:
+                st["air"] = min(1.0, st["air"] + dt / BREATH_REGEN)
+        st["was_hold"] = holding
+        st["t"] += dt
+        st["k"] += ((0.0 if holding else 1.0) - st["k"]) * min(1.0, dt * 7.0)
+        st["sc"] += ((1.0 if scoped else 0.0) - st["sc"]) * min(1.0, dt * 8.0)
+        gasp = 1.0 + (0.5 * (1.0 - st["air"] / BREATH_LOCK_UNTIL) if st["lock"] else 0.0)    # nach Luftnot etwas wilder
+        t = st["t"]
+        size = (w.ads_fov / 14.0) if w.scope else 1.0           # breiteres Sichtfeld (Railgun): grössere Winkel
+        amp = st["k"] * st["sc"] * gasp * size
+        ph = 2 * math.pi * t / BREATH_PERIOD
+        tp = amp * (0.30 * math.sin(ph) + 0.07 * math.sin(2.3 * ph + 1.0))
+        th = amp * (0.17 * math.sin(0.62 * ph + 0.8) + 0.05 * math.sin(1.7 * ph))
+        pl.pitch = clampf(pl.pitch + (tp - st["dp"]), -85.0, 85.0)
+        pl.heading += th - st["dh"]
+        st["dp"], st["dh"] = tp, th
+
+    def apply_fall(self, pl):
+        """Fallschaden aus step() verrechnen: im Einzelspiel/als Host direkt, als Mitspieler beim Host melden."""
+        dmg = getattr(pl, "fall_dmg", 0.0)
+        if dmg <= 0.0:
+            return
+        pl.fall_dmg = 0.0
+        if pl.hp <= 0 or self.world.phase != "play" or pl.protect > 0:
+            return
+        sfx = getattr(self, "sfx", None)
+        if sfx is not None:
+            sfx.play("step_hard", None, 1.0, 0.5)              # dumpfer Aufprall
+        if self.net_mode == "client":
+            if self.client is not None:
+                self.client.send_fall(dmg)
+        else:
+            self.world.damage_player(pl, dmg, -1, WI_FALL)
+
     # ------------------------------------------------------------ Effekte
     def add_particle(self, pos, vel, col, size, life, bounce=0.3, spin=0.0, shrink=True):
         if len(self.parts) > 320:
@@ -129046,6 +121824,28 @@ class ExpGame(Game):
         np.setPos(*pos)
         np.setHpr(self.prng.uniform(0, 360), self.prng.uniform(0, 360), self.prng.uniform(0, 360))
         self.parts.append(Particle(np, pos, vel, life, bounce, spin, shrink))
+
+    def burst(self, pos, kind, d=None):
+        col, n, spd, size = {
+            "ground": ((0.45, 0.36, 0.22), 6, 2.5, 0.05),
+            "rock": ((0.8, 0.8, 0.85), 7, 4.0, 0.035),
+            "tree": ((0.55, 0.38, 0.22), 6, 3.0, 0.05),
+            "water": ((0.75, 0.88, 1.0), 10, 3.5, 0.045),
+            "blood": ((0.75, 0.05, 0.05), 28, 3.6, 0.032),
+            "kill": ((0.7, 0.05, 0.05), 22, 4.0, 0.06),
+            "boom": ((1.0, 0.55, 0.12), 46, 9.0, 0.13),
+        }[kind]
+        r = self.prng
+        for _ in range(n):
+            v = [r.uniform(-1, 1) * spd * 0.6, r.uniform(-1, 1) * spd * 0.6, r.uniform(0.4, 1.0) * spd]
+            if d is not None and kind in ("blood", "kill"):
+                v[0] += d[0] * spd * 0.7
+                v[1] += d[1] * spd * 0.7
+            self.add_particle(pos, v, col, size, r.uniform(0.5, 1.0), bounce=0.3)
+        if kind == "blood" and len(self.fx) < 60:        # leichter roter Sprühnebel
+            self.fx_spawn(self.sphere_np, pos, 0.45, 0.06, 0.24, (0.65, 0.03, 0.03), (0.3, 0.0, 0.0), p=1.0, rise=0.2)
+        if kind in ("ground", "rock", "tree") and r.random() < 0.4:
+            self.smoke_puff(pos, 0.12, 0.7, 0.62 if kind != "tree" else 0.45)     # Staubwölkchen
 
     def fx_spawn(self, model, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0, fog=True):
         """Animierten Effekt (Fx) anlegen: Instanz eines Effektmodells, transparent."""
@@ -129063,63 +121863,132 @@ class ExpGame(Game):
         self.fx.append(f)
         return f
 
-    def bullet_whiz(self, bullets):
-        """Vorbeizischende Kugeln: fliegt eine fremde Kugel nah am eigenen Kopf vorbei, zischt es - aus der
-        Richtung des Vorbeiflugs, je näher, desto lauter (WHIZ_FULL voll, bis WHIZ_MAX leiser, dann nichts).
-        Geprüft wird die Strecke seit dem letzten Bild (jeder Rechner für die Kugeln, die er ohnehin zeigt)."""
-        prev = getattr(self, "whiz_prev", {})
-        if not hasattr(self, "whizzed"):
-            self.whizzed = set()
-        me = self.player
-        nxt = {}
-        if me.hp > 0:
-            head = (me.x, me.y, me.z + eye_h(me))
-            for b in bullets:
-                cur = (b.x, b.y, b.z)
-                nxt[b] = cur
-                if b.owner == self.my_id or self.is_rocket(b) or b in self.whizzed:
-                    continue
-                p0 = prev.get(b)
-                if p0 is None:                               # neu: ein kurzes Stück zurück (Mündung)
-                    p0 = (b.x - b.vx * 0.04, b.y - b.vy * 0.04, b.z - b.vz * 0.04)
-                ab = (cur[0] - p0[0], cur[1] - p0[1], cur[2] - p0[2])
-                l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
-                if l2 < 1e-9:
-                    continue
-                t = ((head[0] - p0[0]) * ab[0] + (head[1] - p0[1]) * ab[1] + (head[2] - p0[2]) * ab[2]) / l2
-                if not 0.0 <= t < 1.0:                       # noch nicht am Kopf vorbei (oder schon lange)
-                    continue
-                c = (p0[0] + ab[0] * t, p0[1] + ab[1] * t, p0[2] + ab[2] * t)
-                d = math.dist(c, head)
-                if d >= WHIZ_MAX:
-                    continue
-                self.whizzed.add(b)
-                vol = 1.0 if d <= WHIZ_FULL else 1.0 - (d - WHIZ_FULL) / (WHIZ_MAX - WHIZ_FULL)
-                self.sfx.play("whiz", c, WHIZ_VOL * vol, self.prng.uniform(0.9, 1.15))
-        self.whiz_prev = nxt
-        alive = set(bullets)
-        self.whizzed = {b for b in self.whizzed if b in alive}
+    def update_fx(self, dt):
+        keep = []
+        for f in self.fx:
+            if f.update(dt):
+                keep.append(f)
+            else:
+                f.np.removeNode()
+        self.fx = keep
 
-    def toast(self, text, col=(1, 0.85, 0.3), dur=TOAST_T):
-        """Kurzer, deutlicher Hinweis in der Bildmitte (Buff erhalten, "Hast du schon" ...)."""
-        self.toast_text.setText(text)
-        self.toast_text.setFg(tuple(col) + (1,))
-        self.toast_text.setAlphaScale(1.0)
-        self.toast_text.setTransparency(TransparencyAttrib.MAlpha)
-        self.toast_t = dur
+    def smoke_puff(self, pos, size=0.3, life=1.4, grey=0.55):
+        r = self.prng
+        self.fx_spawn(self.sphere_np, (pos[0] + r.uniform(-0.1, 0.1), pos[1] + r.uniform(-0.1, 0.1), pos[2]),
+                      life, size * 0.5, size * 1.8, (grey, grey, grey), (grey * 0.5,) * 3,
+                      p=1.0, rise=r.uniform(0.3, 0.9))
+
+    def explosion_fx(self, pos, rad):
+        """Explosionsanimation: weisser Blitz, Feuerball (gelb -> rot -> schwarz), Druckwelle am Boden,
+        aufsteigender Rauch, Funken und Trümmer."""
+        x, y, z = pos
+        r = self.prng
+        self.fx_spawn(self.sphere_np, pos, 0.16, rad * 0.12, rad * 0.42, (1.0, 1.0, 0.9), (1.0, 0.9, 0.5),
+                      p=0.5, fog=False)
+        self.fx_spawn(self.sphere_np, pos, 0.65, rad * 0.15, rad * 0.62, (1.0, 0.78, 0.22), (0.55, 0.08, 0.03),
+                      p=0.9, fog=False)
+        self.fx_spawn(self.sphere_np, (x, y, z + rad * 0.15), 0.9, rad * 0.1, rad * 0.45,
+                      (0.95, 0.45, 0.1), (0.15, 0.05, 0.04), p=0.8, rise=rad * 0.35, fog=False)
+        gz = self.world.ground_for(x, y, z + 0.5)
+        self.fx_spawn(self.disc_np, (x, y, max(gz, z - 1.5) + 0.12), 0.5, rad * 0.15, rad * 1.25,
+                      (1.0, 0.85, 0.6), (0.7, 0.55, 0.4), p=1.3, fog=False)
+        for _ in range(6):
+            off = (x + r.uniform(-0.3, 0.3) * rad, y + r.uniform(-0.3, 0.3) * rad, z + r.uniform(0, 0.3) * rad)
+            self.fx_spawn(self.sphere_np, off, r.uniform(1.4, 2.4), rad * 0.12, rad * r.uniform(0.35, 0.55),
+                          (0.30, 0.28, 0.27), (0.08, 0.08, 0.08), p=0.8, rise=r.uniform(1.0, 2.2))
+        if z - gz < rad * 1.5:                                        # Brandfleck, der langsam verblasst
+            self.fx_spawn(self.scorch_np, (x, y, gz + 0.1), 16.0, rad * 0.9, rad * 1.0,
+                          (0.04, 0.035, 0.03), (0.04, 0.035, 0.03), p=0.7)
+        self.burst(pos, "boom")
+        for _ in range(10):                                           # Trümmer
+            v = [r.uniform(-1, 1) * 5.0, r.uniform(-1, 1) * 5.0, r.uniform(4.0, 9.0)]
+            self.add_particle(pos, v, (0.2, 0.18, 0.16), r.uniform(0.07, 0.16), r.uniform(0.8, 1.6), 0.35, 1.0)
+
+    def rocket_launch_fx(self):
+        """Rückstrahl hinten und Qualm vorn beim Abfeuern der Rakete (eigene Waffe)."""
+        pl = self.player
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        base = (pl.x, pl.y, pl.z + eye_h(pl) - 0.15)
+        for i in range(7):
+            k = self.prng.uniform(0.2, 1.6)
+            self.smoke_puff((base[0] + f[0] * k, base[1] + f[1] * k, base[2] + f[2] * k), 0.35, 1.2, 0.7)
+        for i in range(5):
+            k = self.prng.uniform(0.6, 1.4)
+            self.smoke_puff((base[0] - f[0] * k, base[1] - f[1] * k, base[2] - f[2] * k + 0.1), 0.3, 1.0, 0.6)
+
+    def eject_shell(self, w):
+        pl = self.player
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        r = (math.cos(hr), math.sin(hr), 0.0)
+        rr = self.prng
+        pos = (pl.x + f[0] * 0.35 + r[0] * 0.15, pl.y + f[1] * 0.35 + r[1] * 0.15,
+               pl.z + eye_h(pl) - 0.12 + f[2] * 0.35)
+        sr, su, sf = rr.uniform(1.3, 2.4), rr.uniform(1.4, 2.4), rr.uniform(-0.3, 0.5)
+        vel = (r[0] * sr + f[0] * sf, r[1] * sr + f[1] * sf, su)
+        if w.pellets > 1:
+            self.add_particle(pos, vel, (0.8, 0.12, 0.1), (0.03, 0.03, 0.07), 6.0, 0.35, 1.0, False)
+        else:
+            self.add_particle(pos, vel, (0.95, 0.72, 0.2), (0.015, 0.015, 0.05), 6.0, 0.4, 1.0, False)
+
+    def pname(self, pid):
+        p = self.world.players.get(pid)
+        return p.name if p is not None else "?"
+
+    def feed_add(self, text):
+        self.feed.append((text, time.time()))
+
+    def ctf_event(self, e):
+        """11: CTF-Ereignis ("ctf", Art, Spieler-ID, Flaggen-ID, Team) -> Killfeed, Hinweis, Ton."""
+        if len(e) < 5:
+            return
+        kind, pid, _fid, team = e[1], e[2], e[3], e[4]
+        w = self.world
+        me = pid == self.my_id
+        my_t = w.team_of.get(self.my_id)
+        who = self.pname(pid) if pid is not None and pid >= 0 else ""
+        fl = self.ctf_flag_name(team)
+        col = tuple(min(1.0, c * 1.2 + 0.2) for c in self.ctf_flag_col(team))
+        if kind == "take":
+            self.feed_add(f"{who} hat {fl} genommen")
+            if me:
+                self.toast("DU HAST DIE FLAGGE!  Bring sie in deine Basis", col, 3.0)
+            self.sfx.play("ctf_alert", None, 0.8, 1.0 if me or w.team_of.get(pid) == my_t else 0.85)
+        elif kind == "drop":
+            self.feed_add(f"{who} hat {fl} verloren" if who else f"{fl[0].upper()}{fl[1:]} ist gefallen")
+        elif kind == "ret":
+            self.feed_add(f"{who} hat {fl} zurückgebracht")
+            self.sfx.play("ctf_alert", None, 0.6, 1.25)
+        elif kind == "auto":
+            self.feed_add(f"{fl[0].upper()}{fl[1:]} ist zurück in der Basis")
+        elif kind == "cap":
+            t = team if team in (0, 1) else w.team_of.get(pid)
+            tn = CTF_TEAM_NAMES[t] if t in (0, 1) else "?"
+            self.feed_add(f"{who} punktet für Team {tn}!")
+            tc = tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[t]) if t in (0, 1) else (1, 1, 1)
+            self.toast(f"TEAM {tn.upper()} PUNKTET!   BLAU {w.team_score[0]} : {w.team_score[1]} ROT", tc, 3.0)
+            self.sfx.play("ctf_cap", None, 0.9 if t == my_t else 0.6, 1.0 if t == my_t else 0.8)
+        elif kind == "needhome" and me:
+            self.toast("Eure eigene Flagge muss in der Basis sein!", (1.0, 0.6, 0.4), 2.5)
+        elif kind == "noveh" and me:
+            self.toast("Mit der Flagge kein Fahrzeug", (1.0, 0.6, 0.4), 1.6)
 
     def handle_events(self):
         for e in self.world.events:
             kind = e[0]
+            if kind == "ctf":
+                self.ctf_event(e)
+                continue
             if kind == "shot":
                 if e[2] == self.my_id:
                     self.sfx.shot(e[1], e[2])
-                    if 0 <= e[1] < len(EXP_WEAPONS):
-                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * EXP_WEAPONS[e[1]].loud,
+                    if 0 <= e[1] < len(WEAPONS):
+                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud,
                                         self.world.noise_z(self.player))
                 if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse
                     continue
-                w = EXP_WEAPONS[e[1]]
+                w = WEAPONS[e[1]]
                 rr = self.prng
                 self.sp_back.kick(w.kick_back * 0.2)
                 self.sp_pitch.kick(w.kick_back * 18)
@@ -129244,7 +122113,7 @@ class ExpGame(Game):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (25 + e[1] * 1.5))
             elif kind == "kill":            # (Killer oder -1 = Monster, Opfer, Waffe)
                 victim = self.pname(e[2])
-                wn = exp_weapon_name(e[3])
+                wn = weapon_name(e[3])
                 if e[1] < 0 and e[3] == WI_TURRET:
                     self.feed_add(f"{victim} wurde vom Geschütz erledigt")
                 elif e[1] < 0 and e[3] == WI_TOMAHAWK:
@@ -129296,7 +122165,7 @@ class ExpGame(Game):
                 dup = len(e) > 4 and bool(e[4])
                 if e[1] == self.my_id:
                     self.apply_gain(wi, slots, dup, e[6] if len(e) > 6 else None)
-                wn = EXP_WEAPONS[wi].name if 0 <= wi < len(EXP_WEAPONS) else "?"
+                wn = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else "?"
                 if kind == "loot":
                     ck = e[5] if len(e) > 5 and isinstance(e[5], int) and 0 <= e[5] < len(CRATE_KINDS) else 0
                     what = CRATE_NAMES[CRATE_KINDS[ck]]
@@ -129369,7 +122238,10 @@ class ExpGame(Game):
             elif kind == "reload":
                 pass
             elif kind == "strikeready":
-                self.toast("Tomahawk ist wieder verfügbar - irgendwo fährt eine Säule hoch", (1, 0.45, 0.35), 3.5)
+                if self.world.exp:
+                    self.toast("Tomahawk ist wieder verfügbar - irgendwo fährt eine Säule hoch", (1, 0.45, 0.35), 3.5)
+                else:
+                    self.feed_add("Der Tomahawk ist wieder einsatzbereit")
             elif kind == "timer":
                 pass                      # kein Eintrag im Ereignis-Feed: die Zeit steht im Hinweis am Zeitwahl-Gerät
             elif kind == "respawn":
@@ -129573,7 +122445,7 @@ class ExpGame(Game):
                         pl.gadget = e[3]
                     pl.gad_n = pl.gad_stock[pl.gadget]
                     if len(e) > 5 and isinstance(e[4], int) and 0 <= e[4] < 3 and e[5] > 0:
-                        self.toast(f"+{e[5]} {GADGETS[e[4]]}   (Taste 5: ausrüsten)", (1.0, 0.9, 0.55), 1.8)
+                        self.toast(f"+{e[5]} {GADGETS[e[4]]}   (Taste 3: ausrüsten)", (1.0, 0.9, 0.55), 1.8)
             elif kind == "gadfull":
                 if e[1] == self.my_id:
                     self.toast(f"{GADGETS[e[2]]}: Vorrat voll", (0.9, 0.9, 0.95), 1.5)
@@ -129596,10 +122468,60 @@ class ExpGame(Game):
                 self.intel_reset()
         self.world.events.clear()
 
+    def reload_pose(self, u, magp, mag, ej):
+        """Handposition (im Waffenraum) und Magazinteile für den Nachladefortschritt u = 0..1."""
+        def lp(a, b, k):
+            return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
+        rest = (-0.30, 0.10, -0.40)
+        if magp is None:                                   # Raketenwerfer: Hand schiebt die Rakete hinein
+            slide = smoothstep(0.35, 0.85, u)
+            off = 1 - slide                                # Rakete kommt von links unten ins Bild, die Hand fasst sie von der Seite
+            tgt = (-0.07 - 0.28 * off, 0.5 + 0.9 * off, -0.05 - 0.12 * off)
+            if u < 0.35:
+                return lp(rest, (-0.35, 1.4, -0.17), smoothstep(0.0, 0.3, u))
+            if u > 0.9:
+                return lp(tgt, rest, smoothstep(0.9, 1.0, u))
+            return tgt
+        sx, sy, sz = magp[0], magp[1], magp[2]
+        slot = (sx, sy, sz - 0.02)
+        pulled = (sx - 0.03, sy, sz - 0.12)
+        fetch = (-0.14, sy, sz - 0.15)
+        up = (0.0, 0.0, 0.02)
+        if u < 0.18:
+            pos = lp(rest, slot, smoothstep(0.0, 0.18, u))
+        elif u < 0.38:
+            pos = lp(slot, pulled, smoothstep(0.18, 0.38, u))
+        elif u < 0.58:
+            pos = lp(pulled, fetch, smoothstep(0.38, 0.58, u))
+        elif u < 0.66:
+            pos = fetch
+        elif u < 0.88:
+            pos = lp(fetch, slot, smoothstep(0.66, 0.88, u))
+        else:
+            pos = lp(slot, rest, smoothstep(0.88, 1.0, u))
+        # altes Magazin: in der Hand, dann im Bogen weggeworfen
+        if mag is not None and 0.18 <= u < 0.66:
+            mag.hide()
+        if ej is not None and 0.18 <= u < 0.62:
+            if u < 0.38:
+                p0 = (pos[0], pos[1], pos[2] + up[2])
+                ej.setR(0)
+            else:
+                t = (u - 0.38) / 0.24
+                p0 = (pulled[0] - 0.12 * t, pulled[1] + 0.05 * t, pulled[2] + 0.02 - 1.1 * t * t)
+                ej.setR(220 * t)
+            ej.setPos(*p0)
+            ej.show()
+        # neues Magazin folgt der Hand, bis es sitzt
+        if mag is not None and 0.58 <= u < 0.88:
+            mag.setPos(pos[0], pos[1], pos[2] + up[2])
+            mag.show()
+        return pos
+
     def cur_sight(self):
         """Aktives Visier der Waffe in der Hand: iron | red | acog | sniper | rocket."""
         pl = self.player
-        w = EXP_WEAPONS[pl.cur]
+        w = WEAPONS[pl.cur]
         if w.sight == "rocket":
             return "rocket"
         if w.scope:
@@ -129607,6 +122529,17 @@ class ExpGame(Game):
         if w.name in SCOPE_MOUNT:                             # 7b: Visier je Waffe (Aufsatz)
             return SIGHT_NAMES[pscope(pl, pl.cur)]
         return "iron"
+
+    def ads_fov(self, pl, w, sight):
+        if sight == "iron":
+            return w.ads_fov if w.ads_fov >= 40 else 58.0
+        if sight == "red":
+            return 52.0
+        if sight == "acog":
+            return 27.0
+        if sight == "sniper":
+            return w.ads_fov if w.scope else 14.0
+        return w.ads_fov
 
     def ads_z(self, pl, w):
         if w.name in SCOPE_MOUNT:
@@ -129616,7 +122549,7 @@ class ExpGame(Game):
     # ------------------------------------------------------------ Darstellung
     def update_views(self, dt, mdx, mdy):
         pl, world = self.player, self.world
-        w = EXP_WEAPONS[pl.cur]
+        w = WEAPONS[pl.cur]
         g = pl.guns[pl.cur]
 
         # Zoom
@@ -129810,14 +122743,14 @@ class ExpGame(Game):
         self.gun_pivot.setHpr(hdg, pitch, roll)
         self.update_inspect(dt)
         self.update_gren_arm(pl, driving)
-        scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and self.melee_t <= 0
+        scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and pl.swing_t <= 0
         rsc = w.sight == "rocket" and self.ads_t > 0.6 and pl.hp > 0 and not driving
         gad_show = pl.gad_out and pl.hp > 0 and not driving
         self.gad_anim += ((1.0 if gad_show else 0.0) - self.gad_anim) * min(1.0, 9.0 * dt)
         for k, nd in enumerate(self.gad_hand):
             (nd.show if gad_show and k == pl.gadget else nd.hide)()
         self.update_gad_arms(pl, dt, gad_show)
-        red_on = sight == "red" and self.ads_t > 0.75 and pl.hp > 0 and not driving and self.melee_t <= 0
+        red_on = sight == "red" and self.ads_t > 0.75 and pl.hp > 0 and not driving and pl.swing_t <= 0
         hidden = scoped or rsc or gad_show
         for i, m in enumerate(self.gun_models):
             (m.show if i == pl.cur and not pl.melee_out and not hidden and pl.hp > 0 and not driving else m.hide)()
@@ -129940,12 +122873,16 @@ class ExpGame(Game):
         for pid in others:
             p = world.players[pid]
             v = self.player_views.get(pid)
+            if v is not None and (v.team != getattr(p, "team", None) or v.look_code != getattr(p, "look", "")):
+                self.player_views.pop(pid).root.removeNode()     # 11: Team (Armbinde) oder Aussehen gewechselt
+                v = None
             if v is None:
-                v = self.player_views[pid] = ExpPlayerView(p)
+                v = self.player_views[pid] = PlayerView(p)
                 v.root.reparentTo(self.render)
             v.update(p, dt)
         for pid in [pid for pid in self.player_views if pid not in others]:
             self.player_views.pop(pid).root.removeNode()
+        self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
 
         # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände
         keep = []
@@ -130000,7 +122937,6 @@ class ExpGame(Game):
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
 
-    # ------------------------------------------------------------ 10e: Granaten (HUD, Effekte)
     def update_objects(self, dt):
         """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
         world, now = self.world, time.time()
@@ -130137,9 +123073,15 @@ class ExpGame(Game):
             tv.update(t, dt, self)
         self.update_fx(dt)
 
+    def rank_line(self, i, p):
+        mark = ">" if p.pid == self.my_id else " "
+        if self.world.mode == "koth":
+            return f"{mark}{i + 1}. {p.name[:12]}   {int(p.score)} P   {p.kills}/{p.deaths}"
+        return f"{mark}{i + 1}. {p.name[:12]}   K/D {p.kills / max(1, p.deaths):.2f}   ({p.kills}/{p.deaths})"
+
     def update_hud(self, dt):
         pl, world = self.player, self.world
-        w = EXP_WEAPONS[pl.cur]
+        w = WEAPONS[pl.cur]
         g = pl.guns[pl.cur]
         now = time.time()
         mx = getattr(pl, "max_hp", PLAYER_HP)
@@ -130172,6 +123114,7 @@ class ExpGame(Game):
         self.update_heli_hud(hc)
         # Gadget (Slot 3): Stückzahl
         placed = sum(1 for g in world.gadgets if g.owner == pl.pid and g.kind == pl.gadget)
+        self.set_text(self.gad_count, f"x{pl.gad_n}" + (f"+{placed}" if placed and pl.gadget == GAD_C4 else ""))
         if car is not None:
             self.set_text(self.ammo_text, "")                      # im Auto: Tacho statt Waffe und Munition
             self.set_text(self.name_text, "")
@@ -130236,26 +123179,23 @@ class ExpGame(Game):
             self.set_text(self.amp_text, "")
         self.melee_frame.setColor(*((1.0, 0.85, 0.2, 1.0) if mact else (0.4, 0.4, 0.4, 0.6)))
         self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
-        for i in range(N_SLOTS):                     # Waffenleiste mit Bildern (Slot 3: Spezialwaffe)
-            wi = pl.slots[i]
-            self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
-                               pscope(pl, wi) if isinstance(wi, int) and EXP_WEAPONS[wi].name in SCOPE_MOUNT else 0)
+        gad_ok = bool(self.gadgets_held())
+        for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget (oder Spezialwaffe, wenn kein Gadget da ist)
+            spec = i == 2 and pl.slots[2] is not None and not gad_ok
+            wi = pl.slots[i] if (i < 2 or spec) else ("g", pl.gadget)
+            if i < 2 or spec:
+                self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
+                                   pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
+            else:
+                self.set_slot_icon(i, wi)
             on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-            active = wi is not None and wi == want and on_foot and not pl.gad_out
+            if i == 2 and not spec:
+                active = pl.gad_out and on_foot
+            else:
+                active = wi is not None and wi == want and on_foot and not pl.gad_out
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
             self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
-        self.update_gren_hud(pl)                       # 10e: gewählte Granatenart, Anzahl, Ladebalken, Bogen
-        st_ = pl.gad_stock                             # Gadget-Vorrat (nur aus Beute)
-        ks_ = [k for k in range(3) if st_[k] > 0]
-        placed_ = world.has_c4(pl.pid)
-        if ks_ or placed_:
-            txt_ = "  ".join(("[%s x%d]" if k == pl.gadget else "%s x%d") % (GADGETS[k], st_[k]) for k in ks_)
-            if placed_:
-                txt_ = (txt_ + "  " if txt_ else "") + "C4 scharf"
-            self.set_text(self.gad_hud, "5   " + txt_)
-            self.gad_hud.setFg((1.0, 0.9, 0.3, 1) if pl.gad_out else (0.85, 0.88, 0.95, 0.9))
-        else:
-            self.set_text(self.gad_hud, "")
+        self.update_gren_hud(pl)                       # gewählte Granatenart, Anzahl, Ladebalken, Bogen
         veh = self.my_vehicle() if pl.hp > 0 else None
         txt = ""
         if hc is not None:
@@ -130282,7 +123222,7 @@ class ExpGame(Game):
         self.update_popup(dt)
         scoped = self.cur_sight() in ("sniper", "acog") and self.ads_t > 0.85
         scoped = scoped and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-        snip = scoped and self.cur_sight() == "sniper" and pl.hp > 0 and self.melee_t <= 0
+        snip = scoped and self.cur_sight() == "sniper" and pl.hp > 0 and pl.swing_t <= 0
         (self.bar_root.hide if snip or in_veh else self.bar_root.show)()   # 7a: im Fahrzeug keine Waffenleiste
         if getattr(self, "mm_root", None) is not None:
             (self.mm_root.hide if snip else self.mm_root.show)()           # Minimap im Sniper-Visier ausblenden
@@ -130322,7 +123262,7 @@ class ExpGame(Game):
         zone = ""
         if world.mode == "koth" and pl.hp > 0 and world.in_zone(pl):
             zone = "   IN DER BURG  +1/s"
-        self.set_text(self.timer_text, f"{EXP_MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
+        self.set_text(self.timer_text, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
         # Killfeed (oben links)
         self.feed = [f for f in self.feed if now - f[1] < FEED_T][-FEED_N:]
         self.set_text(self.feed_text, "\n".join(f[0] for f in self.feed))
@@ -130344,11 +123284,11 @@ class ExpGame(Game):
                 elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
                     si_, v_ = divmod(o.att, ATT_CODE)
                     nm_ = att_name(si_, v_)
-                    if pl.melee_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
-                        prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - Tab: Klick auf eine Waffe)"
+                    if pl.melee_out or pl.gad_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
+                        prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - T: Waffe ansehen)"
                     else:
                         old_ = pscope(pl, pl.cur) if si_ == ATT_SCOPE else (pl.att.get(pl.cur) or ATT_NONE)[si_]
-                        prompt = f"F   {nm_} an {EXP_WEAPONS[pl.cur].name} stecken"
+                        prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
                         if old_:
                             prompt += f"   ({att_name(si_, old_)} ins Lager)"
                 elif kind == "drop":
@@ -130374,13 +123314,13 @@ class ExpGame(Game):
                         elif cur is not None:
                             prompt += f"   (tauscht gegen {GEAR[cur].name})"
                     elif o.wi in pl.slots:
-                        prompt = f"F   Waffe aufheben: {EXP_WEAPONS[o.wi].name}"
+                        prompt = f"F   Waffe aufheben: {WEAPONS[o.wi].name}"
                         prompt += "   (Munition)"
                     else:
-                        prompt = f"F   Waffe aufheben: {EXP_WEAPONS[o.wi].name}"
+                        prompt = f"F   Waffe aufheben: {WEAPONS[o.wi].name}"
                         out = pl.slots[target_slot(pl, o.wi)]
                         if out is not None:
-                            prompt += f"   (tauscht gegen {EXP_WEAPONS[out].name})"
+                            prompt += f"   (tauscht gegen {WEAPONS[out].name})"
                 elif kind == "vehicle":
                     ct = world.car_turret(o)
                     if o.driver < 0:
@@ -130395,12 +123335,17 @@ class ExpGame(Game):
                     prompt = "F   aussteigen" if o.ground and o.speed < 4.0 else ""
                 elif kind == "exit_turret":
                     prompt = "F   Geschütz verlassen      Linke Maus schiessen   Rechte Maus Zoom"
+                elif kind == "timer":
+                    prompt = f"F   Tomahawk-Countdown ändern: {int(world.strike_dur)} s"
                 elif kind == "button":
-                    lock = world.toma_lock.get(self.my_id, 0.0)
-                    if lock > 0:
-                        prompt = f"Tomahawk: für dich noch {int(math.ceil(lock))} s gesperrt (du hast ihn zuletzt ausgelöst)"
-                    elif not world.toma_ready():
+                    lock_ = world.toma_lock.get(self.my_id, 0.0) if world.exp else 0.0
+                    if lock_ > 0:
+                        prompt = f"Tomahawk: für dich noch {int(math.ceil(lock_))} s gesperrt (du hast ihn zuletzt ausgelöst)"
+                    elif world.exp and not world.toma_ready():
                         prompt = "Tomahawk-Säule fährt hoch ..."
+                    elif world.strike == 2:
+                        prompt = (f"Tomahawk lädt nach: noch {int(math.ceil(world.strike_wait))} s"
+                                  if world.strike_wait > 0 else "Tomahawk in dieser Runde schon eingesetzt")
                     else:
                         prompt = "F   Tomahawk: Ziel und Countdown wählen"
                 else:
@@ -130451,9 +123396,29 @@ class ExpGame(Game):
             self.lobby_equip = False
         show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
         self.set_text(self.dead_hint, hint if show_dead else "")
-        self.set_text(self.dead_text, ("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if show_dead else "")
+        exp_ = bool(world.exp)                            # Experimental: keine Ausrüstungswahl, Start immer mit der Pistole
+        txt_ = (("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False)
+                 else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if exp_ else
+                "AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:")
+        if show_dead and self.world.mode == "ctf" and self.world.team_of.get(self.my_id) in (0, 1):
+            txt_ = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt_   # CTF: Teamname im Todesbildschirm
+        self.set_text(self.dead_text, txt_ if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        self.tip_hide()
+        if show_dead and not exp_:
+            card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
+            self.death_picker.update(self.loadout, card)
+            self.death_picker.show()
+            self.tip_show(card, mpos)
+            b = self.DEAD_BTN
+            hov = mpos is not None and b[0] <= mpos[0] <= b[1] and b[2] <= mpos[1] <= b[3]
+            self.dead_btn.setColor(*(BTN_HC if hov else BTN_C))
+            self.dead_btn.show()
+            self.dead_btn_text.show()
+        else:
+            self.tip_hide()
+            self.death_picker.hide()
+            self.dead_btn.hide()
+            self.dead_btn_text.hide()
         rb = self.right_btn_rect()
         if show_dead and not lobby:                       # grüner Respawn-Knopf unten rechts (kein R mehr)
             ready = wait <= 0
@@ -130501,6 +123466,15 @@ class ExpGame(Game):
         self.update_strike_map()
         if self.quit_box is not None and self.overlay_kind == "strike" and (world.strike != 0 or pl.hp <= 0):
             self.close_quit_box()                      # jemand war schneller / du bist tot
+
+    # ------------------------------------------------------------ Minimap
+    MM_S = 0.42           # Durchmesser der runden Minimap (Bildschirmeinheiten)
+
+    MM_VIS = 50.0         # sichtbarer Radius in Metern (Standard)
+
+    MM_LEVELS = (25.0, 35.0, 50.0, 75.0, 110.0)      # Zoomstufen (X = heraus, Y = hinein)
+
+    MAP_MARGIN, MAP_PPM = 50.0, 3.0      # Rand um die Karte (m) und Auflösung der Kartentextur (Pixel/m)
 
     def build_map_texture(self):
         """Karte als Textur (Burg, Gebäude, Teiche, Tunneleingänge, Raster). Gemeinsam für die Minimap
@@ -130766,6 +123740,9 @@ class ExpGame(Game):
                                          align=TextNode.ALeft, mayChange=True)
         self.build_bigmap()
 
+    # ------------------------------------------------------------ grosse Karte (M)
+    BIGMAP_H = 0.80       # halbe Kantenlänge der grossen Karte (Bildschirmeinheiten)
+
     def build_bigmap(self):
         """Die ganze Karte gross vor dir (M ein/aus). Das Spiel läuft weiter, man kann sich dabei bewegen."""
         H = self.BIGMAP_H
@@ -130835,6 +123812,10 @@ class ExpGame(Game):
         if not self.bm_open:
             self.trig_lock_t = INPUT_LOCK_T             # 7a: kurz nach dem Schliessen der Karte kein Schuss
 
+    def bm_xy(self, x, y):
+        H = self.BIGMAP_H
+        return (-H + max(0.0, min(WORLD, x)) / WORLD * 2 * H, -H + max(0.0, min(WORLD, y)) / WORLD * 2 * H)
+
     def update_bigmap(self):
         if not getattr(self, "bm_open", False):
             return
@@ -130842,7 +123823,8 @@ class ExpGame(Game):
         p = self.bm_xy(pl.x, pl.y)
         self.bm_me.setPos(p[0], 0, p[1])
         self.bm_me.setR(-pl.heading)
-        self.draw_intel_big()                       # 10h: Lärm-Pings und Sichtkontakte wie auf der Minimap
+        self.draw_intel_big()
+        self.update_ctf_map(big=True)                       # 10h: Lärm-Pings und Sichtkontakte wie auf der Minimap
         for v in self.world.vehicles:
             n = self.bm_vehs.get(v.id)
             if n is not None:
@@ -130855,257 +123837,289 @@ class ExpGame(Game):
                 n.setPos(q[0], 0, q[1])
                 (n.show if q_.hp > 0 else n.hide)()
 
-    PING_T = 3.0          # (alt, 10h: ersetzt durch ENEMY_PING_T)
-
-    # ------------------------------------------------------------ 10h: Gegner-Lärm und Sichtkontakt
-    def intel_reset(self):
-        """10h: Lärm-Pings und Sichtungen vergessen (neue Runde / neues Spiel)."""
-        for pg in getattr(self, "enemy_pings", ()):
-            for key in ("mm", "bm"):
-                if pg.get(key) is not None:
-                    pg[key][0].removeNode()
-        self.enemy_pings = []                      # je Ping: dict(pid, x, y, r, t0, mm=(Knoten, Daten), bm=...)
-        self.enemy_ping_last = {}                  # Gegner-ID -> Zeit des letzten Pings (ENEMY_PING_CD)
-        self.sightings = {}                        # Beobachter-ID -> {Gegner-ID: (Zeit, x, y)} - pro Spieler (Team-fähig)
-        self.intel_clock = self.intel_veh_clock = 0.0
-        for d in (getattr(self, "mm_dots", {}), getattr(self, "bm_dots", {})):
-            for n in d.values():
-                n.hide()
-
-    def intel_allies(self):
-        """10h: Spieler, deren Sichtungen und gehörte Pings man teilt: man selbst und (Team-Modi) die Verbündeten."""
-        w = self.world
-        return [p for pid, p in w.players.items() if w.allied(self.my_id, pid)]
-
-    def heard_noise(self, src, x, y, z, r):
-        """10h: Ein anderer Spieler (src) macht lauten Lärm bei (x, y, z) mit Radius r. Hört man es (oder ein Verbündeter
-        - ENEMY_PING_HEAR_ONLY), erscheint ein grober Kreis auf der Minimap; Mitte zufällig versetzt (der Gegner liegt
-        darin), höchstens alle ENEMY_PING_CD s je Gegner."""
-        w = self.world
-        if not ENEMY_PINGS or src is None or src < 0 or w.allied(self.my_id, src) or r <= 0:
+    def on_mm_zoom(self, d):
+        """X (d=+1) zoomt heraus, Y (d=-1) hinein."""
+        if self.mode != "play" or self.quit_box is not None:
             return
-        if not hasattr(self, "enemy_pings"):
-            self.intel_reset()
+        self.mm_level = max(0, min(len(self.MM_LEVELS) - 1, self.mm_level + d))
+        self.mm_vis = self.MM_LEVELS[self.mm_level]
+
+    def on_y(self):
+        if self.quit_box is not None or (self.mode == "menu" and self.menu_state == "quit"):
+            self.on_confirm(True)
+        else:
+            self.on_mm_zoom(-1)
+
+    PING_T = 3.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
+
+    # ------------------------------------------------------------ 11: Capture the Flag (Anzeige)
+    @staticmethod
+    def ctf_flag_col(team):
+        return CTF_TEAM_COLS[team if team in (0, 1) else 0]
+
+    @staticmethod
+    def ctf_flag_name(team):
+        """'die blaue Flagge' / 'die rote Flagge' / 'die Flagge' (neutral)."""
+        return {0: "die blaue Flagge", 1: "die rote Flagge"}.get(team, "die Flagge")
+
+    def ctf_ui_build(self):
+        """HUD und Minimap-Marker des CTF (einmal je Spiel; cleanup_scene räumt die Knoten mit dem HUD ab)."""
+        ui = {}
+        tc = self.a2dTopCenter
+        for key, x, al in (("s0", -0.035, TextNode.ARight), ("sep", 0.0, TextNode.ACenter), ("s1", 0.035, TextNode.ALeft)):
+            ui[key] = OnscreenText(text="", parent=tc, pos=(x, -0.235), scale=0.056, font=BOLD_FONT, fg=(1, 1, 1, 1),
+                                   shadow=(0, 0, 0, 0.9), align=al, mayChange=True)
+        ui["s0"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[0]) + (1,))
+        ui["s1"].setFg(tuple(min(1.0, c * 1.15 + 0.12) for c in CTF_TEAM_COLS[1]) + (1,))
+        ui["status"] = OnscreenText(text="", parent=tc, pos=(0, -0.285), scale=0.036, fg=(0.9, 0.92, 0.95, 1),
+                                    shadow=(0, 0, 0, 0.9), mayChange=True)
+        ui["team"] = OnscreenText(text="", parent=self.a2dTopRight, pos=(-HUD_MARGIN, -0.36), scale=0.05, font=BOLD_FONT,
+                                  fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ARight, mayChange=True)
+        am = Mesh(lit=False)                               # Pfeil zur eigenen Basis (nur für den Flaggenträger)
+        for sz, c in ((0.062, (0, 0, 0)), (0.048, (1, 1, 1))):
+            tip, lft, nt, rgt = (0, 0, sz), (-0.62 * sz, 0, -0.72 * sz), (0, 0, -0.30 * sz), (0.62 * sz, 0, -0.72 * sz)
+            am.tri(tip, lft, nt, c)
+            am.tri(tip, nt, rgt, c)
+        arrow = tc.attachNewNode(am.node("ctf_pfeil"))
+        arrow.setTwoSided(True)
+        arrow.setPos(0, 0, -0.38)
+        arrow.hide()
+        ui["arrow"] = arrow
+        ui["carry"] = OnscreenText(text="", parent=tc, pos=(0, -0.48), scale=0.044, font=BOLD_FONT, fg=(1, 0.88, 0.35, 1),
+                                   shadow=(0, 0, 0, 0.9), mayChange=True)
+        ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"] = {}, {}, {}, {}, {}
+        ui["ping_t"], ui["myteam"] = 0.0, -2
+        self.ctf_ui = ui
+        return ui
+
+    def ctf_ring(self, r, col, alpha=0.45):
+        """Leuchtender Ring am Boden (Flaggenstand, Abgabezone)."""
+        m = Mesh(lit=False)
+        n = 40
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            p = lambda rr, a: (math.cos(a) * rr, math.sin(a) * rr, 0.0)     # noqa: E731
+            m.tri(p(r * 0.86, a0), p(r, a0), p(r, a1), col + (alpha,), ref=(0, 0, -1))
+            m.tri(p(r * 0.86, a0), p(r, a1), p(r * 0.86, a1), col + (alpha,), ref=(0, 0, -1))
+            m.tri((0, 0, 0), p(r * 0.86, a0), p(r * 0.86, a1), col + (alpha * 0.22,), ref=(0, 0, -1))
+        nd = self.render.attachNewNode(m.node("ctf_ring"))
+        nd.setTransparency(TransparencyAttrib.MAlpha)
+        nd.setDepthWrite(False)
+        nd.setLightOff()
+        nd.setTwoSided(True)
+        nd.setBin("transparent", 3)
+        return nd
+
+    def ctf_clear(self):
+        """CTF-Anzeige abbauen (anderer Modus / neue Runde ohne CTF)."""
+        ui = getattr(self, "ctf_ui", None)
+        if ui is None:
+            return
+        for d in (ui["views"], ui["back"], ui["rings"], ui["mm"], ui["bm"]):
+            for v in d.values():
+                for nd in (v if isinstance(v, (list, tuple)) else (v,)):
+                    if hasattr(nd, "removeNode"):
+                        nd.removeNode()
+            d.clear()
+        for key in ("s0", "sep", "s1", "status", "carry", "team"):
+            self.set_text(ui[key], "")
+        ui["arrow"].hide()
+
+    def update_ctf(self, dt):
+        """11: Flaggen in der Welt (am Ständer, am Boden, am Rücken des Trägers), Ringe, HUD (Teampunkte, Status,
+        Pfeil zur Basis für den Träger) und alle CTF_PING_T s ein grober Kreis um jeden Flaggenträger auf der Minimap."""
+        w, pl = self.world, self.player
+        ui = getattr(self, "ctf_ui", None)
+        if w is None or pl is None or w.mode != "ctf" or not w.ctf_bases:
+            if ui is not None and (ui["views"] or ui["rings"] or ui["mm"]):
+                self.ctf_clear()
+            return
+        if ui is None:
+            ui = self.ctf_ui_build()
         now = time.time()
-        if now - self.enemy_ping_last.get(src, -1e9) < ENEMY_PING_CD:
+        my_t = w.team_of.get(self.my_id)
+        if my_t != ui["myteam"]:
+            ui["myteam"] = my_t
+            self.refresh_fp_arms()                         # Armbinde in der Ego-Ansicht in der Teamfarbe
+        # --- Abgabezonen / Flaggenstände (Ringe am Boden)
+        for t, (bx, by, bz) in enumerate(w.ctf_bases[:2]):
+            if t not in ui["rings"]:
+                rg = self.ctf_ring(CTF_PICK_R * 1.25, CTF_TEAM_COLS[t])
+                rg.setPos(bx, by, bz + 0.04)
+                ui["rings"][t] = rg
+            ui["rings"][t].setColorScale(1, 1, 1, 0.75 + 0.25 * math.sin(now * 2.4 + t))
+        # --- Flaggen
+        seen = set()
+        for f in w.flags:
+            seen.add(f.fid)
+            col = self.ctf_flag_col(f.team)
+            v = ui["views"].get(f.fid)
+            if v is None:
+                root, cloth = build_ctf_flag(col, 1.0, base=True)
+                root.reparentTo(self.render)
+                glow = self.ctf_ring(CTF_PICK_R, col, 0.55)
+                v = ui["views"][f.fid] = (root, cloth, glow)
+            root, cloth, glow = v
+            if f.state == "carried":
+                root.hide()
+                glow.hide()
+            else:
+                root.show()
+                glow.show()
+                root.setPos(f.x, f.y, f.z)
+                glow.setPos(f.x, f.y, f.z + 0.03)
+                if f.state == "dropped":                   # liegt: schräg, blinkt leicht
+                    root.setHpr((f.fid * 47) % 360, 0, 28.0)
+                    glow.setColorScale(1, 1, 1, 0.5 + 0.5 * math.sin(now * 6.0))
+                else:
+                    root.setHpr(0, 0, 0)
+                    glow.setColorScale(1, 1, 1, 0.8)
+                cloth.setH(12.0 * math.sin(now * 2.2 + f.fid) + 6.0 * math.sin(now * 4.7 + f.fid * 1.3))
+        for fid in [k for k in ui["views"] if k not in seen]:
+            for nd in ui["views"].pop(fid):
+                nd.removeNode()
+        # --- Flagge am Rücken des Trägers (andere Spieler; die eigene sieht man in der Ego-Ansicht nicht)
+        carried = {f.carrier: f for f in w.flags if f.state == "carried" and f.carrier != self.my_id}
+        for pid in list(ui["back"]):
+            pv = self.player_views.get(pid)
+            nd, key = ui["back"][pid]
+            if pid not in carried or pv is None or key != (id(pv), carried[pid].team):
+                nd.removeNode()
+                del ui["back"][pid]
+        for pid, f in carried.items():
+            pv = self.player_views.get(pid)
+            if pv is None or pid in ui["back"]:
+                if pid in ui["back"]:
+                    cl = ui["back"][pid][0].find("**/tuch")
+                    if not cl.isEmpty():
+                        cl.setH(15.0 * math.sin(now * 3.1 + pid))
+                continue
+            holder = pv.torso.attachNewNode("ctf_ruecken")
+            holder.setPos(0.12, -0.24, -0.28)
+            holder.setP(14.0)                              # leicht nach hinten geneigt
+            root, cloth = build_ctf_flag(self.ctf_flag_col(f.team), 0.62, base=False)
+            root.reparentTo(holder)
+            root.setH(-90.0)                               # Tuch weht nach hinten
+            ui["back"][pid] = (holder, (id(pv), f.team))
+        # --- Grober Kreis um jeden Träger (alle sehen ihn, alle CTF_PING_T s; Mitte zufällig versetzt)
+        if now - ui["ping_t"] >= CTF_PING_T:
+            ui["ping_t"] = now
+            for f in w.flags:
+                if f.state != "carried" or f.carrier == self.my_id:
+                    continue
+                c = w.players.get(f.carrier)
+                if c is None or c.hp <= 0:
+                    continue
+                a, d = self.prng.uniform(0, 2 * math.pi), CTF_PING_R * 0.85 * math.sqrt(self.prng.random())
+                self.noise_wave(c.x + math.cos(a) * d, c.y + math.sin(a) * d, CTF_PING_R)
+        # --- HUD: Teampunkte, Flaggenstatus, eigene Rolle
+        s0, s1 = w.team_score[0], w.team_score[1]
+        lim = f"   (bis {w.score_limit})" if w.score_limit > 0 else ""
+        self.set_text(ui["s0"], f"BLAU {s0}")
+        self.set_text(ui["sep"], ":")
+        self.set_text(ui["s1"], f"{s1} ROT" + lim)
+        parts = []
+        for f in w.flags:
+            nm = "Blaue Flagge" if f.team == 0 else "Rote Flagge"
+            if f.state == "home":
+                st = "in der Basis"
+            elif f.state == "carried":
+                c = w.players.get(f.carrier)
+                st = "getragen von " + (c.name[:12] if c is not None else "?")
+            else:
+                st = f"liegt  ({int(math.ceil(max(0.0, f.drop_t)))} s)"
+            parts.append(f"{nm}: {st}")
+        self.set_text(ui["status"], "     ".join(parts))
+        if my_t in (0, 1):
+            self.set_text(ui["team"], f"TEAM {CTF_TEAM_NAMES[my_t].upper()}")
+            ui["team"].setFg(tuple(min(1.0, c * 1.15 + 0.15) for c in CTF_TEAM_COLS[my_t]) + (1,))
+        else:
+            self.set_text(ui["team"], "")
+        mine = w.ctf_carried(self.my_id) if pl.hp > 0 else None
+        if mine is not None and my_t in (0, 1) and my_t < len(w.ctf_bases):
+            bx, by, _bz = w.ctf_bases[my_t]
+            h = math.radians(pl.heading)
+            dx, dy = bx - pl.x, by - pl.y
+            fwd = dx * -math.sin(h) + dy * math.cos(h)
+            rgt = dx * math.cos(h) + dy * math.sin(h)
+            ui["arrow"].setR(math.degrees(math.atan2(rgt, fwd)))
+            ui["arrow"].setColorScale(*(tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1.0,)))
+            ui["arrow"].setScale(1.0 + 0.08 * math.sin(now * 6.0))
+            ui["arrow"].show()
+            own = next((q for q in w.flags if q.team == my_t), None)
+            extra = ("   -   EIGENE FLAGGE ZURÜCKHOLEN!" if CTF_NEED_HOME and own is not None and own.state != "home" else "")
+            self.set_text(ui["carry"], f"DU HAST DIE FLAGGE  -  ZUR BASIS  {int(math.hypot(dx, dy))} m{extra}")
+        else:
+            ui["arrow"].hide()
+            self.set_text(ui["carry"], "")
+
+    def update_ctf_map(self, big=False):
+        """11: Minimap (bzw. grosse Karte): Basen (eigene deutlich, als Träger pulsierend), sichtbare Flaggen (am Ständer,
+        am Boden) und die Mitspieler des eigenen Teams als Pfeile in der Teamfarbe."""
+        w, pl, ui = self.world, self.player, getattr(self, "ctf_ui", None)
+        if ui is None or w is None or w.mode != "ctf":
             return
-        if z is None:
-            z = w.height(x, y) + 1.0
-        if ENEMY_PING_HEAR_ONLY:
-            heard = False
-            for p in self.intel_allies():
-                if p.hp <= 0:
-                    continue
-                dz = (p.z + 1.0 - z) if NOISE_SPHERE else 0.0
-                if (p.x - x) ** 2 + (p.y - y) ** 2 + dz * dz <= r * r:
-                    heard = True
-                    break
-            if not heard:
-                return
-        self.enemy_ping_last[src] = now
-        rr = max(ENEMY_PING_MIN_R, r)
-        a, d = self.prng.uniform(0, 2 * math.pi), rr * ENEMY_PING_OFFSET * math.sqrt(self.prng.random())
-        self.enemy_pings.append(dict(pid=src, x=x + math.cos(a) * d, y=y + math.sin(a) * d, r=rr, t0=now,
-                                     mm=None, bm=None))
-        if len(self.enemy_pings) > 12:
-            old = self.enemy_pings.pop(0)
-            for key in ("mm", "bm"):
-                if old[key] is not None:
-                    old[key][0].removeNode()
-
-    PING_SEG = 40
-
-    def ping_geom(self, parent, sort):
-        """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
-        wird er am Rand abgeschnitten)."""
-        n = self.PING_SEG
-        fmt = GeomVertexFormat.getV3c4()
-        vd = GeomVertexData("ping", fmt, Geom.UHDynamic)
-        vd.setNumRows(1 + 2 * n)
-        cw = GeomVertexWriter(vd, "color")
-        vw = GeomVertexWriter(vd, "vertex")
-        r_, g_, b_ = ENEMY_PING_COL
-        cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
-        vw.addData3(0, 0, 0)
-        for i in range(n):
-            cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)          # innerer Ring (Ende der Fläche)
-            vw.addData3(0, 0, 0)
-        for i in range(n):
-            cw.addData4(r_, g_, b_, 0.75)                      # äusserer Ring (Rand)
-            vw.addData3(0, 0, 0)
-        prim = GeomTriangles(Geom.UHStatic)
-        for i in range(n):
-            j = (i + 1) % n
-            prim.addVertices(0, 1 + i, 1 + j)
-            prim.addVertices(1 + i, 1 + n + i, 1 + n + j)
-            prim.addVertices(1 + i, 1 + n + j, 1 + j)
-        geom = Geom(vd)
-        geom.addPrimitive(prim)
-        gn = GeomNode("ping")
-        gn.addGeom(geom)
-        np_ = parent.attachNewNode(gn)
-        np_.setTwoSided(True)
-        np_.setLightOff()
-        np_.setTransparency(TransparencyAttrib.MAlpha)
-        np_.setBin("fixed", sort)
-        np_.setDepthTest(False)
-        np_.setDepthWrite(False)
-        return np_, vd
-
-    def ping_fill(self, vd, pts, ctr):
-        """10h: Kreis-Punkte (pts = äusserer Rand) und Mitte ctr ins Mesh schreiben."""
-        vw = GeomVertexWriter(vd, "vertex")
-        vw.addData3(ctr[0], 0, ctr[1])
-        for px, py in pts:
-            vw.addData3(ctr[0] + (px - ctr[0]) * 0.94, 0, ctr[1] + (py - ctr[1]) * 0.94)
-        for px, py in pts:
-            vw.addData3(px, 0, py)
-
-    def update_intel(self):
-        """10h: Sichtkontakte prüfen (pro verbündetem Beobachter), Fahrzeug-/Heli-Lärm hören und alles auf der
-        Minimap zeichnen: Lärm-Pings als Kreise, gesichtete Gegner als roter Punkt (+ ENEMY_SEEN_GLOW Nachleuchten)."""
-        if not hasattr(self, "enemy_pings"):
-            self.intel_reset()
-        w, pl, now = self.world, self.player, time.time()
-        allies = self.intel_allies()
-        enemies = [p for pid, p in w.players.items() if not w.allied(self.my_id, pid) and p.hp > 0]
-        if now - self.intel_clock >= 1.0 / ENEMY_SIGHT_RATE:
-            self.intel_clock = now
-            half = math.radians(ENEMY_SIGHT_FOV / 2.0)
-            for ob in allies:
-                seen = self.sightings.setdefault(ob.pid, {})
-                if ob.hp <= 0 or getattr(ob, "prespawn", False):
-                    continue
-                h = math.radians(ob.heading)
-                lx, ly = -math.sin(h), math.cos(h)
-                eye = (ob.x, ob.y, ob.z + body_h(ob) - 0.15)
-                for tg in enemies:
-                    dx, dy, dz = tg.x - ob.x, tg.y - ob.y, tg.z + 1.0 - eye[2]
-                    d = math.sqrt(dx * dx + dy * dy + dz * dz)
-                    if d > ENEMY_SIGHT_R:
-                        continue
-                    dh = math.hypot(dx, dy)
-                    if dh > 1.5 and (dx * lx + dy * ly) / dh < math.cos(half):
-                        continue                               # ausserhalb des Blickfelds
-                    vis = False
-                    for zz in (body_h(tg) * 0.85, body_h(tg) * 0.45):    # Kopf oder Körper frei
-                        tp = (tg.x, tg.y, tg.z + zz)
-                        if w.los(eye, tp) and not (w.smokes and w.smoke_blocks(eye, tp)):
-                            vis = True
-                            break
-                    if vis:
-                        seen[tg.pid] = (now, tg.x, tg.y)
-        if now - self.intel_veh_clock >= NOISE_TICK:            # Fahrzeuge/Heli der Gegner: Lärm wie Monster ihn hören
-            self.intel_veh_clock = now
-            for tg in enemies:
-                if tg.vehicle >= 0 or tg.heli >= 0 or tg.mount >= 0:
-                    r = w.player_noise(tg)
-                    if r > 0:
-                        self.heard_noise(tg.pid, tg.x, tg.y, w.noise_z(tg), r)
-        # gesichtete Gegner: neueste Sichtung aller Verbündeten
-        best = {}
-        for ob in allies:
-            for tid, (t, x, y) in self.sightings.get(ob.pid, {}).items():
-                if tid not in best or t > best[tid][0]:
-                    best[tid] = (t, x, y)
-        self.intel_seen = best
+        store = ui["bm"] if big else ui["mm"]
+        dotf = self.bm_dot_factory if big else self.mm_dot_factory
+        arrf = self.bm_arrow if big else self.mm_arrow_factory
+        xy = (lambda x, y: self.bm_xy(x, y)) if big else (lambda x, y: self.mm_xy(x, y))
+        now = time.time()
+        my_t = w.team_of.get(self.my_id)
+        carrying = w.ctf_carried(self.my_id) is not None and pl.hp > 0
         shown = set()
-        for tid, (t, x, y) in best.items():
-            tg = w.players.get(tid)
-            age = now - t
-            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
-                continue
-            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
-            px, py = (tg.x, tg.y) if live else (x, y)
-            p = self.mm_xy(px, py, False)
-            if p is None:
-                continue
-            n = self.mm_dots.get(tid)
+
+        def put(key, x, y, size, col, pulse=False):
+            n = store.get(key)
             if n is None:
-                n = self.mm_dots[tid] = self.mm_dot_factory(0.012, (1.0, 0.2, 0.15, 1))
-            n.show()
+                n = store[key] = dotf(size, col + (1,))
+                n.setR(45.0)                               # Raute
+            p = xy(x, y)
             n.setPos(p[0], 0, p[1])
-            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
-            shown.add(tid)
-        for tid, n in self.mm_dots.items():
-            if tid not in shown:
-                n.hide()
-        # Lärm-Pings
-        R = self.mm_R
-        k = R / self.mm_vis
-        keep = []
-        for pg in self.enemy_pings:
-            age = now - pg["t0"]
-            if age > ENEMY_PING_T:
-                for key in ("mm", "bm"):
-                    if pg[key] is not None:
-                        pg[key][0].removeNode()
-                continue
-            keep.append(pg)
-            if pg["mm"] is None:
-                pg["mm"] = self.ping_geom(self.mm_root, 22)
-            np_, vd = pg["mm"]
-            c = self.mm_xy(pg["x"], pg["y"], False)
-            if c is None:                                         # Mitte ausserhalb: Lage trotzdem rechnen
-                h = math.radians(pl.heading)
-                dx, dy = pg["x"] - pl.x, pg["y"] - pl.y
-                c = ((dx * math.cos(h) + dy * math.sin(h)) * k, (-dx * math.sin(h) + dy * math.cos(h)) * k)
-            rr = pg["r"] * k
-            if math.hypot(*c) - rr > R:
-                np_.hide()
-                continue
-            lim = R * 0.985
-            pts = []
-            for i in range(self.PING_SEG):
-                a = 2 * math.pi * i / self.PING_SEG
-                qx, qy = c[0] + math.cos(a) * rr, c[1] + math.sin(a) * rr
-                dq = math.hypot(qx, qy)
-                if dq > lim:                                      # am Rand der Minimap abschneiden
-                    qx, qy = qx / dq * lim, qy / dq * lim
-                pts.append((qx, qy))
-            dc = math.hypot(*c)
-            cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
-            self.ping_fill(vd, pts, cc)
-            np_.show()
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, age))
-        self.enemy_pings = keep
-
-    def draw_intel_big(self):
-        """10h: dieselben Pings und Sichtungen auf der grossen Karte (M)."""
-        if not hasattr(self, "enemy_pings"):
-            return
-        w, now, H = self.world, time.time(), self.BIGMAP_H
-        k = 2 * H / WORLD
-        for pg in self.enemy_pings:
-            if pg["bm"] is None:
-                pg["bm"] = self.ping_geom(self.bm_root, 62)
-            np_, vd = pg["bm"]
-            c = self.bm_xy(pg["x"], pg["y"])
-            rr = pg["r"] * k
-            pts = []
-            for i in range(self.PING_SEG):
-                a = 2 * math.pi * i / self.PING_SEG
-                pts.append((max(-H, min(H, c[0] + math.cos(a) * rr)), max(-H, min(H, c[1] + math.sin(a) * rr))))
-            self.ping_fill(vd, pts, c)
-            np_.setColorScale(1, 1, 1, 1.0 - smoothstep(ENEMY_PING_T * 0.4, ENEMY_PING_T, now - pg["t0"]))
-        shown = set()
-        for tid, (t, x, y) in getattr(self, "intel_seen", {}).items():
-            tg = w.players.get(tid)
-            age = now - t
-            if tg is None or tg.hp <= 0 or age > ENEMY_SEEN_GLOW + 0.15:
-                continue
-            live = age < 1.5 / ENEMY_SIGHT_RATE + 0.05
-            q = self.bm_xy(*((tg.x, tg.y) if live else (x, y)))
-            n = self.bm_dots.get(tid)
-            if n is None:
-                n = self.bm_dots[tid] = self.bm_dot_factory(0.016, (1.0, 0.2, 0.15, 1))
+            n.setScale(1.0 + (0.35 + 0.35 * math.sin(now * 7.0) if pulse else 0.0))
             n.show()
+            shown.add(key)
+
+        for t, (bx, by, _bz) in enumerate(w.ctf_bases[:2]):
+            own = t == my_t
+            put(("base", t), bx, by, (0.016 if own else 0.011) * (1.4 if big else 1.0), CTF_TEAM_COLS[t],
+                pulse=own and carrying)
+        for f in w.flags:
+            if f.state in ("home", "dropped"):
+                put(("flag", f.fid), f.x, f.y, 0.009 * (1.4 if big else 1.0),
+                    tuple(min(1.0, c * 1.2 + 0.25) for c in self.ctf_flag_col(f.team)), pulse=f.state == "dropped")
+        for pid, p in w.players.items():                   # Teamkameraden
+            if pid == self.my_id or p.hp <= 0 or my_t not in (0, 1) or w.team_of.get(pid) != my_t:
+                continue
+            key = ("ally", pid)
+            n = store.get(key)
+            if n is None:
+                n = store[key] = arrf(0.016 if not big else 0.022, tuple(min(1.0, c * 1.2 + 0.2) for c in CTF_TEAM_COLS[my_t]) + (1,))
+            q = xy(p.x, p.y)
             n.setPos(q[0], 0, q[1])
-            n.setColorScale(1, 1, 1, 1.0 if live else 1.0 - smoothstep(0.0, ENEMY_SEEN_GLOW, age))
-            shown.add(tid)
-        for tid, n in self.bm_dots.items():
-            if tid not in shown:
+            n.setR(-(p.heading - (0.0 if big else pl.heading)))
+            n.show()
+            shown.add(key)
+        for key, n in store.items():
+            if key not in shown:
                 n.hide()
+
+    def mm_xy(self, x, y, clamp=True):
+        """Weltpunkt -> Position auf der runden Karte (relativ zu dir und deiner Blickrichtung).
+        Ausserhalb des Kreises wird der Punkt an den Rand gesetzt (clamp) bzw. None geliefert."""
+        pl = self.player
+        h = math.radians(pl.heading)
+        dx, dy = x - pl.x, y - pl.y
+        sx = dx * math.cos(h) + dy * math.sin(h)            # nach rechts
+        sy = -dx * math.sin(h) + dy * math.cos(h)           # nach vorn = oben
+        k = self.mm_R / self.mm_vis
+        sx, sy = sx * k, sy * k
+        d = math.hypot(sx, sy)
+        lim = self.mm_R * 0.94
+        if d > lim:
+            if not clamp:
+                return None
+            sx, sy = sx / d * lim, sy / d * lim
+        return sx, sy
 
     def noise_wave(self, x, y, r, z=None):
         """Eigener Lärm (Schuss, Explosion, Schlag): Ring breitet sich auf der Minimap bis r m aus.
@@ -131129,6 +124143,10 @@ class ExpGame(Game):
         if NOISE_MINIMAP_ZOOM and r > self.MM_LEVELS[self.mm_level] * 0.92:          # zu gross für den Ausschnitt: herauszoomen
             self.mm_zoom_hold = max(self.mm_zoom_hold, min(NOISE_ZOOM_MAX, r * 1.1))
             self.mm_zoom_until = now + self.wave_t(r) + 0.5
+
+    @staticmethod
+    def wave_t(r):
+        return NOISE_WAVE_T * max(0.6, min(2.2, math.sqrt(r / NOISE_SHOT)))
 
     def update_noise_map(self, dt):
         """Eigener Lärmkreis (Laufen/Rennen/Ducken/Fahren) und die Wellen; Zoom der Minimap."""
@@ -131210,6 +124228,7 @@ class ExpGame(Game):
             self.mm_strike_edge.hide()
         self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
         self.update_bigmap()
+        self.update_ctf_map()                       # 11: Basen, Flaggen, Teamkameraden
         # Funkbaken: eigene Baken als Punkte, alle Spieler in ihrem Radius als Pfeile
         mine = [g for g in self.world.gadgets if g.kind == GAD_BEACON and g.owner == self.my_id]
         ids = {g.gid for g in mine}
@@ -131263,12 +124282,11 @@ class ExpGame(Game):
         self.toma_rk = None
         self.toma_trail, self.toma_trail_t, self.toma_whistled = [], 0.0, False
         self.toma_seen = (-2, -2)
-        if not self.world.toma_spots:
-            return
-        root, col, knob, beam = build_column_model()
-        root.reparentTo(self.render)
-        root.hide()
-        self.toma_np, self.toma_col, self.toma_knob, self.toma_beam = root, col, knob, beam
+        if self.world.toma_spots:                         # Experimental: Tomahawk-Säulen (sonst der Knopf im Kommandoraum)
+            root, col, knob, beam = build_column_model()
+            root.reparentTo(self.render)
+            root.hide()
+            self.toma_np, self.toma_col, self.toma_knob, self.toma_beam = root, col, knob, beam
         rk, fl = build_rocket(False)
         rr = self.render.attachNewNode("tomahawk_rocket")
         rk.reparentTo(rr)
@@ -131293,34 +124311,6 @@ class ExpGame(Game):
         rr.hide()
         self.toma_rk = rr
 
-
-    def update_noise_debug(self):
-        """NOISE_DEBUG: Lärmradien der letzten Geräusche als Ringe am Boden (nur wo die Welt simuliert wird)."""
-        if not hasattr(self, "noise_rings"):
-            m = Mesh(lit=False)
-            for i in range(40):
-                a0, a1 = math.tau * i / 40, math.tau * (i + 1) / 40
-                pp = lambda r, a: (math.cos(a) * r, math.sin(a) * r, 0.0)      # noqa: E731
-                m.tri(pp(0.97, a0), pp(1.0, a0), pp(1.0, a1), (1.0, 0.9, 0.2), ref=(0, 0, -5))
-                m.tri(pp(0.97, a0), pp(1.0, a1), pp(0.97, a1), (1.0, 0.9, 0.2), ref=(0, 0, -5))
-            self.noise_ring_np = NodePath(m.node("laerm"))
-            self.noise_rings = []
-        log = self.world.noise_log[-30:]
-        while len(self.noise_rings) < len(log):
-            n = self.noise_ring_np.copyTo(self.render)
-            n.setTwoSided(True)
-            n.setFogOff()
-            n.setLightOff()
-            self.noise_rings.append(n)
-        for i, n in enumerate(self.noise_rings):
-            if i < len(log):
-                x, y, r, _t = log[i]
-                n.setPos(x, y, self.world.height(x, y) + 0.15)
-                n.setScale(r)
-                n.show()
-            else:
-                n.hide()
-
     def toma_rocket_pos(self, u):
         """Flugbahn der Tomahawk-Rakete (u = 0 Start .. 1 Einschlag): von weit hinter dem Gebirge aus der
         Richtung strike_ang in einem hohen Bogen genau auf den Zielpunkt. Jeder rechnet sie selbst aus."""
@@ -131334,55 +124324,6 @@ class ExpGame(Game):
         x, y = sx + (tx - sx) * u, sy + (ty - sy) * u
         z = tz + TOMA_ROCKET_ALT * (1.0 - u ** 5) + 40.0 * math.sin(math.pi * u) * (1.0 - u)   # hoch, dann Sturzflug
         return x, y, z
-
-    def update_toma(self, dt):
-        """Säule am aktiven Ort zeigen (fährt hoch, Knopf leuchtet) bzw. die benutzte versinken lassen;
-        Rakete im Anflug mit Rauchschweif und Ton. Sichtbar nur in Sichtweite (TOMA_SEE_R) - auch beim Host."""
-        if getattr(self, "toma_np", None) is None:
-            return
-        w, pl = self.world, self.player
-        cam = (pl.x, pl.y)
-
-        def visible(i):
-            if not 0 <= i < len(w.toma_spots):
-                return False
-            x, y, _z, _h = w.toma_spots[i]
-            return math.hypot(cam[0] - x, cam[1] - y) <= TOMA_SEE_R
-
-        i_up = w.toma_idx if visible(w.toma_idx) else -1
-        i_sink = w.toma_sink_idx if (i_up < 0 and visible(w.toma_sink_idx)) else -1
-        shown = i_up if i_up >= 0 else i_sink
-        if (i_up, i_sink) != self.toma_seen:
-            prev = self.toma_seen
-            self.toma_seen = (i_up, i_sink)
-            if shown >= 0:
-                x, y, z, h = w.toma_spots[shown]
-                self.toma_np.setPos(x, y, z)
-                self.toma_np.setH(h)
-                self.toma_np.show()
-                if i_up >= 0 and w.toma_age < 1.0:
-                    self.sfx.play("servo", (x, y, z + 1.0), 1.0, 1.0)        # fährt hoch
-                elif i_sink >= 0 and prev[0] == i_sink:
-                    self.sfx.play("servo", (x, y, z + 1.0), 0.9, 0.6)        # versinkt (tiefer, langsamer)
-            else:
-                self.toma_np.hide()
-        if shown >= 0:
-            if i_up >= 0:
-                u = max(0.0, min(1.0, w.toma_age / TOMA_RISE_T))
-                hgt = u * u * (3 - 2 * u)
-                ready = w.toma_age >= TOMA_RISE_T
-                blink = 0.6 + 0.4 * math.sin(time.time() * 6.0)
-                self.toma_knob.setColorScale(1.0, 1.0, 1.0, 1.0) if ready else self.toma_knob.setColorScale(
-                    0.5, 0.5, 0.5, 1.0)
-                self.toma_beam.show()
-                self.toma_beam.setColorScale(1, 1, 1, (0.3 + 0.7 * blink) * hgt if ready else 0.0)
-            else:
-                u = max(0.0, min(1.0, w.toma_sink_t / TOMA_SINK_T))
-                hgt = 1.0 - u * u * (3 - 2 * u)
-                self.toma_knob.setColorScale(0.25, 0.25, 0.25, 1.0)              # unbrauchbar: Knopf aus
-                self.toma_beam.hide()
-            self.toma_col.setSz(max(0.02, hgt))
-        self.update_toma_rocket(dt)
 
     def update_toma_rocket(self, dt):
         """Anflug der Tomahawk-Rakete während des Countdowns - für alle sichtbar, der Zielort wird nirgends
@@ -131447,7 +124388,102 @@ class ExpGame(Game):
                 f.np.removeNode()
         self.toma_trail = keep
 
-    TOMA_FAR = 420.0      # Kamera-Sichtweite ist 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
+    TOMA_FAR = 420.0      # Kamera-Sichtweite ist mindestens 450 m: weiter weg wird verkleinert näher gezeichnet (gleiche Richtung)
+
+    def toma_far(self, np_, pos, scale):
+        """Rakete und Rauchschweif auch hinter der Sichtweite der Kamera zeigen: in derselben Richtung auf
+        TOMA_FAR heranziehen und im gleichen Verhältnis verkleinern - sieht gleich aus, wird nicht abgeschnitten."""
+        c = self.camera.getPos(self.render)
+        d = math.dist(pos, (c[0], c[1], c[2]))
+        if d > self.TOMA_FAR:
+            k = self.TOMA_FAR / d
+            np_.setPos(c[0] + (pos[0] - c[0]) * k, c[1] + (pos[1] - c[1]) * k, c[2] + (pos[2] - c[2]) * k)
+            np_.setScale(max(0.01, scale * k))
+
+    def stall_flicker(self, root, pos):
+        """Lahmgelegtes Fahrzeug: blau flackern (für alle sichtbar), ab und zu ein Blitz-Funke."""
+        k = 0.5 + 0.5 * math.sin(time.time() * 38.0)
+        root.setColorScale(0.6 + 0.2 * k, 0.75 + 0.2 * k, 1.3 + 0.5 * k, 1)
+        if self.prng.random() < 0.12:
+            p = (pos[0] + self.prng.uniform(-1, 1), pos[1] + self.prng.uniform(-1, 1), pos[2] + self.prng.uniform(-0.3, 0.6))
+            self.zap_fx(p, (p[0] + self.prng.uniform(-0.8, 0.8), p[1] + self.prng.uniform(-0.8, 0.8), p[2] + 0.5),
+                        False, sound=self.prng.random() < 0.25)
+
+    def update_rocks_view(self, dt):
+        """Steinbrocken des Titans: Felsmodell, dreht sich im Flug; zwischen den Snapshots weiter geflogen."""
+        views = getattr(self, "rock_views", None)
+        if views is None:
+            views = self.rock_views = {}
+            m = Mesh()
+            blob(m, 0, 0, 0, ROCK_SIZE * 0.5, ROCK_SIZE * 0.45, ROCK_SIZE * 0.42, (0.42, 0.39, 0.35), random.Random(9),
+                 jitter=0.18)
+            box(m, 0.1, 0.0, -ROCK_SIZE * 0.35, ROCK_SIZE * 0.5, ROCK_SIZE * 0.4, 0.2, (0.33, 0.27, 0.2))   # Erde dran
+            self.rock_np = NodePath(m.node("rock"))
+        live = {}
+        for r in self.world.rocks:
+            nd = views.get(r.rid)
+            if nd is None:
+                nd = self.rock_np.copyTo(self.render)
+                nd.setPos(r.x, r.y, r.z)
+            live[r.rid] = nd
+            if self.net_mode == "client":               # zwischen den Snapshots selbst weiterfliegen
+                r.vz -= ROCK_GRAV * dt
+                r.x += r.vx * dt
+                r.y += r.vy * dt
+                r.z += r.vz * dt
+            nd.setPos(r.x, r.y, r.z)
+            nd.setHpr(nd.getH() + 200 * dt, nd.getP() + 340 * dt, 0)
+        for rid, nd in views.items():
+            if rid not in live:
+                nd.removeNode()
+        self.rock_views = live
+
+    def zap_fx(self, src, dst, hit, sound=True, col=(0.6, 0.9, 1.0)):
+        """Elektroblitz: gezackte blaue Linie aus kurzen Stücken, Funken am Ziel, Knistern (10e: eigene Drohne lila)."""
+        r = self.prng
+        n = 7
+        pts = [src]
+        for i in range(1, n):
+            t = i / n
+            pts.append((src[0] + (dst[0] - src[0]) * t + r.uniform(-0.25, 0.25),
+                        src[1] + (dst[1] - src[1]) * t + r.uniform(-0.25, 0.25),
+                        src[2] + (dst[2] - src[2]) * t + r.uniform(-0.25, 0.25)))
+        pts.append(dst)
+        for a, b in zip(pts, pts[1:]):
+            ln = math.dist(a, b)
+            np_ = self.cube_np.copyTo(self.render)
+            np_.setPos((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+            np_.lookAt(*b)
+            np_.setScale(0.05, ln, 0.05)
+            np_.setColorScale(col[0], col[1], col[2], 1)
+            np_.setLightOff()
+            np_.setFogOff()
+            self.parts.append(Particle(np_, np_.getPos(), (0.0, 0.0, 0.0), 0.16, 0.0, 0.0, False))
+            self.parts[-1].x, self.parts[-1].y, self.parts[-1].z = np_.getX(), np_.getY(), np_.getZ()
+        if hit:
+            for _ in range(10):
+                self.add_particle(dst, (r.uniform(-3, 3), r.uniform(-3, 3), r.uniform(1, 4)), col,
+                                  0.04, 0.4, 0.2)
+        if sound:
+            self.sfx.play("zap", tuple(src), 1.0, self.prng.uniform(0.95, 1.05))
+
+    def slam_fx(self, pos, rad):
+        """Koloss-Bodenschlag: flache Staubwelle bis zum Radius, Brocken, dumpfer Knall, Beben in der Nähe."""
+        x, y, z = pos
+        r = self.prng
+        self.fx_spawn(self.disc_np, (x, y, z + 0.2), 0.7,
+                      0.5, rad, (0.75, 0.68, 0.55), (0.5, 0.45, 0.38), p=1.0)
+        for i in range(14):
+            a = i * math.tau / 14
+            self.smoke_puff((x + math.cos(a) * rad * 0.6, y + math.sin(a) * rad * 0.6, z + 0.3), 0.9, 1.4, 0.6)
+            self.add_particle((x, y, z + 0.4), (math.cos(a) * r.uniform(3, 7), math.sin(a) * r.uniform(3, 7),
+                                                r.uniform(2, 5)), (0.45, 0.4, 0.32), 0.12, 1.2, 0.3, 4.0)
+        self.sfx.play("explosion", (x, y, z), 1.0, 0.55)
+        pl = self.player
+        d = math.hypot(pl.x - x, pl.y - y)
+        if d < rad * 3:                                  # Beben: je näher, desto stärker
+            self.sp_cam.kick((1.0 - d / (rad * 3)) * 9.0)
+            self.sp_hurt.kick(self.prng.choice((-1, 1)) * (1.0 - d / (rad * 3)) * 60.0)
 
 
 def build_column_model():
@@ -131739,48 +124775,6 @@ MAP_PREVIEWS = {
     "polytown": (256, 144, "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"),
     "mc_ttt": (256, 144, "eNrtvSuY40qWLfx9BQokSJDAwMDAwEBAQEBAIEAAAQEBAYEAAgICAgICAgICBgYGAgIGBgkSFEhQ4IACBQoUKHDAAQ0aNBjQYMCAAQMaNOjvrh1bUurprP7/O/fe6rFPlI/Sb8tr7732M+ov/1Xf133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d133d1329t85f/nY/Cff1P3Zdv/7lfhLu63/i+vo3rObStMf3E3Jf/yMID9Z/AvDVy58CFbueF6f56fUvuIVuv5+i+/oXV/t/b7794/LjH8X1h20ZQgjPldXz7833f9Tf/n43BPf1r6v5Se2X1x9pdU2KGspfSgn8u64LE5BVl+ry9fz5r/cTdV//qmwfaj8pr5axdxzbsW2A33EcXPu+53ue74r8/AmG4Hw/Xff1L6b8f/sPaP7q5Q+VlMC8HFyIAvm+iqIgCJLiBF9AW4q/30/aff1LeLv/BcIP2AvHEqTtSeHzxdEX27YhBUF78cMwiOIkP73cPeL7+uU5D7m0xPz9MLEti2HPOp8PcHH1RSlYgAjXYah8Dx5B0XnEd0NwX7+e2gdujy9/UkkexpkfBJ6++CD6g+vhnwB/mqaJvsRxnCRZVtZF/Xp8+eN+Pu/rl8M/OA8IvxSO110Y8FD1EAdaGvZD/AP5JAJaCkgE4iiOFG6D73CPi97XL6b/v/29ev7dA9p9Uv4AfEgURwXgNxGojvIo6OP30hHrS5bnUPxpnuMgZmOQZnf839cvqP//Dv3vuZLUu+sC/FhJXkIC4tCNfUeFnuZFPluGFv9FgX8sLLgxveP/vn5l/IPtgOng2vNwEBTN57Q84YbAs6MoJPUv7Mh3It8uYpHGflJU2fkaQFbiWGmPIM2KO/7v69db3/5xfP6hPCv2LQVtn1XZ6Xr+/KesrAKxj1xTiYNyDSWN2DeVZxSRXcVOVh7D/Cg93yVuJKJAlnl8/u3f7/i/r18P/9dvkdzGvpEpu/76nzoc+resOCpnB9gr14xIOmyAP/LNLHKK0DjVl/PXv5+//GfZfJHWJnT3p8y94/++fsU6t9PLH0kEti/gzgLDRIq+/yOv6sDehmIfkP43A2Ekvp0GVhG7WWCWVQ3B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"),
 }
-
-
-def _exp_autostart(g):
-    """Experimental: direkt in den vom Hauptprogramm gewählten Bereich starten (POLYBASH_EXP_SPEC)."""
-    try:
-        spec = json.loads(os.environ.get("POLYBASH_EXP_SPEC") or "{}")
-    except ValueError:
-        spec = {}
-    if not isinstance(spec, dict):
-        spec = {}
-    name = str(spec.get("name") or "").strip()[:16]
-    if name:
-        g.my_name = name
-    if not os.path.exists(_settings_path()):          # erster Start: Grafik, Empfindlichkeit, Bildrate übernehmen
-        if spec.get("gfx") in GFX_MODES:
-            g.gfx = spec["gfx"]
-        if isinstance(spec.get("sens"), (int, float)) and 0.5 <= spec["sens"] <= 2.0:
-            g.sens_mult = float(spec["sens"])
-        if isinstance(spec.get("fov"), (int, float)) and 60 <= spec["fov"] <= 110:
-            g.fov_base = float(spec["fov"])
-        g.invert_y = bool(spec.get("inv"))
-        if spec.get("fps") in FPS_CHOICES:
-            g.fps_limit = spec["fps"]
-        g.apply_fps()
-    do = spec.get("do")
-    if do == "host":
-        cfg = spec.get("cfg") if isinstance(spec.get("cfg"), dict) else {}
-        for k in ("mode", "limit", "mobs", "tomahawk", "cd", "regen", "resp", "map", "bcr", "bha"):
-            if k in cfg:
-                g.cfg[k] = cfg[k]
-        if g.cfg.get("mode") not in ("koth", "dm"):
-            g.cfg["mode"] = "koth"
-        g.start_game("host")
-    elif do == "join":
-        g.show_menu("join")
-    elif do == "connect":                              # Host aus der Suche des Hauptmenüs: gleich verbinden
-        try:
-            g.show_menu("connecting")
-            g.attempt = JoinAttempt(str(spec["ip"]), int(spec.get("port", NET_PORT)), g.my_name, g.look_code)
-            g.show_loading("client", SimpleNamespace(map_raw={"name": "Verbinde ..."}))   # statt des Verbinden-Menüs
-        except (KeyError, TypeError, ValueError):
-            g.show_menu("join")
 
 
 if __name__ == "__main__":

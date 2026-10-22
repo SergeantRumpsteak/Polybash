@@ -6,7 +6,7 @@ Low-Poly-Partybox für lustige Abende (Panda3D, LAN-Multiplayer).
 
 ```
 Polybash/
-├── spiel.py                          Das gesamte Spiel in einer Datei (Hauptspiel + Modus "Experimental")
+├── spiel.py                          Das gesamte Spiel in einer Datei (alle Modi, auch Experimental)
 ├── experimental/
 │   └── PATCHNOTES_experimental.md    Änderungsliste von Robins Modus
 ├── maps/                             Karten (.json, .mcmap; polytown.ptmap = Standardkarte aus Blender)
@@ -16,26 +16,21 @@ Polybash/
 
 ## Wer ändert was
 
-- Es gibt nur noch `Polybash/spiel.py`. Robins Spielregeln stecken ausschließlich im Modus **Experimental**:
-  Klassen, Konstanten und Funktionen mit Präfix `Exp` / `EXP_` / `exp_` (z. B. `ExpWorld`, `ExpPlayer`, `ExpGame`,
-  `EXP_WEAPONS`). Sie erben vom Hauptspiel und überschreiben nur, was in Experimental anders ist.
-- Gemeinsam für alle Modi (Robins Stand): **Monster** (Mob, MobView, Drohnen, Koloss, Titan ...) und **Netzwerk**
-  (ein Protokoll, `NET_VERSION`; Host meldet per `exp`-Kennung, ob Experimental läuft).
-  Gemeinsam (Stand des Hauptspiels): **Grafik, Texturen und Karte**.
-- In **allen** Modi (nur als Beute aus Kisten, Monstern und Gefallenen, nicht im Ausrüstungsmenü): Nahkampfwaffen
-  (Taste 4 / F), alle Granatenarten (G halten, H wechselt), Rüstung (Helm/Torso/Füße, Sets), Brände und Rauchwolken,
-  Airdrops (Fackel-Granate) und Helikopter-Abstürze. Das Tomahawk-Säulen-System (und der Luftschlag) bleibt wie bisher.
-- Nur in Experimental: Buffs (Fluchttier), Tomahawk-Säulen mit Rakete, Pistolenstart ohne Ausrüstungsmenü und
-  **C4 / Claymore / Funkbake als Beute** (Taste 5; im Hauptspiel weiterhin über das Ausrüstungsmenü).
-- Experimental ist im Start-Menü gleichberechtigt: Die laufende `Game`-Instanz wird zu `ExpGame` umgewandelt
-  (`_pb_to_exp`; Tasks, Events und Szene des Menüs werden vorher abgeräumt, kein zweites Fenster, kein Neustart).
-  "Zum Hauptmenü" schaltet über `_pb_back` zurück. Beitreten: im normalen "Spiel beitreten" erscheinen auch
-  Experimental-Hosts; das Fenster wechselt dann automatisch in den passenden Teil.
-  Regel in Experimental: Alle starten und respawnen nur mit der Pistole, alle anderen Waffen kommen aus Kisten.
-- Spielmodi: King of the Hill, Deathmatch und Capture the Flag (zwei Teams, Flagge holen; die Regeln werden beim Start in einer eigenen Seite eingestellt), dazu "Experimental" (King of the Hill bzw. Deathmatch nach Robins Regeln). Standardkarte ist `maps/polytown.ptmap`.
+- Es gibt nur noch `Polybash/spiel.py`, und alle Modi laufen auf denselben Klassen (`World`, `Player`, `Game`,
+  `PlayerView`): **Karte, Physik (inkl. Fahrzeug-Trefferboxen, Dach-Fix), Fahrzeug-/Heli-Optik, Waffen, HUD, Timer, Killfeed,
+  Geräuschkarte, Ping, Kugelpfeifen, Tooltips und Loot-Debug sind in allen Modi gleich.** Es gibt kein "Spiel im Spiel" mehr.
+- Modi sind Regelsätze: King of the Hill, Deathmatch, Capture the Flag (zwei Teams; Regeln beim Start auf eigener Seite)
+  und **Experimental**. Experimental ist ein Flag der Welt (`World.exp`, im Menü wie jeder andere Modus anwählbar;
+  nochmal anklicken wechselt zwischen King of the Hill und Deathmatch). Es gilt dort: Start und Respawn nur mit der Pistole
+  (kein Ausrüstungsmenü), Tomahawk-Säulen statt Kommandoraum-Knopf, kein CTF.
+- In **allen** Modi: Nahkampfwaffen (Taste 4 / F), alle Granatenarten (G halten, H wechselt), Rüstung, Brände, Rauch,
+  Airdrops, Heli-Abstürze, Buffs (Fluchttier) und Gadget-Beute (C4 / Claymore / Funkbake). **Taste 3** = Gadget bzw.
+  Spezialwaffe in jedem Modus. Bonuskisten und Bonushasen sind überall standardmäßig an und lassen sich vor Rundenbeginn
+  unter "Weitere Einstellungen" aus- und einschalten.
+- Netzwerk: ein Protokoll (`NET_VERSION`); der Host meldet per `exp`-Kennung den Regelsatz, die Ausrüstung gehört in allen
+  Modi dem Host.
 - `main` ist der Stand für alle Freunde. Zusammengeführt wird per Pull Request.
-- Änderungen an Robins Regeln: in den `Exp*`-Teilen von `spiel.py` vornehmen, nicht im gemeinsamen Teil (Monster/Netz/Grafik),
-  sonst ändert sich auch das Hauptspiel.
+- Neue Regeln für einen Modus: über `world.exp` bzw. `world.mode` verzweigen, nicht Klassen duplizieren.
 
 ## Starten
 
@@ -44,4 +39,5 @@ Polybash/
 
 ## Hinweise zu Experimental
 
-- Tasten in Experimental (Reihenfolge der Leiste): 1 Primär, 2 Sekundär, 3 Spezialwaffe (Kiste), 4 Nahkampf, G Granate; kein Gadget-Slot (am Start gibt es kein Gadget). Mausrad wechselt in dieser Reihenfolge. F schlägt immer mit der Nahkampfwaffe (Messer), nie mit der Schusswaffe.
+- Tasten (in allen Modi gleich): 1 / 2 Primär- und Sekundärwaffe, 3 Gadget bzw. Spezialwaffe, 4 Nahkampf, G Granate.
+  Mausrad wechselt in dieser Reihenfolge. F schlägt ohne etwas Benutzbares mit der Nahkampfwaffe (Messer).

@@ -2,6 +2,16 @@
 
 Neueste Änderungen oben.
 
+## Kein "Spiel im Spiel" mehr: ein Regelwerk für alle Modi (2026-10-22)
+- GEÄNDERT `ExpWorld`, `ExpPlayer`, `ExpGame`, `ExpPlayerView`, `ExpSetupPage` und `ExpEndSetupPage` gibt es nicht mehr. Es gibt `World(..., exp=False)`, `Player`, `Game`, `PlayerView`; Experimental ist der Regelsatz `world.exp`. Der Klassentausch beim Start (`_pb_to_exp`, `_exp_autostart`, `_pb_back`) ist weg, Experimental startet im Menü wie jeder andere Modus (Untermodus KotH/Deathmatch: Modus nochmal anklicken).
+- GEÄNDERT **Karte und Physik für alle Modi gleich**: Fahrzeug-Trefferboxen, Dach-Fix (kein Hängenbleiben auf Fahrzeugdächern), Sprengschaden mit Sichtlinie, Mob-/Turm-/Strike-Logik, Landebahn und Tunnel kommen aus dem Experimental-Stand.
+- GEÄNDERT **Optik** der Fahrzeuge, des Helis und der Soldaten (inkl. sichtbarer Rüstung) aus Experimental ist jetzt überall.
+- GEÄNDERT **Gadgets auf Taste 3** in allen Modi (Taste 5 entfällt). Gadget-Beute (C4, Claymore, Funkbake) und Buffs gibt es in allen Modi; Vorrat gehört dem Host.
+- GEÄNDERT **HUD** in allen Modi einheitlich: Timer, Killfeed, Geräuschkarte, Ping, Kugelpfeifen, Tooltips, Loot-Debug, Tab-Übersicht und Tastenlegende.
+- GEÄNDERT **Bonuskisten/-hasen** sind in allen Modi standardmäßig an und lassen sich in "Weitere Einstellungen" abschalten. `MAX_DROPS` ist überall 120.
+- GEÄNDERT Netz: Der Client schickt keine Slots/Aufsätze mehr (der Host besitzt die Ausrüstung in allen Modi); Beitritt zu Experimental-Hosts läuft ohne Fensterwechsel; Karten-/Regelwechsel baut die Welt neu auf.
+- Verhalten, das sich im Hauptspiel dadurch ändert: Heli sinkt mit Strg, Ereignisformate sind die von Experimental, Performance-Änderungen von Experimental gelten überall.
+
 ## Experimental-Ausrüstung in allen Modi, Gadgets als Beute in Experimental (2026-10-22)
 - NEU **Alle Modi (KotH, DM, CTF):** Nahkampfwaffen, alle 8 Granatenarten, Rüstung (Helm/Torso/Füße mit Sets, Schild, zweite Chance), Brände (Molotow) und Rauchwolken, **Airdrops** (Fackel-Granate), **Heli-Abstürze** und Drohnen-Granaten gibt es jetzt auch in den anderen Modi – ausschließlich als Beute (Bonuskisten, Monster, Gefallene), nicht im Ausrüstungsmenü. Man startet unverändert mit seinem Loadout; dazu kommen 2 Splittergranaten pro Leben.
 - NEU Bedienung (alle Modi): **4** = Nahkampfwaffe, **F** ohne etwas Benutzbares = Schnellschlag, **G** halten = Wurf aufladen, **H** / Mausrad bei gehaltenem G = Granatenart, Stromstoss-Taste für das Schild-Set; HUD mit Rüstungs-Kacheln, Schildbalken, Nahkampf-Karte und Granaten-Karte. Taste 3 öffnet ohne Gadget eine Spezialwaffe aus der Kiste.
