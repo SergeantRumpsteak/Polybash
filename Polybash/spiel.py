@@ -7799,10 +7799,11 @@ class World:
             pl.ready = False
         self.ctf_balance()                               # 11: Teams (nur im CTF), Flaggen auf Anfang
         self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
-        for pl in list(self.players.values()):
-            if getattr(pl, "prespawn", False):
-                continue                                 # noch im Ausrüstungsmenü (z.B. in der Endphase beigetreten): bleibt dort, R spawnt
-            self.respawn_player(pl)
+        for pl in list(self.players.values()):          # alle wählen erst ihre Ausrüstung und drücken dann auf Spawn
+            if not getattr(pl, "prespawn", False):
+                x, y = self.pick_spawn(pl.pid)
+                pl.respawn(self, x, y, DEFAULT_LOADOUT)  # Zustand zurücksetzen (Fahrzeug, Buffs, Vorrat ...), ohne Ereignis
+            pl.hp, pl.dead_age, pl.prespawn = 0.0, 1e9, True
         self.events.append(("newmatch",))
 
     def start_round(self):
@@ -122485,6 +122486,9 @@ class Game(ShowBase):
             elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
                 self.open_end_screen(e[1])
             elif kind == "newmatch":
+                if self.net_mode == "client" and self.player is not None:
+                    self.player.hp, self.player.prespawn = 0.0, True      # neue Runde: erst Ausrüstung wählen, dann Spawn
+                    self.dead_since = None
                 self.feed.clear()
                 self.close_end_screen()
                 self.pings.clear()
