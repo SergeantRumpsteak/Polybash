@@ -8,7 +8,9 @@ import sys
 def git(*a):
     return subprocess.check_output(("git",) + a, text=True).strip()
 
-if git("rev-parse", "--abbrev-ref", "HEAD") != "main":
+# Nur auf main - oder auf Zuruf (POLYBASH_BUMP=1) fuer den Release-Commit im eigenen Branch, siehe docs/WORKFLOW.md
+import os
+if git("rev-parse", "--abbrev-ref", "HEAD") != "main" and os.environ.get("POLYBASH_BUMP") != "1":
     sys.exit(0)
 try:
     n = int(git("rev-list", "--count", "HEAD")) + 1

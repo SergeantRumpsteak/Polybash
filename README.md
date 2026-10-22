@@ -10,6 +10,7 @@ Polybash/
 ├── maps/                             Karten (.json, .mcmap; polytown.ptmap = Standardkarte aus Blender)
 └── installer/                        Windows-Installer (Inno Setup)
 docs/PATCHNOTES.md                    Änderungsliste (neueste oben)
+docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von main, Fast-Forward auf main
 .github/workflows/build-installer.yml baut den Installer auf GitHub (Actions)
 ```
 
