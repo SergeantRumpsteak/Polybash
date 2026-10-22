@@ -121019,6 +121019,8 @@ class Game(ShowBase):
             self.sp_pitch.kick(-90)
 
     def set_capture(self, on):
+        if on and getattr(self, "end", None) is not None:
+            return                                   # Rundenende-Menü: die Maus bleibt frei, egal wer sie einfangen will
         if on:
             self.lock_trigger()
         self.captured = on
