@@ -14926,10 +14926,11 @@ VEH_HIT_REACH = 2.1      # m: grober Vorfilter (halbe Diagonale der Quader)
 HELI_HIT_REACH = 6.0
 
 class _HB:
-    __slots__ = ("x0", "y0", "z0", "x1", "y1", "z1")
+    __slots__ = ("x0", "y0", "z0", "x1", "y1", "z1", "clip")
 
     def __init__(self, b):
         self.x0, self.y0, self.z0, self.x1, self.y1, self.z1 = b
+        self.clip = False
 
 _VEH_HB = [_HB(b) for b in VEH_HIT_BOXES]
 
