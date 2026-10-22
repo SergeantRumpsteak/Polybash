@@ -2,6 +2,11 @@
 
 Neueste Änderungen oben.
 
+## Tomahawk-Säulen in allen Modi, Experimental = Deathmatch mit Pistole (2026-10-23)
+- GEÄNDERT **Experimental** ist ein eigener, gleichberechtigter Modus: Deathmatch, nur mit Pistolenstart. Die Untermodus-Wahl (KotH/DM) entfällt.
+- NEU **Tomahawk-Säulen in KotH, DM, CTF und Experimental**: der Knopf im Kommandoraum samt Zeitwahl-Gerät ist entfernt. Eine Säule fährt an einem freien, ebenen Ort auf (Orte pro Karte automatisch aus den Startpunkten gewählt, auf Host und Mitspielern gleich; eine Karte kann sie mit `meta.toma` vorgeben), Ziel und Countdown wählt man auf der Zielkarte, wer auslöst ist 5 min gesperrt, danach fährt woanders eine neue hoch. CTF startet mit Tomahawk nun ebenfalls an.
+- GEÄNDERT Gebirge kann in allen Modi bestiegen werden (`MTN_CLIMB`), Scoreboard-Werte und Netzmeldung der Säule sind modusunabhängig.
+
 ## Kein "Spiel im Spiel" mehr: ein Regelwerk für alle Modi (2026-10-22)
 - GEÄNDERT `ExpWorld`, `ExpPlayer`, `ExpGame`, `ExpPlayerView`, `ExpSetupPage` und `ExpEndSetupPage` gibt es nicht mehr. Es gibt `World(..., exp=False)`, `Player`, `Game`, `PlayerView`; Experimental ist der Regelsatz `world.exp`. Der Klassentausch beim Start (`_pb_to_exp`, `_exp_autostart`, `_pb_back`) ist weg, Experimental startet im Menü wie jeder andere Modus (Untermodus KotH/Deathmatch: Modus nochmal anklicken).
 - GEÄNDERT **Karte und Physik für alle Modi gleich**: Fahrzeug-Trefferboxen, Dach-Fix (kein Hängenbleiben auf Fahrzeugdächern), Sprengschaden mit Sichtlinie, Mob-/Turm-/Strike-Logik, Landebahn und Tunnel kommen aus dem Experimental-Stand.

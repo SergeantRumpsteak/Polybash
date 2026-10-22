@@ -19,12 +19,11 @@ Polybash/
 - Es gibt nur noch `Polybash/spiel.py`, und alle Modi laufen auf denselben Klassen (`World`, `Player`, `Game`,
   `PlayerView`): **Karte, Physik (inkl. Fahrzeug-Trefferboxen, Dach-Fix), Fahrzeug-/Heli-Optik, Waffen, HUD, Timer, Killfeed,
   Geräuschkarte, Ping, Kugelpfeifen, Tooltips und Loot-Debug sind in allen Modi gleich.** Es gibt kein "Spiel im Spiel" mehr.
-- Modi sind Regelsätze: King of the Hill, Deathmatch, Capture the Flag (zwei Teams; Regeln beim Start auf eigener Seite)
-  und **Experimental**. Experimental ist ein Flag der Welt (`World.exp`, im Menü wie jeder andere Modus anwählbar;
-  nochmal anklicken wechselt zwischen King of the Hill und Deathmatch). Es gilt dort: Start und Respawn nur mit der Pistole
-  (kein Ausrüstungsmenü), Tomahawk-Säulen statt Kommandoraum-Knopf, kein CTF.
+- Vier gleichberechtigte Modi: King of the Hill, Deathmatch, Capture the Flag und **Experimental**. Experimental ist
+  Deathmatch, nur dass alle mit der Pistole starten und respawnen (kein Ausrüstungsmenü; alles Weitere kommt aus der
+  Beute). Technisch: `World.exp` = Pistolenstart, `World.mode` = "dm". Keine Modus-Klasse steht über einer anderen.
 - In **allen** Modi: Nahkampfwaffen (Taste 4 / F), alle Granatenarten (G halten, H wechselt), Rüstung, Brände, Rauch,
-  Airdrops, Heli-Abstürze, Buffs (Fluchttier) und Gadget-Beute (C4 / Claymore / Funkbake). **Taste 3** = Gadget bzw.
+  **Tomahawk-Säulen** (Orte werden pro Karte automatisch auf freien Plätzen gewählt; es gibt keinen Kommandoraum-Knopf mehr), Airdrops, Heli-Abstürze, Buffs (Fluchttier) und Gadget-Beute (C4 / Claymore / Funkbake). **Taste 3** = Gadget bzw.
   Spezialwaffe in jedem Modus. Bonuskisten und Bonushasen sind überall standardmäßig an und lassen sich vor Rundenbeginn
   unter "Weitere Einstellungen" aus- und einschalten.
 - Netzwerk: ein Protokoll (`NET_VERSION`); der Host meldet per `exp`-Kennung den Regelsatz, die Ausrüstung gehört in allen

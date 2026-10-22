@@ -338,7 +338,6 @@ OVER_T = 15.0            # so lange bleibt die Rangliste nach Rundenende stehen
 
 MODES = ("koth", "dm", "ctf", "experimental")
 
-EXP_MODES = ("koth", "dm")
 MODE_NAMES = {"koth": "King of the Hill", "dm": "Deathmatch", "ctf": "Capture the Flag", "experimental": "Experimental"}
 
 CTF_TEAM_NAMES = ("Blau", "Rot")
@@ -354,7 +353,7 @@ CTF_NO_VEHICLES = True   # mit Flagge: keine Fahrzeuge, kein Heli, kein Schütze
 CTF_PTS_MAX = 10         # Punktelimit im Host-Menü: 0 (aus) .. so viele Punkte
 CTF_FF_DEFAULT = False   # Eigenbeschuss (Standard aus)
 CTF_MOBS_DEFAULT = 0     # Monster im CTF: aus
-CTF_TOMA_DEFAULT = False # Tomahawk im CTF: aus
+CTF_TOMA_DEFAULT = True  # Tomahawk im CTF: wie in allen Modi an
 HUD_MARGIN = 0.05        # einheitlicher Abstand der HUD-Elemente zum Bildrand
 MC_MODES = ("dm", "experimental")   # Modi, die auf Minecraft-Karten erlaubt sind
 LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Minuten
@@ -560,7 +559,6 @@ TUR_TURN = 150.0         # Grad/s
 
 # --- Tomahawk (Knopf im Kommandoraum der Tunnel, einmal pro Runde)
 STRIKE_T = 10.0          # Countdown in s (Standard)
-STRIKE_OPTIONS = (5, 10, 20, 30, 60)   # im Kontrollraum einstellbar
 
 TOMA_DURATIONS = (10, 20, 30, 60)   # Countdown-Länge, wird auf der Zielkarte gewählt (mind. 10 s)
 STRIKE_R = 30.0          # King of the Hill: doppelter Radius der Zone
@@ -595,6 +593,8 @@ TOMA_SPOTS = (
     (76.0, 56.0, None),     # Feld Nordost
 )
 
+TOMA_SPOT_GAP = 30.0     # m: so weit liegen die Säulen-Orte mindestens auseinander
+TOMA_SPOT_MAX = 14       # höchstens so viele Orte je Karte
 TOMA_GROUND_CLEAR = 9.0  # m: so viel Platz brauchen Bodenorte zu Wänden/Deckung (keine Engstellen für Fahrzeuge)
 
 TOMA_SEE_R = 120.0       # Mitspieler erfahren vom Host (und sehen) die Säule nur in dieser Entfernung
@@ -3947,7 +3947,7 @@ class World:
         self.strike_wait = 0.0               # Sekunden, bis der Knopf wieder geht
         self.seed = seed
         self.exp = bool(exp)                 # Regelsatz "Experimental" (Start mit der Pistole, Tomahawk-Säulen, Beute-Gadgets)
-        self.mode = mode if mode in (EXP_MODES if self.exp else MODES) else "koth"
+        self.mode = "dm" if self.exp else (mode if mode in MODES and mode != "experimental" else "koth")   # Experimental = Deathmatch mit Pistolenstart
         self.limit = float(limit)         # Zeitlimit in Sekunden
         self.mobs_on = spawn_mobs         # Monster an/aus (der Client bekommt sie vom Host)
         self.mob_level = int(mob_level)   # Dichte: Index in MOB_LEVELS
@@ -3992,12 +3992,8 @@ class World:
         self.toma_sink_idx, self.toma_sink_t = -1, 0.0   # benutzte Säule, die gerade versinkt
         self.toma_lock = {}                  # Spieler-ID -> s, bis er selbst wieder auslösen darf (TOMA_PLAYER_CD)
         self.strike_ang = 0.0                # Himmelsrichtung, aus der die Rakete anfliegt (Grad)
-        if self.exp:                                 # Experimental: Säulen statt Kommandoraum-Knopf
-            self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
-            self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
-        else:
-            self.button = SimpleNamespace(x=80.0 + TO, y=62.55 + TO, z=TUN_Z)
-            self.timer_panel = SimpleNamespace(x=85.0 + TO, y=62.55 + TO, z=TUN_Z)
+        self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)       # Knopf der aktiven Tomahawk-Säule (außer Reichweite: keine)
+        self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
         self.strike_dur = STRIKE_T
         self.strike_x, self.strike_y = float(CENTER), float(CENTER)   # Einschlagpunkt (nur Host/Schütze kennt ihn)
         self.spawn_zs = {}
@@ -4096,8 +4092,8 @@ class World:
         self.time_left = self.limit
         self.over_t = 0.0
         self.reset_crates()
-        if self.exp:
-            self.place_toma()    # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
+        self.build_toma_spots()
+        self.place_toma()    # beim Mitspieler überschreibt der Host das (Nachricht 'tb')
         if spawn_mobs:           # der Client bekommt die Monster vom Host
             self.populate_mobs()
         # --- Capture the Flag
@@ -5615,10 +5611,10 @@ class World:
                                                         self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
                     best, bs = (kind, o), d                   # 10a: nicht durch Decken/Wände (Kisten, Drops)
         if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
-            for kind, b in (("button", self.button), ("timer", self.timer_panel)):
-                d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
-                if d < bs and abs(pl.z - b.z) < 2.5:
-                    best, bs = (kind, b), d
+            b = self.button
+            d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
+            if d < bs and abs(pl.z - b.z) < 2.5:
+                best, bs = ("button", b), d
         return best
 
     def alt_seat(self, pl):
@@ -5662,10 +5658,6 @@ class World:
             self.pickup_drop(pl, o)
         elif kind == "button":
             self.press_button(pl)
-        elif kind == "timer" and self.tomahawk_on:
-            i = STRIKE_OPTIONS.index(self.strike_dur) if self.strike_dur in STRIKE_OPTIONS else 1
-            self.strike_dur = float(STRIKE_OPTIONS[(i + 1) % len(STRIKE_OPTIONS)])
-            self.events.append(("timer", pl.pid, self.strike_dur))
         elif kind == "turret":
             self.mount_turret(pl, o)
         elif kind == "exit_turret":
@@ -6438,24 +6430,8 @@ class World:
         return math.hypot(x - self.strike_x, y - self.strike_y) <= STRIKE_R      # in allen Modi kreisförmig
 
     def press_button(self, pl, tx=None, ty=None, dur=None):
-        """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte). Experimental: Tomahawk-Säule
-        (press_toma), sonst der Knopf im Kommandoraum."""
-        if self.exp:
-            return self.press_toma(pl, tx, ty, dur)
-        if not self.tomahawk_on or self.strike != 0 or self.phase != "play" or pl.hp <= 0:
-            return False
-        if tx is None or ty is None or not (math.isfinite(tx) and math.isfinite(ty)):
-            tx, ty = CENTER, CENTER
-        self.strike_x, self.strike_y = clampf(float(tx), 4.0, WORLD - 4.0), clampf(float(ty), 4.0, WORLD - 4.0)
-        self.strike, self.strike_t, self.strike_by = 1, self.strike_dur, pl.pid
-        pl.stats["toma_fired"] += 1
-        self.strike_ang = self.mrng.uniform(0.0, 360.0)      # Anflugrichtung der Rakete
-        self.events.append(("strike", pl.pid))
-        return True
-
-    def press_toma(self, pl, tx=None, ty=None, dur=None):
         """Tomahawk starten; (tx, ty) = gewählter Einschlagpunkt (ohne Angabe: Kartenmitte), dur = Countdown
-        (STRIKE_OPTIONS). Die Säule wird unbrauchbar und versinkt; nach der Abklingzeit fährt woanders eine hoch.
+        (TOMA_DURATIONS). Die Säule wird unbrauchbar und versinkt; nach der Abklingzeit fährt woanders eine hoch.
         Wer auslöst, ist danach TOMA_PLAYER_CD Sekunden für den Tomahawk gesperrt."""
         if (not self.tomahawk_on or self.strike != 0 or self.phase != "play" or pl.hp <= 0 or not self.toma_ready()
                 or self.toma_lock.get(pl.pid, 0.0) > 0):
@@ -7233,6 +7209,68 @@ class World:
         self.att_state_event(pl, 3, code, wi)
         return True
 
+    def mode_name(self):
+        """Anzeigename des Spielmodus (Experimental läuft als Deathmatch mit Pistolenstart)."""
+        return MODE_NAMES["experimental" if self.exp else self.mode]
+
+    def build_toma_spots(self):
+        """Orte der Tomahawk-Säulen (in allen Modi, auf Host und Mitspieler gleich): Kartenpunkte 'toma' aus der Karte, sonst
+        freie, ebene Plätze unter den Startpunkten - weit auseinander und mit TOMA_GROUND_CLEAR Platz zu Wänden und Fahrzeugen."""
+        cands = []
+        pt = getattr(self, "pt", None)
+        for p in ((pt or {}).get("meta", {}).get("toma") or ()):
+            try:
+                cands.append((float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else None))
+            except (TypeError, ValueError, IndexError):
+                pass
+        if not cands:
+            cands = [(float(sx), float(sy), None) for sx, sy in self.spawns]
+        solid = [b for b in self.boxes if not getattr(b, "clip", False)]
+        keep_off = [(o.x, o.y) for o in list(self.vehicles) + list(self.helis)] + [tuple(p[:2]) for p in self.pads]
+        if self.runway is not None:
+            try:
+                keep_off.append((self.runway[0], self.runway[1]))
+            except (TypeError, IndexError, KeyError):
+                pass
+        R = TOMA_GROUND_CLEAR
+        good = []
+        for x, y, z0 in cands:
+            if not (R < x < WORLD - R and R < y < WORLD - R):
+                continue
+            z = z0 if z0 is not None else self.floor_at(x, y, 400.0)
+            if z is None or self.water_at(x, y, z):
+                continue
+            if any(math.hypot(x - kx, y - ky) < R + 3.0 for kx, ky in keep_off):
+                continue
+            blocked = False
+            for b in solid:                                   # Wand/Deckung im Umkreis (Quader über Bodenhöhe)
+                if b.z1 < z + 0.6 or b.z0 > z + 3.5:
+                    continue
+                dx = max(b.x0 - x, 0.0, x - b.x1)
+                dy = max(b.y0 - y, 0.0, y - b.y1)
+                if dx * dx + dy * dy < R * R:
+                    blocked = True
+                    break
+            if blocked:
+                continue
+            ok = True                                         # ebener Boden rundherum
+            for k in range(8):
+                a = k * math.pi / 4
+                zz = self.floor_at(x + math.cos(a) * 4.0, y + math.sin(a) * 4.0, z + 1.0)
+                if zz is None or abs(zz - z) > 0.8:
+                    ok = False
+                    break
+            if ok:
+                good.append((x, y, z))
+        spots = []
+        for x, y, z in sorted(good, key=lambda p: (p[0], p[1])):   # gleichmäßig verteilt, deterministisch (Host = Mitspieler)
+            if all(math.hypot(x - q[0], y - q[1]) >= TOMA_SPOT_GAP for q in spots):
+                h = math.degrees(math.atan2(-(CENTER - x), CENTER - y))     # Blick zur Kartenmitte
+                spots.append((x, y, z, h))
+            if len(spots) >= TOMA_SPOT_MAX:
+                break
+        self.toma_spots = spots
+
     def set_toma(self, i, age=0.0):
         """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
         if not (isinstance(i, int) and 0 <= i < len(self.toma_spots)):
@@ -7252,7 +7290,7 @@ class World:
     def place_toma(self):
         """Host: die Säule an einem zufälligen Ort hochfahren lassen - nie dort, wo sie zuletzt benutzt wurde."""
         n = len(self.toma_spots)
-        if n == 0:
+        if n == 0 or not self.tomahawk_on:
             self.set_toma(-1)
             return
         choices = [i for i in range(n) if i != self.toma_last] or list(range(n))
@@ -7276,7 +7314,7 @@ class World:
             return True
         if self.place_gadget(pl, pl.gadget, pos, nrm, yaw, att) is None:
             return False
-        pl.gad_n -= 1
+        pl.gad_n = pl.gad_stock[pl.gadget] if 0 <= pl.gadget < 3 else 0      # Vorrat hat place_gadget schon verringert
         return True
 
     def has_c4(self, pid):
@@ -7743,8 +7781,7 @@ class World:
         self.strike_x = self.strike_y = float(CENTER)
         self.toma_lock.clear()
         self.toma_sink_idx, self.toma_sink_t = -1, 0.0
-        if self.exp:
-            self.place_toma()
+        self.place_toma()
         for t in self.turrets:
             t.heat, t.over, t.firing, t.op = 0.0, False, False, -1
         for hc in self.helis:
@@ -8490,7 +8527,7 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         else:
             pl.x, pl.y = ox, oy
     if (getattr(world, "steep", False) and getattr(world, "cm", None) is None and pl.moving
-            and not (MTN_CLIMB and world.exp)):
+            and not MTN_CLIMB):
         too_steep(pl, ox, oy, world)                 # Felswände im Gebirge: nicht hinauf (auch nicht springend)
 
     if getattr(world, "cm", None) is not None:
@@ -16898,8 +16935,7 @@ class SetupPage:
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         elif g.cfg["mode"] == "experimental":
-            sub = "Deathmatch" if (g.cfg_is_mc() or g.cfg.get("exp_sub") == "dm") else "King of the Hill"
-            self.text(None, f"Experimental ({sub}): Start mit der Pistole, Ausrüstung aus Beute   -   Modus nochmal anklicken wechselt",
+            self.text(None, "Experimental: wie Deathmatch, aber alle starten mit der Pistole - alles Weitere kommt aus der Beute",
                       0, -0.885, 0.028, self.YELLOW)
         else:
             self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    "
@@ -18244,10 +18280,7 @@ class HostSession:
                        r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
-            if w.exp:
-                snap["sb"] = [[p.pid] + list(stat_summary(p)) for p in w.players.values()]
-            else:
-                snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
+            snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
         if w.mode == "ctf":                              # CTF: Teampunkte, Flaggen, Teams
             snap["ctf"] = [list(w.team_score),
                            [[f.fid, f.team, FLAG_STATES.index(f.state), f.carrier, r2(f.x), r2(f.y), r2(f.z),
@@ -18276,8 +18309,7 @@ class HostSession:
                 c.pend_ev = []
             else:
                 c.send_line(line)
-            if w.exp:
-                self.send_toma(c)
+            self.send_toma(c)
             c.flush()
         if self.snap_n % 150 == 1 and clients:       # alle ~5 s: Zustand jeder Leitung
             netlog("Host: Snapshot " + str(len(line)) + " B; je Spieler (pid, ungesendet B, gesendet gesamt B, stumm s): " +
@@ -18364,7 +18396,7 @@ class ClientSession:
 
     def __init__(self, conn, world, my_id, backlog=()):
         self.conn, self.world, self.my_id = conn, world, my_id
-        if world.exp:
+        if True:
             world.set_toma(-1)                  # wo die Kapsel ist, sagt nur der Host (und nur in der Nähe)
         self.mobs = {}               # Monster-ID -> NetMob
         self.bullets = {}            # Kugel-ID -> Bullet (nur zum Anzeigen)
@@ -18451,7 +18483,7 @@ class ClientSession:
                 self.cfg_changed = True
             elif m.get("t") == "reload":
                 self.reload = m
-            elif m.get("t") == "tb" and self.world.exp:    # Tomahawk-Säule in Sichtweite (oder -1 = keine)
+            elif m.get("t") == "tb":    # Tomahawk-Säule in Sichtweite (oder -1 = keine)
                 w = self.world
                 w.set_toma(int(m.get("i", -1)), float(m.get("a", 0.0)))
                 w.toma_sink_idx = int(m.get("s", -1))
@@ -18523,13 +18555,10 @@ class ClientSession:
             q = w.players.get(row[0])
             if q is None:
                 continue
-            if w.exp:
-                if len(row) >= 4:
-                    q.sb = tuple(int(v) for v in row[1:4])
-            elif len(row) >= 3:
-                q.sb = tuple(int(v) for v in row[1:3])
-                if len(row) >= 6:
-                    q.sb_ctf = tuple(int(v) for v in row[3:6])      # CTF: Flaggen geholt / zurück / Träger getötet
+            if len(row) >= 4:
+                q.sb = tuple(int(v) for v in row[1:4])
+                if len(row) >= 7:
+                    q.sb_ctf = tuple(int(v) for v in row[4:7])      # CTF: Flaggen geholt / zurück / Träger getötet
         self.apply_ctf(m.get("ctf"))                     # CTF: Teampunkte, Flaggen, Teams
 
         seen = set()
@@ -18809,7 +18838,7 @@ class ClientSession:
 
     def send_strike(self, x, y, dur=None):
         self.conn.send({"t": "strikego", "x": round(float(x), 1), "y": round(float(y), 1),
-                        "d": int(dur) if dur in STRIKE_OPTIONS else None})
+                        "d": int(dur) if dur in TOMA_DURATIONS else None})
         self.conn.flush()
 
     def send_melee(self, pl, d):
@@ -116074,9 +116103,6 @@ class Game(ShowBase):
             return                                    # Minecraft-Karten kennen nur Deathmatch (und Experimental)
         c, old = self.cfg, self.cfg.get("mode")
         if mode == old:
-            if mode == "experimental" and not self.cfg_is_mc():       # nochmal anklicken: Untermodus KotH <-> Deathmatch
-                c["exp_sub"] = "dm" if c.get("exp_sub", "koth") == "koth" else "koth"
-                self.menu_refresh()
             return
         if mode == "ctf":                             # CTF-Standard: Monster und Tomahawk aus (im Menü änderbar)
             self.ctf_prev = (c.get("mobs"), c.get("tomahawk"))
@@ -116103,13 +116129,9 @@ class Game(ShowBase):
         return {"crates": True if bc is None else bool(bc), "hares": True if bh is None else bool(bh)}
 
     def world_rules(self):
-        """(Spielmodus, Regelsatz Experimental) aus den Einstellungen. Experimental läuft als King of the Hill oder
-        Deathmatch (Untermodus cfg['exp_sub']); auf Minecraft-Karten nur als Deathmatch."""
-        c = self.cfg
-        if c.get("mode") != "experimental":
-            return c.get("mode", "koth"), False
-        sub = "dm" if self.cfg_is_mc() else (c.get("exp_sub") if c.get("exp_sub") in EXP_MODES else "koth")
-        return sub, True
+        """(Spielmodus der Welt, Pistolenstart) aus den Einstellungen. Experimental ist Deathmatch mit Pistolenstart."""
+        m = self.cfg.get("mode", "koth")
+        return ("dm", True) if m == "experimental" else (m, False)
 
     def set_cfg(self, key, v):
         """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus)."""
@@ -116420,7 +116442,6 @@ class Game(ShowBase):
         self.cfg_backup = dict(c)
         c["map"] = getattr(w, "map_path", c.get("map"))
         c["mode"] = "experimental" if w.exp else (w.mode if w.mode in MODES else c["mode"])
-        c["exp_sub"] = w.mode if w.exp and w.mode in EXP_MODES else "koth"
         c["ff"], c["plim"] = bool(w.ctf_ff), int(w.score_limit)     # CTF-Regeln der laufenden Runde
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
@@ -116516,6 +116537,8 @@ class Game(ShowBase):
         w.limit = float(c["limit"]) * 60.0
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
+        if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
+            w.place_toma()
         b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
         w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
@@ -117255,6 +117278,8 @@ class Game(ShowBase):
                 def set_tomahawk():
                     w.tomahawk_on = not w.tomahawk_on
                     self.cfg["tomahawk"] = w.tomahawk_on
+                    if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
+                        w.place_toma()                         # Säule wieder hochfahren lassen
 
                 def set_bonus(which):
                     if which == "crates":
@@ -119310,11 +119335,11 @@ class Game(ShowBase):
                 return
         world = self.world
         t = max(0.0, world.time_left)
-        self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}")
+        self.set_text(self.tab_title, f"{world.mode_name()}   {int(t) // 60:02d}:{int(t) % 60:02d}")
         koth = world.mode == "koth"
         if world.mode == "ctf":                      # Team, Flaggen geholt / zurückgebracht
             s0, s1 = world.team_score[0], world.team_score[1]
-            self.set_text(self.tab_title, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}"
+            self.set_text(self.tab_title, f"{world.mode_name()}   {int(t) // 60:02d}:{int(t) % 60:02d}"
                                           f"      BLAU {s0} : {s1} ROT")
             heads = ["#", "Spieler", "Team", "Kills", "Tode", "Flaggen", "Zurück"]
             rows = sorted(world.ranking()[:8], key=lambda p: (world.team_of.get(p.pid, 9),))
@@ -120401,8 +120426,8 @@ class Game(ShowBase):
         pl, world = self.player, self.world
         if not alt and pl.hp > 0 and world.phase == "play" and world.strike == 0:
             r = world.nearest_use(pl)
-            if r is not None and r[0] == "button" and (not world.exp or (
-                    world.toma_ready() and world.toma_lock.get(self.my_id, 0.0) <= 0)):   # Tomahawk: erst Ziel auf der Karte wählen
+            if r is not None and r[0] == "button" and (
+                    world.toma_ready() and world.toma_lock.get(self.my_id, 0.0) <= 0):   # Tomahawk: erst Ziel auf der Karte wählen
                 self.open_strike_map()
                 return
             if r is None:                                   # nichts zu benutzen: Schlag mit der Waffe
@@ -122239,12 +122264,7 @@ class Game(ShowBase):
             elif kind == "reload":
                 pass
             elif kind == "strikeready":
-                if self.world.exp:
-                    self.toast("Tomahawk ist wieder verfügbar - irgendwo fährt eine Säule hoch", (1, 0.45, 0.35), 3.5)
-                else:
-                    self.feed_add("Der Tomahawk ist wieder einsatzbereit")
-            elif kind == "timer":
-                pass                      # kein Eintrag im Ereignis-Feed: die Zeit steht im Hinweis am Zeitwahl-Gerät
+                self.toast("Tomahawk ist wieder verfügbar - irgendwo fährt eine Säule hoch", (1, 0.45, 0.35), 3.5)
             elif kind == "respawn":
                 if e[1] == self.my_id:
                     self.apply_respawn(e[2], e[3])
@@ -123263,7 +123283,7 @@ class Game(ShowBase):
         zone = ""
         if world.mode == "koth" and pl.hp > 0 and world.in_zone(pl):
             zone = "   IN DER BURG  +1/s"
-        self.set_text(self.timer_text, f"{MODE_NAMES[world.mode]}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
+        self.set_text(self.timer_text, f"{world.mode_name()}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
         # Killfeed (oben links)
         self.feed = [f for f in self.feed if now - f[1] < FEED_T][-FEED_N:]
         self.set_text(self.feed_text, "\n".join(f[0] for f in self.feed))
@@ -123336,13 +123356,11 @@ class Game(ShowBase):
                     prompt = "F   aussteigen" if o.ground and o.speed < 4.0 else ""
                 elif kind == "exit_turret":
                     prompt = "F   Geschütz verlassen      Linke Maus schiessen   Rechte Maus Zoom"
-                elif kind == "timer":
-                    prompt = f"F   Tomahawk-Countdown ändern: {int(world.strike_dur)} s"
                 elif kind == "button":
-                    lock_ = world.toma_lock.get(self.my_id, 0.0) if world.exp else 0.0
+                    lock_ = world.toma_lock.get(self.my_id, 0.0)
                     if lock_ > 0:
                         prompt = f"Tomahawk: für dich noch {int(math.ceil(lock_))} s gesperrt (du hast ihn zuletzt ausgelöst)"
-                    elif world.exp and not world.toma_ready():
+                    elif not world.toma_ready():
                         prompt = "Tomahawk-Säule fährt hoch ..."
                     elif world.strike == 2:
                         prompt = (f"Tomahawk lädt nach: noch {int(math.ceil(world.strike_wait))} s"
@@ -124283,7 +124301,7 @@ class Game(ShowBase):
         self.toma_rk = None
         self.toma_trail, self.toma_trail_t, self.toma_whistled = [], 0.0, False
         self.toma_seen = (-2, -2)
-        if self.world.toma_spots:                         # Experimental: Tomahawk-Säulen (sonst der Knopf im Kommandoraum)
+        if self.world.toma_spots:                         # Tomahawk-Säulen
             root, col, knob, beam = build_column_model()
             root.reparentTo(self.render)
             root.hide()
