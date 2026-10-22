@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## Neue Runde mit Ausrüstungswahl, Schaden und Netz modusunabhängig (2026-10-23)
+- GEÄNDERT Nach dem Rundenende landen alle Spieler beim Start der nächsten Runde im Ausrüstungsmenü und drücken selbst auf Spawn (Experimental: Pistole, ebenfalls mit Spawn-Knopf).
+- GEFIXT Die Maus bleibt im Rundenende-Menü sichtbar.
+- GEÄNDERT Schadensmodell: Eigenbeschuss-Sperre hängt nicht mehr am Modus, sondern nur an Teams (`allied`). Sonst gab es im Schadenscode keine Modusabfrage.
+- GEÄNDERT Netz: Snapshot-Format, Rundenstatistik und Tomahawk-Meldungen sind für alle Modi gleich (CTF-Block immer enthalten, `tb` immer). **NET_VERSION 42**: alte Clients können nicht mehr beitreten.
+
 ## Tomahawk-Säulen in allen Modi, Experimental = Deathmatch mit Pistole (2026-10-23)
 - GEÄNDERT **Experimental** ist ein eigener, gleichberechtigter Modus: Deathmatch, nur mit Pistolenstart. Die Untermodus-Wahl (KotH/DM) entfällt.
 - NEU **Tomahawk-Säulen in KotH, DM, CTF und Experimental**: der Knopf im Kommandoraum samt Zeitwahl-Gerät ist entfernt. Eine Säule fährt an einem freien, ebenen Ort auf (Orte pro Karte automatisch aus den Startpunkten gewählt, auf Host und Mitspielern gleich; eine Karte kann sie mit `meta.toma` vorgeben), Ziel und Countdown wählt man auf der Zielkarte, wer auslöst ist 5 min gesperrt, danach fährt woanders eine neue hoch. CTF startet mit Tomahawk nun ebenfalls an.

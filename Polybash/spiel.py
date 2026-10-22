@@ -319,7 +319,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 41         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
+NET_VERSION = 42         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
 BUILD = 173               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -5323,9 +5323,9 @@ class World:
             return
         if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
             return
-        if (self.mode == "ctf" and not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
+        if (not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
                 and attacker != pl.pid and self.allied(attacker, pl.pid)):
-            return                                       # Eigenbeschuss aus - Teamkameraden nehmen keinen Schaden
+            return                                       # Teams (nur wo es welche gibt): Eigenbeschuss aus
         instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
         if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
             absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
@@ -7749,8 +7749,7 @@ class World:
             st = p.stats
             out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
                         "score": round(p.score, 1), "mode": self.mode,
-                        "team": self.team_of.get(p.pid, -1) if self.mode == "ctf" else -1,     # 11: CTF
-                        "ts": list(self.team_score) if self.mode == "ctf" else None,
+                        "team": self.team_of.get(p.pid, -1), "ts": list(self.team_score),
                         "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
         return out
 
@@ -18282,7 +18281,7 @@ class HostSession:
                 "k": w.kills, "ev": self.events}
         if self.snap_n % SB_EVERY == 1:                  # Scoreboard-Werte (Tab) - selten genügt
             snap["sb"] = [[p.pid] + list(stat_summary(p)) + list(ctf_summary(p)) for p in w.players.values()]
-        if w.mode == "ctf":                              # CTF: Teampunkte, Flaggen, Teams
+        if True:                                         # Teampunkte, Flaggen, Teams (in Modi ohne Teams leer) - Format modusunabhängig
             snap["ctf"] = [list(w.team_score),
                            [[f.fid, f.team, FLAG_STATES.index(f.state), f.carrier, r2(f.x), r2(f.y), r2(f.z),
                              r1(f.drop_t)] for f in w.flags],
@@ -116721,7 +116720,7 @@ class Game(ShowBase):
         w = self.world
         host = self.net_mode == "host"
         pls = sorted(w.players.values(), key=lambda p: p.pid)
-        self.set_text(ui["info"], f"{MODE_NAMES.get(w.mode, w.mode)}   -   {len(pls)} / {MAX_PLAYERS} Spieler   -   "
+        self.set_text(ui["info"], f"{w.mode_name()}   -   {len(pls)} / {MAX_PLAYERS} Spieler   -   "
                                   f"{int(w.limit // 60)} Minuten")
         for i, (nm, tg) in enumerate(ui["rows"]):
             if i < len(pls):
