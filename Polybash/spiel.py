@@ -245,13 +245,50 @@ N_TITAN = 2              # Titan (Boss): höchstens so viele gleichzeitig (10g: 
 # Titan A im Nordwest-Viertel, Titan B im Südost-Viertel bei der Landebahn. Ohne Aggro bleiben sie in ihrem Revier.
 TITAN_HOMES = ((-95.0, 95.0, 55.0), (95.0, -105.0, 50.0))
 
-TITAN_PING_ERR = 5.0     # 10g: Titan/Koloss angeschossen: Ping auf den Schützen, so ungenau (m) - egal wie weit weg
+TITAN_PING_ERR = 0.0     # 10g: Titan/Koloss angeschossen: Ping auf den Schützen, so ungenau (m); 13b: exakt (vorher 5)
 
-MOB_HIT_POS_ERR = 7.0    # 10g: andere Monster angeschossen: laufen zur Stelle des Schützen beim Schuss (so ungenau, m)
+MOB_HIT_POS_ERR = 0.0    # 10g: andere Monster angeschossen: zur Stelle des Schützen (so ungenau, m); 13b: exakt (vorher 7)
+MOB_NOISE_FAR = 40.0     # 13b: weiter als so viele m vom Geräusch / Schützen: erst nur bis auf MOB_NOISE_NEAR heran
+MOB_NOISE_NEAR = 20.0    # 13b: (Zwischenziel auf der Linie zur Quelle, laufend nachgeführt), ab MOB_NOISE_FAR direkt
+                         #      auf den genauen Punkt (Pin) des Geräuschs bzw. des Schützen
+MOB_BAR_SHOW_T = 1.5     # 13c: Monster-Lebensbalken nach einem Treffer so viele s voll sichtbar ...
+MOB_BAR_FADE_T = 0.5     # 13c: ... und blendet dann in so vielen s sanft aus (unsichtbar bis zum nächsten Treffer)
 
 HOME_RETURN_K = 1.0      # 10g: Tempo-Faktor (auf "speed") beim Rückweg ins Revier
 
-TITAN_RESPAWN = 300.0    # s nach dem Tod, bis ein neuer Titan auftaucht
+# 13f: Boss-Respawn getrennt nach Art: Ein toter Koloss/Titan kommt NICHT einzeln wieder. Erst wenn der letzte lebende
+# seiner Art getötet wurde, beginnt der Zyklus dieser Art: nach BOSS_WAVE_DELAY s buddelt sich der erste am Kartenrand
+# (BOSS_EDGE_BAND m vom Rand) aus dem Boden (BOSS_DIG_T s, unverwundbar), danach alle BOSS_WAVE_GAP s der nächste, bis
+# wieder so viele da sind wie beim Rundenstart. Kolosse und Titanen haben je einen eigenen Zähler.
+BOSS_KINDS = ("colossus", "titan")
+BOSS_WAVE_DELAY = {"colossus": 30.0, "titan": 120.0}
+BOSS_WAVE_GAP = {"colossus": 20.0, "titan": 60.0}
+BOSS_EDGE_BAND = (5.0, 25.0)     # m vom Kartenrand (findet sich dort kein Platz: bis 2,5x so weit innen)
+BOSS_DIG_T = 5.0                 # s: so lange buddelt er sich aus (steigt aus dem Boden, Erde fliegt)
+# 13f: Wegsuche in Gebäude. Liegt das Ziel (Geräuschquelle oder gejagter Spieler) unter einem Dach (Decke höchstens
+# NAV_ROOF_H m darüber), sucht das Monster per A* auf einem NAV_CELL-m-Raster um seine Position einen Weg dorthin - um die
+# Aussenwände herum bis zur Tür/Öffnung - statt stumpf gegen die Wand zu laufen. Höchstens NAV_PLANS Suchen je Bild
+# (Host), je Suche NAV_MAX_NODES Felder; neu geplant, wenn das Ziel um NAV_GOAL_MOVE m wandert oder nach NAV_REPLAN s.
+# Findet sich kein Weg, läuft es so nah heran wie möglich.
+NAV_KINDS = ("grunt", "brute", "huntress")
+NAV_ROOF_H = 8.0
+NAV_CELL = 0.5                   # m: Raster (fein genug, dass in jeder Tür ein Feld frei liegt)
+NAV_MARGIN = 14.0                # m: Suchfeld = Rechteck um Monster und Ziel plus so viel Rand
+NAV_MAX_NODES = 5000
+NAV_MS = 3.0                     # ms Rechenzeit je Bild für alle laufenden Suchen zusammen (verteilt über mehrere Bilder)
+NAV_H_K = 1.6                    # gewichtete Heuristik: schneller, Wege kaum länger
+NAV_GOAL_MOVE = 2.5
+NAV_REPLAN = 4.0
+NAV_REACH = 0.7                  # m: Wegpunkt erreicht
+NAV_RADIUS = 0.25                # m: Prüfradius der Felder (den Körper schiebt push_out durch die Tür)
+# 13f: Titan-Mörserwurf: Sieht der Titan den Spieler nicht direkt (Gebäude dazwischen), bückt er sich, hebt einen Felsen
+# auf und wirft ihn im hohen Bogen über das Hindernis (mortar_* in MOB_KINDS["titan"]). Der Bogen steigt mindestens
+# MORTAR_APEX m über die Wurflinie und überall MORTAR_CLEAR m über die Dächer dazwischen; Ziel ungenau (MORTAR_ERR m).
+MORTAR_APEX = 16.0
+MORTAR_CLEAR = 5.0
+MORTAR_ERR = 2.5
+MORTAR_PICK = 0.42               # Anteil der Ausholzeit: jetzt greift er den Felsen vom Boden ...
+MORTAR_LIFT = 0.62               # ... ab hier richtet er sich mit dem Felsen über dem Kopf auf
 
 # Steinbrocken des Titans
 ROCK_SPEED = 26.0        # m/s waagerecht (gut ausweichbar: ab 20 m gut 1 s Flug, dazu das lange Ausholen)
@@ -319,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 42         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41)
+NET_VERSION = 43         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 173               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -402,19 +439,22 @@ GREN_ANIM_T = 0.6         # Dauer der Wurfanimation (Arm)
 
 
 # --- 10e: Granaten-Arsenal. Arten (Reihenfolge = Index im Netz; neue Arten nur hinten anhängen!)
-GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare", "guard")   # 10h: + Abwehrdrohne
+GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare", "guard",   # 10h: + Abwehrdrohne
+              "jet")                                                                          # 13c: + Jet-Strike
 
 DROP_GK = GREN_KINDS + ("gad:0", "gad:1", "gad:2")     # Art eines Stapel-Drops: Granatenart oder Gadget (Experimental)
 
 GREN_NAMES = {"frag": "Splittergranate", "decoy": "Decoy", "flash": "Blendgranate", "smoke": "Rauchgranate",
-              "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel", "guard": "Abwehrdrohne"}
+              "drone": "Drohnen-Granate", "molotov": "Molotow", "flare": "Airdrop-Fackel", "guard": "Abwehrdrohne",
+              "jet": "Jet-Strike"}
 
 GREN_SHORT = {"frag": "Splitter", "decoy": "Decoy", "flash": "Blend", "smoke": "Rauch", "drone": "Drohne",
-              "molotov": "Molotow", "flare": "Airdrop", "guard": "Abwehr"}
+              "molotov": "Molotow", "flare": "Airdrop", "guard": "Abwehr", "jet": "Jet"}
 
 GREN_COL = {"frag": (0.30, 0.40, 0.20), "decoy": (0.80, 0.68, 0.20), "flash": (0.78, 0.80, 0.84),
             "smoke": (0.42, 0.46, 0.50), "drone": (0.58, 0.26, 0.85), "molotov": (0.45, 0.62, 0.30),
-            "flare": (0.85, 0.15, 0.12), "guard": (0.92, 0.52, 0.10)}   # Erkennungsfarbe (Modell, HUD-Symbol)
+            "flare": (0.85, 0.15, 0.12), "guard": (0.92, 0.52, 0.10),
+            "jet": (0.16, 0.17, 0.19)}   # Erkennungsfarbe (Modell, HUD-Symbol); 13c: Jet-Strike schwarz
 
 GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
              "decoy": "Landet und macht dort Schusslärm - Monster laufen hin. Kein Schaden",
@@ -423,20 +463,21 @@ GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
              "drone": "Setzt eine eigene lila Drohne frei, die Gegner betäubt",
              "molotov": "Brennende Fläche beim Aufprall (nicht im Wasser)",
              "flare": "Rote Fackel: ein Frachtflugzeug wirft dort eine Kiste ab",
-             "guard": "Orange Abwehrdrohne: umkreist dich und zerstört Drohnen in 15 m (auch die, die dein Fahrzeug lahmlegen)"}
+             "guard": "Orange Abwehrdrohne: umkreist dich und zerstört Drohnen in 15 m (auch die, die dein Fahrzeug lahmlegen)",
+             "jet": "Roter Rauch: ein Jet wirft dort eine Bombe ab - 15 m Radius, im Zentrum tödlich. Abstand halten!"}
 
 GREN_LOOT_N = {"decoy": 3, "frag": 2, "flash": 2, "smoke": 2, "drone": 1, "molotov": 2, "flare": 3,
-               "guard": 1}                 # Stück je Beute (10h: Abwehrdrohne 1)
+               "guard": 1, "jet": 1}       # Stück je Beute (10h: Abwehrdrohne 1; 13c: Jet-Strike kommt nur vom Titan)
 
 GREN_LOOT_W = {"common": {"frag": 30, "decoy": 24, "flash": 18, "smoke": 18, "molotov": 10, "drone": 0, "flare": 0,
                           "guard": 0},
-               "rare":   {"frag": 22, "decoy": 12, "flash": 18, "smoke": 14, "molotov": 18, "drone": 10, "flare": 6,
-                          "guard": 8},
-               "gold":   {"frag": 14, "decoy": 6, "flash": 12, "smoke": 10, "molotov": 18, "drone": 20, "flare": 20,
-                          "guard": 14}}
+               "rare":   {"frag": 22, "decoy": 12, "flash": 18, "smoke": 14, "molotov": 18, "drone": 18, "flare": 6,
+                          "guard": 0},
+               "gold":   {"frag": 14, "decoy": 6, "flash": 12, "smoke": 10, "molotov": 18, "drone": 34, "flare": 20,
+                          "guard": 0}}   # 13f: keine Abwehrdrohne mehr (ihr Anteil ging an die lila Drohne)
 
 GREN_FUSE_K = {"frag": GREN_FUSE, "decoy": 1.0, "flash": 1.6, "smoke": 1.4, "drone": 0.9, "molotov": 6.0,
-               "flare": 1.2, "guard": 0.8}   # s bis zur Wirkung (Molotow: beim Aufprall, spätestens dann)
+               "flare": 1.2, "guard": 0.8, "jet": 1.2}   # s bis zur Wirkung (Molotow: beim Aufprall, spätestens dann)
 
 GREN_SPEED_MIN = 8.0      # m/s: kurz getippt (ca. 6 m weit)
 
@@ -482,9 +523,25 @@ SMOKE_FADE_T = 4.0        # ... und löst sich so lange auf
 
 SMOKE_BLOCK_M = 1.4       # m Rauch auf einer Sichtlinie: Monster (und 10h-Sichtung) sehen nicht hindurch
 
-PDRONE_LIFE = 35.0        # s Lebensdauer der eigenen (lila) Drohne
+PDRONE_LIFE = 300.0       # s Lebensdauer der eigenen (lila) Drohne (13d: 5 min, vorher 35 s; HUD-Uhr läuft linear ab)
 
+PDRONE_ONE_PER = "spiel"  # 13f: höchstens 1 aktive lila Drohne - "spiel": im ganzen Spiel, "spieler": je Spieler; eine weitere
+                          # Drohnen-Granate frischt nur die Restzeit der aktiven auf 100 % auf (Besitzer bleibt)
 PDRONE_STUN = (0.8, 1.6)  # s Betäubung durch die eigene Drohne (Monster-Drohne: STUN_MIN..MAX)
+PDRONE_HUNT_R = 30.0      # 13d: feindliche Drohnen / grosse Monster so nah an der lila Drohne werden gejagt (m)
+PDRONE_HUNT_SPEED = 8.0   # 13d: ... so schnell fliegt sie dann hin (m/s; Monster-Drohne fliegt 5,5)
+PDRONE_DRONE_ZAP_R = 4.0  # 13d: aus so viel m zerstört ihr Stromschlag eine feindliche Drohne (ohne Beute)
+PDRONE_DRONE_CD = 1.5     # 13d: ... danach so viele s Pause
+PDRONE_BOSS_KINDS = ("titan", "colossus")   # 13d: diese grossen Monster betäubt sie (wie Spieler)
+PDRONE_BOSS_OWNER_R = 35.0  # 13d: ... aber nur, wenn das Monster so nah am Besitzer ist (brenzlige Lage, m)
+PDRONE_BOSS_ZAP_R = 9.0   # 13d: ... aus so viel m (Abstand zur Oberfläche des Monsters)
+PDRONE_BOSS_STUN = 3.0    # 13d: ... so viele s steht das Monster still
+PDRONE_BOSS_IMMUNE = 6.0  # 13d: ... danach so viele s immun gegen die lila Drohne (kein Dauer-Stun)
+PDRONE_BOSS_CD = 10.0     # 13d: ... und die Drohne braucht so viele s, bis sie wieder betäuben kann
+PDRONE_HUD_SEG = 120      # 13d: Segmente der Uhr im Drohnen-HUD (5 min -> eins je 2,5 s, das letzte schrumpft stufenlos)
+PDRONE_HUD_X, PDRONE_HUD_Z = -0.15, 0.62   # 13d: Mitte des Drohnen-Kästchens unten rechts (über Tacho/Munition)
+PDRONE_HUD_S = 0.2        # 13d: Kantenlänge des Kästchens
+PDRONE_HUD_GHOST = 0.32   # 13d: Deckkraft des Drohnen-Modells im Hintergrund
 
 GDRONE_R = 15.0           # 10h: Abwehrdrohne - zerstört Drohnen so nah am Besitzer (m; 10-20)
 
@@ -529,6 +586,26 @@ AIR_PLANE_ALT = 105.0     # ... in dieser Höhe (über dem Gebirge)
 AIR_FALL_V = 5.5          # m/s sinkt die Kiste am Fallschirm
 
 AIR_KINDS = ("common", "rare", "gold")   # ein Satz Fackeln = je eine braune, blaue, goldene Kiste (zufällige Reihenfolge)
+# 13c: Jet-Strike-Granate. Nur der Titan lässt sie fallen (JET_DROP_CHANCE, JET_DROP_N Stück); in keiner Kiste, keinem
+# Airdrop und keiner anderen Monster-Beute. Wurf: rote Rauchfackel wie beim Airdrop; nach JET_DELAY s fliegt ein Jet
+# (JET_SPEED, JET_ALT) über die Fackel und klinkt JET_RELEASE m vorher eine Bombe aus, die JET_BOMB_T s später genau an
+# der Fackel einschlägt. Wirkung: halber Tomahawk-Radius (JET_R = STRIKE_R / 2 = 15 m). Im Zentrum (JET_KILL_R) sofort
+# tödlich (wie die Tomahawk), dahinter höchstens JET_DMG, nach aussen schnell abnehmend: JET_DMG x (1 - t)^JET_FALLOFF.
+# Wer im Tunnel ist, überlebt; ausserhalb des Zentrums schützen Wände/Decken (wie bei Explosionen).
+JET_DROP_CHANCE = 1.0      # Titan erlegt: so wahrscheinlich liegt ein Jet-Strike in der Beute (Maximalwert) ...
+JET_DROP_N = (1, 3)        # ... mit so vielen Stück (zufällig)
+JET_DELAY = 5.0            # s nach dem Zünden der Fackel startet der Jet ...
+JET_LEAD = 900.0           # ... so weit (m) vor der Fackel ...
+JET_SPEED = 150.0          # ... mit so viel m/s (540 km/h) ...
+JET_ALT = 120.0            # ... in dieser Höhe (über dem Gebirge)
+JET_BOMB_T = 2.6           # s Fallzeit der Bombe
+JET_RELEASE = JET_SPEED * JET_BOMB_T * 0.5   # m vor der Fackel wird ausgeklinkt (die Bombe wird im Fall langsamer)
+JET_KILL_R = 2.5           # m: im Zentrum sofort tödlich
+JET_DMG = 180.0            # Schaden direkt ausserhalb des Zentrums (Spieler haben 100 HP) ...
+JET_FALLOFF = 2.0          # ... fällt mit (1 - t)^2 schnell ab (t = 0 am Zentrum, 1 am Rand)
+JET_DZ = 12.0              # m: so weit ober-/unterhalb des Einschlags wirkt sie
+JET_VEH_K = 1.5            # Faktor auf den Schaden an Fahrzeugen und Helikoptern
+WI_JET = -21               # "Waffe" in der Kill-Anzeige
 
 # --- Fahrzeug (Geländewagen)
 VEH_HP = 220.0
@@ -562,37 +639,31 @@ STRIKE_T = 10.0          # Countdown in s (Standard)
 
 TOMA_DURATIONS = (10, 20, 30, 60)   # Countdown-Länge, wird auf der Zielkarte gewählt (mind. 10 s)
 STRIKE_R = 30.0          # King of the Hill: doppelter Radius der Zone
+JET_R = STRIKE_R / 2     # 13c: Wirkungsradius des Jet-Strikes (halber Tomahawk, siehe JET_*)
 STRIKE_CD = 120.0        # Standard-Abklingzeit des Tomahawk (s); 0 = nur einmal pro Runde
 STRIKE_CD_CHOICES = (0, 30, 60, 120, 180, 300)   # im Host-Menü einstellbar
 
 
-# Der Tomahawk-Knopf sitzt oben auf einer Säule, die an einem von vielen gut sichtbaren Orten aus dem Boden fährt.
-# Viele Orte, dafür nicht versteckt: auf Mauern, Türmen, Dächern, Plattformen und auf freien Plätzen.
-# (dx, dy, z) relativ zur Kartenmitte; z = Standhöhe (erhöhter Ort) oder None (am Boden, Platz wird frei gesucht).
+# 13a: Feste Orte der Tomahawk-Säule auf Polytown (maps/polytown.ptmap): acht Punkte auf der Kreisstraße, die in
+# 55 m Abstand um die Burg in der Kartenmitte läuft (gleichmässig alle 45 Grad). Je Eintrag: (x, y, Standhöhe, Suchradius,
+# Name) in Weltkoordinaten (0..300 m, +y = Norden). Standhöhe None = Boden, sonst die Ebene, auf der die Säule steht. Um den
+# Ankerpunkt sucht build_toma_spots_fixed in Ringen den nächsten freien, ebenen Platz - nur Kartengeometrie, kein Zufall:
+# gleiches Ergebnis bei allen Spielern. Andere Karten: build_toma_spots wählt die Orte automatisch.
 TOMA_SPOTS = (
-    (1.5, -1.0, 6.0),       # Bergfried-Dach mitten in der King-of-the-Hill-Zone (Treppe)
-    (-20.2, 3.0, 5.0),      # Burg: Wehrgang West (Treppe im Hof)
-    (20.2, -3.0, 5.0),      # Burg: Wehrgang Ost
-    (-21.0, -21.0, 8.0),    # Burg: Eckturm Südwest (Treppe vom Wehrgang)
-    (21.0, 21.0, 8.0),      # Burg: Eckturm Nordost
-    (-57.1, 56.8, 9.0),     # Feldturm Nordwest (lange Treppe)
-    (57.1, -59.2, 9.0),     # Feldturm Südost
-    (-74.0, -36.0, 3.5),    # Dach der Bunkerstellung (Sandsack-Rampe)
-    (81.0, 39.5, 2.4),      # Heuboden der Scheune
-    (2.0, 87.0, 3.3),       # Ruinendorf, auf den Mauerresten
-    (52.0, 74.0, 2.6),      # Dach eines Unterstands (über die Sandsäcke)
-    (-52.0, -70.0, 2.6),    # Dach eines Unterstands
-    # Bodenorte nur auf freien Flächen (TOMA_GROUND_CLEAR): nicht auf Rollbahn oder Helipads, nicht an Engstellen
-    (40.0, -40.0, None),    # freies Feld Südost
-    (44.0, 14.0, None),     # freies Feld östlich der Burg
-    (60.0, -76.0, None),    # Feld östlich hinter der Rollbahn
-    (-80.0, -56.0, None),   # Feld Südwest
-    (-64.0, 76.0, None),    # Feld Nordwest
-    (-40.0, 52.0, None),    # Wiese Nordwest
-    (4.0, 60.0, None),      # Wiese nördlich der Burg
-    (76.0, 56.0, None),     # Feld Nordost
+    (205.0, 150.0, None, 4.0, "Kreisstraße Ost"),
+    (188.9, 188.9, None, 4.0, "Kreisstraße Nordost"),
+    (150.0, 205.0, None, 4.0, "Kreisstraße Nord"),
+    (111.1, 188.9, None, 4.0, "Kreisstraße Nordwest"),
+    (95.0, 150.0, None, 4.0, "Kreisstraße West"),
+    (111.1, 111.1, None, 4.0, "Kreisstraße Südwest"),
+    (150.0, 95.0, None, 4.0, "Kreisstraße Süd"),
+    (188.9, 111.1, None, 4.0, "Kreisstraße Südost"),
 )
-
+TOMA_SPOT_STEP = 0.75        # m: Abstand der Suchringe um den Ankerpunkt
+TOMA_SPOT_LEVEL_TOL = 0.6    # m: so weit darf der gefundene Boden von der verlangten Standhöhe abweichen
+TOMA_SPOT_FLAT = 0.35        # m: höchstens so viel Höhenunterschied in 0,9 m Umkreis (keine Kante, keine Stufe)
+TOMA_SPOT_HEAD = 1.8         # m: so viel Platz nach oben (Säule 1,5 m)
+TOMA_SPOT_KEEP = 6.0         # m Abstand zu Fahrzeug-Startplätzen und (zusätzlich zu HELI_PAD_R) zu Helipads
 TOMA_SPOT_GAP = 30.0     # m: so weit liegen die Säulen-Orte mindestens auseinander
 TOMA_SPOT_MAX = 14       # höchstens so viele Orte je Karte
 TOMA_GROUND_CLEAR = 9.0  # m: so viel Platz brauchen Bodenorte zu Wänden/Deckung (keine Engstellen für Fahrzeuge)
@@ -609,6 +680,20 @@ TOMA_SHOW_PLAYERS = False   # Zielkarte zeigt die Positionen der anderen Spieler
 TOMA_PLAYER_CD = 300.0      # s: wer den Tomahawk ausgelöst hat, kann ihn so lange selbst nicht mehr auslösen
 
 TOMA_RESPAWN_JITTER = 0.30  # Abklingzeit bis zur nächsten Säule zufällig +- 30 %
+# 13a: Tomahawk-Radar (Battle-Royale-Kreis). Steht die Säule TOMA_RADAR_START s unbenutzt, zeigen Minimap und Karte (M)
+# allen Spielern einen halbtransparenten gelben Suchkreis, der die Säule enthält, ihre Lage aber verschleiert (Mitte
+# zufällig versetzt, TOMA_RADAR_KEEP). Alle TOMA_RADAR_STEP s halbiert sich der Radius (ein Viertel der Fläche), der neue
+# Kreis liegt ganz im alten. Wäre er nicht grösser als die King-of-the-Hill-Zone (TOMA_RADAR_PIN_R), wird er zum Pin
+# (gelb/rot/schwarz, Raketensymbol) genau auf der Säule. Standard: 5:00 -> 120 m, 6:00 -> 60 m, 7:00 -> 30 m, 8:00 -> Pin.
+TOMA_RADAR = True
+TOMA_RADAR_START = 300.0          # s nach dem Auftauchen der Säule (5 min)
+TOMA_RADAR_STEP = 60.0            # s je Stufe (1 min)
+TOMA_RADAR_R0 = 120.0             # m Startradius (~ halbe Fläche der 300-m-Karte)
+TOMA_RADAR_PIN_R = STRIKE_R / 2   # m: Radius der King-of-the-Hill-Zone (STRIKE_R ist ihr doppelter Radius)
+TOMA_RADAR_KEEP = 0.85            # die Säule liegt höchstens so weit (Anteil des Radius) von der Kreismitte
+TOMA_RADAR_COL = (1.0, 0.82, 0.15)   # Farbe des Suchkreises (gelb)
+TOMA_RADAR_ALPHA = 0.16           # Deckkraft der Kreisfläche (der Rand ist kräftiger)
+TOMA_RADAR_TOAST = True           # Hinweis in der Bildmitte, wenn der Kreis erscheint, schrumpft oder zum Pin wird
 CASTLE_HALF = 22.0       # Deathmatch: alles innerhalb der Burgmauern
 TO = CENTER - 80.0       # Verschiebung der Tunnel-Koordinaten (entworfen für eine 160-m-Karte)
 
@@ -1121,10 +1206,21 @@ LOOT_ATT_TABLES = {
 }
 
 # --- 10b: Kisten pausiert, Beute kommt von Monstern
-MOB_LOOT = {"grunt": ("common", 2), "huntress": ("common", 2), "brute": ("rare", 2), "drone": ("rare", 2),
-            "colossus": ("gold", 2), "titan": ("gold", 6),
+MOB_LOOT = {"grunt": ("common", 3), "huntress": ("common", 3), "brute": ("rare", 3), "drone": ("rare", 2),
+            "colossus": ("gold", 4), "titan": ("gold", 6),
             "critter": ("gold", 1)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl); 10g: Hase 1 Teil gold + Buff
 
+# 13a: gestaffelte Granaten-Pools je Monsterart (Gewichte; ersetzt für Monster-Beute GREN_LOOT_W[Stufe], fehlt die Art,
+# gilt weiter die Stufe). MOB_GREN_SURE: so viele Teile der Beute sind sicher Granaten (verschiedene Arten), die
+# übrigen Teile kommen wie bisher aus den anderen Kategorien. Zombies/Jägerin/Brute/Koloss haben dafür je 1 Teil mehr.
+MOB_GREN_W = {
+    "grunt":    {"frag": 28, "decoy": 24, "flash": 24, "smoke": 24},          # einfache Zombies: nur Standard-Granaten
+    "huntress": {"frag": 28, "decoy": 24, "flash": 24, "smoke": 24},
+    "brute":    {"frag": 8, "decoy": 4, "flash": 5, "smoke": 5, "molotov": 10, "drone": 42, "flare": 26},   # 13f: ohne
+    "colossus": {"frag": 3, "decoy": 1, "flash": 2, "smoke": 2, "molotov": 6, "drone": 50, "flare": 36},   # Abwehrdrohne
+    "titan":    {"frag": 3, "decoy": 1, "flash": 2, "smoke": 2, "molotov": 6, "drone": 50, "flare": 36},
+}
+MOB_GREN_SURE = {"grunt": 1, "huntress": 1, "brute": 1, "colossus": 1, "titan": 2}
 MOB_LOOT_LIFE = 45.0           # s liegt Monster-Beute (dann verschwindet sie)
 
 MOB_LOOT_R = 1.1               # m: so weit verteilt um die Stelle des Monsters (Titan: x2)
@@ -1471,7 +1567,7 @@ def weapon_name(wi):
     return {WI_GRENADE: "Granate", WI_VEHICLE: "Fahrzeug", WI_TURRET: "Geschütz",
             WI_TOMAHAWK: "Tomahawk", WI_HELI: "Helikopter",
             WI_FLAK: "Flak", WI_FALL: "Sturz", WI_C4: "C4", WI_CLAY: "Claymore", WI_MELEE: "Nahkampf",
-            WI_MOLOTOV: "Molotow"}.get(wi, "?")
+            WI_MOLOTOV: "Molotow", WI_JET: "Jet-Strike"}.get(wi, "?")
 
 def strike_cd_label(cd):
     cd = int(cd)
@@ -1510,7 +1606,8 @@ MOB_HIT_DOWN = 0.5         # m: ... und so weit unter die eigenen Füsse (Spiele
 # --- 7a: Titan (und Koloss) bleiben nicht mehr hängen
 TITAN_PASS_PROPS = ("tree", "rock")   # durch diese Hindernisse läuft der Titan einfach durch (Gebäude/Mauern nicht)
 
-MOB_STUCK_KINDS = ("titan", "colossus", "drone", "pdrone", "gdrone")   # diese Arten erkennen, wenn sie festhängen ...
+MOB_STUCK_KINDS = ("titan", "colossus", "drone", "pdrone", "gdrone",   # diese Arten erkennen, wenn sie festhängen ...
+                   "grunt", "brute", "huntress")                      # 13b: auch Zombies/Brute/Jägerin (Zäune)
 
 MOB_STUCK_T = 2.5          # s ohne Fortschritt -> festgefahren ...
 
@@ -1558,7 +1655,8 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     "titan": dict(hp=4500.0, speed=1.4, wander=0.45, dmg=160.0, cooldown=3.2, windup=1.6, recover=1.2,
                   aggro=45.0, scale=7.0, hear=0.8, slam_windup=3.2, slam_r=11.0, slam_dmg=150.0,
                   slam_kill=4.5, slam_chance=0.3, slam_crowd=12.0,
-                  rock_min=20.0, rock_max=70.0, rock_windup=2.4, rock_recover=1.4),
+                  rock_min=20.0, rock_max=70.0, rock_windup=2.4, rock_recover=1.4,
+                  mortar_min=14.0, mortar_max=85.0, mortar_windup=3.4, mortar_recover=1.3),   # 13f: Mörserwurf
     # Elektro-Drohne: schwebt in fly m Höhe (7a: je Drohne DRONE_FLY_MIN..MAX, steigt zu höheren Zielen), schiesst aus bis zu range m (freie Sicht nötig); kein Schaden,
     # betäubt für STUN_MIN..STUN_MAX s. Wenig HP, aber klein (hit_r/hit_h) und in der Luft.
     # 9b: DRONE_SIZE-fach so gross (Modell über scale, Trefferzone hit_r/hit_h mitskaliert).
@@ -1583,6 +1681,14 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
 
 TEMP_MOBS = tuple(k for k, v in MOB_KINDS.items() if v.get("temp"))   # 10e: keine Monster (kein Respawn, keine Beute)
 
+# 13b: Titan-Spezialfähigkeit: Er steigt über Objekte, die nicht höher als seine Beine sind (Modell: Beine = 0,75 x
+# Grösse, also 0,75 x 7 = 5,25 m) und frei stehen (nichts liegt darauf - eine Hauswand unter einem Dach also nicht):
+# Zäune am Flugplatz, Bänke, Schilder, Mäuerchen, Container.
+MOB_LEG_K = 0.75                 # Beinlänge im Monster-Modell (Rumpf sitzt auf 0,75 x Grösse)
+TITAN_LEG_H = MOB_LEG_K * MOB_KINDS["titan"]["scale"]
+TITAN_LOW_BASE = 0.6             # m: Unterkante höchstens so hoch über dem Boden unter dem Titan
+TITAN_ROOF_GAP = 3.0             # m: liegt bis so hoch über der Oberkante etwas auf (Quader / Decke), ist es Teil eines Hauses ...
+TITAN_COVER_K = 0.25             # ... wenn es mindestens diesen Anteil der Grundfläche überdeckt (Torbogen am Zaunende: nicht)
 ZAP_KINDS = ("drone", "pdrone")                                       # 10e: Drohnen, die mit Stromstössen betäuben
 
 DRONE_KINDS = ("drone", "pdrone", "gdrone")                           # 10h: alle Drohnen (Modell, Surren, Abwehr-Ziele)
@@ -2248,6 +2354,24 @@ class AirDrop:
         self.px = self.py = self.pz = 0.0                # Flugzeug
         self.cx, self.cy, self.cz = x, y, AIR_PLANE_ALT  # Kiste
         self.dist = 0.0                                  # zurückgelegter Weg des Flugzeugs
+        self.jet = False                                 # 13c: Jet-Strike (Jet + Bombe statt Frachtflugzeug + Kiste)
+
+    def lead(self):
+        return JET_LEAD if self.jet else AIR_PLANE_LEAD
+
+    def speed(self):
+        return JET_SPEED if self.jet else AIR_PLANE_SPEED
+
+    def plane_z(self):
+        return max(JET_ALT, self.fz + 60.0) if self.jet else max(AIR_PLANE_ALT, self.fz + 60.0)
+
+    def bomb_pos(self):
+        """13c: Lage der fallenden Bombe (aus dem Weg des Jets berechnet - Host und Mitspieler gleich) -> (x, y, z, u)."""
+        u = clampf((self.dist - (JET_LEAD - JET_RELEASE)) / JET_SPEED / JET_BOMB_T, 0.0, 1.0)
+        rx, ry = self.fx - math.cos(self.ang) * JET_RELEASE, self.fy - math.sin(self.ang) * JET_RELEASE
+        s = 1.0 - (1.0 - u) ** 2                         # waagerecht: anfangs schnell, dann langsamer
+        z0 = self.plane_z() - 2.0
+        return rx + (self.fx - rx) * s, ry + (self.fy - ry) * s, z0 - (z0 - self.fz) * u * u, u
 
 def smoke_key(origin, p):
     return (int(round((p[0] - origin[0]) / SMOKE_CELL)), int(round((p[1] - origin[1]) / SMOKE_CELL)),
@@ -2502,6 +2626,7 @@ class Mob:
         self.phase = rng.uniform(0, 6.28)
         self.speed_now = 0.0
         self.noise_at = None      # (x, y) eines gehörten Geräuschs, zu dem es hinläuft
+        self.noise_src = None     # 13b: genauer Punkt der Quelle (Geräusch / Schütze) - noise_at folgt ihr (noise_goal)
         self.search_t = 0.0       # restliche Suchzeit am Geräuschort
         self.searching = False    # schon am Geräuschort angekommen?
         self.inv_speed = NOISE_INVESTIGATE   # Tempo-Faktor beim Hinlaufen (Geräusch / Kugel / Treffer)
@@ -2523,8 +2648,8 @@ class Mob:
     def aggressive(self):
         return not MOB_KINDS[self.kind].get("calm", False)
 
-    def on_noise(self, x, y, world):
-        """Ein Geräusch bei (x, y) gehört. Jede Art entscheidet selbst: aggressive laufen hin und suchen,
+    def on_noise(self, x, y, world, z=None):
+        """Ein Geräusch bei (x, y) gehört (13f: z = Höhe der Quelle, für die Wegsuche ins Gebäude). Jede Art entscheidet selbst: aggressive laufen hin und suchen,
         nicht aggressive (calm) fliehen davon weg."""
         if self.state == "dead":
             return
@@ -2533,11 +2658,23 @@ class Mob:
             return
         if self.state in ("chase", "attack") and self.noise_at is None:
             return                                         # jagt schon einen Spieler, den es sieht
-        self.noise_at = (x, y)
+        self.noise_src = (x, y)                            # 13b: Ziel nach der 20-40-m-Regel (noise_goal)
+        self.noise_z = world.height(x, y) if z is None else z - 1.0   # 13f: etwa Fusshöhe an der Quelle
+        self.noise_at = self.noise_goal()
         self.search_t = NOISE_SEARCH_T
         self.searching = False
         self.inv_speed = NOISE_INVESTIGATE
         self.set_travel_budget(x, y)
+
+    def noise_goal(self):
+        """13b: Laufziel zur Quelle noise_src. Weiter als MOB_NOISE_FAR: ein Punkt MOB_NOISE_NEAR vor der Quelle (auf der
+        Linie Monster -> Quelle); näher: genau die Quelle. Wird jedes Bild neu gerechnet, das Ziel rückt also mit."""
+        sx, sy = self.noise_src
+        dx, dy = self.x - sx, self.y - sy
+        d = math.hypot(dx, dy)
+        if d <= MOB_NOISE_FAR:
+            return sx, sy
+        return sx + dx / d * MOB_NOISE_NEAR, sy + dy / d * MOB_NOISE_NEAR
 
     def on_shot(self, world, d, hit=False, shooter=None):
         """Eine Kugel flog nah vorbei / schlug daneben ein (hit=False) oder hat getroffen (hit=True). d = Flug-
@@ -2569,7 +2706,8 @@ class Mob:
             a += math.radians(rng.uniform(-1, 1) * (MOB_HIT_ERR if hit else BULLET_DIR_ERR))
             tx = clampf(self.x + math.cos(a) * dist, lo + 2, WORLD - lo - 2)
             ty = clampf(self.y + math.sin(a) * dist, lo + 2, WORLD - lo - 2)
-        self.noise_at = (tx, ty)
+        self.noise_src = (tx, ty) if (hit and shooter is not None) else None   # 13b: Schütze = genaue Quelle
+        self.noise_at = self.noise_goal() if self.noise_src else (tx, ty)
         self.search_t = MOB_HIT_SEARCH_T if hit else BULLET_SEARCH_T
         self.searching = False
         self.inv_speed = MOB_HIT_SPEED if hit else NOISE_INVESTIGATE
@@ -2635,6 +2773,79 @@ class Mob:
         self.hover = self.z - self.gz
         self.speed_now = step / dt if dt > 0 else 0.0
 
+    def ally_hunt(self, dt, world):
+        """13d: lila Drohne (Drohnen-Granate). Vorrang vor Spielern: feindliche Drohnen in PDRONE_HUNT_R anfliegen und
+        per Stromschlag zerstören (ohne Beute); sonst Titan/Koloss betäuben, wenn sie dem Besitzer näher als
+        PDRONE_BOSS_OWNER_R kommen. -> True, wenn sie gerade jagt (dann hat sie sich selbst bewegt)."""
+        own = getattr(self, "owner", -1)
+        owner = world.players.get(own)
+        if owner is None or owner.hp <= 0:
+            return False
+        tgt, best, boss = None, 1e18, False
+        for o in world.mobs:
+            if o is self or o.state == "dead":
+                continue
+            if o.kind in DRONE_KINDS:
+                ow = getattr(o, "owner", None)
+                if ow is not None and world.allied(ow, own):
+                    continue                               # eigene/verbündete Drohnen bleiben heil
+                is_boss = False
+            elif o.kind in PDRONE_BOSS_KINDS:
+                if getattr(o, "stun_t", 0.0) > 0 or getattr(o, "pstun_lock", 0.0) > 0:
+                    continue
+                if math.hypot(o.x - owner.x, o.y - owner.y) > PDRONE_BOSS_OWNER_R:
+                    continue                               # nur, wenn es für den Besitzer brenzlig wird
+                if self.atk_cd > PDRONE_DRONE_CD:          # nach einem Boss-Stun: erst nach der Pause wieder
+                    continue
+                is_boss = True
+            else:
+                continue
+            d = math.hypot(o.x - self.x, o.y - self.y) - (o.radius if is_boss else 0.0)
+            if d > PDRONE_HUNT_R:
+                continue
+            key = d + (1e6 if is_boss else 0.0)            # Drohnen zuerst, dann Bosse
+            if key < best:
+                tgt, best, boss = o, key, is_boss
+        if tgt is None:
+            return False
+        self.state = "chase"
+        self.noise_at, self.searching, self.noise_src = None, False, None
+        dx, dy = tgt.x - self.x, tgt.y - self.y
+        dh = math.hypot(dx, dy)
+        keep = tgt.radius + PDRONE_BOSS_ZAP_R * 0.6 if boss else 0.0   # Boss: auf Abstand bleiben
+        ox, oy = self.x, self.y
+        if dh > keep + 0.3:
+            step = min(dh - keep, PDRONE_HUNT_SPEED * dt)
+            self.x += dx / dh * step
+            self.y += dy / dh * step
+        if dh > 1e-4:
+            self.turn_toward(dx, dy, dt, 500.0)
+        self.x, self.y = push_out(self.x, self.y, max(self.radius, 0.4), world, self.z, air=True)
+        lo = edge_margin(world)
+        self.x = clampf(self.x, lo, WORLD - lo)
+        self.y = clampf(self.y, lo, WORLD - lo)
+        self.gz = world.height(self.x, self.y)
+        aim_z = tgt.z + (tgt.height * 0.7 if boss else 0.0)  # Boss: auf Kopfhöhe, Drohne: gleiche Höhe
+        want = clampf(aim_z - self.gz, DRONE_FLY_LOW, DRONE_FLY_TOP)
+        self.hover += clampf(want - self.hover, -DRONE_CLIMB * 2.0 * dt, DRONE_CLIMB * 2.0 * dt)
+        self.hover = max(0.3, self.hover)
+        self.z = self.gz + self.hover
+        self.speed_now = math.hypot(self.x - ox, self.y - oy) / dt if dt > 0 else 0.0
+        self.phase += dt * 6.0
+        if boss:
+            cz = clampf(self.z, tgt.z, tgt.z + tgt.height)
+            d = math.dist((self.x, self.y, self.z), (tgt.x, tgt.y, cz)) - tgt.radius
+            ok = d <= PDRONE_BOSS_ZAP_R and self.atk_cd <= 0
+            dst = (tgt.x, tgt.y, cz)
+        else:
+            d = math.dist((self.x, self.y, self.z), (tgt.x, tgt.y, tgt.z))
+            ok = d <= PDRONE_DRONE_ZAP_R and self.atk_cd <= 0
+            dst = (tgt.x, tgt.y, tgt.z)
+        if ok and world.los((self.x, self.y, self.z + 0.2), dst):
+            world.ally_zap(self, tgt, boss)
+            self.atk_cd = PDRONE_BOSS_CD if boss else PDRONE_DRONE_CD
+        return True
+
     def set_travel_budget(self, tx, ty):
         """10g: so lange darf der Weg zum Geräusch/Ping dauern (Häuser, Burgmauern ...) - danach sucht es dort,
         wo es gerade ist, und gibt auf (Titan/Koloss: zurück ins Revier, andere: frei umherlaufen)."""
@@ -2644,12 +2855,16 @@ class Mob:
 
     def windup(self):
         k = MOB_KINDS[self.kind]
+        if self.atk_kind == 3:                         # 13f: Mörserwurf
+            return k["mortar_windup"]
         if self.atk_kind == 2:
             return k["rock_windup"]
         return k["slam_windup"] if self.atk_kind == 1 else k["windup"]
 
     def recover(self):
         k = MOB_KINDS[self.kind]
+        if self.atk_kind == 3:
+            return k.get("mortar_recover", 1.0)
         return k.get("rock_recover", 1.0) if self.atk_kind == 2 else k.get("recover", 0.4)
 
     def needs_check(self, world):
@@ -2713,7 +2928,16 @@ class Mob:
             self.hover = max(0.0, self.hover - 6.0 * dt)  # abgeschossene Drohne fällt herunter
             self.z = self.gz + self.hover
             return
+        if getattr(self, "dig_t", 0.0) > 0:              # 13f: buddelt sich aus dem Boden (steht still, unverwundbar)
+            self.dig_t = max(0.0, self.dig_t - dt)
+            u = 1.0 - self.dig_t / BOSS_DIG_T
+            self.z = self.gz - self.height * (1.0 - u * u * (3.0 - 2.0 * u))
+            self.speed_now = 0.0
+            self.hurt_t = max(0.0, self.hurt_t - dt)
+            return
         rng = world.mrng
+        if getattr(self, "pstun_lock", 0.0) > 0:        # 13d: Schutz vor Dauer-Betäubung durch die lila Drohne
+            self.pstun_lock -= dt
         if getattr(self, "stun_t", 0.0) > 0:            # 7c: Stromstoss - steht still, greift nicht an
             self.stun_t -= dt
             self.speed_now = 0.0
@@ -2724,18 +2948,20 @@ class Mob:
             self.daze_t -= dt
             if self.state == "attack":
                 self.state = "chase"
-            self.noise_at, self.searching = None, False
+            self.noise_at, self.searching, self.noise_src = None, False, None
         self.hurt_t = max(0.0, self.hurt_t - dt)
         self.alert_t = max(0.0, self.alert_t - dt)
         self.atk_cd = max(0.0, self.atk_cd - dt)
         self.zap_hold = max(0.0, self.zap_hold - dt)
+        if self.kind == "pdrone" and not dazed and self.ally_hunt(dt, world):
+            return                                         # 13d: jagt gerade eine Drohne / betäubt einen Boss
         pl = self.nearest_player(players, world)   # Ziel: nächster lebender Spieler
         if pl is None:
             dx = dy = 0.0
             d = 1e9
         else:
             dx, dy = pl.x - self.x, pl.y - self.y
-            d = math.hypot(dx, dy)
+            d = math.hypot(dx, dy) or 1e-6                 # 13f: genau übereinander -> keine Division durch 0
         d3 = math.hypot(d, pl.z - self.z) if pl is not None else d          # 10a: Sichtweite in 3D (Heli hoch oben)
         sees = pl is not None and (d3 < k["aggro"] or (self.alert_t > 0 and d3 < 90))
         if sees and (dazed or (world.smokes and d3 > 2.5 and world.smoke_blocks(
@@ -2753,10 +2979,17 @@ class Mob:
         elif self.state == "attack":
             self.atk_t += dt
             if pl is not None:
-                self.turn_toward(dx, dy, dt, (200.0, 60.0, 90.0)[self.atk_kind])
+                self.turn_toward(dx, dy, dt, (200.0, 60.0, 90.0, 70.0)[self.atk_kind])
+            if self.atk_kind == 3 and not getattr(self, "picked", True) and self.atk_t >= self.windup() * MORTAR_PICK:
+                self.picked = True                         # 13f: greift den Felsen vom Boden
+                a_ = math.radians(self.heading)
+                hx, hy = self.x - math.sin(a_) * self.radius * 0.9, self.y + math.cos(a_) * self.radius * 0.9
+                world.events.append(("rockkick", (round(hx, 2), round(hy, 2), round(world.height(hx, hy), 2))))
             if not self.did_hit and self.atk_t >= self.windup():
                 self.did_hit = True
-                if self.atk_kind == 2:
+                if self.atk_kind == 3:
+                    world.titan_mortar(self, pl)
+                elif self.atk_kind == 2:
                     world.titan_kick(self, pl)
                 elif self.atk_kind == 1:
                     world.colossus_slam(self)
@@ -2771,7 +3004,7 @@ class Mob:
                 self.next_slam = rng.random() < k.get("slam_chance", 0.0)
         elif sees:
             self.state = "chase"
-            self.noise_at, self.searching = None, False    # sieht einen Spieler: Geräusch egal
+            self.noise_at, self.searching, self.noise_src = None, False, None   # sieht einen Spieler: Geräusch egal
             self.turn_toward(dx, dy, dt)
             if ranged:                                     # Drohne: auf Abstand bleiben und umkreisen
                 want = k["range"] * 0.6
@@ -2798,9 +3031,13 @@ class Mob:
                     if d <= reach or (slam and d <= k["slam_r"] * 0.55):
                         self.state, self.atk_t, self.did_hit = "attack", 0.0, False
                         self.atk_kind = 1 if slam else 0
-                    elif (k["rock_min"] <= d <= k["rock_max"]
-                          and world.los((self.x, self.y, self.gz + 2.0), (pl.x, pl.y, pl.z + 1.2))):
-                        self.state, self.atk_t, self.did_hit, self.atk_kind = "attack", 0.0, False, 2
+                    elif k["rock_min"] <= d <= k["mortar_max"] or k["mortar_min"] <= d <= k["mortar_max"]:
+                        free = world.los((self.x, self.y, self.gz + 2.0), (pl.x, pl.y, pl.z + 1.2))
+                        if free and k["rock_min"] <= d <= k["rock_max"]:
+                            self.state, self.atk_t, self.did_hit, self.atk_kind = "attack", 0.0, False, 2
+                        elif not free and k["mortar_min"] <= d <= k["mortar_max"]:   # 13f: Gebäude dazwischen
+                            self.state, self.atk_t, self.did_hit, self.atk_kind = "attack", 0.0, False, 3
+                            self.picked = False
             elif "slam_r" in k:                            # Koloss: leichter Schlag oder Bodenschlag
                 crowd = sum(1 for q in players if q.hp > 0 and math.hypot(q.x - self.x, q.y - self.y) < k["slam_crowd"])
                 if d > reach * 0.85:
@@ -2814,10 +3051,17 @@ class Mob:
                 if d > reach * 0.85:
                     speed = k["speed"]
                     ux, uy = dx / d, dy / d
+                    if self.kind in NAV_KINDS:             # 13f: Spieler im Gebäude -> um die Wände zur Tür
+                        st_ = world.nav_steer(self, pl.x, pl.y, pl.z)
+                        if st_ is not None:
+                            ux, uy = st_
+                            self.turn_toward(ux, uy, dt)
                 if d <= reach and self.atk_cd <= 0:
                     self.state, self.atk_t, self.did_hit = "attack", 0.0, False
         elif self.noise_at is not None:                    # Geräusch gehört: hinlaufen und dort suchen
             self.state = "chase"
+            if self.noise_src is not None and not self.searching:
+                self.noise_at = self.noise_goal()          # 13b: 20-40-m-Regel, Ziel rückt mit
             nx, ny = self.noise_at
             tdx, tdy = nx - self.x, ny - self.y
             td = math.hypot(tdx, tdy)
@@ -2828,12 +3072,19 @@ class Mob:
                     self.noise_at = nx, ny = self.x, self.y
                     td = 0.0
                 self.searching = True                      # angekommen: ab jetzt läuft die Suchzeit
+                self.noise_src = None                      # 13b: ab jetzt sucht es dort (kein Nachführen mehr)
             if self.searching:
                 self.search_t -= dt
             if self.search_t <= 0:                         # nichts gefunden: aufgeben
-                self.noise_at, self.searching = None, False
+                self.noise_at, self.searching, self.noise_src = None, False, None
                 self.state = "idle"
             elif td > 2.0:
+                st_ = None
+                if self.kind in NAV_KINDS and not self.searching:   # 13f: Lärmquelle im Gebäude -> Weg zur Tür
+                    st_ = world.nav_steer(self, nx, ny, getattr(self, "noise_z", None))
+                if st_ is not None:
+                    tdx, tdy = st_
+                    td = 1.0
                 self.turn_toward(tdx, tdy, dt)
                 speed = k["speed"] * (0.5 if self.searching else self.inv_speed)
                 ux, uy = tdx / td, tdy / td
@@ -2889,7 +3140,8 @@ class Mob:
         check = self.hover > 0 or self.needs_check(world)   # 12: steht es still, entfallen Kollision und Bodenabfrage
         if self.hover <= 0 and check:                # Fliegende stossen nicht an niedrige Hindernisse
             self.x, self.y = push_out(self.x, self.y, self.radius, world, self.gz,
-                                      skip=TITAN_PASS_PROPS if self.kind == "titan" else ())
+                                      skip=TITAN_PASS_PROPS if self.kind == "titan" else (),
+                                      low_pass=self.gz if self.kind == "titan" else None)
         elif self.hover > 0 and self.state != "dead":   # Drohnen: nicht durch Gebäude/Wände (aber über Dächern und Bäumen)
             self.x, self.y = push_out(self.x, self.y, max(self.radius, 0.4), world, self.z, air=True)
         lo = edge_margin(world)
@@ -3506,13 +3758,14 @@ def z_overlap(a0, a1, b0, b1, tol=MOB_Z_TOL):
     return min(a1, b1) - max(a0, b0) > tol
 
 
-def push_out(x, y, r, world, z=None, veh=-1, skip=(), air=False):
+def push_out(x, y, r, world, z=None, veh=-1, skip=(), air=False, low_pass=None):
     """Kreis (x,y,r) aus allen festen Objekten (Bäume, Felsen, Teiche, Gebäude,
     Fahrzeuge) schieben. z = Fusshöhe: Quader, über deren Oberkante man steht
     (abzüglich STEP_H), und Quader über dem Kopf blockieren nicht.
     veh = ID eines Fahrzeugs, das ignoriert wird (das eigene). skip = Prop-Arten, die nicht blockieren
     (Titan: TITAN_PASS_PROPS). air = Flieger (Drohne): Bäume/Felsen/Fahrzeuge unter ihr blockieren nicht, Wände und Gebäude
-    (Quader, Netz-Karte) schon - sie fliegt nicht durch Mauern."""
+    (Quader, Netz-Karte) schon - sie fliegt nicht durch Mauern. low_pass = Bodenhöhe des Titanen (13b): freistehende Quader
+    bis TITAN_LEG_H blockieren nicht (World.low_obstacle)."""
     under = z is not None and z < TUN_ROOF - 0.5         # 7c: im Tunnel stören Bäume/Felsen darüber nicht
     # 12: nur Props aus dem Raster in der Nähe statt aller Props - gleiche Reihenfolge wie die Prop-Liste. Wird der Kreis
     # verschoben, kommen die Nachbarn an der neuen Stelle dazu (nur spätere Props, wie früher beim Durchlauf der Liste):
@@ -3561,6 +3814,8 @@ def push_out(x, y, r, world, z=None, veh=-1, skip=(), air=False):
             for b in world.boxes_near(x - r, y - r, x + r, y + r):
                 if z >= b.z1 - STEP_H or z + PLAYER_H - HEAD_TOL <= b.z0:   # HEAD_TOL: Geländer des Stockwerks darüber
                     continue
+                if low_pass is not None and world.low_obstacle(b, low_pass):
+                    continue                             # 13b: der Titan steigt darüber
                 nx, ny = clampf(x, b.x0, b.x1), clampf(y, b.y0, b.y1)
                 dx, dy = x - nx, y - ny
                 d2 = dx * dx + dy * dy
@@ -3991,6 +4246,8 @@ class World:
         self.toma_last = -1                  # zuletzt benutzter Ort (der nächste ist ein anderer)
         self.toma_sink_idx, self.toma_sink_t = -1, 0.0   # benutzte Säule, die gerade versinkt
         self.toma_lock = {}                  # Spieler-ID -> s, bis er selbst wieder auslösen darf (TOMA_PLAYER_CD)
+        self.toma_radar = None               # 13a: Radar (x, y, Radius, Stufe, Pin 0/1) oder None; Host rechnet, Mitspieler per 'tb'
+        self.toma_radar_plan = None          # 13a: (Ort, Liste aller Stufen) für die gerade stehende Säule (nur Host)
         self.strike_ang = 0.0                # Himmelsrichtung, aus der die Rakete anfliegt (Grad)
         self.button = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)       # Knopf der aktiven Tomahawk-Säule (außer Reichweite: keine)
         self.timer_panel = SimpleNamespace(x=-999.0, y=-999.0, z=-999.0)
@@ -4069,9 +4326,13 @@ class World:
 
         # --- Mobs, Kugeln, Ereignisse (eigener RNG: ändert die Welt nicht)
         self.mrng = random.Random(seed + 2)
+        self.toma_radar_rng = random.Random(seed + 13)   # 13a: Versatz der Radar-Kreise (nur Host)
+        self.low_cache = {}                              # 13b: id(Quader) -> steht frei? (low_obstacle, Titan)
         self.bullets = []
         self.mobs = []
         self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
+        self.boss_n, self.boss_wave = {}, {}             # 13f: Bosse je Art beim Rundenstart; laufender Zyklus [Restzeit, offen]
+        self.nav_clock, self.nav_ms = 0.0, NAV_MS        # 13f: Wegsuche ins Gebäude (nav_steer)
         self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
         self.noise_log = []      # NOISE_DEBUG: (x, y, Radius, Restzeit) zur Anzeige
         self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
@@ -5173,17 +5434,24 @@ class World:
             cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
             if kind == "drone":                          # 9b: feste Zahl, unabhängig von Kartengrösse und Dichte
                 cnt = DRONE_COUNT if k > 0 else 0
+            if kind in BOSS_KINDS:
+                self.boss_n[kind] = cnt                  # 13f: so viele kommen pro Zyklus wieder
             for _ in range(cnt):
                 self.spawn_mob(kind, [], 0.0)
 
-    def spawn_mob(self, kind, avoid, min_dist):
-        """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll."""
+    def spawn_mob(self, kind, avoid, min_dist, edge=False):
+        """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll. 13f: edge = am Kartenrand
+        (BOSS_EDGE_BAND), buddelt sich aus dem Boden (dig_t, Ereignis 'bossdig')."""
         rng = self.mrng
         home, home_i, area = None, -1, None
         if kind == "critter" and getattr(self, "forest_areas", None):
             area = rng.choice(self.forest_areas)         # 10g: Hasen wohnen in den Wäldern
-        for i in range(80):
-            if area is not None and i < 60:
+        for i in range(160 if edge else 80):
+            if edge:                                     # 13f: Streifen am Rand, später weiter innen
+                lo, hi = BOSS_EDGE_BAND if i < 100 else (BOSS_EDGE_BAND[1], BOSS_EDGE_BAND[1] * 2.5)
+                e_, t_ = rng.uniform(lo, hi), rng.uniform(lo, WORLD - lo)
+                x, y = ((e_, t_), (WORLD - e_, t_), (t_, e_), (t_, WORLD - e_))[rng.randrange(4)]
+            elif area is not None and i < 60:
                 a, r = rng.uniform(0, 2 * math.pi), area[2] * 0.85 * math.sqrt(rng.random())
                 x, y = area[0] + math.cos(a) * r, area[1] + math.sin(a) * r
                 if not (6 < x < WORLD - 6 and 6 < y < WORLD - 6):
@@ -5214,9 +5482,191 @@ class World:
                 m.home, m.home_i = home, home_i
             elif kind == "critter" and area is not None:
                 m.forest = area
+            if edge:                                     # 13f: steckt noch ganz im Boden, Blick zur Kartenmitte
+                m.dig_t = BOSS_DIG_T
+                m.z = m.gz - m.height
+                m.heading = math.degrees(math.atan2(-(CENTER - x), CENTER - y))
+                self.events.append(("bossdig", m.id, round(x, 2), round(y, 2), round(m.gz, 2), kind))
+                self.make_noise(x, y, NOISE_EXPLOSION * 0.5, m.gz + 1.0)
             self.mobs.append(m)
             return True
         return False
+
+    # ------------------------------------------------------------ 13f: Wegsuche in Gebäude
+    def indoor(self, x, y, z):
+        """13f: liegt (x, y) mit Fusshöhe z unter einem Dach (Decke höchstens NAV_ROOF_H m darüber)?"""
+        return self.ceiling_at(x, y, z) < z + NAV_ROOF_H
+
+    def nav_free(self, x, y, z, r):
+        """13f: kann ein Monster mit Radius r bei (x, y) mit Fusshöhe z stehen (Wände aus Quadern und Kartennetz,
+        Bäume/Felsen)? Gleiche Regeln wie push_out."""
+        if self.cm is not None:
+            px, py = self.cm.push(x, y, z, r, PUSH_H)
+            if (px - x) ** 2 + (py - y) ** 2 > 0.0025:
+                return False
+        for b in self.boxes_near(x - r, y - r, x + r, y + r):
+            if z >= b.z1 - STEP_H or z + PLAYER_H - HEAD_TOL <= b.z0:
+                continue
+            nx, ny = clampf(x, b.x0, b.x1), clampf(y, b.y0, b.y1)
+            if (x - nx) ** 2 + (y - ny) ** 2 < r * r:
+                return False
+        for _i, p in self.solid_near_idx(x, y, r):
+            if p.kind != "pond" and (x - p.x) ** 2 + (y - p.y) ** 2 < (p.solid_r + r) ** 2:
+                return False
+        return True
+
+    def nav_path(self, m, gx, gy, gz):
+        """13f: Wegsuche am Stück (Tests): nav_search bis zum Ende laufen lassen."""
+        job = self.nav_search(m, gx, gy, gz)
+        try:
+            while True:
+                next(job)
+        except StopIteration as e:
+            return e.value
+
+    def nav_search(self, m, gx, gy, gz):
+        """13f: gewichtetes A* (Generator: gibt alle 24 Felder die Kontrolle ab, nav_steer verteilt es über mehrere Bilder)
+        auf einem NAV_CELL-Raster (verankert an der Position des Monsters) von m zu (gx, gy, gz). Höhe je Feld über floor_at
+        (Treppen, Stockwerke). -> Wegpunkte [(x, y)] (nur die Knicke) oder None. Erreicht die Suche das Ziel nicht, führt der
+        Weg zum nächstgelegenen erreichten Feld (wenn das deutlich näher ist)."""
+        import heapq
+        c = NAV_CELL
+        r = NAV_RADIUS
+        sx, sy, sz = m.x, m.y, m.gz
+        lox, hix = min(sx, gx) - NAV_MARGIN, max(sx, gx) + NAV_MARGIN
+        loy, hiy = min(sy, gy) - NAV_MARGIN, max(sy, gy) + NAV_MARGIN
+        zc = {(0, 0): sz}
+        g = {(0, 0): 0.0}
+        came = {}
+        best, bd = (0, 0), math.hypot(gx - sx, gy - sy)
+        h0 = bd
+        heap = [(h0, 0.0, 0, 0)]
+        closed = set()
+        n = 0
+        goal = None
+        dirs = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
+                (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414))
+
+        def cell_z(i, j, zfrom):
+            key = (i, j)
+            if key in zc:
+                return zc[key]
+            x, y = sx + i * c, sy + j * c
+            z = None
+            if lox <= x <= hix and loy <= y <= hiy and not self.in_void(x, y):
+                z = self.floor_at(x, y, zfrom)
+                if z < zfrom - 2.5 or not self.nav_free(x, y, z, r):
+                    z = None
+            zc[key] = z
+            return z
+        while heap and n < NAV_MAX_NODES:
+            _f, gc, i, j = heapq.heappop(heap)
+            if (i, j) in closed:
+                continue
+            closed.add((i, j))
+            n += 1
+            if n % 24 == 0:
+                yield None
+            z = zc[(i, j)]
+            x, y = sx + i * c, sy + j * c
+            dg = math.hypot(gx - x, gy - y)
+            if dg < bd:
+                best, bd = (i, j), dg
+            if dg <= c * 1.1 and abs(z - gz) < 1.5:
+                goal = (i, j)
+                break
+            for di, dj, w in dirs:
+                ni, nj = i + di, j + dj
+                if (ni, nj) in closed:
+                    continue
+                nz = cell_z(ni, nj, z)
+                if nz is None:
+                    continue
+                if di and dj and (cell_z(i + di, j, z) is None or cell_z(i, j + dj, z) is None):
+                    continue                               # nicht über Ecken schneiden
+                ng = gc + w * c + abs(nz - z) * 0.5
+                if ng < g.get((ni, nj), 1e18):
+                    g[(ni, nj)] = ng
+                    came[(ni, nj)] = (i, j)
+                    heapq.heappush(heap, (ng + NAV_H_K * math.hypot(gx - (sx + ni * c), gy - (sy + nj * c)), ng, ni, nj))
+        end = goal
+        if end is None:
+            if h0 - bd < 3.0:
+                return None
+            end = best
+        cells = [end]
+        while cells[-1] in came:
+            cells.append(came[cells[-1]])
+        cells.reverse()
+        pts = []
+        for k in range(1, len(cells)):                     # nur Knicke behalten
+            if k == len(cells) - 1:
+                pts.append(cells[k])
+                continue
+            a0, a1, a2 = cells[k - 1], cells[k], cells[k + 1]
+            if (a1[0] - a0[0], a1[1] - a0[1]) != (a2[0] - a1[0], a2[1] - a1[1]):
+                pts.append(a1)
+        out = [(sx + i * c, sy + j * c) for i, j in pts]
+        if goal is not None:
+            out.append((gx, gy))
+        return out
+
+    def nav_steer(self, m, gx, gy, gz):
+        """13f: Laufrichtung (ux, uy) für m zum Ziel (gx, gy, gz), wenn das Ziel in einem Gebäude liegt und der Weg
+        dorthin über eine Tür/Öffnung führt - sonst None (dann wie bisher geradeaus)."""
+        if gz is None:
+            gz = self.height(gx, gy)
+        if not self.indoor(gx, gy, gz):
+            m.nav = m.nav_job = None
+            return None
+        st = getattr(m, "nav", None)
+        job = getattr(m, "nav_job", None)
+        need = (st is None or math.hypot(st["g"][0] - gx, st["g"][1] - gy) > NAV_GOAL_MOVE
+                or self.nav_clock - st["t"] > NAV_REPLAN)
+        if need and (job is None or math.hypot(job[0][0] - gx, job[0][1] - gy) > NAV_GOAL_MOVE):
+            job = m.nav_job = ((gx, gy), self.nav_search(m, gx, gy, gz))
+        if job is not None and self.nav_ms > 0:          # laufende Suche ein Stück weiterrechnen
+            t0 = time.perf_counter()
+            try:
+                while (time.perf_counter() - t0) * 1000.0 < self.nav_ms:
+                    next(job[1])
+            except StopIteration as e:
+                st = m.nav = {"g": job[0], "t": self.nav_clock, "pts": e.value or []}
+                m.nav_job = None
+            self.nav_ms -= (time.perf_counter() - t0) * 1000.0
+        if st is None:
+            return None
+        pts = st["pts"]
+        while pts and math.hypot(pts[0][0] - m.x, pts[0][1] - m.y) < NAV_REACH:
+            pts.pop(0)
+        if not pts:
+            return None
+        dx, dy = pts[0][0] - m.x, pts[0][1] - m.y
+        d = math.hypot(dx, dy) or 1.0
+        return dx / d, dy / d
+
+    def update_boss_waves(self, dt, avoid):
+        """13f (Host): getrennte Respawn-Zyklen für Kolosse und Titanen (siehe BOSS_WAVE_*)."""
+        for kind in BOSS_KINDS:
+            n = self.boss_n.get(kind, 0)
+            if n <= 0:
+                continue
+            wv = self.boss_wave.get(kind)
+            if wv is None:
+                if not any(o.kind == kind and o.state != "dead" for o in self.mobs):
+                    self.boss_wave[kind] = [BOSS_WAVE_DELAY[kind], n]       # der letzte ist gefallen: Zyklus startet
+                    self.events.append(("bosswave", kind, BOSS_WAVE_DELAY[kind]))
+                continue
+            wv[0] -= dt
+            if wv[0] > 0:
+                continue
+            if self.spawn_mob(kind, avoid, 45.0, edge=True):
+                wv[1] -= 1
+                wv[0] = BOSS_WAVE_GAP[kind]
+                if wv[1] <= 0:
+                    del self.boss_wave[kind]
+            else:
+                wv[0] = 1.0
 
     # ------------------------------------------------------------ Lärm
     def make_noise(self, x, y, r, z=None):
@@ -5234,7 +5684,7 @@ class World:
                 continue
             dz = (m.z + m.height * 0.5 - z) if NOISE_SPHERE else 0.0
             if (m.x - x) ** 2 + (m.y - y) ** 2 + dz * dz <= (r * MOB_KINDS[m.kind].get("hear", 1.0)) ** 2:
-                m.on_noise(x, y, self)
+                m.on_noise(x, y, self, z)
 
     def player_noise(self, pl):
         """Lärmradius, den ein Spieler gerade durch Bewegung/Fahrzeug macht."""
@@ -5471,7 +5921,9 @@ class World:
             if dist > p.stats["longest"]:
                 p.stats["longest"], p.stats["longest_w"] = round(dist, 1), wi
 
-    def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1):
+    def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1, loot=True):
+        if getattr(m, "dig_t", 0.0) > 0:                  # 13f: steckt noch im Boden
+            return
         dmg *= self.dmg_mult(owner)
         pct = round(min(dmg, max(m.hp, 0.0)) / m.max_hp * 100.0)
         m.hp -= dmg
@@ -5505,10 +5957,13 @@ class World:
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(killer)
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if m.kind in MOB_LOOT or extra:              # 10b: Beute von Monstern (Titan: 6 Teile)
-                self.mob_loot(m, killer, extra)          # 10d: Diebesdolch +1 (andere Kategorie)
-            if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
-                self.titan_loot(m)
+            if not loot:                                 # 13d: von der lila Drohne zerstört - keine Beute
+                pass
+            else:
+                if m.kind in MOB_LOOT or extra:          # 10b: Beute von Monstern (Titan: 6 Teile)
+                    self.mob_loot(m, killer, extra)      # 10d: Diebesdolch +1 (andere Kategorie)
+                if m.kind == "titan" and self.bonus_crates:  # Bonuskisten an: zusätzlich eine goldene Kiste
+                    self.titan_loot(m)
 
     def explode(self, pos, owner, r, dmg, wi):
         """Flächenschaden: linear abfallend, gegen sich selbst nur halb.
@@ -5939,6 +6394,7 @@ class World:
         n += extra
         if n <= 0:
             return []
+        sure = min(n, MOB_GREN_SURE.get(m.kind, 0))      # 13a: so viele Teile sind sicher Granaten (MOB_GREN_W)
         rng = self.mrng
         hist = pl.loot_history if pl is not None else {}
         last = getattr(pl, "last_by", {}) if pl is not None else {}
@@ -5947,10 +6403,13 @@ class World:
         mul = getattr(pl, "cat_mul", None) if pl is not None else None
         items, used, names = [], [], set()
         cats = self.loot_cats
-        must = list(cats) if n >= len(cats) else []
+        rest = [c for c in cats if not (sure and c == "grenade")]
+        must = list(rest) if n - sure >= len(rest) else []
         rng.shuffle(must)
         for k in range(n):
-            if must:
+            if k < sure:
+                pool = ["grenade"]
+            elif must:
                 pool = [must.pop()]
             else:
                 pool = [c for c in cats if c not in used] or list(cats)
@@ -5962,7 +6421,7 @@ class World:
                     cat = rng.choices(tries, weights=ws)[0]
                     tries.remove(cat)
                     tried.add(cat)
-                    got = self.loot_pick(cat, tier, pl, hist, last, slots, worn, names)
+                    got = self.loot_pick(cat, tier, pl, hist, last, slots, worn, names, m.kind)
                 if got is not None:
                     break
             if got is None:
@@ -5977,6 +6436,8 @@ class World:
             if pl is not None and got[1]:
                 hist[got[1]] = hist.get(got[1], 0) + 1
                 last[got[0]] = got[1]
+        if m.kind == "titan" and rng.random() < JET_DROP_CHANCE:   # 13c: Spezialdrop - nur vom Titan
+            items.append(("grenade", "gk:jet", rng.randint(*JET_DROP_N)))
         out = []
         R = MOB_LOOT_R * (2.0 if m.kind == "titan" else 1.0)
         a0 = rng.uniform(0, 2 * math.pi)
@@ -6012,12 +6473,13 @@ class World:
                                 round(m.gz + min(2.0, m.height * 0.5), 2)))
         return out
 
-    def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude):
-        """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None."""
+    def loot_pick(self, cat, tier, pl, hist, last, slots, worn, exclude, kind=None):
+        """10b: ein Teil einer Kategorie für die Qualitätsstufe tier -> (Kategorie, Name, Anzahl) oder None.
+        13a: kind = Monsterart; deren Granaten-Pool (MOB_GREN_W) ersetzt den der Stufe."""
         rng = self.mrng
         if cat == "grenade":                             # 10e: eine Granatenart nach Stufe (GREN_LOOT_W), Anzahl je Art
-            ws = {k: w for k, w in GREN_LOOT_W.get(tier, GREN_LOOT_W["common"]).items()
-                  if w > 0 and "gk:" + k not in exclude}
+            pool = MOB_GREN_W.get(kind) or GREN_LOOT_W.get(tier, GREN_LOOT_W["common"])
+            ws = {k: w for k, w in pool.items() if w > 0 and "gk:" + k not in exclude}
             if not ws:
                 return None
             ks = list(ws)
@@ -6464,6 +6926,7 @@ class World:
             self.toma_lock[pid] -= dt
             if self.toma_lock[pid] <= 0:
                 del self.toma_lock[pid]
+        self.update_toma_radar()                         # 13a: Suchkreis / Pin
         if self.strike == 2 and self.strike_cd > 0 and self.phase == "play":
             self.strike_wait -= dt                       # Abklingzeit läuft; danach ist der Knopf wieder bereit
             if self.strike_wait <= 0:
@@ -6857,14 +7320,17 @@ class World:
         if k == "drone":
             self.spawn_pdrone(g)
             return False
-        if k == "guard":
-            self.spawn_gdrone(g)
+        if k == "guard":                                 # 13f: keine Zweit-Drohne mehr - alte Abwehrdrohnen-Granaten
+            self.spawn_pdrone(g)                         # starten (bzw. frischen) die lila Drohne
             return False
         if k == "molotov":
             self.molotov(g)
             return False
         if k == "flare":
             self.start_airdrop(g)
+            return False
+        if k == "jet":                                   # 13c: Jet-Strike
+            self.start_airdrop(g, jet=True)
             return False
         return False
 
@@ -6897,7 +7363,16 @@ class World:
         self.smokes = [sm for sm in self.smokes if sm.age < SMOKE_T]
 
     def spawn_pdrone(self, g):
-        """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer)."""
+        """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer). 13f: Es gibt
+        höchstens eine aktive lila Drohne (PDRONE_ONE_PER: im ganzen Spiel bzw. je Spieler); eine weitere Drohnen-Granate
+        setzt nur deren Restzeit wieder auf PDRONE_LIFE (Ereignis 'pdrefresh')."""
+        act = [o for o in self.mobs if o.kind == "pdrone" and o.state != "dead"
+               and (PDRONE_ONE_PER == "spiel" or getattr(o, "owner", -1) == g.owner)]
+        if act:
+            d = max(act, key=lambda o: getattr(o, "life", 0.0))
+            d.life = PDRONE_LIFE
+            self.events.append(("pdrefresh", g.owner, getattr(d, "owner", -1), round(d.x, 2), round(d.y, 2), round(d.z, 2)))
+            return
         m = Mob("pdrone", g.x, g.y, self)
         m.id = self.next_mid
         self.next_mid += 1
@@ -6969,11 +7444,12 @@ class World:
                         m.on_noise(fa.pos[0], fa.pos[1], self)
         self.fires = [fa for fa in self.fires if fa.age < MOLO_T]
 
-    def start_airdrop(self, g):
+    def start_airdrop(self, g, jet=False):
         """10e: Airdrop-Fackel gezündet: rote Fackel, nach AIR_PLANE_DELAY s fliegt ein Frachtflugzeug über die Fackel
-        und wirft die Kiste (Art aus dem Fackel-Satz) am Fallschirm ab."""
+        und wirft die Kiste (Art aus dem Fackel-Satz) am Fallschirm ab. 13c: jet = Jet-Strike (Jet + Bombe)."""
         z = self.floor_at(g.x, g.y, g.z)                 # Boden unter dem Aufprall (Dach, Brücke, Tunnel, Gelände)
         ad = AirDrop(self.next_fxid, g.x, g.y, z, g.tier, g.owner, self.mrng.uniform(0, 2 * math.pi))
+        ad.jet = bool(jet)
         self.next_fxid += 1
         self.airdrops.append(ad)
         self.events.append(("flare", ad.aid, round(g.x, 2), round(g.y, 2), round(z, 2)))
@@ -6981,6 +7457,10 @@ class World:
     def update_airdrops(self, dt):
         keep = []
         for ad in self.airdrops:
+            if ad.jet:                                   # 13c: Jet-Strike
+                if self.update_jet(ad, dt):
+                    keep.append(ad)
+                continue
             ad.age += dt
             ad.t += dt
             if ad.state == 0 and ad.t >= AIR_PLANE_DELAY:
@@ -7213,11 +7693,44 @@ class World:
         """Anzeigename des Spielmodus (Experimental läuft als Deathmatch mit Pistolenstart)."""
         return MODE_NAMES["experimental" if self.exp else self.mode]
 
+    # ------------------------------------------------------------ 13b: Titan steigt über Niedriges
+    def low_obstacle(self, b, gz):
+        """13b: Steigt der Titan (Boden gz) über den Quader b? Ja, wenn er auf seiner Ebene steht, nicht höher als seine
+        Beine reicht (TITAN_LEG_H) und frei steht - nichts liegt darauf (kein Quader, keine Decke bis TITAN_ROOF_GAP)."""
+        if b.z0 > gz + TITAN_LOW_BASE or b.z1 - gz > TITAN_LEG_H:
+            return False
+        key = id(b)
+        v = self.low_cache.get(key)
+        if v is None:
+            v = True
+            area = max(1e-6, (b.x1 - b.x0 + 0.4) * (b.y1 - b.y0 + 0.4))
+            cover = 0.0                                  # Grundfläche, über der etwas aufliegt (Dach, Decke, Stockwerk)
+            for o in self.boxes_near(b.x0 - 0.2, b.y0 - 0.2, b.x1 + 0.2, b.y1 + 0.2):
+                if o is not b and b.z1 - 0.05 <= o.z0 <= b.z1 + TITAN_ROOF_GAP:
+                    ox = min(o.x1, b.x1 + 0.2) - max(o.x0, b.x0 - 0.2)
+                    oy = min(o.y1, b.y1 + 0.2) - max(o.y0, b.y0 - 0.2)
+                    if ox > 0 and oy > 0:
+                        cover += ox * oy
+            if cover >= TITAN_COVER_K * area:            # trägt etwas (Hauswand unter dem Dach) - Torbogen am Zaunende nicht
+                v = False
+            if v and self.cm is not None:
+                cx, cy = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
+                for px, py in ((cx, cy), (b.x0 + 0.05, b.y0 + 0.05), (b.x1 - 0.05, b.y1 - 0.05)):
+                    if self.cm.ceiling(px, py, b.z1 - 0.1) < b.z1 + TITAN_ROOF_GAP:
+                        v = False
+                        break
+            self.low_cache[key] = v
+        return v
+
     def build_toma_spots(self):
         """Orte der Tomahawk-Säulen (in allen Modi, auf Host und Mitspieler gleich): Kartenpunkte 'toma' aus der Karte, sonst
         freie, ebene Plätze unter den Startpunkten - weit auseinander und mit TOMA_GROUND_CLEAR Platz zu Wänden und Fahrzeugen."""
         cands = []
         pt = getattr(self, "pt", None)
+        if pt:                                           # Polytown: feste Orte auf der Kreisstraße (TOMA_SPOTS)
+            self.build_toma_spots_fixed()
+            if self.toma_spots:
+                return
         for p in ((pt or {}).get("meta", {}).get("toma") or ()):
             try:
                 cands.append((float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else None))
@@ -7271,8 +7784,98 @@ class World:
                 break
         self.toma_spots = spots
 
+    def build_toma_spots_fixed(self):
+        """13a: Orte der Tomahawk-Säule auf Polytown (TOMA_SPOTS: Kreisstraße). Um jeden Ankerpunkt wird in Ringen (TOMA_SPOT_STEP)
+        der nächste freie, ebene Platz auf der verlangten Ebene gesucht; findet sich keiner, entfällt der Ort.
+        Nur Kartengeometrie, kein Zufall: gleiches Ergebnis bei allen Spielern (der Host schickt nur den Index)."""
+        self.toma_spots = []
+        for ax, ay, level, search, _name in TOMA_SPOTS:
+            best, r = None, 0.0
+            while best is None and r <= search + 1e-6:
+                n = 1 if r == 0.0 else max(8, int(math.tau * r / TOMA_SPOT_STEP))
+                for k in range(n):
+                    a = k * math.tau / n
+                    px, py = ax + math.cos(a) * r, ay + math.sin(a) * r
+                    z = self.toma_spot_floor(px, py, level)
+                    if z is not None and self.toma_spot_ok(px, py, z):
+                        best = (px, py, z)
+                        break
+                r += TOMA_SPOT_STEP
+            if best is None:
+                continue
+            x, y, z = best
+            h = math.degrees(math.atan2(-(CENTER - x), CENTER - y)) if (x, y) != (CENTER, CENTER) else 0.0
+            self.toma_spots.append((round(x, 2), round(y, 2), round(float(z), 3), h))
+
+    def toma_spot_floor(self, x, y, level):
+        """13a: Boden für die Säule bei (x, y): am Gelände (level None) bzw. auf der Ebene level - oder None."""
+        ref = self.height(x, y) if level is None else level
+        z = self.floor_at(x, y, ref + 0.3)
+        if level is not None and abs(z - level) > TOMA_SPOT_LEVEL_TOL:
+            return None
+        return z
+
+    def toma_spot_ok(self, x, y, z):
+        """13a: Platz für die Säule: kein Wasser, keine Wand, eben, Kopffreiheit, nicht auf Fahrzeug-/Heli-Startplätzen."""
+        if not (4.0 < x < WORLD - 4.0 and 4.0 < y < WORLD - 4.0):
+            return False
+        if self.water_at(x, y, z) or self.in_solid(x, y, 0.9, z):
+            return False
+        for k in range(8):
+            a = k * math.tau / 8
+            if abs(self.floor_at(x + math.cos(a) * 0.9, y + math.sin(a) * 0.9, z + 0.3) - z) > TOMA_SPOT_FLAT:
+                return False
+        if self.ceiling_at(x, y, z) < z + TOMA_SPOT_HEAD:
+            return False
+        if any(math.hypot(x - v.x, y - v.y) < TOMA_SPOT_KEEP for v in self.vehicles):
+            return False
+        if any(math.hypot(x - px, y - py) < HELI_PAD_R + TOMA_SPOT_KEEP for px, py in self.pads):
+            return False
+        return not any(math.hypot(x - p.x, y - p.y) < p.solid_r + 0.8 for p in self.solid_near(x, y, 1.0))
+
+    def toma_radar_stages(self, i):
+        """13a: alle Radar-Stufen für den Säulen-Ort i -> [(x, y, Radius, Stufe, Pin)]. Jeder Kreis enthält die Säule
+        (höchstens TOMA_RADAR_KEEP x Radius von der Mitte) und liegt ganz im vorigen; die letzte Stufe ist der Pin."""
+        x, y, _z, _h = self.toma_spots[i]
+        rng = self.toma_radar_rng
+        out, prev, r = [], None, float(TOMA_RADAR_R0)
+        while r > TOMA_RADAR_PIN_R + 1e-6:
+            if prev is None:
+                a, d = rng.uniform(0.0, math.tau), r * TOMA_RADAR_KEEP * math.sqrt(rng.random())
+                cx = clampf(x + math.cos(a) * d, 0.0, WORLD)       # Mitte auf der Karte (rückt dabei nur näher)
+                cy = clampf(y + math.sin(a) * d, 0.0, WORLD)
+            else:
+                pcx, pcy, pr = prev
+                room = pr - r                                      # so weit darf die Mitte wandern (Kreis im Kreis)
+                for _ in range(40):
+                    a, d = rng.uniform(0.0, math.tau), room * math.sqrt(rng.random())
+                    cx, cy = pcx + math.cos(a) * d, pcy + math.sin(a) * d
+                    if math.hypot(cx - x, cy - y) <= r * TOMA_RADAR_KEEP:
+                        break
+                else:                                              # sicher: auf der Linie zur Säule
+                    dd = math.hypot(pcx - x, pcy - y)
+                    t = min(1.0, r * 0.8 / dd) if dd > 0 else 0.0
+                    cx, cy = x + (pcx - x) * t, y + (pcy - y) * t
+            out.append((cx, cy, r, len(out), 0))
+            prev = (cx, cy, r)
+            r *= 0.5
+        out.append((x, y, 0.0, len(out), 1))
+        return out
+
+    def update_toma_radar(self):
+        """13a (Host): Radar-Stufe aus dem Alter der stehenden Säule; None, solange keine unbenutzte Säule lange genug steht."""
+        if (not TOMA_RADAR or not self.tomahawk_on or self.phase != "play" or self.toma_idx < 0 or self.strike != 0
+                or self.toma_age < TOMA_RADAR_START):
+            self.toma_radar = None
+            return
+        if self.toma_radar_plan is None or self.toma_radar_plan[0] != self.toma_idx:
+            self.toma_radar_plan = (self.toma_idx, self.toma_radar_stages(self.toma_idx))
+        st = self.toma_radar_plan[1]
+        self.toma_radar = st[min(len(st) - 1, int((self.toma_age - TOMA_RADAR_START) // TOMA_RADAR_STEP))]
+
     def set_toma(self, i, age=0.0):
         """Aktiven Säulen-Ort setzen (-1 = keiner). age = s seit dem Auftauchen."""
+        self.toma_radar, self.toma_radar_plan = None, None       # 13a: Radar beginnt für jede Säule neu
         if not (isinstance(i, int) and 0 <= i < len(self.toma_spots)):
             i = -1
         self.toma_idx = i
@@ -7449,6 +8052,97 @@ class World:
             if -40 < g.x < WORLD + 40 and -40 < g.y < WORLD + 40 and g.z > -30:
                 alive.append(g)
         self.grenades = alive
+
+    def update_jet(self, ad, dt):
+        """13c (Host): Jet-Strike. state 0 Fackel brennt / 1 Jet im Anflug / 2 Bombe fällt / 3 eingeschlagen (Jet fliegt
+        weiter). -> False, wenn er vorbei ist."""
+        ad.age += dt
+        ad.t += dt
+        if ad.state == 0 and ad.t >= JET_DELAY:
+            ad.state, ad.t, ad.dist = 1, 0.0, 0.0
+            self.events.append(("jetin", ad.aid))
+        if ad.state >= 1:
+            ad.dist += JET_SPEED * dt
+            if ad.state == 1 and ad.dist >= JET_LEAD - JET_RELEASE:
+                ad.state, ad.t = 2, 0.0
+                self.events.append(("jetdrop", ad.aid))
+            if ad.state == 2 and ad.bomb_pos()[3] >= 1.0:
+                ad.state = 3
+                self.jet_impact(ad)
+        return ad.dist < JET_LEAD * 2.0 + 50.0 and ad.age < FLARE_BURN_T + JET_DELAY
+
+    def jet_impact(self, ad):
+        """13c: Bombe schlägt an der Fackel ein. Halber Tomahawk-Radius (JET_R); im Zentrum (JET_KILL_R) sofort tödlich,
+        dahinter JET_DMG x (1 - t)^JET_FALLOFF. Unter der Erde (Tunnel) sicher, ausserhalb des Zentrums schützen Wände."""
+        x, y, z = ad.fx, ad.fy, ad.fz
+        owner = ad.owner
+        pos = (x, y, z + 0.6)
+        self.make_noise(x, y, NOISE_TOMAHAWK * 0.5, z + 1.0)
+        self.events.append(("jetboom", ad.aid, round(x, 2), round(y, 2), round(z, 2)))
+        self.events.append(("explosion", (round(x, 2), round(y, 2), round(z + 1.0, 2)), 9.0))
+        for i in range(5):
+            a = i * math.tau / 5 + ad.ang
+            ex, ey = x + math.cos(a) * JET_R * 0.5, y + math.sin(a) * JET_R * 0.5
+            self.events.append(("explosion", (round(ex, 2), round(ey, 2), round(self.floor_at(ex, ey, z + 2.0) + 0.8, 2)),
+                                5.0))
+
+        def amount(d):
+            if d <= JET_KILL_R:
+                return 9999.0
+            t = min(1.0, (d - JET_KILL_R) / max(0.01, JET_R - JET_KILL_R))
+            return JET_DMG * (1.0 - t) ** JET_FALLOFF
+
+        def reach(p, top):
+            """Abstand (waagerecht) oder None, wenn ausser Reichweite / geschützt."""
+            if p[2] < -1.5 and self.underground(SimpleNamespace(x=p[0], y=p[1], z=p[2])):
+                return None
+            if abs(p[2] - z) > JET_DZ:
+                return None
+            d = math.hypot(p[0] - x, p[1] - y)
+            if d > JET_R:
+                return None
+            if d > JET_KILL_R and not self.blast_los(pos, (p[0], p[1], p[2] + 0.9), (p[0], p[1], top)):
+                return None
+            return d
+        for v in list(self.vehicles):
+            if v.hp > 0:
+                d = reach((v.x, v.y, v.z), v.z + 1.8)
+                if d is not None:
+                    if d <= JET_KILL_R + VEH_R * 0.5:
+                        self.destroy_vehicle(v, owner)
+                    else:
+                        self.damage_vehicle(v, amount(d) * JET_VEH_K, owner)
+        for hc in list(self.helis):
+            if hc.hp > 0:
+                d = reach((hc.x, hc.y, hc.z), hc.z + 2.5)
+                if d is not None:
+                    if d <= JET_KILL_R + HELI_R * 0.5:
+                        self.destroy_heli(hc, owner)
+                    else:
+                        self.damage_heli(hc, amount(d) * JET_VEH_K, owner)
+        for pl in list(self.players.values()):
+            if pl.hp <= 0 or pl.heli >= 0:
+                continue
+            d = reach((pl.x, pl.y, pl.z), pl.z + 1.6)
+            if d is None:
+                continue
+            if d <= JET_KILL_R:
+                pl.protect = 0.0
+                self.damage_player(pl, 9999.0, owner, WI_JET)
+            else:
+                f = 0.5 if pl.pid == owner else 1.0
+                self.damage_player(pl, amount(d) * f * self.dmg_mult(owner), owner, WI_JET)
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            d = reach((m.x, m.y, m.z), m.z + m.height * 0.9)
+            if d is None:
+                continue
+            d = max(0.0, d - m.radius)                   # grosse Monster: zählt der nächste Punkt
+            mp = (m.x, m.y, m.z + m.height * 0.5)
+            dx, dy = m.x - x, m.y - y
+            l = math.hypot(dx, dy) or 1.0
+            self.hurt_mob(m, amount(d), mp, (dx / l, dy / l, 0.3), False, owner, WI_JET)
 
     def grenade_step(self, g, h):
         """Ein Teilschritt: Schwerkraft, Abprallen an Quadern, Bäumen, Felsen und am Boden."""
@@ -7771,6 +8465,7 @@ class World:
     def new_match(self):
         """Neue Runde: Punkte, Monster, Kisten und Spieler zurücksetzen."""
         self.bullets, self.mobs, self.pending = [], [], []
+        self.boss_wave = {}                              # 13f
         self.grenades, self.drops, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
@@ -7866,6 +8561,8 @@ class World:
             if d.lock > 0:
                 d.lock = max(0.0, d.lock - dt)
         self.update_noise(dt, players)
+        self.nav_clock += dt                             # 13f: Wegsuche: Uhr und Rechenzeit je Bild
+        self.nav_ms = NAV_MS
         self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
         if self.rocks:
             self.update_rocks(dt)
@@ -7882,8 +8579,11 @@ class World:
             self.mobs.remove(m)
             if m.kind in TEMP_MOBS:                      # 10e: keine Monster - kommen nicht wieder
                 continue
-            self.pending.append([TITAN_RESPAWN if m.kind == "titan" else RESPAWN_T, m.kind])
+            if m.kind in BOSS_KINDS:                     # 13f: Bosse kommen nur im Zyklus ihrer Art wieder
+                continue
+            self.pending.append([RESPAWN_T, m.kind])
         avoid = [(p.x, p.y) for p in players if p.hp > 0] or [(CENTER, CENTER)]
+        self.update_boss_waves(dt, avoid)
         for e in self.pending[:]:
             e[0] -= dt
             if e[0] <= 0:
@@ -8050,6 +8750,39 @@ class World:
         self.rocks.append(Rock(self.next_rid, sx, sy, sz, vx, vy, vz, m.id))
         self.next_rid += 1
 
+    def titan_mortar(self, m, pl):
+        """13f: Mörserwurf des Titans: Felsen von über dem Kopf in hohem Bogen auf den Spieler (Position beim Abwurf,
+        +-MORTAR_ERR m), so hoch, dass er die Dächer dazwischen um MORTAR_CLEAR m überfliegt. Gleiche Steinbrocken-Physik
+        wie der Tritt (ROCK_GRAV) - Mitspieler fliegen ihn selbst weiter."""
+        a = math.radians(m.heading)
+        fx, fy = -math.sin(a), math.cos(a)
+        sx, sy, sz = m.x - fx * m.radius * 0.15, m.y - fy * m.radius * 0.15, m.z + m.height * 1.05
+        self.events.append(("rockthrow", (round(sx, 2), round(sy, 2), round(sz, 2))))
+        self.make_noise(m.x, m.y, NOISE_EXPLOSION * 0.4, m.z + 1.0)
+        if pl is None or pl.hp <= 0:
+            return
+        rng = self.mrng
+        e_, ea = rng.uniform(0.0, MORTAR_ERR), rng.uniform(0.0, math.tau)
+        tx, ty, tz = pl.x + math.cos(ea) * e_, pl.y + math.sin(ea) * e_, pl.z + 0.4
+        dz = tz - sz
+        bump = 4.0 * MORTAR_APEX                         # z(f) = sz + dz*f + bump*f*(1-f) mit bump = g*T²/2
+        for i in range(1, 12):                           # Dächer/Mauern unter der Bahn: Bogen hoch genug machen
+            f = i / 12.0
+            px, py = sx + (tx - sx) * f, sy + (ty - sy) * f
+            top = self.cm.top(px, py) if self.cm is not None else None
+            top = self.height(px, py) if top is None else top
+            for b in self.boxes_near(px, py, px, py):
+                if b.x0 <= px <= b.x1 and b.y0 <= py <= b.y1 and b.z1 > top and not b.clip:
+                    top = b.z1
+            bump = max(bump, (top + MORTAR_CLEAR - sz - dz * f) / (f * (1.0 - f)))
+        T = math.sqrt(2.0 * bump / ROCK_GRAV)
+        vx, vy = (tx - sx) / T, (ty - sy) / T
+        vz = (dz + 0.5 * ROCK_GRAV * T * T) / T
+        r = Rock(self.next_rid, sx, sy, sz, vx, vy, vz, m.id)
+        r.life = T + 3.0
+        self.rocks.append(r)
+        self.next_rid += 1
+
     def update_rocks(self, dt):
         """Steinbrocken fliegen; Aufprall an Gelände, Wand, Spieler oder Fahrzeug -> Flächenschaden."""
         keep = []
@@ -8149,6 +8882,23 @@ class World:
                         return True
         return False
 
+    def ally_zap(self, m, tgt, boss):
+        """13d: Stromschlag der lila Drohne: feindliche Drohne -> zerstört (Kill für den Besitzer, aber KEINE Beute);
+        Titan/Koloss -> PDRONE_BOSS_STUN s betäubt (danach PDRONE_BOSS_IMMUNE s immun)."""
+        own = getattr(m, "owner", -1)
+        src = (round(m.x, 2), round(m.y, 2), round(m.z + 0.2, 2))
+        dz = tgt.height * 0.6 if boss else 0.2
+        dst = (round(tgt.x, 2), round(tgt.y, 2), round(tgt.z + dz, 2))
+        self.events.append(("zap", src, dst, 1, 1))     # lila Blitz (wie die eigene Drohne)
+        if boss:
+            tgt.stun_t = max(getattr(tgt, "stun_t", 0.0), PDRONE_BOSS_STUN)
+            tgt.pstun_lock = PDRONE_BOSS_STUN + PDRONE_BOSS_IMMUNE
+            if tgt.state == "attack":
+                tgt.state, tgt.atk_t, tgt.did_hit = "chase", 0.0, True
+            self.events.append(("bossstun", own, tgt.id, MOB_NAMES.get(tgt.kind, tgt.kind), PDRONE_BOSS_STUN))
+        else:
+            self.hurt_mob(tgt, tgt.hp + 1.0, dst, (0.0, 0.0, -1.0), False, own, -1, loot=False)
+
     def guard_zap(self, m, tgt):
         """10h: Stromschlag der Abwehrdrohne: zerstört die Ziel-Drohne (Kill zählt für den Besitzer)."""
         src = (round(m.x, 2), round(m.y, 2), round(m.z + 0.2, 2))
@@ -8172,7 +8922,8 @@ class World:
             busy = (m.kind in TEMP_MOBS or m.noise_at is not None or m.alert_t > 0 or m.hurt_t > 0
                     or (m.state != "idle" and not (m.state == "dead" and m.dead_t > 1.0))
                     or getattr(m, "stun_t", 0.0) > 0 or getattr(m, "daze_t", 0.0) > 0
-                    or m.fear is not None or abs(m.kx) + abs(m.ky) > 0.2)
+                    or m.fear is not None or abs(m.kx) + abs(m.ky) > 0.2
+                    or getattr(m, "dig_t", 0.0) > 0)             # 13f: Ausbuddeln flüssig (jedes Bild)
             if not busy:
                 x, y = m.x, m.y
                 for px, py in live:
@@ -15687,6 +16438,102 @@ class AbilityIcon:
         self.root.hide()
 
 
+class DroneHud:
+    """13d: HUD-Kästchen der lila Drohne unten rechts: dunkle Kachel, das Drohnen-Modell halbtransparent im Hintergrund,
+    darüber eine weisse Kreislinie (Uhr), die ab 12 Uhr im Uhrzeigersinn abläuft, mit Zeiger an der Kante; darunter
+    die Restzeit. Kreis leer = Drohne erlischt."""
+
+    def __init__(self, parent):
+        S = PDRONE_HUD_S
+        self.root = parent.attachNewNode("drone_hud")
+        self.root.setPos(PDRONE_HUD_X, 0, PDRONE_HUD_Z)
+
+        def fixed(n, sort):
+            n.setTransparency(TransparencyAttrib.MAlpha)
+            n.setBin("fixed", sort)
+            n.setDepthTest(False)
+            n.setDepthWrite(False)
+            return n
+        cm = CardMaker("bg")
+        cm.setFrame(-S / 2, S / 2, -S / 2, S / 2)
+        bg = fixed(self.root.attachNewNode(cm.generate()), 40)
+        bg.setColor(0.04, 0.05, 0.08, 0.7)
+        th = 0.004                                   # dezenter lila Rand
+        for a0, b0, a1, b1 in ((-S / 2, S / 2 - th, S / 2, S / 2), (-S / 2, -S / 2, S / 2, -S / 2 + th),
+                               (-S / 2, -S / 2, -S / 2 + th, S / 2), (S / 2 - th, -S / 2, S / 2, S / 2)):
+            cm.setFrame(a0, a1, b0, b1)
+            e = fixed(self.root.attachNewNode(cm.generate()), 41)
+            e.setColor(0.85, 0.55, 1.0, 0.55)
+        # Drohnen-Modell als halbtransparenter Hintergrund (von schräg oben)
+        ghost = self.root.attachNewNode("ghost")
+        mdl = build_drone("pdrone")
+        model, bar = mdl[0], mdl[3]
+        bar.removeNode()
+        model.reparentTo(ghost)
+        model.setLightOff(1)
+        try:                                         # Modell mittig und passend gross ins Kästchen
+            lo, hi = model.getTightBounds()
+            size = max(hi[0] - lo[0], hi[1] - lo[1], 1e-3)
+            mid = (lo + hi) * 0.5
+            model.setPos(-mid[0], -mid[1], -mid[2])
+            ghost.setScale(S * 0.62 / size)
+        except (TypeError, ValueError):             # keine Ausdehnung (leeres Modell): unskaliert lassen
+            pass
+        ghost.setHpr(25, 35, 0)                      # leicht gedreht, Oberseite zum Betrachter
+        ghost.setZ(0.012)
+        fixed(ghost, 42)
+        ghost.setColorScale(1, 1, 1, PDRONE_HUD_GHOST)
+        # Uhr: Segmente im Uhrzeigersinn ab 12 Uhr
+        r_out, r_in = S * 0.44, S * 0.405
+        self.r_out = r_out
+        self.segs = []
+        n = PDRONE_HUD_SEG
+        p = lambda r, a: (math.cos(a) * r, 0.0, math.sin(a) * r)       # noqa: E731
+        for i in range(n):
+            a0 = math.pi / 2 - math.tau * i / n
+            a1 = math.pi / 2 - math.tau * (i + 1) / n
+            m = Mesh(lit=False)
+            m.tri(p(r_in, a0), p(r_out, a0), p(r_out, a1), (1, 1, 1), ref=(0, 5, 0))
+            m.tri(p(r_in, a0), p(r_out, a1), p(r_in, a1), (1, 1, 1), ref=(0, 5, 0))
+            seg = fixed(self.root.attachNewNode(m.node("seg")), 43)
+            seg.setTwoSided(True)
+            self.segs.append(seg)
+        # Zeiger: von der Mitte zur ablaufenden Kante
+        cm.setFrame(-0.0025, 0.0025, 0.0, r_in)
+        self.hand = fixed(self.root.attachNewNode(cm.generate()), 44)
+        self.hand.setColor(1, 1, 1, 0.85)
+        self.txt = OnscreenText(text="", parent=self.root, pos=(0, -S / 2 - 0.034), scale=0.034, fg=(1, 1, 1, 0.95),
+                                shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.txt.setBin("fixed", 45)
+        self.last = None
+        self.root.hide()
+
+    def set(self, frac, left):
+        """frac 0..1 = Anteil der Restzeit (1 = voller Kreis), left = Restzeit in s."""
+        frac = max(0.0, min(1.0, frac))
+        n = len(self.segs)
+        gone = (1.0 - frac) * n                      # abgelaufener Teil ab 12 Uhr im Uhrzeigersinn
+        full = int(gone)
+        key = (int(gone * 8), int(math.ceil(left)))
+        if key != self.last:                         # nur neu zeichnen, wenn sich etwas sichtbar ändert
+            self.last = key
+            for i, seg in enumerate(self.segs):
+                if i < full:
+                    seg.hide()
+                else:
+                    seg.show()
+                    seg.setColor(1, 1, 1, 0.95)
+            if full < n:                             # Segment an der Kante: stufenlos ausblenden
+                self.segs[full].setColor(1, 1, 1, 0.95 * (1.0 - (gone - full)))
+            self.hand.setR(360.0 * (1.0 - frac))     # R im Uhrzeigersinn (Bildschirm), 0 = 12 Uhr
+            s = int(math.ceil(left))
+            self.txt.setText(f"{s // 60}:{s % 60:02d}")
+        self.root.show()
+
+    def hide(self):
+        self.root.hide()
+
+
 class SliderSpec:
     """Beschreibung eines Schiebereglers (Menü oder Pause): Text, Bereich, Schrittweite, lesen/setzen, Anzeige."""
     def __init__(self, label, lo, hi, step, get, set_, fmt=str, enabled=True):
@@ -18250,7 +19097,9 @@ class HostSession:
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
-                        r2(m.hurt_t), r2(m.dead_t), m.atk_kind] for m in w.mobs],
+                        r2(m.hurt_t), r2(m.dead_t), m.atk_kind]
+                       + ([getattr(m, "owner", -1), r1(getattr(m, "life", 0.0))] if m.kind in TEMP_MOBS else [])
+                       for m in w.mobs],                  # 13d: eigene Drohnen + Besitzer, Restzeit (HUD-Uhr)
                 "bl": [[b.bid, r2(b.x), r2(b.y), r2(b.z), r1(b.vx), r1(b.vy), r1(b.vz),
                         r1(b.travel), b.wi, b.owner] for b in w.bullets],
                 "cr": [[c.cid, CRATE_KINDS.index(c.kind) if not c.air else 0, r2(c.x), r2(c.y), r2(c.z),
@@ -18261,8 +19110,8 @@ class HostSession:
                         GREN_KINDS.index(g.kind), 1 if g.active else 0] for g in w.grenades],
                 "sm": [[q.sid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age)] for q in w.smokes],   # 10e
                 "fi": [[q.fid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age), q.owner] for q in w.fires],
-                "ad": [[a.aid, a.state, r2(a.fx), r2(a.fy), r2(a.fz), round(a.ang, 3), r1(a.dist), r2(a.cz), r1(a.age)]
-                       for a in w.airdrops],
+                "ad": [[a.aid, a.state, r2(a.fx), r2(a.fy), r2(a.fz), round(a.ang, 3), r1(a.dist), r2(a.cz), r1(a.age),
+                        1 if a.jet else 0] for a in w.airdrops],                           # 13c: + Jet-Strike
                 "dr": [[d.did, r2(d.x), r2(d.y), r2(d.z), d.wi, d.gear, d.melee, d.att,
                         list(d.atts) if d.atts != ATT_NONE else 0, d.owner, r1(d.lock), d.scope, d.gren,
                         DROP_GK.index(d.gk)] for d in w.drops],
@@ -18327,11 +19176,16 @@ class HostSession:
             x, y, _z, _h = w.toma_spots[i]
             return i if math.hypot(pl.x - x, pl.y - y) <= TOMA_SEE_R else -1
         i, si = seen(w.toma_idx), seen(w.toma_sink_idx)
+        rd = w.toma_radar                                # 13a: Radar-Kreis bzw. Pin - für alle, unabhängig von TOMA_SEE_R
+        rk = (rd[3], rd[4]) if rd else None
         now = time.time()
-        if getattr(c, "tb_last", None) != (i, si) or now - getattr(c, "tb_t", 0.0) > 1.0:
-            c.send({"t": "tb", "i": i, "a": r1(w.toma_age), "s": si, "st": r1(w.toma_sink_t),
-                    "l": r1(w.toma_lock.get(c.pid, 0.0))})
-            c.tb_last, c.tb_t = (i, si), now
+        if getattr(c, "tb_last", None) != (i, si, rk) or now - getattr(c, "tb_t", 0.0) > 1.0:
+            msg = {"t": "tb", "i": i, "a": r1(w.toma_age), "s": si, "st": r1(w.toma_sink_t),
+                   "l": r1(w.toma_lock.get(c.pid, 0.0))}
+            if rd:
+                msg["rd"] = [r1(rd[0]), r1(rd[1]), r1(rd[2]), int(rd[3]), int(rd[4])]
+            c.send(msg)
+            c.tb_last, c.tb_t = (i, si, rk), now
 
 
 class NetMob:
@@ -18356,12 +19210,16 @@ class NetMob:
 
     def windup(self):
         k = MOB_KINDS[self.kind]
+        if self.atk_kind == 3:                         # 13f: Mörserwurf
+            return k["mortar_windup"]
         if self.atk_kind == 2:
             return k["rock_windup"]
         return k["slam_windup"] if self.atk_kind == 1 else k["windup"]
 
     def recover(self):
         k = MOB_KINDS[self.kind]
+        if self.atk_kind == 3:
+            return k.get("mortar_recover", 1.0)
         return k.get("rock_recover", 1.0) if self.atk_kind == 2 else k.get("recover", 0.4)
 
     def apply(self, x, y, z, heading, state, hp, speed, atk, hurt, dead):
@@ -18495,6 +19353,12 @@ class ClientSession:
                     w.toma_lock[self.my_id] = lk
                 else:
                     w.toma_lock.pop(self.my_id, None)
+                rd = m.get("rd")                     # 13a: Tomahawk-Radar (Kreis oder Pin) vom Host
+                try:
+                    w.toma_radar = ((float(rd[0]), float(rd[1]), float(rd[2]), int(rd[3]), int(rd[4]))
+                                    if isinstance(rd, list) and len(rd) == 5 else None)
+                except (TypeError, ValueError):
+                    w.toma_radar = None
         except (KeyError, IndexError, TypeError, ValueError):
             pass
         except Exception:
@@ -18571,6 +19435,8 @@ class ClientSession:
                 nm = self.mobs[mid] = NetMob(mid, KINDS[ki], x, y, z, hd)
             nm.apply(x, y, z, hd, STATES[si], hp, spd, atk, hurt, dead)
             nm.atk_kind = row[12] if len(row) > 12 else 0
+            if len(row) > 14:                            # 13d: eigene Drohne: Besitzer und Restzeit (HUD-Uhr)
+                nm.own_pid, nm.life_left = row[13], row[14]
             seen.add(mid)
         for mid in [i for i in self.mobs if i not in seen]:
             del self.mobs[mid]
@@ -18732,10 +19598,12 @@ class ClientSession:
         w.fires = [q for q in w.fires if q.fid in live]
         old = {a.aid: a for a in w.airdrops}
         ads = []
-        for aid, st, fx, fy, fz, ang, dist, cz, age in m.get("ad", ()):
+        for row in m.get("ad", ()):
+            aid, st, fx, fy, fz, ang, dist, cz, age = row[:9]
             a = old.get(aid)
             if a is None:
                 a = AirDrop(aid, fx, fy, fz, "common", -1, ang)
+                a.jet = bool(row[9]) if len(row) > 9 else False                         # 13c
             a.state, a.ang = st, ang
             if abs(a.dist - dist) > 6.0 or st != getattr(a, "_st", st):
                 a.dist = dist
@@ -18771,8 +19639,8 @@ class ClientSession:
         for a in w.airdrops:
             a.age += dt
             if a.state >= 1:
-                a.dist += AIR_PLANE_SPEED * dt
-            if a.state == 2:
+                a.dist += a.speed() * dt                 # 13c: Jet schneller
+            if a.state == 2 and not a.jet:
                 a.cz -= AIR_FALL_V * dt
         if w.strike == 1:
             w.strike_t = max(0.0, w.strike_t - dt)
@@ -114458,7 +115326,7 @@ def gren_icon_mesh(kind, s=0.05):
         rect(0.1 * s, 0.95 * s, 0.38 * s, 1.08 * s, (0.95, 0.92, 0.85))
         disc(0.22 * s, 1.35 * s, 0.22 * s, 0.32 * s, (1.0, 0.55, 0.1))          # Flamme
         disc(0.22 * s, 1.30 * s, 0.11 * s, 0.18 * s, (1.0, 0.95, 0.5))
-    elif kind == "flare":
+    elif kind in ("flare", "jet"):                                             # 13c: Jet-Strike wie die Fackel (schwarz)
         rect(-0.3 * s, -1.0 * s, 0.3 * s, 0.8 * s, c)
         for k in range(5):
             z = -0.95 + k * 0.12
@@ -114548,6 +115416,49 @@ def build_parachute():
     nd = NodePath(m.node("chute"))
     nd.setTwoSided(True)
     return nd
+
+def build_strike_jet():
+    """13c: Kampfjet für den Jet-Strike (Nase +y): schlanker Rumpf, Deltaflügel, Doppel-Seitenleitwerk, Cockpithaube,
+    glühende Düse. Etwa 16 m lang."""
+    rng = random.Random(77)
+    m, glow = Mesh(), Mesh(lit=False)
+    body, dk, canopy = (0.36, 0.39, 0.42), (0.22, 0.24, 0.27), (0.12, 0.16, 0.22)
+    loft(m, [(0, -8.0, 0.0), (0, -5.0, 0.0), (0, 2.0, 0.1), (0, 6.0, 0.0), (0, 8.5, -0.1)],
+         [0.9, 1.1, 1.0, 0.6, 0.05], [0.8, 1.0, 1.0, 0.6, 0.05], body, rng)
+    loft(m, [(0, 1.5, 0.75), (0, 3.5, 1.0), (0, 5.2, 0.7)], [0.05, 0.45, 0.05], [0.05, 0.35, 0.05], canopy, None)
+    for sx in (-1, 1):
+        m.tri((sx * 0.9, 2.0, 0.0), (sx * 6.5, -5.0, -0.1), (sx * 0.9, -6.0, 0.0), body, ref=(0, 0, -5))   # Deltaflügel
+        m.tri((sx * 0.9, 2.0, 0.0), (sx * 0.9, -6.0, 0.0), (sx * 6.5, -5.0, -0.1), dk, ref=(0, 0, 5))
+        m.tri((sx * 0.6, -4.5, 0.6), (sx * 1.3, -7.6, 3.4), (sx * 0.6, -7.8, 0.6), dk, ref=(-sx * 5, 0, 0))   # Leitwerk
+        m.tri((sx * 0.6, -4.5, 0.6), (sx * 0.6, -7.8, 0.6), (sx * 1.3, -7.6, 3.4), dk, ref=(sx * 5, 0, 0))
+        box(m, sx * 3.2, -2.2, -0.45, 0.3, 2.4, 0.3, dk, rng)                                               # Bombenträger
+    box(glow, 0, -8.2, 0.0, 0.7, 0.3, 0.7, (1.0, 0.55, 0.2))                                                 # Düse
+    root = NodePath("jet")
+    root.attachNewNode(m.node("jet"))
+    g = root.attachNewNode(glow.node("duese"))
+    g.setLightOff()
+    root.setScale(1.0)
+    return root
+
+
+def build_jet_bomb():
+    """13c: Fliegerbombe (Nase +y): olivgrüner Körper, gelber Ring, Leitwerk hinten."""
+    rng = random.Random(78)
+    m = Mesh()
+    loft(m, [(0, -1.1, 0), (0, -0.6, 0), (0, 0.6, 0), (0, 1.1, 0)], [0.12, 0.3, 0.3, 0.05], [0.12, 0.3, 0.3, 0.05],
+         (0.32, 0.36, 0.24), rng)
+    loft(m, [(0, 0.35, 0), (0, 0.5, 0)], [0.31, 0.31], [0.31, 0.31], (0.95, 0.80, 0.15), None)
+    for a in range(4):
+        ca, sa = math.cos(a * math.pi / 2), math.sin(a * math.pi / 2)
+        m.tri((ca * 0.1, -0.7, sa * 0.1), (ca * 0.45, -1.25, sa * 0.45), (ca * 0.1, -1.2, sa * 0.1), (0.25, 0.28, 0.2),
+              ref=(-sa, 0, ca))
+        m.tri((ca * 0.1, -0.7, sa * 0.1), (ca * 0.1, -1.2, sa * 0.1), (ca * 0.45, -1.25, sa * 0.45), (0.25, 0.28, 0.2),
+              ref=(sa, 0, -ca))
+    root = NodePath("bombe")
+    root.attachNewNode(m.node("bombe"))
+    root.setScale(1.4)
+    return root
+
 
 def build_supply_crate():
     """10e: neutrale Versorgungskiste (Airdrop): Holz mit Stahlbändern, Schablonen-Pfeil - verrät ihre Seltenheit nicht."""
@@ -115172,10 +116083,19 @@ class Sfx:
                 self.loop_at(key, "gas", (g.x, g.y, g.z), 0.6)
         for a in world.airdrops:
             fp = (a.fx, a.fy, a.fz + 0.4)
-            if a.age < FLARE_BURN_T and math.dist(fp, cam) < self.RANGE["gas"]:
+            if a.age < FLARE_BURN_T and (not a.jet or a.state < 3) and math.dist(fp, cam) < self.RANGE["gas"]:
                 key = ("flare", a.aid)
                 loops_on.add(key)
                 self.loop_at(key, "gas", fp, 0.45, 1.5)
+            if a.jet:                                    # 13c: Jet-Strike - Düsenlärm am Jet
+                if a.state >= 1:
+                    k = a.dist - JET_LEAD
+                    pp = (a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, a.plane_z())
+                    if math.dist(pp, cam) < self.RANGE["jet"]:
+                        key = ("jet", a.aid)
+                        loops_on.add(key)
+                        self.loop_at(key, "jet", pp, 0.9)
+                continue
             if a.state >= 1:
                 k = a.dist - AIR_PLANE_LEAD
                 pp = (a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, max(AIR_PLANE_ALT, a.fz + 60.0))
@@ -115343,6 +116263,80 @@ def default_fullscreen(g):
 
 
 class Game(ShowBase):
+    def titan_hold_fx(self, m):
+        """13f: Mörserwurf - der Titan hält den Felsen: vom Greifen am Boden (MORTAR_PICK) bis zum Abwurf. Erst vor den
+        Füssen, dann hoch über den Kopf (Pose: MobView, Atk-Art 3). Danach fliegt der echte Brocken (world.rocks)."""
+        held = self.held_rocks = getattr(self, "held_rocks", {})
+        nd = held.get(m.id)
+        w = m.windup() if m.state == "attack" and getattr(m, "atk_kind", 0) == 3 else 0.0
+        if not w or not (w * MORTAR_PICK <= m.atk_t < w):
+            if nd is not None:
+                nd.hide()
+            return
+        if nd is None:
+            if getattr(self, "rock_np", None) is None:
+                self.update_rocks_view(0.0)                # legt das Felsmodell an
+            nd = held[m.id] = self.rock_np.copyTo(self.render)
+        nd.show()
+        a = math.radians(m.heading)
+        fx, fy = -math.sin(a), math.cos(a)
+        p1 = w * MORTAR_LIFT
+        u = 0.0 if m.atk_t < p1 else (m.atk_t - p1) / (w - p1)
+        u = u * u * (3 - 2 * u)
+        reach = m.radius * (0.95 - 1.1 * u)                # vor den Füssen -> leicht hinter dem Kopf
+        zg = m.z + 0.6 + (m.height * 1.05 - 0.6) * u
+        nd.setPos(m.x + fx * reach, m.y + fy * reach, zg)
+        nd.setScale(1.5 + 0.2 * u)                         # grosser Brocken in den Pranken
+        nd.setHpr(m.heading, 20.0 * math.sin(m.atk_t * 2.0), 0)
+
+    def boss_dig_fx(self, m, v, dep, dt):
+        """13f: Koloss/Titan buddelt sich aus (Host und Mitspieler: erkannt daran, dass er unter dem Boden steckt):
+        Oberkörper wühlt hin und her, Beine strampeln, ringsum fliegt Erde, der Boden bebt."""
+        k = clampf(dep / max(m.height, 0.1), 0.0, 1.0)     # 1 = noch ganz im Boden
+        t = time.time() + m.id * 0.37
+        v.torso.setP(28.0 * math.sin(t * 6.5) * (0.35 + k))
+        v.torso.setR(12.0 * math.sin(t * 4.1))
+        v.legL.setP(40.0 * math.sin(t * 8.0))
+        v.legR.setP(-40.0 * math.sin(t * 8.0))
+        gz = m.z + dep
+        acc = self.dig_acc = getattr(self, "dig_acc", {})
+        a_ = acc.get(m.id, 0.0) + dt
+        r = self.prng
+        rad = m.radius * 1.15
+        while a_ >= 0.035:                                 # Erde fliegt ringsum
+            a_ -= 0.035
+            ang = r.uniform(0, math.tau)
+            rr = rad * r.uniform(0.4, 1.0)
+            self.add_particle((m.x + math.cos(ang) * rr, m.y + math.sin(ang) * rr, gz + 0.15),
+                              (math.cos(ang) * r.uniform(1.0, 3.5), math.sin(ang) * r.uniform(1.0, 3.5), r.uniform(2.5, 6.0)),
+                              (0.36, 0.27, 0.18) if r.random() < 0.7 else (0.45, 0.4, 0.33), 0.06 + 0.06 * r.random(),
+                              1.1, 0.3)
+            if r.random() < 0.08:
+                self.smoke_puff((m.x + math.cos(ang) * rr, m.y + math.sin(ang) * rr, gz + 0.3), 0.6 + m.scale * 0.12, 1.6, 0.55)
+        acc[m.id] = a_
+        pl = self.player
+        d = math.hypot(pl.x - m.x, pl.y - m.y)
+        if d < 40.0 and r.random() < dt * 3.0:              # Beben in der Nähe
+            self.sp_cam.kick((1.0 - d / 40.0) * 2.5)
+
+    def update_drone_hud(self):
+        """13d: eigene lila Drohne aktiv -> Kästchen unten rechts; Uhr = Restzeit / PDRONE_LIFE. Bei mehreren eigenen
+        Drohnen zählt die mit der längsten Restzeit."""
+        hud = getattr(self, "drone_hud", None)
+        if hud is None:
+            return
+        left = -1.0
+        for m in self.world.mobs:
+            if m.kind != "pdrone" or m.state == "dead":
+                continue
+            own = getattr(m, "owner", getattr(m, "own_pid", -1))
+            if own == self.my_id:
+                left = max(left, float(getattr(m, "life", getattr(m, "life_left", 0.0))))
+        if left < 0 or self.player.hp <= 0:
+            hud.hide()
+        else:
+            hud.set(left / PDRONE_LIFE, left)
+
     BUFF_LOOK = {"speed": ("T", (0.3, 1.0, 0.6)), "damage": ("S", (1.0, 0.35, 0.25)), "tank": ("HP", (1.0, 0.8, 0.25))}
 
     def __init__(self):
@@ -118354,6 +119348,7 @@ class Game(ShowBase):
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
+        self.drone_hud = DroneHud(self.a2dBottomRight)  # 13d: lila Drohne aktiv - Kästchen mit Uhrzeiger-Countdown
         # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
         mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
@@ -120263,17 +121258,23 @@ class Game(ShowBase):
                 glow.setLightOff()
                 glow.setFogOff()
                 glow.setColorScale(1.0, 0.15, 0.1, 0.5)
-                plane, props = build_cargo_plane()
+                if a.jet:                                       # 13c: Jet-Strike - Kampfjet und Bombe
+                    plane, props = build_strike_jet(), []
+                    drop = root.attachNewNode("bombe")
+                    build_jet_bomb().reparentTo(drop)
+                    chute = drop.attachNewNode("kein_schirm")
+                else:
+                    plane, props = build_cargo_plane()
+                    drop = root.attachNewNode("kiste")
+                    build_supply_crate().reparentTo(drop)
+                    chute = build_parachute()
+                    chute.reparentTo(drop)
                 plane.reparentTo(root)
                 plane.hide()
-                drop = root.attachNewNode("kiste")
-                build_supply_crate().reparentTo(drop)
-                chute = build_parachute()
-                chute.reparentTo(drop)
                 drop.hide()
                 v = self.ad_views[a.aid] = {"root": root, "flare": fl, "fire": fire, "glow": glow, "plane": plane,
                                             "props": props, "drop": drop, "chute": chute, "puff": 0.0}
-            burning = a.age < FLARE_BURN_T and a.state < 3 or (a.state == 3 and a.age < FLARE_BURN_T * 0.6)
+            burning = a.age < FLARE_BURN_T and a.state < 3 or (a.state == 3 and a.age < FLARE_BURN_T * 0.6 and not a.jet)
             (v["fire"].show if burning else v["fire"].hide)()
             (v["glow"].show if burning else v["glow"].hide)()
             if burning:
@@ -120285,6 +121286,21 @@ class Game(ShowBase):
                     self.fx_spawn(self.sphere_np, (a.fx + self.prng.uniform(-0.2, 0.2), a.fy + self.prng.uniform(-0.2, 0.2),
                                                    a.fz + 0.4), 3.2, 0.25, 1.6, (0.95, 0.2, 0.15), (0.6, 0.25, 0.22),
                                   p=1.2, rise=2.6)
+            if a.jet:                                           # 13c: Jet-Strike
+                if a.state >= 1:
+                    k = a.dist - JET_LEAD
+                    v["plane"].show()
+                    v["plane"].setPos(a.fx + math.cos(a.ang) * k, a.fy + math.sin(a.ang) * k, a.plane_z())
+                    v["plane"].setH(math.degrees(a.ang) - 90.0)
+                if a.state == 2:
+                    bx, by, bz, u = a.bomb_pos()
+                    v["drop"].show()
+                    v["drop"].setPos(bx, by, bz)
+                    v["drop"].setH(math.degrees(a.ang) - 90.0)
+                    v["drop"].setP(-15.0 - 60.0 * u)                # kippt im Fall mit der Nase nach unten
+                else:
+                    v["drop"].hide()
+                continue
             if a.state >= 1:
                 k = a.dist - AIR_PLANE_LEAD
                 pz = max(AIR_PLANE_ALT, a.fz + 60.0)
@@ -120663,23 +121679,24 @@ class Game(ShowBase):
                 if old[key] is not None:
                     old[key][0].removeNode()
 
-    def ping_geom(self, parent, sort):
+    def ping_geom(self, parent, sort, col=None, alpha=None, edge=0.75):
         """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
-        wird er am Rand abgeschnitten)."""
+        wird er am Rand abgeschnitten). 13a: Farbe/Deckkraft wählbar (Standard: Gegner-Ping)."""
         n = self.PING_SEG
         fmt = GeomVertexFormat.getV3c4()
         vd = GeomVertexData("ping", fmt, Geom.UHDynamic)
         vd.setNumRows(1 + 2 * n)
         cw = GeomVertexWriter(vd, "color")
         vw = GeomVertexWriter(vd, "vertex")
-        r_, g_, b_ = ENEMY_PING_COL
-        cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)
+        r_, g_, b_ = ENEMY_PING_COL if col is None else col
+        a_ = ENEMY_PING_ALPHA if alpha is None else alpha
+        cw.addData4(r_, g_, b_, a_)
         vw.addData3(0, 0, 0)
         for i in range(n):
-            cw.addData4(r_, g_, b_, ENEMY_PING_ALPHA)          # innerer Ring (Ende der Fläche)
+            cw.addData4(r_, g_, b_, a_)                        # innerer Ring (Ende der Fläche)
             vw.addData3(0, 0, 0)
         for i in range(n):
-            cw.addData4(r_, g_, b_, 0.75)                      # äusserer Ring (Rand)
+            cw.addData4(r_, g_, b_, edge)                      # äusserer Ring (Rand)
             vw.addData3(0, 0, 0)
         prim = GeomTriangles(Geom.UHStatic)
         for i in range(n):
@@ -120699,6 +121716,117 @@ class Game(ShowBase):
         np_.setDepthTest(False)
         np_.setDepthWrite(False)
         return np_, vd
+
+    def toma_pin_node(self, parent, s, sort):
+        """13a: Pin des Tomahawk-Radars (Spitze unten = Säule): schwarzer Rand, gelbe Fläche, rotes Raketensymbol."""
+        def disc(m, cz, r, col, n=20):
+            for k in range(n):
+                a0, a1 = math.tau * k / n, math.tau * (k + 1) / n
+                m.tri((0, 0, cz), (math.cos(a0) * r, 0, cz + math.sin(a0) * r), (math.cos(a1) * r, 0, cz + math.sin(a1) * r),
+                      col, ref=(0, 5, 0))
+        root = parent.attachNewNode("toma_pin")
+        black, yel, red = Mesh(lit=False), Mesh(lit=False), Mesh(lit=False)
+        disc(black, 1.9 * s, 1.0 * s, (0.04, 0.04, 0.05))
+        black.tri((-0.78 * s, 0, 1.4 * s), (0.78 * s, 0, 1.4 * s), (0, 0, 0), (0.04, 0.04, 0.05), ref=(0, 5, 0))
+        disc(yel, 1.9 * s, 0.78 * s, (1.0, 0.82, 0.15))
+        yel.tri((-0.56 * s, 0, 1.5 * s), (0.56 * s, 0, 1.5 * s), (0, 0, 0.3 * s), (1.0, 0.82, 0.15), ref=(0, 5, 0))
+        rc = (0.92, 0.12, 0.08)
+        bx, z0, z1 = 0.13 * s, 1.5 * s, 2.15 * s                                # Rakete: Rumpf, Spitze, Flossen
+        red.tri((-bx, 0, z0), (bx, 0, z0), (bx, 0, z1), rc, ref=(0, 5, 0))
+        red.tri((-bx, 0, z0), (bx, 0, z1), (-bx, 0, z1), rc, ref=(0, 5, 0))
+        red.tri((-bx, 0, z1), (bx, 0, z1), (0, 0, 2.48 * s), rc, ref=(0, 5, 0))
+        red.tri((-bx, 0, z0), (-0.32 * s, 0, 1.4 * s), (-bx, 0, 1.78 * s), rc, ref=(0, 5, 0))
+        red.tri((bx, 0, z0), (bx, 0, 1.78 * s), (0.32 * s, 0, 1.4 * s), rc, ref=(0, 5, 0))
+        for k, (m, nm) in enumerate(((black, "pin_rand"), (yel, "pin_flaeche"), (red, "pin_rakete"))):
+            n = root.attachNewNode(m.node(nm))
+            n.setTwoSided(True)
+            n.setLightOff()
+            n.setTransparency(TransparencyAttrib.MAlpha)
+            n.setBin("fixed", sort + k)
+            n.setDepthTest(False)
+            n.setDepthWrite(False)
+        return root
+
+    def draw_toma_radar(self):
+        """13a: Tomahawk-Radar zeichnen: gelber Suchkreis (auf der Minimap am Rand abgeschnitten) bzw. Pin genau auf der
+        Säule (auf der Minimap am Rand, wenn ausserhalb des Ausschnitts). Hinweis in der Bildmitte bei jeder neuen Stufe."""
+        mm_root = getattr(self, "mm_root", None)
+        if mm_root is None:
+            return
+        st = getattr(self, "toma_radar_ui", None)
+        if st is None or st["root"] is not mm_root:                  # neue Minimap (neues Spiel): Knoten neu anlegen
+            st = self.toma_radar_ui = {"root": mm_root, "mm": None, "bm": None, "mm_pin": None, "bm_pin": None,
+                                       "key": None}
+        rd = getattr(self.world, "toma_radar", None)
+        key = (rd[3], rd[4]) if rd else None
+        if key != st["key"]:
+            if rd and TOMA_RADAR_TOAST and self.mode == "play":
+                self.toast("Tomahawk geortet - Pin auf der Karte (M)" if rd[4] else
+                           ("Tomahawk-Radar: Suchgebiet auf der Karte (M)" if rd[3] == 0 else
+                            "Tomahawk-Radar: Suchkreis wird kleiner"), col=TOMA_RADAR_COL)
+            st["key"] = key
+        for k in ("mm", "bm"):
+            if st[k] is not None and not (rd and not rd[4]):
+                st[k][0].hide()
+        for k in ("mm_pin", "bm_pin"):
+            if st[k] is not None and not (rd and rd[4]):
+                st[k].hide()
+        if not rd:
+            return
+        cx, cy, rr_m, _stage, pin = rd
+        bm_on = getattr(self, "bm_open", False) and getattr(self, "bm_root", None) is not None
+        H = self.BIGMAP_H
+        if pin:
+            if st["mm_pin"] is None:
+                st["mm_pin"] = self.toma_pin_node(mm_root, 0.011, 26)
+            p = self.mm_xy(cx, cy)
+            st["mm_pin"].setPos(p[0], 0, p[1])
+            st["mm_pin"].show()
+            if bm_on:
+                if st["bm_pin"] is None:
+                    st["bm_pin"] = self.toma_pin_node(self.bm_root, 0.016, 64)
+                q = self.bm_xy(cx, cy)
+                st["bm_pin"].setPos(q[0], 0, q[1])
+                st["bm_pin"].show()
+            return
+        # Suchkreis auf der Minimap (wie die Lärm-Pings: Punkte am Rand der Minimap abgeschnitten)
+        pl, R = self.player, self.mm_R
+        k = R / self.mm_vis
+        h = math.radians(pl.heading)
+        dx, dy = cx - pl.x, cy - pl.y
+        c = ((dx * math.cos(h) + dy * math.sin(h)) * k, (-dx * math.sin(h) + dy * math.cos(h)) * k)
+        rr = rr_m * k
+        if st["mm"] is None:
+            st["mm"] = self.ping_geom(mm_root, 22, TOMA_RADAR_COL, TOMA_RADAR_ALPHA, 0.7)
+        np_, vd = st["mm"]
+        if math.hypot(*c) - rr > R:
+            np_.hide()
+        else:
+            lim = R * 0.985
+            pts = []
+            for i in range(self.PING_SEG):
+                a = math.tau * i / self.PING_SEG
+                qx, qy = c[0] + math.cos(a) * rr, c[1] + math.sin(a) * rr
+                dq = math.hypot(qx, qy)
+                if dq > lim:
+                    qx, qy = qx / dq * lim, qy / dq * lim
+                pts.append((qx, qy))
+            dc = math.hypot(*c)
+            cc = c if dc <= lim else (c[0] / dc * lim * 0.9, c[1] / dc * lim * 0.9)
+            self.ping_fill(vd, pts, cc)
+            np_.show()
+        # Suchkreis auf der grossen Karte (M)
+        if bm_on:
+            if st["bm"] is None:
+                st["bm"] = self.ping_geom(self.bm_root, 62, TOMA_RADAR_COL, TOMA_RADAR_ALPHA, 0.7)
+            np_, vd = st["bm"]
+            kb = 2 * H / WORLD
+            c = (-H + cx * kb, -H + cy * kb)
+            pts = [(max(-H, min(H, c[0] + math.cos(math.tau * i / self.PING_SEG) * rr_m * kb)),
+                    max(-H, min(H, c[1] + math.sin(math.tau * i / self.PING_SEG) * rr_m * kb)))
+                   for i in range(self.PING_SEG)]
+            self.ping_fill(vd, pts, (max(-H, min(H, c[0])), max(-H, min(H, c[1]))))
+            np_.show()
 
     def ping_fill(self, vd, pts, ctr):
         """10h: Kreis-Punkte (pts = äusserer Rand) und Mitte ctr ins Mesh schreiben."""
@@ -122077,7 +123205,22 @@ class Game(ShowBase):
                 self.sfx.play("pin", (e[2], e[3], e[4]), 0.9, 0.6)
                 ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
                 if ad_ is not None and ad_.owner == self.my_id:
-                    self.toast("Airdrop angefordert - Flugzeug im Anflug", (1.0, 0.45, 0.35), 2.5)
+                    self.toast("Jet-Strike angefordert - Bombe in wenigen Sekunden" if ad_.jet else
+                               "Airdrop angefordert - Flugzeug im Anflug", (1.0, 0.45, 0.35), 2.5)
+            elif kind == "jetin":              # 13c: Jet-Strike - Jet im Anflug
+                ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
+                if ad_ is not None:
+                    pl_ = self.player
+                    if ad_.owner == self.my_id:
+                        self.toast("Jet-Strike im Anflug - Abstand halten!", (1.0, 0.45, 0.35), 2.5)
+                    elif pl_.hp > 0 and math.hypot(pl_.x - ad_.fx, pl_.y - ad_.fy) < JET_R * 2.5:
+                        self.toast("Jet im Anflug - weg vom roten Rauch!", (1.0, 0.35, 0.3), 2.5)
+            elif kind == "jetdrop":            # 13c: Bombe ausgeklinkt - Pfeifen
+                ad_ = next((a for a in self.world.airdrops if a.aid == e[1]), None)
+                if ad_ is not None and "whistle" in self.sfx.pool:
+                    self.sfx.play("whistle", (ad_.fx, ad_.fy, ad_.fz + 20.0), 0.9, 1.1)
+            elif kind == "jetboom":            # 13c: Einschlag - Staubwelle und Beben
+                self.slam_fx((e[2], e[3], e[4]), JET_R * 0.6)
             elif kind == "airland":            # 10e: Kiste gelandet
                 if "thud" in self.sfx.pool:
                     self.sfx.play("thud", (e[3], e[4], e[5]), 1.0, 0.8)
@@ -122087,6 +123230,18 @@ class Game(ShowBase):
                 self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.7, 1.3)
                 if e[1] == self.my_id:
                     self.toast("Drohne gestartet", (0.85, 0.55, 1.0), 1.5)
+            elif kind == "pdrefresh":          # 13f: Drohnen-Granate frischt die aktive lila Drohne auf
+                self.sfx.play("charge", (e[3], e[4], e[5] + 0.5), 0.6, 1.6)
+                for _ in range(10):
+                    a_ = self.prng.uniform(0, math.tau)
+                    self.add_particle((e[3], e[4], e[5]), (math.cos(a_) * 2.0, math.sin(a_) * 2.0, self.prng.uniform(-0.5, 1.5)),
+                                      (0.85, 0.55, 1.0), 0.04, 0.6, 0.0)
+                if e[1] == self.my_id:
+                    self.toast("Drohne aufgefrischt - wieder 5:00" if e[2] == self.my_id
+                               else "Es ist schon eine Drohne aktiv - ihre Zeit wurde aufgefrischt", (0.85, 0.55, 1.0), 2.0)
+            elif kind == "bossstun":           # 13d: lila Drohne hat einen Titan/Koloss betäubt
+                if len(e) > 4 and e[1] == self.my_id:
+                    self.toast(f"Drohne betäubt {e[3]}", (0.85, 0.55, 1.0), 1.5)
             elif kind == "tempdown":           # 10e: eigene Drohne erlischt
                 for _ in range(8):
                     self.add_particle((e[2], e[3], e[4]), (self.prng.uniform(-2, 2), self.prng.uniform(-2, 2),
@@ -122323,6 +123478,21 @@ class Game(ShowBase):
                     self.hurt_flash = max(self.hurt_flash, 0.5)
             elif kind == "slam":               # Koloss-Bodenschlag: Staubwelle, Beben, dumpfer Knall
                 self.slam_fx(e[1], e[2])
+            elif kind == "bossdig":            # 13f: Koloss/Titan bricht am Kartenrand aus dem Boden
+                x, y, z = e[2], e[3], e[4]
+                big = 1.6 if e[5] == "titan" else 1.0
+                self.slam_fx((x, y, z), 4.0 * big)
+                for _ in range(int(24 * big)):
+                    self.add_particle((x, y, z + 0.3), (self.prng.uniform(-4, 4), self.prng.uniform(-4, 4),
+                                                        self.prng.uniform(4, 10)), (0.36, 0.27, 0.18), 0.16, 1.4, 0.3)
+                self.sfx.play("rip", (x, y, z), MOB_VOL.get("titan_rip", 0.8), self.prng.uniform(0.45, 0.6))
+                self.feed_add("Ein Titan bricht aus dem Boden!" if e[5] == "titan" else "Ein Koloss bricht aus dem Boden!")
+            elif kind == "bosswave":           # 13f: der letzte seiner Art ist gefallen -> Zyklus beginnt
+                self.feed_add(("Alle Titanen besiegt" if e[1] == "titan" else "Alle Kolosse besiegt")
+                              + f" - in {int(e[2])} s graben sie sich am Kartenrand wieder aus")
+            elif kind == "rockthrow":          # 13f: Titan schleudert den Felsen im hohen Bogen
+                if "swoosh" in self.sfx.pool:
+                    self.sfx.play("swoosh", e[1], 1.0, 0.45)
             elif kind == "rockkick":           # Titan reisst einen Brocken aus dem Boden
                 x, y, z = e[1]
                 for _ in range(16):
@@ -122884,6 +124054,15 @@ class Game(ShowBase):
             if v is None:
                 v = self.mob_views[m] = MobView(m)
                 v.root.reparentTo(self.render)
+            v.update_bar(m, dt)                            # 13c: Balken-Fade jedes Bild
+            if m.kind == "titan":
+                self.titan_hold_fx(m)                      # 13f: Felsen in den Händen beim Mörserwurf
+            if m.kind in BOSS_KINDS and m.state != "dead":   # 13f: Boss buddelt sich gerade aus dem Boden?
+                dep = world.height(m.x, m.y) - m.z
+                if dep > 0.05:
+                    v.update(m)
+                    self.boss_dig_fx(m, v, dep, dt)
+                    continue
             n = getattr(m, "upd_n", None)                  # 12: gestaffelt nicht gerechnet -> Bild bleibt gleich, nichts tun
             if n is not None:                              # (Mitspieler: Monster aus dem Netz haben keinen Zähler)
                 key = (n, m.hp)
@@ -122893,6 +124072,8 @@ class Game(ShowBase):
             v.update(m)
         for m in [m for m in self.mob_views if m not in current]:
             self.mob_views.pop(m).root.removeNode()
+        for mid in [k for k, nd in getattr(self, "held_rocks", {}).items() if not any(o.id == k for o in current)]:
+            self.held_rocks.pop(mid).removeNode()
 
         # Mitspieler
         others = {pid for pid in world.players if pid != self.my_id}
@@ -123121,6 +124302,7 @@ class Game(ShowBase):
                                   (0.95, 0.75, 0.1, 1) if ratio > 0.25 else (0.9, 0.15, 0.1, 1)))
             self.set_text(self.hp_text, f"{int(math.ceil(pl.hp))}")
         self.update_ability_icons()
+        self.update_drone_hud()                          # 13d: Drohnen-Kästchen mit Uhr unten rechts
         if getattr(self, "toast_later", None):             # Hinweis vom Spielstart (nach dem Aufbau zeigen)
             self.toast(*self.toast_later)
             self.toast_later = None
@@ -124250,6 +125432,7 @@ class Game(ShowBase):
         else:
             self.mm_strike.hide()
             self.mm_strike_edge.hide()
+        self.draw_toma_radar()                      # 13a: Tomahawk-Radar (Suchkreis / Pin) auf Minimap und Karte
         self.set_text(self.mm_zoom_text, f"X  heraus    Y  hinein        Ausschnitt {int(self.mm_vis)} m")
         self.update_bigmap()
         self.update_ctf_map()                       # 11: Basen, Flaggen, Teamkameraden
@@ -124682,6 +125865,29 @@ class MobView:
                 lod.setSwitch(1, 1e6, d_)
         self.spark_t = 0.0
         self.drawn = None         # 12: (Update-Zähler, HP) des zuletzt gezeichneten Zustands
+        self.bar_hp = mob.hp      # 13c: zuletzt gesehene HP (sinkt sie -> Treffer -> Balken ploppt auf)
+        self.bar_age = 1e9        # 13c: s seit dem letzten Treffer (gross = Balken unsichtbar)
+        self.bar.setTransparency(TransparencyAttrib.MAlpha)
+
+    def update_bar(self, m, dt):
+        """13c: Lebensbalken nur nach Treffern: MOB_BAR_SHOW_T s voll sichtbar, dann in MOB_BAR_FADE_T s ausblenden.
+        Läuft jedes Bild (auch wenn das Monster gestaffelt nicht neu gezeichnet wird), damit der Fade flüssig bleibt."""
+        if m.state == "dead":
+            self.bar_age = 1e9
+            self.bar.hide()
+            return
+        if m.hp < self.bar_hp - 1e-6:                      # Treffer (auch aus dem Netz): Balken neu aufpoppen lassen
+            self.bar_age = 0.0
+        else:
+            self.bar_age += dt
+        self.bar_hp = m.hp
+        fade = self.bar_age - MOB_BAR_SHOW_T
+        if fade >= MOB_BAR_FADE_T or m.hp >= m.max_hp:
+            self.bar.hide()
+            return
+        self.fg.setSx(max(m.hp / m.max_hp, 0.001))
+        self.bar.setAlphaScale(1.0 if fade <= 0 else 1.0 - fade / MOB_BAR_FADE_T)
+        self.bar.show()
 
     def update(self, m):
         r = self.root
@@ -124711,10 +125917,31 @@ class MobView:
             if not hop:
                 self.legR.setZ(0.75)
             lean = 0.0
+            squat = 0.0
             if m.state == "attack":                        # ausholen, dann zuschlagen
                 w = m.windup()
                 rec = MOB_KINDS[m.kind].get("recover", 0.4)
-                if getattr(m, "atk_kind", 0) == 2:           # Titan-Tritt: Bein weit zurück, Fuss fährt in den Boden,
+                if getattr(m, "atk_kind", 0) == 3:           # 13f: Mörserwurf - bückt sich tief, greift den Felsen,
+                    rec = m.recover()                        # richtet sich mit ihm über dem Kopf auf und wirft
+                    a_ = m.atk_t
+                    p0, p1 = w * MORTAR_PICK, w * MORTAR_LIFT
+                    if a_ < p0:                              # runter bücken (in die Knie); P < 0 = nach vorn
+                        u = a_ / p0
+                        u = u * u * (3 - 2 * u)
+                        lean, squat = -78.0 * u, 0.2 * u
+                    elif a_ < p1:                            # unten: greift zu, wuchtet den Felsen los
+                        u = (a_ - p0) / (p1 - p0)
+                        lean, squat = -78.0 + 6.0 * math.sin(u * math.pi * 3), 0.2
+                    elif a_ < w:                             # aufrichten, Felsen über den Kopf, nach hinten lehnen
+                        u = (a_ - p1) / (w - p1)
+                        u = u * u * (3 - 2 * u)
+                        lean, squat = -78.0 + 118.0 * u, 0.2 * (1 - u)
+                    else:                                    # Wurf: nach vorn durchziehen, dann gerade
+                        u = min(1.0, (a_ - w) / max(rec, 0.01))
+                        lean = 40.0 - 70.0 * min(1.0, u * 3.0) + 30.0 * max(0.0, u * 3.0 - 1.0) / 2.0
+                    self.legL.setP(-35.0 * squat / 0.2)
+                    self.legR.setP(35.0 * squat / 0.2)
+                elif getattr(m, "atk_kind", 0) == 2:           # Titan-Tritt: Bein weit zurück, Fuss fährt in den Boden,
                     rec = m.recover()                        # dann reisst er den Brocken nach vorn heraus
                     if m.atk_t < w * 0.7:
                         u = m.atk_t / (w * 0.7)
@@ -124742,16 +125969,12 @@ class MobView:
             if m.kind == "grunt":                          # 9d: schlurfender Zombie - schwankt beim Gehen
                 self.torso.setR(7.0 * math.sin(m.phase * 0.5) * (1.0 if m.speed_now > 0 else 0.4))
             bob = abs(math.sin(m.phase)) * (0.25 if hop else 0.05) * (1 if m.speed_now > 0 else 0)
-            self.torso.setZ((0.45 if hop else 0.75) + bob)
+            self.torso.setZ((0.45 if hop else 0.75) + bob - squat)
         if m.hurt_t > 0:
             r.setColorScale(2.0, 0.6, 0.6, 1)
         else:
             r.clearColorScale()
-        if m.hp < m.max_hp:
-            self.bar.show()
-            self.fg.setSx(max(m.hp / m.max_hp, 0.001))
-        else:
-            self.bar.hide()
+        # 13c: Lebensbalken steuert update_bar (Auto-Fade nach Treffern)
 
 
 def _log_path():

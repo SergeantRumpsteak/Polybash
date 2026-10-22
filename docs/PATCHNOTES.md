@@ -1,6 +1,19 @@
-# Patchnotes – Robins Experimental-Modus
+# Patchnotes
 
 Neueste Änderungen oben.
+
+## Robins Patches 13a-13d und 13f in allen Modi, feste Tomahawk-Säulen auf der Kreisstraße (2026-10-23)
+Alles gilt für KotH, DM, CTF und Experimental gleichermassen. Nicht übernommen: 13e (zerstörbare Umgebung) und alles zu
+Baumwachstum/-hitbox, Baumfällen und zertrampelten Zäunen. **NET_VERSION 43**: alte Clients können nicht mehr beitreten.
+- NEU **13a Granaten-Beute**: Monster haben eigene Granaten-Pools (`MOB_GREN_W`) und sichere Granaten-Teile (`MOB_GREN_SURE`): Zombies/Jägerin Standardgranaten, Brute mehr Drohnen/Airdrop-Fackeln, Koloss und Titan am meisten; mehr Beute von Zombies/Jägerin/Brute/Koloss (`MOB_LOOT`).
+- NEU **13a Tomahawk-Radar**: steht die Säule 5 min unbenutzt, zeigen Minimap und Karte (M) einen gelben Suchkreis (120 m, nach je 1 min halbiert), zuletzt einen Pin genau auf der Säule (`TOMA_RADAR_*`, Netz: Feld `rd` in `tb`).
+- GEÄNDERT **Feste Säulenorte auf Polytown**: acht Punkte auf der Kreisstraße um die Burg (55 m um die Kartenmitte, alle 45 Grad, `TOMA_SPOTS`); um jeden Ankerpunkt sucht `build_toma_spots_fixed` den nächsten freien, ebenen Platz. Andere Karten wählen die Orte weiter automatisch.
+- NEU **13b Geräusch-Pathing**: Geräusch/Schütze weiter als 40 m: erst bis 20 m heran, dann genau auf den Punkt; getroffene Monster laufen exakt zum Schützen. Zombie/Brute/Jägerin erkennen Festhängen und nehmen Umwege. Der Titan steigt über freistehende niedrige Objekte (Zäune, Bänke, Schilder; `TITAN_LEG_H`).
+- NEU **13c Jet-Strike-Granate** (nur vom Titan, 1-3 Stück): rote Rauchfackel, ein Jet wirft eine Bombe ab, 15 m Radius, im Zentrum tödlich. **Lebensbalken** der Monster blenden nach 1,5 s selbst aus.
+- NEU **13d Lila Drohne**: 5 min Lebensdauer, zerstört feindliche Drohnen im Umkreis (ohne Beute), betäubt Titan/Koloss nah am Besitzer; Drohnen-Kästchen mit Uhrzeiger unten rechts.
+- NEU **13f Boss-Zyklen**: Kolosse und Titanen kommen erst wieder, wenn der letzte seiner Art tot ist, und buddeln sich dann nacheinander am Kartenrand aus (unverwundbar). Wegsuche per A* um Aussenwände zur Tür, wenn das Ziel im Gebäude liegt. Titan-Mörserwurf im hohen Bogen über Dächer (Bück-Animation). Höchstens eine lila Drohne im ganzen Spiel, weitere Granaten frischen die Zeit auf; die Abwehrdrohne gibt es nicht mehr als Beute (alte Granaten starten die lila Drohne).
+- GEFIXT Raketenwerfer-Treffer auf Fahrzeuge: kein Absturz mehr (Trefferquader von Fahrzeug/Heli kennen das Zaun-Flag `clip`).
+- GEFIXT Drohnen-HUD fängt ein Modell ohne Ausdehnung ab.
 
 ## Neue Runde mit Ausrüstungswahl, Schaden und Netz modusunabhängig (2026-10-23)
 - GEÄNDERT Nach dem Rundenende landen alle Spieler beim Start der nächsten Runde im Ausrüstungsmenü und drücken selbst auf Spawn (Experimental: Pistole, ebenfalls mit Spawn-Knopf).
