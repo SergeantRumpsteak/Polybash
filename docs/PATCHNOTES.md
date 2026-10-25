@@ -2,6 +2,42 @@
 
 Neueste Änderungen oben.
 
+## Waffen-, Ausrüstungs- und Nahkampf-Paket (Robin, 2026-10-26)
+Gilt für alle Modi (KotH, DM, CTF, Experimental). **NET_VERSION 48**: neue Waffen- und Nahkampf-Indizes, neue Nachrichten (`fire` mit `gl`, `axe`), alle müssen aktualisieren.
+
+Umbenannt (nur Namen, Indizes 0-8 bleiben):
+- Sturmgewehr -> **Colt M4 Carbine**, Scharfschützengewehr -> **DSR**, Maschinenpistole -> **MP9**, Pistole -> **Colt ACP**.
+
+Geänderte Waffen:
+- **Colt M4 Carbine**: Schaden 17 -> 15, Hüftstreuung 1,6° -> 1,25° (weniger als die SCAR-L). Kein Schalldämpfer möglich. Exklusiv: Aufsatz **Granatwerfer** (Platz Griff, ersetzt ihn): Rückstoß x1,9, Streuung beim Zielen x2,6. **V** schaltet Auto -> Semi -> Granatwerfer; 40-mm-Granaten im Bogen (`GL_*`: 3 je Waffe, max. 6, 2,2 s Nachladen, Radius 4 m, 95 Schaden).
+- **MP9**: Schaden 11 -> 8, starkes Spray im Dauerfeuer (Streuungszuwachs 0,10 -> 0,34, Seitenrückstoß 0,6 -> 1,5).
+- **Colt ACP**: Hüftstreuung 0,9° -> 1,2°.
+- **Minigun**: kein Zielen mehr (Rechtsklick wirkungslos), Hüftstreuung 3,0° -> 2,0°. **Anlauf**: 2 s aus dem Kaltstart; nach dem Loslassen dreht sie 1,5 s aus (`MINIGUN_SPIN_DECAY`). Wer in diesem Fenster wieder abdrückt, läuft nur den Rest an. HUD zeigt „Anlauf xx %“, Waffe zittert und surrt beim Hochdrehen.
+- **Railgun**: 90 Schaden an Personen/Monstern (vorher 140), fest **200** an Fahrzeugen und Helikoptern (`Weapon.veh_dmg`, ohne Heli-Faktor).
+
+Neue Waffen (nur aus Kisten/Beute, Loot-Tabellen neu verteilt):
+- **SCAR-L** (Haupt): die alten Werte des Sturmgewehrs (17 Schaden, 1,6° Hüfte).
+- **AK** (Haupt): 19 Schaden, deutlich mehr Rückstoß (1,45 / 0,85 seitlich).
+- **VSS** (Haupt, DMR): Schaden an die Colt ACP gekoppelt (`PISTOL_DMG` = 28: 4 Körper- oder 2 Kopftreffer), Magazin 10, festes Zielfernrohr **4x -> 6x -> 8x per Mausrad** beim Zielen.
+- **Karabiner 98k** (Haupt): keine Aufsätze, festes 10x-Glas, Repetierer: nach jedem Schuss 4 s Durchladen (Animation, Klicks, kurz aus dem Glas). Hüfte 7° (extrem ungenau). 100 Schaden Körper, 140 Kopf.
+- **Baretta** (Sekundär): 24 Schaden, etwas langsamer als die Colt ACP, präziser (0,65°). Eine **zweite Baretta** macht daraus die **Dual Baretta**: beide Hände, abwechselnd links/rechts, doppelte Munition und Nachladezeit, nur aus der Hüfte, ungenauer. Restmunition der ersten wandert in die Reserve.
+- **Abgesägte Schrotflinte** (Sekundär): gleicher Schaden wie die Schrotflinte (9 x 9), Streuung 8° statt 4,5°, 2 Schuss, Kipplauf-Nachladen.
+- **Stinger** (Spezial): Zielerfassung nur auf Fahrzeuge/Helikopter, 4 s im Kegel halten. Fadenkreuz **rot** (kein Ziel) -> **gelb** (Erfassung, Piepen) -> **grün** (schussbereit); ohne Erfassung nur ein Klicken. Lenkrakete (`STINGER_*`): Volltreffer 260 an Fahrzeugen (zerstört), 520 an Helikoptern.
+
+Neue Waffen benutzen das Modell ihres Vorbilds umgefärbt/gekürzt/ergänzt (`Weapon.model`, `GUN_SHAPES`-Varianten: SCAR-L sandfarben, AK mit Holz, VSS mit Schalldämpfer, 98k Holz/Brünierung mit Kammerstängel, Baretta silber, Abgesägte gekürzt, Stinger oliv mit Suchkopf) und dessen Klang leicht verstimmt.
+
+Schalldämpfer und Aufsätze:
+- **Schalldämpfer** (alle Waffen außer Colt M4 Carbine): Lärmradius höchstens wie ein laufender Spieler (`SILENCED_NOISE` = 10 m statt 43-60 m). Andere hören nur ein leises Zischen im Umkreis von ca. 16 m (neuer Klang `silenced`).
+- In **normalen Modi** (KotH, DM, CTF) liegen Waffen immer **blank** in der Welt - auch fallengelassene oder von Toten. Aufsätze gibt es separat bzw. im Ausrüstungsmenü. Experimental bleibt wie bisher.
+- Aufsatz-Auswahl (Menü und Tab-Fenster) zeigt nur, was an die Waffe passt (`att_fits(wi, si, v)`); unpassende Aufsätze werden beim Spawnen/Aufheben entfernt (`att_clean`).
+
+Nahkampf:
+- **Schwert**: 3-s-Halteangriff mit Kamerafahrt (Blick hebt sich mit der Klinge, beim Aufschlag von oben nach unten). Beim Aufschlag Luft-Druckwellen und Erde in **V-Form** ca. 2 m hoch; der halbtransparente Staub hängt 4-5 s und verschwindet dann ganz.
+- **Erschöpfungsklinge** gestrichen (Waffe, Beute, Modell, Lebensraub/Erschöpfung).
+- NEU **Kriegsaxt**: normaler Nahkampf (58 Schaden, Kopf x1,7) plus Wurf: halten lädt bis 100 % (1,2 s), loslassen wirft - ohne Flugbahn-Anzeige. Wurf 35-90 Schaden; die Axt fliegt aus der Hand (Messer bleibt) und liegt danach als Beute am Boden. In Fahrzeugen/Helikoptern bleibt sie 5-10 s stecken (zufällig) und macht 10 Schaden/s. Look: schwarzer Stiel mit Rauch, rote Wicklung, Bartaxt mit blutroter Schneide, Ziegenbock-Gravur mit rot leuchtenden Augen.
+
+Technik: Granatwerfer/Lenkrakete laufen als Kugeln mit Explosion (`WI_GL`, `Bullet.target`), Axtwürfe als `World.axes` (Host) mit Ereignissen `axe_fly`/`axe_stick`/`axe_end` für die Darstellung.
+
 ## Mobs weichen Hindernissen aus (2026-10-25)
 Nur Verhalten der Monster auf dem Host; das Netzprotokoll bleibt.
 - NEU **Fühler-Ausweichen** (`Mob.steer_around`): Bodenmonster (Zombie, Brute, Jägerin, Koloss, Titan) prüfen im Verfolgen zwei Punkte voraus mit derselben Kollisionsabfrage wie die Bewegung (`push_out`). Liegt ein Hindernis voraus, laufen sie seitlich daran vorbei: die gewählte Richtung wird in Weltkoordinaten gemerkt und gehalten, bis der direkte Weg wieder frei ist (gleiten an der Wand bis zur Ecke, kein Hin-und-Her).

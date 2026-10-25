@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 47         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 48         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 200               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -955,30 +955,71 @@ class Weapon:
     loud: float = 1.0         # Lautstärke-Faktor des Schusses (Lärmsystem: NOISE_SHOT * loud)
     head_mult: float = 2.0    # Faktor auf den Schaden bei Kopftreffern
     weapon_type: str = ""     # WT_PRIMARY (nur Slot 1) | WT_SECONDARY (nur Slot 2) | WT_SPECIAL (nur Slot 3, Kistenwaffe)
+    # --- v48: Waffen-Paket (Robin)
+    no_ads: bool = False      # kein Zielen über Kimme und Korn / Visier (Minigun, Dual Baretta)
+    veh_dmg: float = 0.0      # Schaden an Fahrzeugen und Helikoptern je Kugel (0 = wie dmg; Helikopter dann x HELI_K)
+    zooms: tuple = ()         # fest verbautes Zielfernrohr: Vergrösserungen (mehrere = per Mausrad beim Zielen umschalten)
+    spin: float = 0.0         # s Anlaufzeit aus dem Kaltstart (Minigun); 0 = schiesst sofort
+    bolt: bool = False        # Repetierer: nach jedem Schuss Kammer per Hand durchladen (interval = Repetierzeit)
+    lock_t: float = 0.0       # s bis die Zielerfassung steht (Stinger); 0 = keine Erfassung
+    model: str = ""           # Modell/Sound einer anderen Waffe benutzen (Name), "" = eigenes
+    no_att: bool = False      # keine Aufsätze montierbar (auch kein Visier)
+    no_silencer: bool = False # kein Schalldämpfer an der Mündung (Colt M4 Carbine)
 
 
 WT_PRIMARY, WT_SECONDARY, WT_SPECIAL = "primary", "secondary", "special"   # Werte für Weapon.weapon_type
+PISTOL_DMG = 28                # v48: Schaden der Colt ACP - die VSS ist daran gekoppelt (4 Körper- / 2 Kopftreffer)
 
 WEAPONS = (
-    Weapon("Pistole", 28, 0.30, 12, 96, 240, 0.9, 1.3, kick=1.6, kick_yaw=0.4,
+    # Indizes 0..8 bleiben wie vor v48 (PRIMARIES/SECONDARIES/DEFAULT_SCOPE zählen darauf); Neues kommt hinten dran.
+    Weapon("Colt ACP", PISTOL_DMG, 0.30, 12, 96, 240, 1.2, 1.3, kick=1.6, kick_yaw=0.4,       # v48: vorher Pistole, Hüfte ungenauer
            kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, loud=0.75, weapon_type=WT_SECONDARY),
-    Weapon("Sturmgewehr", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,
-           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0, weapon_type=WT_PRIMARY),
+    Weapon("Colt M4 Carbine", 15, 0.09, 30, 240, 360, 1.25, 2.0, auto=True, kick=0.9,   # v48: vorher Sturmgewehr
+           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0, weapon_type=WT_PRIMARY,
+           no_silencer=True),
     Weapon("Schrotflinte", 9, 0.85, 7, 36, 200, 4.5, 2.4, pellets=9, kick=5.0,
            kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6, loud=1.1, weapon_type=WT_PRIMARY),
-    Weapon("Scharfschütze", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,
+    Weapon("DSR", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,                 # v48: vorher Scharfschütze
            kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25, weapon_type=WT_PRIMARY),
     Weapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
            kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9, weapon_type=WT_SECONDARY),
-    Weapon("Maschinenpistole", 11, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.5,
-           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, loud=0.85, weapon_type=WT_SECONDARY),
+    Weapon("MP9", 8, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.75,              # v48: vorher Maschinenpistole;
+           kick_yaw=1.5, kick_back=1.6, ads_fov=59, bloom=0.34, pickup=32, loud=0.85,    # 11 -> 8 Schaden, wildes Spray
+           weapon_type=WT_SECONDARY),
     Weapon("Raketenwerfer", 0, 1.4, 1, 6, 95, 0.4, 2.6, kick=5.0, kick_yaw=0.4,
            kick_back=9.0, ads_fov=26, ads_spread=0.5, grav=0.12, blast_r=6.0, sight="rocket",
            blast_dmg=130, kind="special", loud=1.4, weapon_type=WT_SPECIAL),
-    Weapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
-           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="special", loud=1.3, weapon_type=WT_SPECIAL),
-    Weapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
-           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2, weapon_type=WT_SPECIAL),
+    Weapon("Minigun", 9, 0.045, 150, 450, 380, 2.0, 4.0, auto=True, kick=0.35,          # v48: kein Zielen, Anlauf
+           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=1.0, bloom=0.05, kind="special", loud=1.3,
+           weapon_type=WT_SPECIAL, no_ads=True, spin=2.0),
+    Weapon("Railgun", 90, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,         # v48: 90 an Personen,
+           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2,   # 200 an Fahrzeugen
+           weapon_type=WT_SPECIAL, veh_dmg=200.0),
+    # ---- v48: neue Waffen
+    Weapon("SCAR-L", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,             # die alten Werte des Sturmgewehrs
+           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0, weapon_type=WT_PRIMARY,
+           model="Colt M4 Carbine"),
+    Weapon("AK", 19, 0.10, 30, 240, 340, 1.7, 2.2, auto=True, kick=1.45,                # mehr Schaden, deutlich mehr Rückstoss
+           kick_yaw=0.85, kick_back=2.8, ads_fov=55, bloom=0.16, pickup=30, loud=1.05, weapon_type=WT_PRIMARY,
+           model="Colt M4 Carbine"),
+    Weapon("VSS", PISTOL_DMG, 0.22, 10, 60, 420, 2.2, 2.4, kick=1.3, kick_yaw=0.4,              # DMR: Pistolen-Schaden, 4-6-8x
+           kick_back=3.0, ads_fov=28, ads_spread=0.06, bloom=0.2, pickup=10, head_mult=2.0, loud=0.8,
+           weapon_type=WT_PRIMARY, zooms=(4, 6, 8), model="DSR"),
+    Weapon("Karabiner 98k", 100, 4.0, 5, 30, 760, 7.0, 3.2, kick=4.5, kick_yaw=0.5,     # Repetierer, festes 10x, keine Aufsätze
+           kick_back=6.5, ads_fov=11, ads_spread=0.004, pickup=5, head_mult=1.4, loud=1.25,
+           weapon_type=WT_PRIMARY, zooms=(10,), bolt=True, no_att=True, model="DSR"),
+    Weapon("Baretta", 24, 0.36, 15, 105, 240, 0.65, 1.3, kick=1.3, kick_yaw=0.3,         # schwächer/langsamer, präziser
+           kick_back=3.0, ads_fov=61, ads_spread=0.25, bloom=0.18, pickup=15, loud=0.72, weapon_type=WT_SECONDARY,
+           model="Colt ACP"),
+    Weapon("Dual Baretta", 24, 0.20, 30, 210, 240, 1.5, 2.6, kick=1.5, kick_yaw=0.7,     # zweite Baretta: beide Hände
+           kick_back=3.0, ads_fov=61, bloom=0.3, pickup=30, loud=0.72, weapon_type=WT_SECONDARY,
+           no_ads=True, model="Colt ACP"),
+    Weapon("Abgesägte Schrotflinte", 9, 0.30, 2, 24, 200, 8.0, 2.0, pellets=9, kick=6.0,   # gleicher Schaden, viel mehr Streuung
+           kick_yaw=1.2, kick_back=8.0, ads_fov=63, ads_spread=0.75, pickup=4, loud=1.15,
+           weapon_type=WT_SECONDARY, model="Schrotflinte"),
+    Weapon("Stinger", 0, 1.5, 1, 4, 70, 0.5, 3.0, kick=4.0, kick_yaw=0.3,                # Fliegerfaust mit Zielerfassung
+           kick_back=8.0, ads_fov=30, ads_spread=0.5, grav=0.0, blast_r=4.5, blast_dmg=110, sight="stinger",
+           kind="special", loud=1.35, weapon_type=WT_SPECIAL, lock_t=4.0, model="Raketenwerfer"),
 )
 
 for _w in WEAPONS:                             # jede Waffe braucht eine gültige Kategorie (Spezialwaffen = kind "special")
@@ -988,6 +1029,50 @@ for _w in WEAPONS:                             # jede Waffe braucht eine gültig
 
 
 WEAPON_IDX = {w.name: i for i, w in enumerate(WEAPONS)}
+
+M4_WI = WEAPON_IDX["Colt M4 Carbine"]
+SCAR_WI = WEAPON_IDX["SCAR-L"]
+AK_WI = WEAPON_IDX["AK"]
+VSS_WI = WEAPON_IDX["VSS"]
+K98_WI = WEAPON_IDX["Karabiner 98k"]
+BARETTA_WI = WEAPON_IDX["Baretta"]
+DUAL_WI = WEAPON_IDX["Dual Baretta"]                 # entsteht aus zwei Baretta (nie in Kisten, nicht im Loadout)
+SAWED_WI = WEAPON_IDX["Abgesägte Schrotflinte"]
+STINGER_WI = WEAPON_IDX["Stinger"]
+MODEL_BASE = {w.name: w.model for w in WEAPONS if w.model}   # neue Waffen leihen sich Modell/Klang einer alten
+
+
+def mdl(name):
+    """Name der Waffe, deren Modell, Haltung und Klang benutzt werden (v48: neue Waffen leihen sie sich)."""
+    return MODEL_BASE.get(name, name)
+
+SHOT_PITCH = {"SCAR-L": 0.94, "AK": 0.86, "VSS": 1.25, "Karabiner 98k": 0.82, "Baretta": 1.12, "Dual Baretta": 1.12,
+              "Abgesägte Schrotflinte": 0.92, "Stinger": 1.18}   # v48: Tonhöhe der Schüsse neuer Waffen (Vorbild-Klang)
+SILENCED_PITCH = {"Colt ACP": 1.1, "Revolver": 0.95, "MP9": 1.2, "DSR": 0.8, "Schrotflinte": 0.7}   # v48: Schalldämpfer-Klang
+# --- v48: Sondermechaniken der Waffen (zum Balancen)
+BOLT_PHASES = (0.12, 0.28, 0.42, 0.55, 0.70, 0.88)   # Repetieren (Anteil der Zeit): kippen, Kammer auf, zurück, vor, zu, anlegen
+DUAL_LEFT_POS = (-0.30, 0.02, 0.0)                   # Dual Baretta: linke Waffe relativ zur rechten (Ego-Ansicht)
+SCOPE_FOV_8X = 14.0            # Sichtfeld (Grad) im 8-fach-Glas; andere Vergrösserungen anteilig (4x = 28, 10x = 11,2)
+MINIGUN_SPIN_DECAY = 1.5       # s: so lange dreht die Minigun nach dem Loslassen aus (Abkling-Fenster); wer darin wieder
+                               # abdrückt, muss nur den Rest anlaufen (Anlauf aus dem Kaltstart: Weapon.spin = 2 s)
+GL_START = 3                   # Granatwerfer (Colt M4 Carbine): 40-mm-Granaten je aufgehobener Waffe ...
+GL_MAX = 6                     # ... höchstens so viele
+GL_RELOAD = 2.2                # s: Nachladen des Werfers nach jedem Schuss
+GL_SPEED = 48.0                # m/s Mündungsgeschwindigkeit (Bogenflug)
+GL_GRAV = 0.55                 # Faktor auf die Schwerkraft
+GL_BLAST_R = 4.0               # m Explosionsradius
+GL_BLAST_DMG = 95.0            # Schaden im Zentrum
+GL_SPREAD = 0.8                # Grad Streuung (Zielen: x Weapon.ads_spread des Gewehrs mit Werfer)
+WI_GL = -22                    # "Waffe" in der Kill-Anzeige und als Kugel-Art
+STINGER_CONE = 5.0             # Grad: so nah an der Blickrichtung muss ein Fahrzeug/Heli für die Erfassung liegen
+STINGER_RANGE = 420.0          # m maximale Erfassungsentfernung
+STINGER_HOST_CONE = 12.0       # Grad: Host sucht das Ziel beim Abschuss großzügiger (Laufzeit, Bewegung)
+STINGER_TURN = 2.4             # rad/s: so schnell dreht die Lenkrakete auf ihr Ziel ein
+STINGER_SPEED = 120.0          # m/s Endgeschwindigkeit (startet mit Weapon.speed, beschleunigt)
+STINGER_ACCEL = 90.0           # m/s² Beschleunigung
+STINGER_LIFE = 6.0             # s Flugzeit
+STINGER_VEH_DMG = 260.0        # Schaden bei direktem Treffer an Fahrzeug (Explosion kommt dazu)
+STINGER_HELI_DMG = 520.0       # Schaden bei direktem Treffer am Helikopter (Helikopter: 1000)
 
 # Ansicht/Aufsätze/Visier gelten für Haupt- (Slot 1) und Kleinwaffen (Slot 2); die Namenslisten folgen aus weapon_type:
 PRIMARY_NAMES = tuple(w.name for w in WEAPONS if w.weapon_type == WT_PRIMARY)       # Sturmgewehr, Schrotflinte, Scharfschütze
@@ -1009,7 +1094,7 @@ class Melee:
 MELEE = (
     Melee("Messer", 25, 0.45, 1.6, short="Messer"),                       # Start (0815-Messer)
     Melee("Diebesdolch", 34, 0.42, 1.7, short="Diebesdolch"),      # 10d: vorher Erschöpfungsdolch - Monster-Kill = +1 Beute
-    Melee("Erschöpfungsklinge", 46, 0.6, 2.0, short="Klinge"),    # 10d: vorher Machete - Lebensraub, Erschöpfung
+    Melee("Kriegsaxt", 58, 0.8, 2.3, head=1.7, arc=38.0, short="Axt"),   # v48: statt Erschöpfungsklinge - auch zum Werfen
     Melee("Schwert", 62, 0.75, 2.4, short="Schwert"),
     Melee("Katana", 75, 0.55, 2.5, head=1.6, arc=45.0, short="Katana"),
     Melee("Bratpfanne", 38, 0.7, 1.9, head=2.6, arc=50.0, short="Pfanne", sound="bong"),   # Spass: Kopf = BONG
@@ -1028,27 +1113,37 @@ MELEE_SNEAK = 2.0         # Faktor, wenn das Monster nichts ahnt (idle, nicht am
 NOISE_MELEE = 3.0         # m Lärmradius eines Schlags/Treffers (etwa wie Ducken)
 
 # 9c: Sonderfähigkeiten der Nahkampfwaffen
-DAGGER_NAME = "Erschöpfungsklinge"   # 10d: die Wirkung des Erschöpfungsdolchs liegt jetzt auf der Machete
-
 THIEF_NAME = "Diebesdolch"     # 10d: Monster mit dem Diebesdolch erlegt -> so viele Gegenstände zusätzlich (andere Kategorie)
 
 THIEF_EXTRA = 1
 
 SLASH_FX_T = 0.4               # 10d: s - Ring-Slash (Katana) bzw. Windstoss-Schnitt (Schwert) sichtbar
 
-DAGGER_LEECH = 0.5        # Erschöpfungsdolch: so viel des verursachten Schadens heilt den Träger (Monster und Spieler)
+DAGGER_AMP = 2.0          # verstärkte Fähigkeiten (pl.amp): Faktor - v48: die Erschöpfungsklinge, die sie auslöste, ist gestrichen
 
-DAGGER_AMP = 2.0          # ... nach einem Spieler-Treffer: der nächste Einsatz jeder eigenen Fähigkeit wirkt so viel stärker
+DAGGER_AMP_T = 20.0       # ... s: so lange bleibt ein verstärkter Einsatz bereit
 
-DAGGER_AMP_T = 20.0       # ... s: so lange bleibt dieser verstärkte Einsatz bereit
-
-DAGGER_PAN_LOCK = 8.0     # ... s: so lange kann der Getroffene nicht essen (Abklingzeit der Pfanne; laufendes Essen bricht ab)
+# --- v48: Kriegsaxt (Nahkampf + Wurf)
+AXE_NAME = "Kriegsaxt"
+AXE_CHARGE_T = 1.2        # s halten (nach MELEE_HOLD_START) bis 100 % Wurfkraft; loslassen = werfen (kein Flugbogen angezeigt)
+AXE_MIN_POW = 0.15        # schwächster Wurf (Anteil)
+AXE_SPEED = (12.0, 34.0)  # m/s Abwurftempo bei 0 % / 100 % Kraft
+AXE_THROW_DMG = (35.0, 90.0)   # Schaden des Wurfs bei 0 % / 100 % Kraft (Kopf x Melee.head)
+AXE_GRAV = 1.0            # Faktor auf die Schwerkraft im Flug
+AXE_LIFE = 6.0            # s: länger fliegt sie nicht (fällt dann zu Boden)
+AXE_STICK_T = (5.0, 10.0) # s: so lange steckt sie in Fahrzeug/Heli (zufällig) ...
+AXE_STICK_DPS = 10.0      # ... und richtet dort so viel Schaden je Sekunde an (zusätzlich zum Einschlag)
+AXE_SPIN = 900.0          # Grad/s Drehung im Flug (Darstellung)
+AXE_SMOKE_T = 0.12        # s zwischen zwei schwarzen Rauchwölkchen am Stiel (Darstellung)
+SWORD_DUST_T = 4.5        # s: so lange hängt der Staub des Schwert-Aufschlags in der Luft (halbtransparent)
+SWORD_DIRT_H = 2.0        # m: so hoch wirbelt der Aufschlag die Erde (V-Form vor dem Spieler)
+SWORD_V_ANGLE = 24.0      # Grad: halber Öffnungswinkel des V
 
 MELEE_HOLD_START = 0.3    # s: länger gehalten = Katana/Schwert laden auf (kurzer Klick = normaler Schlag)
 
 MELEE_CHARGE_T = 3.0      # s gedrückt halten bis zur Sonderattacke (Katana, Schwert)
 
-MELEE_SPECIAL = {"Katana": "spin", "Schwert": "slam"}
+MELEE_SPECIAL = {"Katana": "spin", "Schwert": "slam", "Kriegsaxt": "throw"}
 
 KATANA_SPIN_R = 2.0       # Katana: Rundum-Schlag trifft alles in so viel m um einen ...
 
@@ -1096,7 +1191,7 @@ N_SLOTS = N_FREE_SLOTS + 1     # Waffenslots insgesamt (Tasten 1..N_SLOTS)
 
 HUD_CARDS = N_SLOTS + 1        # Karten der Leiste: 1 Sturmgewehr, 2 Sekundärwaffe, 3 Spezialwaffe, 4 Gadget; 5 Nahkampf und 6 Granate rechts daneben
 
-START_WEAPON = WEAPON_IDX["Pistole"]   # damit startet/respawnt jeder; kommt nicht in Kisten
+START_WEAPON = WEAPON_IDX["Colt ACP"]   # damit startet/respawnt jeder; kommt nicht in Kisten
 
 DUP_AMMO_MAGS = 2              # hebt man eine Waffe auf, die man schon trägt: so viele Magazine Reserve dazu
 
@@ -1155,15 +1250,22 @@ LOOT_PITY_STEP = 1.0           # je Zug: jede ANDERE Waffe +so viele Prozentpunk
 LOOT_DEBUG = False             # True: beim Öffnen die Chancen des Spielers je Kistenart einblenden + ins Log
 
 LOOT_TABLES = {
-    #  Waffe               braun  blau   gold
-    "Schrotflinte":     (30.0, 10.0,  2.0),
-    "Maschinenpistole": (30.0, 10.0,  2.0),
-    "Sturmgewehr":      (13.0, 22.0,  7.0),
-    "Revolver":         (13.0, 22.0,  7.0),
-    "Minigun":          ( 9.0, 16.0, 16.0),
-    "Railgun":          ( 2.0,  8.0, 27.0),
-    "Raketenwerfer":    ( 2.0,  8.0, 27.0),
-    "Scharfschütze":    ( 1.0,  4.0, 12.0),
+    #  Waffe                     braun  blau   gold     (v48: neue Waffen dazu, Spalten wieder je 100)
+    "Schrotflinte":            (18.0,  7.0,  1.0),
+    "MP9":                     (18.0,  7.0,  1.0),
+    "Baretta":                 (12.0,  5.0,  1.0),
+    "Abgesägte Schrotflinte":  (10.0,  6.0,  2.0),
+    "Colt M4 Carbine":         ( 9.0, 12.0,  4.0),
+    "Revolver":                ( 9.0, 12.0,  4.0),
+    "AK":                      ( 7.0, 10.0,  6.0),
+    "SCAR-L":                  ( 4.0,  8.0,  8.0),
+    "Minigun":                 ( 6.0, 10.0, 12.0),
+    "VSS":                     ( 3.0,  5.0,  6.0),
+    "Railgun":                 ( 1.0,  5.0, 18.0),
+    "Raketenwerfer":           ( 1.0,  5.0, 17.0),
+    "Stinger":                 ( 1.0,  4.0, 10.0),
+    "DSR":                     ( 0.5,  2.0,  6.0),
+    "Karabiner 98k":           ( 0.5,  2.0,  4.0),
 }
 
 # Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). 7c: Set-Teile eher blau/gold.
@@ -1193,7 +1295,7 @@ LOOT_GEAR_TABLES = {
 LOOT_MELEE_TABLES = {
     #  Nahkampf              braun  blau   gold   (das Start-Messer kommt nie aus Kisten)
     "Diebesdolch":         (40.0, 15.0,  5.0),
-    "Erschöpfungsklinge":  (30.0, 25.0, 10.0),
+    "Kriegsaxt":           (20.0, 25.0, 15.0),     # v48
     "Schwert":             (12.0, 30.0, 30.0),
     "Katana":              ( 3.0, 15.0, 40.0),
     "Bratpfanne":          (15.0, 15.0, 15.0),
@@ -1221,6 +1323,7 @@ LOOT_ATT_TABLES = {
     "Senkrechtgriff":      (12.0,  9.0,  7.0),     # Griff
     "Winkelgriff":         (10.0,  9.0,  7.0),
     "Laserpointer":        (10.0,  8.0,  6.0),
+    "Granatwerfer":        ( 2.0,  4.0,  6.0),     # v48: nur Colt M4 Carbine (ersetzt den Griff)
     "Red Dot":             ( 5.0,  8.0,  8.0),     # Visier (Sturmgewehr, Schrotflinte, Scharfschütze)
     "ACOG":                ( 2.0,  6.0, 10.0),
     "Sniper-Visier":       ( 0.0,  3.0,  9.0),
@@ -1432,7 +1535,7 @@ KEYS = {"forward": "w", "back": "s", "left": "a", "right": "d", "sprint": "shift
         "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g",
         "ability": SET_ICON_KEY, "inspect": INSPECT_KEY}
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
-SELECTIVE_FIRE = (1,)          # Waffen mit Feuermodus-Schalter (V): Sturmgewehr
+SELECTIVE_FIRE = (1, 9, 10)    # Waffen mit Feuermodus-Schalter (V): Colt M4 Carbine, SCAR-L, AK
 
 # ---- Ausrüstungsteile (Aufsätze) für Haupt- und Kleinwaffe: je Platz eine Auswahl, wirkt als Faktor auf die Waffenwerte
 ATT_SLOTS = ("Lauf", "Magazin", "Griff")
@@ -1458,8 +1561,12 @@ ATTACHMENTS = (
      ("Winkelgriff", "ruhigeres Zielen über Kimme und Korn / Visier",
       {"ads_spread": 0.75, "bloom": 0.9}),
      ("Laserpointer", "deutlich weniger Streuung aus der Hüfte; Zielen unverändert",
-      {"spread": 0.7})),
+      {"spread": 0.7}),
+     ("Granatwerfer", "nur Colt M4 Carbine: V schaltet auf 40-mm-Granaten; viel mehr Rückstoss und Streuung beim Zielen",
+      {"kick": 1.9, "kick_yaw": 1.8, "ads_spread": 2.6, "bloom": 1.3})),
 )
+ATT_SILENCER = (0, 1)          # v48: (Platz, Index) des Schalldämpfers
+ATT_GL = (2, 4)                # v48: (Platz, Index) des Granatwerfers (ersetzt den Griff, nur Colt M4 Carbine)
 ATT_NONE = (0, 0, 0)
 _EFF_CACHE = {}
 
@@ -1493,14 +1600,48 @@ ATT_BY_NAME.update({ATT_SCOPE_NAMES[v]: (ATT_SCOPE, v) for v in range(1, len(ATT
 
 ATT_SLOT_NAMES = tuple(ATT_SLOTS) + ("Visier",)
 
-def att_fits(wi, si=0):
-    """Passt an diese Waffe ein Aufsatz des Platzes si? Lauf/Magazin/Griff: Haupt- und Kleinwaffen; Visier: nur
-    Waffen mit Schiene (Sturmgewehr, Schrotflinte, Scharfschütze). Spezialwaffen: nie."""
-    if not (0 <= wi < len(WEAPONS)) or WEAPONS[wi].kind == "special":
+def att_fits(wi, si=0, v=None):
+    """Passt an diese Waffe ein Aufsatz des Platzes si (v: genau dieser Aufsatz; None = irgendeiner des Platzes)?
+    Lauf/Magazin/Griff: Haupt- und Kleinwaffen; Visier: nur Waffen mit Schiene (Colt M4 Carbine, SCAR-L, AK,
+    Schrotflinte, DSR). Spezialwaffen: nie. v48: Karabiner 98k gar keine, VSS/98k kein Wechselvisier (fest verbaut),
+    Colt M4 Carbine kein Schalldämpfer, Granatwerfer nur am Colt M4 Carbine."""
+    if not (isinstance(wi, int) and 0 <= wi < len(WEAPONS)) or WEAPONS[wi].kind == "special":
+        return False
+    w = WEAPONS[wi]
+    if w.no_att:
         return False
     if si == ATT_SCOPE:
-        return WEAPONS[wi].name in SCOPE_MOUNT
-    return WEAPONS[wi].name in GRIP_AT
+        return w.name in SCOPE_MOUNT and not w.zooms
+    if w.name not in GRIP_AT:
+        return False
+    if v is None or not v:
+        return True
+    if (si, v) == ATT_SILENCER and w.no_silencer:
+        return False
+    if (si, v) == ATT_GL and wi != M4_WI:
+        return False
+    return True
+
+
+def att_clean(wi, a):
+    """v48: Aufsatz-Code a (3 Indizes) auf das beschränken, was an die Waffe wi passt (Unpassendes -> Standard)."""
+    a = att_valid(a)
+    if a is None:
+        return None
+    a = tuple(v if att_fits(wi, si, v) else 0 for si, v in enumerate(a))
+    return None if a == ATT_NONE else a
+
+
+def att_silenced(wi, a):
+    """v48: trägt die Waffe wi mit den Aufsätzen a einen Schalldämpfer?"""
+    a = att_valid(a)
+    return a is not None and a[ATT_SILENCER[0]] == ATT_SILENCER[1] and att_fits(wi, *ATT_SILENCER)
+
+
+def att_has_gl(wi, a):
+    """v48: Colt M4 Carbine mit Granatwerfer?"""
+    a = att_valid(a)
+    return wi == M4_WI and a is not None and a[ATT_GL[0]] == ATT_GL[1]
 
 def pscope(pl, wi):
     """Visier der Waffe wi des Spielers (7b: je Waffe; ab Werk DEFAULT_SCOPE)."""
@@ -1539,9 +1680,9 @@ BREATH_HOLD = 2.0              # s: so lange kann man die Luft anhalten (Shift)
 BREATH_REGEN = 2.5             # s: bis die Luft wieder voll ist
 BREATH_OOB_T = 4.05             # s: Länge des "ausser Atem"-Tons; so lange ist Luftanhalten gesperrt
 BREATH_LOCK_UNTIL = 1.0        # nach dem Ausatmen erst wieder anhalten, wenn der Vorrat so voll ist
-PRIMARIES = (1, 2, 3)          # wählbare Hauptwaffen (Index in WEAPONS)
+PRIMARIES = (1, 2, 3)          # wählbare Hauptwaffen im Ausrüstungsmenü (Index in WEAPONS; v48: neue nur aus der Beute)
 SECONDARIES = (0, 4, 5)        # wählbare Kleinwaffen
-LOOT_WEAPONS = (6, 7, 8)       # nur aus Lootkisten
+LOOT_WEAPONS = (6, 7, 8, 16)   # nur aus Lootkisten (Spezialwaffen)
 GAD_C4, GAD_CLAY, GAD_BEACON = 0, 1, 2
 GADGETS = ("C4", "Claymore", "Funkbake")       # wählbares Gadget (zusätzlich zu Haupt- und Kleinwaffe)
 GAD_INFO = ("3 Ladungen: Rechtsklick klebt sie an Wände, Boden, Fahrzeuge - Linksklick zündet alle",
@@ -1571,10 +1712,12 @@ SC_IRON, SC_RED, SC_ACOG, SC_SNIPER = 0, 1, 2, 3
 SCOPES = ("Kimme und Korn", "Red Dot", "ACOG", "Sniper-Visier")          # Visiere für Primärwaffen
 SCOPE_INFO = ("offene Visierung", "Leuchtpunkt, 1x", "4-fach Zielfernrohr", "8-fach Zielfernrohr")
 SIGHT_NAMES = ("iron", "red", "acog", "sniper")
-DEFAULT_SCOPE = {3: SC_SNIPER}              # Scharfschützengewehr ab Werk mit Sniper-Visier
+DEFAULT_SCOPE = {3: SC_SNIPER, 11: SC_SNIPER, 12: SC_SNIPER}   # DSR ab Werk mit Sniper-Visier; VSS/98k: fest verbaut
 DEFAULT_LOADOUT = (1, 0, GAD_C4, SC_IRON)   # Sturmgewehr + Pistole + C4 + Kimme und Korn
+assert (SELECTIVE_FIRE == (M4_WI, SCAR_WI, AK_WI) and set(DEFAULT_SCOPE) == {WEAPON_IDX["DSR"], VSS_WI, K98_WI}
+        and LOOT_WEAPONS[-1] == STINGER_WI)              # v48: Index-Tabellen passen zur Waffenliste
 ROCKET_WI = next(i for i, w in enumerate(WEAPONS) if w.blast_r > 0)   # Raketenwerfer
-PISTOL_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Pistole")   # richtet am Helikopter keinen Schaden an
+PISTOL_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Colt ACP")   # richtet am Helikopter keinen Schaden an
 MINIGUN_WI = next(i for i, w in enumerate(WEAPONS) if w.name == "Minigun")
 WI_GRENADE, WI_VEHICLE, WI_TURRET, WI_TOMAHAWK = -2, -3, -4, -5   # "Waffe" in der Kill-Anzeige
 WI_HELI, WI_FLAK = -6, -8
@@ -1588,7 +1731,7 @@ def weapon_name(wi):
     return {WI_GRENADE: "Granate", WI_VEHICLE: "Fahrzeug", WI_TURRET: "Geschütz",
             WI_TOMAHAWK: "Tomahawk", WI_HELI: "Helikopter",
             WI_FLAK: "Flak", WI_FALL: "Sturz", WI_C4: "C4", WI_CLAY: "Claymore", WI_MELEE: "Nahkampf",
-            WI_MOLOTOV: "Molotow", WI_JET: "Jet-Strike"}.get(wi, "?")
+            WI_MOLOTOV: "Molotow", WI_JET: "Jet-Strike", WI_GL: "Granatwerfer"}.get(wi, "?")
 
 def strike_cd_label(cd):
     cd = int(cd)
@@ -1754,6 +1897,7 @@ BUFF_TANK_HP = (150.0, 200.0)   # Tank-Buff: max. Leben zufällig eines davon (H
 # weit wie sie sehen, ein Schuss weckt ein ganzes Areal. Jede Waffe hat einen Lautstärke-Faktor (Weapon.loud).
 NOISE_CROUCH = 3.0        # geduckt: fast lautlos, nur direkt daneben
 NOISE_WALK = 10.0         # normal laufen: die nähere Umgebung
+SILENCED_NOISE = NOISE_WALK  # v48: Schuss mit Schalldämpfer - höchstens so laut wie ein laufender Spieler
 NOISE_RUN = 22.0          # sprinten: deutlich weiter
 NOISE_SHOT = 60.0         # Schuss (x Weapon.loud: Pistole 0,75 ... Raketenwerfer 1,4)
 NOISE_EXPLOSION = 90.0    # Granate, Rakete, zerstörtes Fahrzeug
@@ -2372,9 +2516,27 @@ class Bullet:
         self.grav = wp.grav if wp else 1.0
         self.blast_r = wp.blast_r if wp else 0.0
         self.blast_dmg = wp.blast_dmg if wp else 0.0
+        self.veh_dmg = wp.veh_dmg if wp else 0.0     # v48: eigener Schaden an Fahrzeugen/Helikoptern (Railgun)
+        self.target = None        # v48: Lenkrakete (Stinger): ("veh"|"heli", ID) des Ziels
         self.life = 4.0
         self.travel = 0.0
         self.alerted = set()      # Monster, die diese Kugel schon bemerkt haben (nur Host)
+        if wi == WI_GL:           # v48: 40-mm-Granate aus dem Werfer am Colt M4 Carbine
+            self.grav, self.blast_r, self.blast_dmg = GL_GRAV, GL_BLAST_R, GL_BLAST_DMG
+        elif wi == STINGER_WI:
+            self.life = STINGER_LIFE
+
+
+class ThrownAxe:
+    """v48: geworfene Kriegsaxt (nur Host simuliert; Mitspieler zeichnen sie aus den Ereignissen axe_fly/axe_stick/axe_end)."""
+
+    def __init__(self, aid, x, y, z, vx, vy, vz, owner, power, mi):
+        self.aid, self.owner, self.power, self.mi = aid, owner, power, mi
+        self.x, self.y, self.z = x, y, z
+        self.vx, self.vy, self.vz = vx, vy, vz
+        self.life = AXE_LIFE
+        self.stuck = None         # ("veh"|"heli", ID, (dx, dy, dz) im Fahrzeugraum, Kurs beim Einschlag)
+        self.stuck_t = 0.0        # Rest-Steckzeit (s)
 
 
 class Grenade:
@@ -3494,7 +3656,7 @@ TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schad
 SB_EVERY = 15                         # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot
 KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
-              ("1 2 3", "Sturmgewehr / Sekundär / Spezial"), ("Mausrad", "Waffe wechseln"), ("G / 6", "Granate (halten = weiter)"),
+              ("1 2 3", "Hauptwaffe / Sekundär / Spezial"), ("Mausrad", "Waffe wechseln"), ("G / 6", "Granate (halten = weiter)"),
               ("H / G+Mausrad", "Granatenart"), ("F", "benutzen / Schlag"),
               ("4", "Gadget"), ("5", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
@@ -3575,7 +3737,9 @@ def weapon_info(wi, gun=None, att=None, scope=None):
         lines.append(f"Explosion: {w.blast_dmg:.0f} Schaden, Radius {w.blast_r:.0f} m")
     else:
         lines.append(f"Schaden: {w.dmg:.0f} pro {'Schrot' if w.pellets > 1 else 'Schuss'}"
-                     + (f" x {w.pellets}" if w.pellets > 1 else "") + "  (Kopf x2)")
+                     + (f" x {w.pellets}" if w.pellets > 1 else "") + f"  (Kopf x{w.head_mult:g})")
+        if w.veh_dmg > 0:
+            lines.append(f"Fahrzeuge/Helikopter: {w.veh_dmg:.0f} pro Treffer")
     rpm = 60.0 / w.interval
     lines.append(f"Feuerrate: {rpm:.0f} Schuss/min" + ("  (Dauerfeuer)" if w.auto else ""))
     mag = f"Magazin: {gun.mag}/{w.mag}" if gun is not None else f"Magazin: {w.mag}"
@@ -3588,6 +3752,20 @@ def weapon_info(wi, gun=None, att=None, scope=None):
         extra.append("Zielfernrohr")
     if w.sight == "rocket":
         extra.append("Visier mit Entfernungsmesser")
+    if w.zooms:                                            # v48
+        extra.append("Zielfernrohr " + "/".join(f"{z}x" for z in w.zooms) + (" (Mausrad)" if len(w.zooms) > 1 else ""))
+    if w.no_ads:
+        extra.append("nur aus der Hüfte")
+    if w.spin > 0:
+        extra.append(f"Anlauf {w.spin:.0f} s")
+    if w.bolt:
+        extra.append(f"Repetierer ({w.interval:.0f} s)")
+    if w.lock_t > 0:
+        extra.append(f"Zielerfassung {w.lock_t:.0f} s - nur Fahrzeuge/Helikopter")
+    if w.no_att:
+        extra.append("keine Aufsätze")
+    if wi == M4_WI:
+        extra.append("Granatwerfer möglich, kein Schalldämpfer")
     if w.grav < 0.5:
         extra.append("kaum Kugelfall")
     extra.append(f"Tempo {w.speed:.0f} m/s")
@@ -3635,9 +3813,10 @@ def melee_info(mi, pl=None):
          f"Leise (Lärm {NOISE_MELEE:.0f} m); ahnungslose Monster x{MELEE_SNEAK:g}")
     if m.name == THIEF_NAME:
         s += f"\nMonster damit erlegt: {THIEF_EXTRA} Gegenstand mehr (andere Kategorie)"
-    if m.name == DAGGER_NAME:
-        s += (f"\nLebensraub: heilt {DAGGER_LEECH * 100:.0f} % des Schadens\nTrifft er Spieler: deren Fähigkeiten auf volle "
-              f"Abklingzeit, deine sofort bereit,\nnächster Einsatz x{DAGGER_AMP:g} ({DAGGER_AMP_T:.0f} s)")
+    if MELEE_SPECIAL.get(m.name) == "throw":
+        s += (f"\nHalten: Wurf aufladen (bis 100 % in {AXE_CHARGE_T:g} s), loslassen = werfen - ohne Flugbahn-Anzeige"
+              f"\nWurf: {AXE_THROW_DMG[0]:.0f}-{AXE_THROW_DMG[1]:.0f} Schaden; bleibt in Fahrzeugen/Helis "
+              f"{AXE_STICK_T[0]:.0f}-{AXE_STICK_T[1]:.0f} s stecken ({AXE_STICK_DPS:.0f} Schaden/s)")
     elif MELEE_SPECIAL.get(m.name) == "spin":
         s += f"\n{MELEE_CHARGE_T:.0f} s halten: Rundum-Schlag ({KATANA_SPIN_R:g} m, Schaden x{KATANA_SPIN_MULT:g})"
     elif MELEE_SPECIAL.get(m.name) == "slam":
@@ -3797,7 +3976,12 @@ def loot_chances(kind, owned=(), history=None, last=None, art="weapon", worn=())
     base = loot_base(kind, history, art)
     skip = set(worn)
     if LOOT_SKIP_OWNED:
-        skip |= {WEAPONS[wi].name for wi in owned if wi is not None and 0 <= wi < len(WEAPONS)}
+        names_ = {WEAPONS[wi].name for wi in owned if wi is not None and 0 <= wi < len(WEAPONS)}
+        if "Dual Baretta" in names_:
+            names_.add("Baretta")                    # v48: mit beiden Barettas bringt eine dritte nichts
+        else:
+            names_.discard("Baretta")                # v48: zweite Baretta = Dual Baretta - bleibt möglich
+        skip |= names_
     if LOOT_SKIP_LAST and last:
         skip.add(last)
     keep = [n for n in base if n not in skip and base[n] > 0]
@@ -3824,7 +4008,7 @@ def roll_loot(kind, rng, owned=(), history=None, last=None, worn=()):
             name = rng.choices(names, weights=[ch[n] for n in names])[0]
             return LOOT_ITEMS[name], name
         del cats[art]
-    return "weapon", "Sturmgewehr"
+    return "weapon", "Colt M4 Carbine"
 
 def worn_names(pl):
     """Getragene Ausrüstung und Nahkampfwaffe (Namen) - werden beim Öffnen einer Kiste herausgerechnet."""
@@ -4385,6 +4569,9 @@ class World:
         self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
         self.vehicles = []
         self.grenades = []
+        self.axes = []           # v48: geworfene Kriegsäxte (Host)
+        self.next_aid = 1
+        self.axe_sink = None     # v48: Mitspieler: Axtwurf an den Host melden
         self.smokes = []         # 10e: Rauchwolken (jeder Rechner selbst, aus dem Ereignis "smoke")
         self.fires = []          # 10e: brennende Flächen (Molotow)
         self.airdrops = []       # 10e: Airdrops (Fackel, Flugzeug, Kiste am Fallschirm)
@@ -5958,7 +6145,7 @@ class World:
             pl.hp, pl.since_hurt = min(pl.max_hp, SAVE_HP), 0.0
             self.events.append(("player_hurt", dmg, pl.pid))
             return
-        blast = wi in (WI_GRENADE, ROCKET_WI, WI_C4, WI_CLAY, WI_VEHICLE, WI_HELI, WI_FLAK)
+        blast = wi in (WI_GRENADE, ROCKET_WI, WI_C4, WI_CLAY, WI_VEHICLE, WI_HELI, WI_FLAK, WI_GL, STINGER_WI)
         if dmg >= pl.hp and wi not in (WI_FALL, WI_TOMAHAWK):            # 10c: Zweite Chance (je Teil einmal)
             save, slot = (("save_head", "head") if head and not blast else
                           ("save_blast", "feet") if blast else ("save_body", "torso"))
@@ -6307,6 +6494,8 @@ class World:
                  gk="frag"):
         while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
+        if wi >= 0 and not self.exp:                     # v48: normale Modi - Waffen liegen immer blank in der Welt
+            atts, scope = None, -1                       # (Aufsätze gibt es separat bzw. im Ausrüstungsmenü)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
                  scope, gren, gk)
         self.next_did += 1
@@ -7322,23 +7511,6 @@ class World:
         else:
             self.note_hit(pl.pid, head)
             self.hit_player(t, dmg, pos, (fx, fy, 0.0), head, pl.pid, wi)
-        if m.name == DAGGER_NAME:                         # 9c: Erschöpfungsdolch
-            dealt = max(0.0, before - max(0.0, t.hp) - max(0.0, getattr(t, "shield_hp", 0.0)))
-            if dealt > 0 and pl.hp > 0:
-                heal = min(pl.max_hp - pl.hp, dealt * DAGGER_LEECH)
-                if heal > 0:
-                    pl.hp += heal
-                    self.events.append(("leech", pl.pid, round(heal, 1)))
-            if not isinstance(t, Mob):
-                self.dagger_drain(pl, t)
-
-    def dagger_drain(self, att, tgt):
-        """9c: Erschöpfungsdolch trifft einen Spieler: seine Fähigkeiten auf volle Abklingzeit (Dash, Jetpack leer,
-        Stromstoss, Essen gesperrt/abgebrochen), die des Angreifers sofort bereit und der nächste Einsatz jeder
-        Fähigkeit x DAGGER_AMP (DAGGER_AMP_T s lang). Bewegungs-Fähigkeiten rechnet der Rechner des Spielers - deshalb
-        geht das Ereignis "drain" an alle (apply_drain)."""
-        apply_drain(att, tgt)
-        self.events.append(("drain", att.pid, tgt.pid))
 
     def pan_add(self, pl, kind):
         """9c: Kill mit der Bratpfanne: Punkte je Art (PAN_POINTS) -> mehr Essen in der Pfanne."""
@@ -7389,6 +7561,165 @@ class World:
                 self.events.append(("bite", pl.pid, pl.eat_bites))
         if pl.eat_t <= 0 and st >= 3:
             self.events.append(("burp", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z + 1.5, 2)))   # kein Lärm!
+
+    # ------------------------------------------------------------ v48: Kriegsaxt werfen
+    def axe_throw(self, pl, d, power):
+        """Kriegsaxt werfen (Richtung d, Kraft 0..1). Die Axt verlässt die Hand (zurück zum Messer) und fliegt ohne
+        angezeigten Bogen. Mitspieler melden den Wurf dem Host."""
+        if pl.hp <= 0 or not (0 <= pl.melee < len(MELEE)) or MELEE[pl.melee].name != AXE_NAME:
+            return
+        if self.axe_sink is not None:
+            self.axe_sink(d, power)
+            pl.melee = START_MELEE                       # sofort aus der Hand (der Host bestätigt mit "melee")
+            return
+        self.axe_throw_host(pl, d, power)
+
+    def axe_throw_host(self, pl, d, power):
+        if pl.hp <= 0 or self.phase != "play" or not (0 <= pl.melee < len(MELEE)) or MELEE[pl.melee].name != AXE_NAME:
+            return
+        power = clampf(float(power), AXE_MIN_POW, 1.0)
+        d = norm(d)
+        sp = AXE_SPEED[0] + (AXE_SPEED[1] - AXE_SPEED[0]) * power
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        ox, oy, oz = eye[0] + d[0] * 0.5, eye[1] + d[1] * 0.5, eye[2] + d[2] * 0.5 - 0.1
+        if self.in_solid(ox, oy, 0.05, oz):
+            ox, oy, oz = eye
+        a = ThrownAxe(self.next_aid, ox, oy, oz, d[0] * sp, d[1] * sp, d[2] * sp, pl.pid, power, pl.melee)
+        self.next_aid += 1
+        self.axes.append(a)
+        pl.protect = 0.0
+        pl.melee = START_MELEE                           # die Axt ist weg - das Messer bleibt
+        self.events.append(("melee", pl.pid, START_MELEE, -2))
+        self.events.append(("axe_fly", a.aid, round(ox, 2), round(oy, 2), round(oz, 2),
+                            round(a.vx, 2), round(a.vy, 2), round(a.vz, 2), pl.pid))
+        self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
+
+    def axe_drop(self, a, x, y, z):
+        """Axt fällt als Nahkampf-Drop zu Boden (jeder kann sie aufheben)."""
+        z = self.floor_at(x, y, z + 0.3)
+        if z is None or self.in_solid(x, y, 0.2, z):
+            z = a.z
+        self.add_drop(x, y, z, -1, -1, a.mi)
+        self.events.append(("axe_end", a.aid, round(x, 2), round(y, 2), round(z, 2)))
+
+    def update_axes(self, dt):
+        """Flug, Treffer und Steckenbleiben der geworfenen Äxte (Host)."""
+        keep = []
+        for a in self.axes:
+            if a.stuck is not None:
+                kind, oid, off, h0 = a.stuck
+                o = self.vehicle_by_id(oid) if kind == "veh" else self.heli_by_id(oid)
+                a.stuck_t -= dt
+                if o is None or o.hp <= 0 or a.stuck_t <= 0:
+                    px, py, pz = (o.x, o.y, o.z) if o is not None else (a.x, a.y, a.z)
+                    self.axe_drop(a, px + self.mrng.uniform(-1.5, 1.5), py + self.mrng.uniform(-1.5, 1.5), pz)
+                    continue
+                a.x, a.y, a.z = o.x, o.y, o.z            # (für die Statistik/Lärm; die Darstellung rechnet mit off)
+                if kind == "veh":
+                    self.damage_vehicle(o, AXE_STICK_DPS * dt, a.owner)
+                else:
+                    self.damage_heli(o, AXE_STICK_DPS * dt, a.owner)
+                keep.append(a)
+                continue
+            a.life -= dt
+            if a.life <= 0:
+                self.axe_drop(a, a.x, a.y, a.z)
+                continue
+            n = max(1, int(math.sqrt(a.vx ** 2 + a.vy ** 2 + a.vz ** 2) * dt / 0.5) + 1)
+            done = False
+            for _ in range(n):
+                if not self.axe_substep(a, dt / n):
+                    done = True
+                    break
+            if not done:
+                if -50 < a.x < WORLD + 50 and -50 < a.y < WORLD + 50:
+                    keep.append(a)
+            elif a.stuck is not None:
+                keep.append(a)
+        self.axes = keep
+
+    def axe_substep(self, a, h):
+        """Ein Flugschritt; False, wenn die Axt etwas getroffen hat (dann liegt sie, steckt oder ist ausgewertet)."""
+        x0, y0, z0 = a.x, a.y, a.z
+        a.vz -= GRAV_BULLET * AXE_GRAV * h
+        x1, y1, z1 = x0 + a.vx * h, y0 + a.vy * h, z0 + a.vz * h
+        p0, p1 = (x0, y0, z0), (x1, y1, z1)
+        best_t, hit, who = 2.0, None, None
+        for m in self.mobs:
+            if m.state == "dead":
+                continue
+            t = seg_cyl(p0, p1, m.x, m.y, m.radius + 0.1, m.z, m.z + m.height)
+            if t is not None and t < best_t:
+                best_t, hit, who = t, "mob", m
+        if self.phase == "play":
+            for q in self.players.values():
+                if q.hp <= 0 or q.pid == a.owner or q.protect > 0 or q.vehicle >= 0 or q.heli >= 0:
+                    continue
+                t = seg_cyl(p0, p1, q.x, q.y, PLAYER_HIT_R + 0.1, q.z, q.z + body_h(q))
+                if t is not None and t < best_t:
+                    best_t, hit, who = t, "player", q
+        for v in self.vehicles:
+            if v.hp <= 0:
+                continue
+            th = vehicle_hit_t(p0, p1, v)
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "veh", v
+        for hc in self.helis:
+            if hc.hp <= 0 or hc.driver == a.owner:
+                continue
+            th = vehicle_hit_t(p0, p1, hc, True)
+            if th is not None and th[0] < best_t:
+                best_t, hit, who = th[0], "heli", hc
+        for bx in self.boxes_near(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)):
+            t = seg_box(p0, p1, bx)
+            if t is not None and t < best_t:
+                best_t, hit, who = t, "wall", None
+        if self.cm is not None:
+            t = self.cm.seg(p0, p1)
+            if t is not None and t < best_t:
+                best_t, hit, who = t, "wall", None
+        elif hit is None and z1 <= self.ground_for(x1, y1, z1):
+            best_t, hit = 1.0, "wall"
+        if hit is None:
+            a.x, a.y, a.z = x1, y1, z1
+            return True
+        hx, hy, hz = x0 + (x1 - x0) * best_t, y0 + (y1 - y0) * best_t, z0 + (z1 - z0) * best_t
+        a.x, a.y, a.z = hx, hy, hz
+        sp = math.sqrt(a.vx ** 2 + a.vy ** 2 + a.vz ** 2) or 1.0
+        dn = (a.vx / sp, a.vy / sp, a.vz / sp)
+        m = MELEE[a.mi] if 0 <= a.mi < len(MELEE) else MELEE[START_MELEE]
+        dmg = AXE_THROW_DMG[0] + (AXE_THROW_DMG[1] - AXE_THROW_DMG[0]) * a.power
+        wi = MELEE_WI0 + a.mi
+        if hit in ("player", "mob"):
+            z0_, z1_ = (who.z, who.z + (body_h(who) if hit == "player" else who.height))
+            head = hz > z0_ + 0.78 * (z1_ - z0_)
+            dmg *= m.head if head else 1.0
+            self.events.append(("mhit", (round(hx, 2), round(hy, 2), round(hz, 2)), "slash", a.owner))
+            self.note_hit(a.owner, head)
+            if hit == "mob":
+                self.hurt_mob(who, dmg, (hx, hy, hz), dn, head, a.owner, wi)
+            else:
+                self.hit_player(who, dmg, (hx, hy, hz), dn, head, a.owner, wi)
+            self.axe_drop(a, hx - dn[0] * 0.4, hy - dn[1] * 0.4, hz)
+            return False
+        if hit in ("veh", "heli"):                       # bleibt stecken: Einschlag + AXE_STICK_DPS je Sekunde
+            hd = math.radians(who.heading)
+            c, sn = math.cos(hd), math.sin(hd)
+            dx, dy = hx - who.x, hy - who.y
+            off = (dx * c + dy * sn, -dx * sn + dy * c, hz - who.z)
+            a.stuck = (hit, who.id, off, who.heading)
+            a.stuck_t = self.mrng.uniform(*AXE_STICK_T)
+            if hit == "veh":
+                self.damage_vehicle(who, dmg * 0.5, a.owner)
+            else:
+                self.damage_heli(who, dmg * 0.5, a.owner)
+            self.events.append(("axe_stick", a.aid, hit, who.id, round(off[0], 2), round(off[1], 2), round(off[2], 2),
+                                round(math.degrees(math.atan2(-dn[0], dn[1])) - who.heading, 1)))
+            self.events.append(("impact", (hx, hy, hz), "rock"))
+            return False
+        self.events.append(("impact", (hx, hy, hz), "rock"))
+        self.axe_drop(a, hx - dn[0] * 0.3, hy - dn[1] * 0.3, hz)
+        return False
 
     def melee_special(self, pl, kind, d):
         """9c: Sonderattacke (Katana "spin", Schwert "slam"). Mitspieler schicken sie an den Host."""
@@ -7826,8 +8157,8 @@ class World:
 
     def loot_debug(self, pl, kind):
         """LOOT_DEBUG: aktuelle Chancen des Spielers je Kistenart ins Log und als Hinweis an ihn."""
-        short = {"Schrotflinte": "SG", "Maschinenpistole": "MP", "Sturmgewehr": "AR", "Revolver": "Rev",
-                 "Minigun": "Mini", "Railgun": "Rail", "Raketenwerfer": "RPG", "Scharfschütze": "Sniper"}
+        short = {"Schrotflinte": "SG", "MP9": "MP", "Colt M4 Carbine": "AR", "Revolver": "Rev",
+                 "Minigun": "Mini", "Railgun": "Rail", "Raketenwerfer": "RPG", "DSR": "Sniper"}
         lines = []
         for k in LOOT_CRATE_KINDS:
             ch = loot_chances(k, pl.slots, pl.loot_history, pl.last_loot)
@@ -7847,15 +8178,21 @@ class World:
         """Host/Einzelspiel: Waffe ins Inventar legen; eine verdrängte Waffe fällt auf den Boden (mit ihren
         Aufsätzen). atts = Aufsätze der aufgehobenen Waffe (7b). Das Ereignis trägt die neue Slot-Belegung und
         die Aufsätze, der Mitspieler übernimmt sie genau so."""
+        wi, atts = dual_upgrade(pl, wi, atts)          # v48: zweite Baretta -> Dual Baretta
         out_att = pl.att.get(wi) if wi in pl.slots else None
         out, dup = take_weapon(pl, wi)
         if not dup:
-            a = att_valid(atts)
+            a = att_clean(wi, atts)
             if a is not None and a != ATT_NONE and att_fits(wi):
                 pl.att[wi] = a
             else:
                 pl.att.pop(wi, None)
             pl.guns[wi] = GunState(pl.wp(wi))
+            extra_res = getattr(pl, "dual_reserve", 0)
+            if wi == DUAL_WI and extra_res:
+                g_ = pl.guns[wi]
+                g_.reserve = min(pl.wp(wi).max_reserve, g_.reserve + extra_res)
+            pl.dual_reserve = 0
             if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
                 pl.scopes[wi] = scope
             else:
@@ -8398,6 +8735,14 @@ class World:
         g.x, g.y, g.z = nx, ny, nz
 
     # ------------------------------------------------------------ Kugeln
+    def shot_noise(self, pl, w, wi=None):
+        """v48: Lärmradius eines Schusses - mit Schalldämpfer höchstens SILENCED_NOISE (wie ein laufender Spieler)."""
+        wi = pl.cur if wi is None else wi
+        r = NOISE_SHOT * getattr(w, "loud", 1.0)
+        if att_silenced(wi, pl.att.get(wi)):
+            r = min(r, SILENCED_NOISE)
+        return r
+
     def add_shot(self, pl, eye, dirs, w):
         """Kugeln eines Schusses erzeugen. Beim Client (shot_sink) werden sie
         stattdessen an den Host geschickt - der simuliert alle Kugeln."""
@@ -8405,15 +8750,38 @@ class World:
         if self.shot_sink is not None:
             self.shot_sink(pl, eye, dirs, w)
             return
+        nr = self.shot_noise(pl, w)
         self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1),           # 10h: + Lärmradius, Höhe
-                            round(NOISE_SHOT * getattr(w, "loud", 1.0), 1), round(world_noise_z(self, pl), 1)))
+                            round(nr, 1), round(world_noise_z(self, pl), 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
-        self.make_noise(pl.x, pl.y, NOISE_SHOT * getattr(w, "loud", 1.0), world_noise_z(self, pl))
+        self.make_noise(pl.x, pl.y, nr, world_noise_z(self, pl))
+        tgt = None
+        if pl.cur == STINGER_WI and dirs:                # v48: Lenkrakete - Ziel im Kegel um die Abschussrichtung
+            t = stinger_target(self, eye, dirs[0], STINGER_HOST_CONE, STINGER_RANGE * 1.1)
+            if t is not None and not (t[0] == "heli" and getattr(t[2], "driver", -1) == pl.pid):
+                tgt = (t[0], t[1])
         for d in dirs:
-            self.bullets.append(Bullet(eye[0], eye[1], eye[2],
-                                       d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
-                                       w.dmg, pl.pid, self.next_bid, pl.cur))
+            b = Bullet(eye[0], eye[1], eye[2], d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
+                       w.dmg, pl.pid, self.next_bid, pl.cur)
+            b.veh_dmg = w.veh_dmg
+            b.target = tgt
+            self.bullets.append(b)
             self.next_bid += 1
+
+    def add_gl(self, pl, eye, d):
+        """v48: 40-mm-Granate (Colt M4 Carbine mit Granatwerfer). Client: an den Host melden."""
+        if self.shot_sink is not None:
+            self.events.append(("glshot", pl.pid, 1))        # Mitspieler: eigener Klang sofort, Host meldet es den anderen
+            self.shot_sink(pl, eye, [d], WEAPONS[pl.cur], gl=True)
+            return
+        self.events.append(("glshot", pl.pid, 0))
+        r = NOISE_SHOT * 0.9
+        self.events.append(("lnoise", pl.pid, round(pl.x, 1), round(pl.y, 1), round(world_noise_z(self, pl), 1), round(r, 1)))
+        pl.protect = 0.0
+        self.make_noise(pl.x, pl.y, r, world_noise_z(self, pl))
+        self.bullets.append(Bullet(eye[0], eye[1], eye[2], d[0] * GL_SPEED, d[1] * GL_SPEED, d[2] * GL_SPEED,
+                                   0.0, pl.pid, self.next_bid, WI_GL))
+        self.next_bid += 1
 
     def own_vehicle_id(self, pid):
         """ID des Wagens, in dem Spieler pid fährt oder dessen Heckgeschütz er bedient (sonst -1)."""
@@ -8504,6 +8872,11 @@ class World:
             hz = self.ground_for(hx, hy, hz)
         b.x, b.y, b.z = hx, hy, hz
         d = norm((b.vx, b.vy, b.vz))
+        if b.blast_r > 0 and b.wi == STINGER_WI and hit in ("vehicle", "heli"):   # v48: Stinger - Volltreffer
+            if hit == "vehicle":
+                self.damage_vehicle(who, STINGER_VEH_DMG, b.owner)
+            else:
+                self.damage_heli(who, STINGER_HELI_DMG, b.owner)
         if b.blast_r > 0:                                # Rakete: Explosion kurz vor dem Ziel
             self.explode((hx - d[0] * 0.3, hy - d[1] * 0.3, hz - d[2] * 0.3),
                          b.owner, b.blast_r, b.blast_dmg, b.wi)
@@ -8525,10 +8898,13 @@ class World:
                 self.hit_player(drv, b.dmg * (self.head_mult(b.wi) if head else 1.0), (hx, hy, hz), d, head, b.owner, b.wi)
             else:
                 self.events.append(("impact", (hx, hy, hz), "rock"))
-                self.damage_vehicle(who, b.dmg, b.owner)
+                self.damage_vehicle(who, b.veh_dmg if getattr(b, "veh_dmg", 0.0) > 0 else b.dmg, b.owner)
         elif hit == "heli":
             self.events.append(("impact", (hx, hy, hz), "rock"))
-            self.damage_heli(who, 0.0 if b.wi == PISTOL_WI else b.dmg * HELI_K, b.owner)
+            if getattr(b, "veh_dmg", 0.0) > 0:               # v48: Railgun - fester Schaden (200), ohne HELI_K
+                self.damage_heli(who, b.veh_dmg, b.owner)
+            else:
+                self.damage_heli(who, 0.0 if b.wi in (PISTOL_WI, BARETTA_WI, DUAL_WI) else b.dmg * HELI_K, b.owner)
         else:
             self.events.append(("impact", (hx, hy, hz), hit))
         return False
@@ -8544,7 +8920,11 @@ class World:
                     self.explode((b.x, b.y, b.z), b.owner, b.blast_r, b.blast_dmg, WI_FLAK)
                     continue
             if b.life <= 0:
+                if b.wi == STINGER_WI:                   # v48: Lenkrakete zerlegt sich nach Ablauf in der Luft
+                    self.explode((b.x, b.y, b.z), b.owner, b.blast_r * 0.6, b.blast_dmg * 0.3, STINGER_WI)
                 continue
+            if b.wi == STINGER_WI:
+                self.steer_missile(b, dt)
             speed = math.sqrt(b.vx ** 2 + b.vy ** 2 + b.vz ** 2)
             n = max(1, int(speed * dt / 1.0) + 1)        # Teilstücke <= ~1 m
             ok = True
@@ -8565,6 +8945,30 @@ class World:
             if ok and -50 < b.x < WORLD + 50 and -50 < b.y < WORLD + 50:
                 alive.append(b)
         self.bullets = alive
+
+    def steer_missile(self, b, dt):
+        """v48: Stinger-Lenkrakete - beschleunigt auf STINGER_SPEED und dreht (höchstens STINGER_TURN rad/s) auf ihr Ziel."""
+        sp = math.sqrt(b.vx ** 2 + b.vy ** 2 + b.vz ** 2) or 1.0
+        d = (b.vx / sp, b.vy / sp, b.vz / sp)
+        sp = min(STINGER_SPEED, sp + STINGER_ACCEL * dt)
+        tg = None
+        if b.target is not None:
+            kind, tid = b.target
+            for o in (self.vehicles if kind == "veh" else self.helis):
+                if o.id == tid and o.hp > 0:
+                    tg = (o.x, o.y, o.z + (1.2 if kind == "heli" else 0.8))
+                    break
+            if tg is None:
+                b.target = None
+        if tg is not None:
+            w = norm((tg[0] - b.x, tg[1] - b.y, tg[2] - b.z))
+            c = max(-1.0, min(1.0, d[0] * w[0] + d[1] * w[1] + d[2] * w[2]))
+            ang = math.acos(c)
+            mx = STINGER_TURN * dt
+            if ang > 1e-4:
+                k = min(1.0, mx / ang)
+                d = norm((d[0] + (w[0] - d[0]) * k, d[1] + (w[1] - d[1]) * k, d[2] + (w[2] - d[2]) * k))
+        b.vx, b.vy, b.vz = d[0] * sp, d[1] * sp, d[2] * sp
 
     def separate_mobs(self):
         """Monster schieben sich gegenseitig auseinander - nur, wenn sie auch in der Höhe aneinanderstossen
@@ -8745,6 +9149,7 @@ class World:
             elif pl.mount < 0:
                 pl.stats["walk"] += d
         self.update_bullets(dt)
+        self.update_axes(dt)
         self.update_grenades(dt)
         self.update_smokes(dt)                           # 10e: Rauch, Feuer, Airdrops
         self.update_fires(dt)
@@ -9145,7 +9550,10 @@ class GunState:
         self.mag = w.mag
         self.reserve = min(w.max_reserve, w.mag * 3)
         self.cd = 0.0
-        self.semi = False        # Sturmgewehr: True = Einzelfeuer (V schaltet um)
+        self.semi = False        # Sturmgewehre: True = Einzelfeuer (V schaltet um)
+        self.gl_mode = False     # v48: Colt M4 Carbine mit Granatwerfer - V schaltet auch auf den Werfer
+        self.gl = GL_START       # v48: 40-mm-Granaten (eine im Rohr zählt mit)
+        self.gl_cd = 0.0         # v48: Nachladen des Werfers nach jedem Schuss
 
 
 class Player:
@@ -9191,7 +9599,7 @@ class Player:
         pri, sec = (loadout[0], loadout[1]) if len(loadout) > 1 else (START_WEAPON, None)
         self.att = {}                     # Aufsätze: Waffe -> (Lauf, Magazin, Griff)
         for wi_, a_ in ((pri, loadout[4] if len(loadout) > 4 else None), (sec, loadout[5] if len(loadout) > 5 else None)):
-            a_ = att_valid(a_)
+            a_ = att_clean(wi_, a_) if isinstance(wi_, int) else None
             if wi_ is not None and a_ is not None and a_ != ATT_NONE:
                 self.att[wi_] = a_
         self.guns = [GunState(self.wp(i)) for i in range(len(WEAPONS))]
@@ -9231,7 +9639,13 @@ class Player:
         self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
-        self.scopes = {pri: self.scope} if isinstance(pri, int) else {}   # 7b: Visier je Waffe (Hauptwaffe: gewähltes)
+        self.scopes = {pri: self.scope} if isinstance(pri, int) and att_fits(pri, ATT_SCOPE) else {}   # 7b: Visier je Waffe
+        self.spin = 0.0                   # v48: Minigun-Anlauf 0..1 (1 = dreht voll, schiesst)
+        self.spin_idle = 99.0             # v48: s seit dem letzten Feuern der Minigun (Abkling-Fenster)
+        self.lock_t = 0.0                 # v48: Stinger - so lange liegt das Ziel schon im Erfassungskegel
+        self.lock_id = None               # v48: ("veh"|"heli", ID) des erfassten Ziels
+        self.bolt_t = 0.0                 # v48: Repetierer - Kammer wird gerade durchgeladen (Rest s)
+        self.dual_side = 0                # v48: Dual Baretta - welche Hand als Nächstes schiesst (0 rechts, 1 links)
 
     def ext_fields(self):
         """Zusätzliche Spielerfelder (Betäubung, Ausrüstung, Granaten, Nahkampf ...): im Netzprotokoll immer vorhanden,
@@ -9311,7 +9725,8 @@ def att_give(pl, si, v):
     Lager. -> (Meldung 1 = angesteckt / 2 = Lager, Code, Waffe)"""
     wi = pl.cur
     code = si * ATT_CODE + v
-    if not getattr(pl, "melee_out", False) and not getattr(pl, "gad_out", False) and wi in pl.slots and att_fits(wi, si):
+    if (not getattr(pl, "melee_out", False) and not getattr(pl, "gad_out", False) and wi in pl.slots
+            and att_fits(wi, si, v)):
         old = att_set_value(pl, wi, si, v)
         if old:                                          # der bisherige Aufsatz (auch ein Visier ab Werk) ins Lager
             pl.att_store.append(si * ATT_CODE + old)
@@ -9322,7 +9737,7 @@ def att_give(pl, si, v):
 def att_equip_local(pl, wi, si, v):
     """7b: Aufsatz aus dem Lager an die Waffe wi stecken (Tab-Fenster); v = 0: Standard. Der bisherige geht ins
     Lager. -> Code des Aufsatzes oder None (nichts geändert)."""
-    if pl.hp <= 0 or wi not in pl.slots or not att_fits(wi, si):
+    if pl.hp <= 0 or wi not in pl.slots or not att_fits(wi, si, v):
         return None
     n = len(ATTACHMENTS[si]) if si < ATT_SCOPE else len(ATT_SCOPE_NAMES)
     if not (isinstance(v, int) and 0 <= v < n):
@@ -9344,6 +9759,30 @@ def stock_ammo(pl, wi):
     """Waffe aufgehoben, die man schon trägt: Reserve auffüllen statt eines zweiten Exemplars."""
     w, g = WEAPONS[wi], pl.guns[wi]
     g.reserve = min(w.max_reserve, g.reserve + w.mag * DUP_AMMO_MAGS)
+    if wi == M4_WI:                                  # v48: auch Granaten für den Werfer
+        g.gl = min(GL_MAX, getattr(g, "gl", 0) + GL_START)
+
+
+def dual_upgrade(pl, wi, atts=None):
+    """v48: Hebt man eine Baretta auf, während man schon eine trägt, nimmt man beide - die Dual Baretta (doppelte
+    Munition, kein Zielen). Mit der Dual Baretta in der Hand gibt eine weitere Baretta nur Munition.
+    -> (Waffe, die tatsächlich ins Inventar kommt, ihre Aufsätze)"""
+    if wi != BARETTA_WI:
+        return wi, atts
+    if DUAL_WI in pl.slots:
+        return DUAL_WI, atts
+    if BARETTA_WI not in pl.slots:
+        return wi, atts
+    old = pl.guns[BARETTA_WI]
+    pl.slots[pl.slots.index(BARETTA_WI)] = None      # die erste Baretta wandert in die linke Hand (fällt nicht)
+    keep = pl.att.pop(BARETTA_WI, None)
+    scope = pl.scopes.pop(BARETTA_WI, None)
+    if pl.cur == BARETTA_WI:
+        pl.cur = pl.switch_to = DUAL_WI
+        pl.switch_t = SWITCH_T * 0.5
+        pl.reload_t = 0.0
+    pl.dual_reserve = old.reserve + old.mag          # Restmunition der ersten Baretta kommt zur Reserve
+    return DUAL_WI, (keep if keep is not None else atts)
 
 def target_slot(pl, wi):
     """In welchen Slot käme die Waffe wi? Fest nach Kategorie (TYPE_SLOT): Haupt- -> SLOT_PRIMARY,
@@ -9925,22 +10364,6 @@ def noise_ground_r(world, x, y, z, r):
 def world_noise_z(world, pl):
     return world.noise_z(pl) if hasattr(world, "noise_z") else pl.z + 1.0
 
-def apply_drain(att, tgt):
-    """9c: Wirkung des Erschöpfungsdolchs auf beide Spieler (läuft beim Host UND auf den Rechnern der beiden)."""
-    if tgt is not None:
-        tgt.dash_cd, tgt.dash_t = DASH_CD, 0.0
-        tgt.jet_fuel, tgt.jet_on = 0.0, False
-        tgt.shock_cd = SHOCK_CD
-        tgt.pan_lock = DAGGER_PAN_LOCK
-        tgt.eat_t = 0.0
-        tgt.amp, tgt.amp_t = set(), 0.0
-    if att is not None:
-        att.dash_cd = 0.0
-        att.jet_fuel = jet_fuel_max(att)
-        att.shock_cd = 0.0
-        att.pan_lock = 0.0
-        att.amp, att.amp_t = {"dash", "jet", "shock", "pan"}, DAGGER_AMP_T
-
 def tick_melee_timers(pl, dt):
     """9c: Pfannen-Sperre und verstärkte Fähigkeiten laufen ab."""
     pl.pan_lock = max(0.0, pl.pan_lock - dt)
@@ -9971,6 +10394,14 @@ def melee_charge(pl, world, trigger, dt):
         pl.chg_hold += dt
         return pl.chg_hold >= MELEE_HOLD_START
     held, pl.chg_hold = pl.chg_hold, 0.0
+    if kind == "throw":                                   # v48: Kriegsaxt - Kraft nach Haltedauer, loslassen = werfen
+        if held < MELEE_HOLD_START:
+            return False
+        pw = clampf((held - MELEE_HOLD_START) / AXE_CHARGE_T, AXE_MIN_POW, 1.0)
+        pr = math.radians(pl.pitch)
+        world.axe_throw(pl, (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr)), pw)
+        pl.swing_t = pl.melee_cd = 0.5
+        return True
     if held < MELEE_CHARGE_T:
         return False
     d = (-math.sin(hr), math.cos(hr), 0.0)
@@ -9992,6 +10423,20 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
     g = pl.guns[pl.cur]
     w = pl.wp(pl.cur)
     g.cd = max(0.0, g.cd - dt)
+    g.gl_cd = max(0.0, getattr(g, "gl_cd", 0.0) - dt)
+    pl.bolt_t = max(0.0, getattr(pl, "bolt_t", 0.0) - dt)
+    spinning = (w.spin > 0 and trigger and not pl.melee_out and pl.switch_t <= 0 and pl.reload_t <= 0
+                and g.mag > 0 and not getattr(pl, "gad_out", False))
+    if spinning:                                       # v48: Minigun läuft an (Rest-Drehzahl aus dem Abkling-Fenster zählt)
+        pl.spin = min(1.0, getattr(pl, "spin", 0.0) + dt / w.spin)
+        pl.spin_idle = 0.0
+    else:                                              # ... und dreht nach dem Loslassen in MINIGUN_SPIN_DECAY s aus
+        pl.spin = max(0.0, getattr(pl, "spin", 0.0) - dt / MINIGUN_SPIN_DECAY)
+        pl.spin_idle = getattr(pl, "spin_idle", 99.0) + dt
+    if w.lock_t > 0 and not pl.melee_out:              # v48: Stinger - Zielerfassung
+        stinger_lock(pl, world, dt, w)
+    else:
+        pl.lock_t, pl.lock_id = 0.0, None
     pl.bloom = max(0.0, pl.bloom - 5.0 * dt)
     pl.trigger_buf = max(0.0, pl.trigger_buf - dt)
     if edge:
@@ -10028,7 +10473,8 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
             d = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
             world.melee_swing(pl, d)
         return
-    pl.ads = ads and pl.reload_t <= 0
+    bolt_busy = w.bolt and w.interval * 0.1 < pl.bolt_t < w.interval * 0.9   # v48: beim Repetieren aus dem Glas
+    pl.ads = ads and pl.reload_t <= 0 and not w.no_ads and not bolt_busy   # v48: Minigun/Dual Baretta nur aus der Hüfte
     if pl.reload_t > 0:
         pl.reload_t -= dt
         if pl.reload_t <= 0:
@@ -10037,9 +10483,16 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
             g.reserve -= take
             pl.reload_t = 0.0
         return
+    if getattr(g, "gl_mode", False) and att_has_gl(pl.cur, pl.att.get(pl.cur)):   # v48: Granatwerfer am Colt M4 Carbine
+        if pl.trigger_buf > 0 and g.gl_cd <= 0 and g.gl > 0:
+            g.gl -= 1
+            g.gl_cd = GL_RELOAD
+            pl.trigger_buf = 0.0
+            fire_gl(pl, w, world)
+        return
     wants = trigger if (w.auto and not g.semi) else pl.trigger_buf > 0
     if (reload_req or g.mag == 0) and g.mag < w.mag and g.reserve > 0:
-        if w.name == SG_NAME:
+        if mdl(w.name) == SG_NAME:
             pl.reload_tot = sg_times(min(w.mag - g.mag, g.reserve))[1]   # Kipplauf: je Patrone ein Handgriff
         else:
             pl.reload_tot = w.reload
@@ -10048,10 +10501,89 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
         world.events.append(("wreload", pl.pid, pl.cur))
         return
     if wants and g.cd <= 0 and g.mag > 0:
+        if w.spin > 0 and pl.spin < 1.0:               # v48: Minigun dreht noch hoch
+            return
+        if w.lock_t > 0 and pl.lock_t < w.lock_t:      # v48: Stinger schiesst nur mit stehender Erfassung (grün)
+            if edge:
+                world.events.append(("dryfire", pl.pid))
+            pl.trigger_buf = 0.0
+            return
         g.cd = w.interval
         g.mag -= 1
         pl.trigger_buf = 0.0
+        if w.bolt and g.mag > 0:                       # v48: Repetierer - Kammer durchladen (Animation, Zeit = interval)
+            pl.bolt_t = w.interval
+        if pl.cur == DUAL_WI:                          # v48: Dual Baretta - abwechselnd rechts und links
+            pl.dual_side = 1 - getattr(pl, "dual_side", 0)
         fire(pl, w, world)
+        if w.lock_t > 0:
+            pl.lock_t, pl.lock_id = 0.0, None
+
+
+def stinger_target(world, eye, f, cone, rng_max):
+    """v48: bestes Ziel (Fahrzeug/Helikopter mit Leben) im Kegel um die Richtung f -> (Art, ID, Objekt) oder None.
+    Bewertet nach Winkel (kleiner = besser); eigene Fahrzeuge werden von außen nicht gefiltert (Aufrufer)."""
+    best, bang = None, cone
+    for kind, objs in (("veh", getattr(world, "vehicles", ())), ("heli", getattr(world, "helis", ()))):
+        for o in objs:
+            if getattr(o, "hp", 0) <= 0:
+                continue
+            dx, dy, dz = o.x - eye[0], o.y - eye[1], (o.z + 1.0) - eye[2]
+            d = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if d < 4.0 or d > rng_max:
+                continue
+            c = (dx * f[0] + dy * f[1] + dz * f[2]) / d
+            ang = math.degrees(math.acos(max(-1.0, min(1.0, c))))
+            if ang < bang:
+                best, bang = (kind, o.id, o), ang
+    return best
+
+
+def stinger_lock(pl, world, dt, w):
+    """v48: Stinger - liegt ein Fahrzeug/Helikopter im Erfassungskegel, läuft die Erfassung (lock_t bis w.lock_t);
+    springt das Ziel heraus oder wechselt es, beginnt sie neu. Eigenes Fahrzeug/Heli zählt nicht."""
+    if pl.switch_t > 0 or pl.reload_t > 0 or pl.guns[pl.cur].mag <= 0 or pl.hp <= 0:
+        pl.lock_t, pl.lock_id = 0.0, None
+        return
+    hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+    f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+    eye = (pl.x, pl.y, pl.z + eye_h(pl))
+    t = stinger_target(world, eye, f, STINGER_CONE, STINGER_RANGE)
+    if t is not None and t[0] == "heli" and getattr(t[2], "driver", -1) == pl.pid:
+        t = None
+    key = (t[0], t[1]) if t is not None else None
+    if key is None:
+        pl.lock_t, pl.lock_id = 0.0, None
+    elif key != pl.lock_id:
+        pl.lock_t, pl.lock_id = 0.0, key
+    else:
+        pl.lock_t = min(w.lock_t, pl.lock_t + dt)
+
+
+def stinger_state(pl, w):
+    """v48: Anzeige der Erfassung: 'red' (kein Ziel), 'yellow' (Erfassung läuft), 'green' (schussbereit)."""
+    if getattr(pl, "lock_id", None) is None:
+        return "red"
+    return "green" if pl.lock_t >= w.lock_t else "yellow"
+
+
+def fire_gl(pl, w, world):
+    """v48: 40-mm-Granate aus dem Werfer unter dem Lauf (Bogenflug, Explosion beim Aufschlag)."""
+    rng = world.mrng
+    hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+    cp, sp = math.cos(pr), math.sin(pr)
+    f = (-math.sin(hr) * cp, math.cos(hr) * cp, sp)
+    r = (math.cos(hr), math.sin(hr), 0.0)
+    u = cross(r, f)
+    spread = GL_SPREAD * (w.ads_spread / 0.3 if pl.ads else 1.6)
+    a = math.radians(spread) * math.sqrt(rng.random())
+    ph = rng.uniform(0, 2 * math.pi)
+    t = math.tan(a)
+    d = norm(tuple(f[i] + t * (math.cos(ph) * r[i] + math.sin(ph) * u[i]) for i in range(3)))
+    eye = (pl.x, pl.y, pl.z + eye_h(pl))
+    world.add_gl(pl, eye, d)
+    pl.pitch = min(85.0, pl.pitch + 3.5)
+    pl.heading += rng.uniform(-1, 1) * 0.8
 
 
 # ------------------------------------------------------------ Prozedurale Texturen
@@ -14462,13 +14994,13 @@ def build_soldier(look):
 
 
 # Höhe der Visierlinie über dem Waffenursprung beim Zielen (Kimme und Korn liegen auf dieser Höhe)
-ADS_Z = {"Pistole": 0.069, "Sturmgewehr": 0.079, "Revolver": 0.0765, "Maschinenpistole": 0.071}
+ADS_Z = {"Colt ACP": 0.069, "Colt M4 Carbine": 0.079, "Revolver": 0.0765, "MP9": 0.071}
 ADS_Z_DEFAULT = 0.095
 
 # Montagepunkt (y, Oberkante z) der Schiene je Primärwaffe; Höhe der Zielachse über der Schiene je Visier
-SCOPE_MOUNT = {"Sturmgewehr": (0.25, 0.0375), "Schrotflinte": (0.08, 0.0425), "Scharfschütze": (0.15, 0.035)}
+SCOPE_MOUNT = {"Colt M4 Carbine": (0.25, 0.0375), "Schrotflinte": (0.08, 0.0425), "DSR": (0.15, 0.035)}
 SCOPE_AXIS = {SC_RED: 0.086, SC_ACOG: 0.05, SC_SNIPER: 0.065}
-IRON_ADS_Z = {"Schrotflinte": 0.0735, "Scharfschütze": 0.066}     # Sturmgewehr: Kimme/Korn steckt schon im Modell
+IRON_ADS_Z = {"Schrotflinte": 0.0735, "DSR": 0.066}     # Sturmgewehr: Kimme/Korn steckt schon im Modell
 _RING = (0.09, 0.095, 0.1)
 _DK, _DK2, _DOT = (0.08, 0.08, 0.09), (0.12, 0.12, 0.14), (0.95, 0.95, 0.9)
 IRON_EXTRA = {
@@ -14477,7 +15009,7 @@ IRON_EXTRA = {
                      (0, 0.76, 0.06, 0.022, 0.04, 0.02, _DK2), (0, 0.76, 0.0695, 0.008, 0.012, 0.02, (0.06, 0.06, 0.07)),
                      (-0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, _DOT), (0.0135, -0.0075, 0.0655, 0.004, 0.002, 0.006, _DOT),
                      (0, 0.754, 0.0765, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))],
-    "Scharfschütze": [(0, -0.1, 0.0385, 0.034, 0.06, 0.007, _DK2),
+    "DSR": [(0, -0.1, 0.0385, 0.034, 0.06, 0.007, _DK2),
                       (-0.0135, -0.1, 0.0575, 0.011, 0.014, 0.031, _DK), (0.0135, -0.1, 0.0575, 0.011, 0.014, 0.031, _DK),
                       (0, 0.9, 0.0405, 0.022, 0.04, 0.016, _DK2), (0, 0.9, 0.0605, 0.008, 0.012, 0.0235, (0.06, 0.06, 0.07)),
                       (-0.0135, -0.1075, 0.0575, 0.004, 0.002, 0.006, _DOT), (0.0135, -0.1075, 0.0575, 0.004, 0.002, 0.006, _DOT),
@@ -14525,7 +15057,7 @@ def scope_parts(sc, wname, rel=False):
                 (0, ym - 0.16, zt + 0.065, 0.05, 0.04, 0.05, (0.06, 0.06, 0.07)), (0, ym, zt + 0.095, 0.014, 0.02, 0.012, (0.3, 0.3, 0.32))]
     if rel:
         return []
-    if wname == "Sturmgewehr":
+    if mdl(wname) == "Colt M4 Carbine":
         return list(GUN_PARTS[wname][0][-8:])             # Kimme und Korn sitzen am Modell
     return [] if wname not in IRON_EXTRA else list(IRON_EXTRA[wname])
 
@@ -14537,7 +15069,7 @@ def scope_ads_z(sc, wname):
 
 # (cx, cy, cz, sx, sy, sz, farbe) in Waffen-Koordinaten: +y vorwärts, +x rechts
 GUN_PARTS = {
-    "Pistole": ([(0, 0.12, 0.03, 0.05, 0.26, 0.055, (0.22, 0.22, 0.25)),
+    "Colt ACP": ([(0, 0.12, 0.03, 0.05, 0.26, 0.055, (0.22, 0.22, 0.25)),
                  (0, 0.08, -0.005, 0.045, 0.20, 0.04, (0.15, 0.15, 0.17)),
                  (0, 0.0, -0.07, 0.045, 0.07, 0.13, (0.30, 0.20, 0.12)),
                  # Kimme: zwei Backen mit Ausschnitt; Korn: Pfosten mit Schutzbacken und Leuchtpunkten
@@ -14547,7 +15079,7 @@ GUN_PARTS = {
                  (-0.0135, -0.0075, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9)),
                  (0.0135, -0.0075, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9)),
                  (0, 0.2285, 0.0675, 0.004, 0.002, 0.004, (0.95, 0.95, 0.9))], (0, 0.26, 0.035)),
-    "Sturmgewehr": ([(0, 0.20, 0.0, 0.055, 0.45, 0.075, (0.20, 0.22, 0.20)),
+    "Colt M4 Carbine": ([(0, 0.20, 0.0, 0.055, 0.45, 0.075, (0.20, 0.22, 0.20)),
                      (0, 0.55, 0.02, 0.025, 0.35, 0.025, (0.1, 0.1, 0.1)),
                      (0, 0.40, 0.0, 0.06, 0.25, 0.07, (0.18, 0.20, 0.18)),
                      (0, -0.15, -0.01, 0.05, 0.28, 0.09, (0.30, 0.33, 0.22)),
@@ -14567,7 +15099,7 @@ GUN_PARTS = {
                       (0, 0.05, 0.0, 0.06, 0.25, 0.085, (0.25, 0.25, 0.28)),
                       (0, 0.35, -0.04, 0.06, 0.20, 0.05, (0.40, 0.26, 0.14)),
                       (0, -0.22, -0.03, 0.05, 0.35, 0.10, (0.40, 0.26, 0.14))], (0, 0.80, 0.03)),
-    "Scharfschütze": ([(0, 0.10, 0.0, 0.05, 0.60, 0.07, (0.20, 0.25, 0.22)),
+    "DSR": ([(0, 0.10, 0.0, 0.05, 0.60, 0.07, (0.20, 0.25, 0.22)),
                        (0, 0.65, 0.02, 0.025, 0.55, 0.025, (0.1, 0.1, 0.1)),
                        (0, -0.30, -0.02, 0.05, 0.35, 0.10, (0.30, 0.30, 0.28)),
                        (0, 0.10, -0.07, 0.035, 0.08, 0.08, (0.12, 0.12, 0.12))], (0, 0.95, 0.02)),
@@ -14583,7 +15115,7 @@ GUN_PARTS = {
                   (-0.0135, -0.0125, 0.0725, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
                   (0.0135, -0.0125, 0.0725, 0.004, 0.002, 0.006, (0.95, 0.95, 0.9)),
                   (0, 0.269, 0.078, 0.004, 0.002, 0.006, (0.95, 0.5, 0.1))], (0, 0.30, 0.035)),
-    "Maschinenpistole": ([(0, 0.12, 0.0, 0.05, 0.30, 0.07, (0.18, 0.18, 0.20)),
+    "MP9": ([(0, 0.12, 0.0, 0.05, 0.30, 0.07, (0.18, 0.18, 0.20)),
                           (0, 0.30, 0.01, 0.025, 0.15, 0.025, (0.1, 0.1, 0.1)),
                           (0, 0.08, -0.09, 0.04, 0.06, 0.14, (0.12, 0.12, 0.12)),
                           (0, -0.02, -0.05, 0.045, 0.07, 0.11, (0.25, 0.18, 0.12)),
@@ -14615,18 +15147,18 @@ GUN_PARTS = {
 
 # Wechselmagazin je Waffe (für die Nachladeanimation der Ego-Ansicht). Gleiche Tupel wie in GUN_PARTS
 # werden dort im Ego-Modell weggelassen (das Magazin ist dann ein eigenes, bewegliches Teil).
-RHAND_GRIP = {"Pistole": (0.0, 0.003, -0.07, -3.0), "Revolver": (0.0, -0.027, -0.07, -14.0),
-              "Maschinenpistole": (0.0, -0.033, -0.06, -15.0), "Sturmgewehr": (0.0, 0.052, -0.09, -7.0),
-              "Scharfschütze": (0.0, -0.1155, -0.08, 20.0), "Schrotflinte": (0.0, -0.098, -0.02, 0.0),
+RHAND_GRIP = {"Colt ACP": (0.0, 0.003, -0.07, -3.0), "Revolver": (0.0, -0.027, -0.07, -14.0),
+              "MP9": (0.0, -0.033, -0.06, -15.0), "Colt M4 Carbine": (0.0, 0.052, -0.09, -7.0),
+              "DSR": (0.0, -0.1155, -0.08, 20.0), "Schrotflinte": (0.0, -0.098, -0.02, 0.0),
               "Railgun": (0.0, 0.052, -0.11, -5.0), "Raketenwerfer": (0.0, 0.08, -0.107, -7.0),
               "Minigun": (0.0, 0.0045, -0.127, -2.0)}      # rechte Hand am Griff (Waffenraum): Position, Neigung des Griffs
 MAG_PARTS = {
-    "Pistole": (0, 0.0, -0.12, 0.04, 0.06, 0.09, (0.10, 0.10, 0.12)),
-    "Sturmgewehr": (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
+    "Colt ACP": (0, 0.0, -0.12, 0.04, 0.06, 0.09, (0.10, 0.10, 0.12)),
+    "Colt M4 Carbine": (0, 0.18, -0.12, 0.04, 0.09, 0.16, (0.12, 0.12, 0.12)),
     "Schrotflinte": (0, 0.25, -0.075, 0.04, 0.12, 0.03, (0.75, 0.15, 0.10)),
-    "Scharfschütze": (0, 0.10, -0.07, 0.035, 0.08, 0.08, (0.12, 0.12, 0.12)),
+    "DSR": (0, 0.10, -0.07, 0.035, 0.08, 0.08, (0.12, 0.12, 0.12)),
     "Revolver": (0, 0.06, -0.075, 0.05, 0.06, 0.04, (0.75, 0.60, 0.25)),
-    "Maschinenpistole": (0, 0.08, -0.09, 0.04, 0.06, 0.14, (0.12, 0.12, 0.12)),
+    "MP9": (0, 0.08, -0.09, 0.04, 0.06, 0.14, (0.12, 0.12, 0.12)),
     "Raketenwerfer": None,                      # die Rakete wird von vorn eingeschoben
     "Minigun": (0, -0.02, -0.20, 0.09, 0.12, 0.09, (0.25, 0.32, 0.18)),
     "Railgun": (0, 0.05, -0.17, 0.05, 0.08, 0.09, (0.20, 0.70, 0.90)),
@@ -14817,8 +15349,8 @@ def _gs_mk():
              ("p", 0, 0.010, [(-0.014, 0.052), (-0.034, 0.062), (-0.036, 0.052), (-0.02, 0.040)], dk),
              ("p", 0, 0.006, [(0.06, -0.028), (0.068, -0.028), (0.064, -0.05), (0.057, -0.048)], (0.10, 0.10, 0.12))]
     body += _gs_loop(0, 0.012, [(0.035, -0.028), (0.04, -0.052), (0.075, -0.058), (0.108, -0.044), (0.11, -0.026)], 0.007, frame)
-    body += [("b",) + tuple(t) for t in P["Pistole"][0][3:]]                 # Kimme und Korn
-    G["Pistole"] = dict(body=body, barrel=[], iron=[], mag=[
+    body += [("b",) + tuple(t) for t in P["Colt ACP"][0][3:]]                 # Kimme und Korn
+    G["Colt ACP"] = dict(body=body, barrel=[], iron=[], mag=[
         ("p", 0, 0.034, [(-0.026, 0.046), (0.026, 0.046), (0.026, -0.044), (-0.026, -0.044)], (0.10, 0.10, 0.12)),
         ("b", 0, 0.0, -0.047, 0.040, 0.062, 0.010, (0.05, 0.05, 0.06)),
         ("b", 0, 0.0, 0.047, 0.030, 0.040, 0.004, (0.8, 0.6, 0.2))])
@@ -14844,7 +15376,7 @@ def _gs_mk():
             ("b", 0, 0.123, -0.050, 0.006, 0.008, 0.022, _C_DK)]
     body += [("b", sg * 0.0325, y, 0.0, 0.004, 0.035, 0.028, (0.05, 0.05, 0.06)) for y in (0.34, 0.40, 0.46) for sg in (-1, 1)]
     body += _gs_loop(0, 0.008, [(0.100, -0.040), (0.108, -0.062), (0.142, -0.062), (0.150, -0.040)], 0.006, lo)
-    G["Sturmgewehr"] = dict(body=body, barrel=[], iron=[("b",) + tuple(t) for t in P["Sturmgewehr"][0][-8:]], mag=[
+    G["Colt M4 Carbine"] = dict(body=body, barrel=[], iron=[("b",) + tuple(t) for t in P["Colt M4 Carbine"][0][-8:]], mag=[
         ("p", 0, 0.036, [(-0.040, 0.080), (0.040, 0.080), (0.044, 0.02), (0.062, -0.081), (0.010, -0.083), (-0.030, -0.01)], (0.12, 0.12, 0.12)),
         ("p", 0, 0.040, [(0.004, -0.078), (0.070, -0.078), (0.064, -0.087), (0.002, -0.088)], _C_DK)])
 
@@ -14895,7 +15427,7 @@ def _gs_mk():
             ("t", [(0.02, 0.36, -0.04), (0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
             ("t", [(-0.02, 0.36, -0.04), (-0.03, 0.26, -0.056)], [0.005, 0.005], _C_DK, 6),
             ("p", 0, 0.012, [(-0.115, -0.035), (-0.05, -0.035), (-0.05, -0.052), (-0.115, -0.052)], _C_DK)]
-    G["Scharfschütze"] = dict(body=body, barrel=[], iron=[], mag=[
+    G["DSR"] = dict(body=body, barrel=[], iron=[], mag=[
         ("p", 0, 0.032, [(-0.036, 0.04), (0.036, 0.04), (0.038, -0.04), (-0.038, -0.04)], (0.12, 0.12, 0.12)),
         ("b", 0, 0.0, -0.043, 0.036, 0.084, 0.008, _C_DK)])
 
@@ -14943,8 +15475,8 @@ def _gs_mk():
     body += _gs_loop(0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
     body += _gs_loop(-0.02, 0.008, [(-0.03, -0.02), (-0.20, -0.04)], 0.007, smg)
     body += _gs_loop(0, 0.01, [(0.015, -0.036), (0.022, -0.060), (0.05, -0.062), (0.06, -0.036)], 0.007, smg)
-    body += [("b",) + tuple(t) for t in P["Maschinenpistole"][0][4:]]
-    G["Maschinenpistole"] = dict(body=body, barrel=[], iron=[], mag=[
+    body += [("b",) + tuple(t) for t in P["MP9"][0][4:]]
+    G["MP9"] = dict(body=body, barrel=[], iron=[], mag=[
         ("p", 0, 0.034, [(-0.030, 0.070), (0.030, 0.070), (0.030, -0.070), (-0.028, -0.070)], (0.12, 0.12, 0.12)),
         ("b", 0, 0.0, -0.074, 0.040, 0.064, 0.008, _C_DK)]
         + [("b", 0, 0, z, 0.0365, 0.062, 0.004, (0.06, 0.06, 0.07)) for z in (0.04, 0.01, -0.02, -0.05)])
@@ -15017,6 +15549,138 @@ def _gs_mk():
 
 GUN_SHAPES = _gs_mk()
 _POLY_CACHE = {}
+
+
+# ------------------------------------------------------------------ v48: Modelle der neuen Waffen
+# Jede neue Waffe baut auf dem Modell ihres Vorbilds auf (Weapon.model), umgefärbt, gekürzt oder ergänzt.
+def _gs_col(s):
+    return s[4] if s[0] == "p" else s[3] if s[0] == "t" else s[7]
+
+
+def _gs_with_col(s, c):
+    if s[0] == "p":
+        return s[:4] + (c,)
+    if s[0] == "t":
+        return s[:3] + (c,) + s[4:]
+    return s[:7] + (c,)
+
+
+def _gs_recolor(shapes, fn):
+    """Formen mit umgerechneter Farbe (fn: Farbe -> Farbe)."""
+    return [_gs_with_col(s, tuple(min(1.0, max(0.0, v)) for v in fn(_gs_col(s)))) for s in shapes]
+
+
+def _gs_clip(shapes, y0, y1):
+    """Formen auf den Bereich y0 <= y <= y1 (Waffenlänge) beschneiden - abgesägter Lauf/Schaft."""
+    out = []
+    for s in shapes:
+        k = s[0]
+        if k == "p":
+            ys = [p[0] for p in s[3]]
+            if max(ys) < y0 or min(ys) > y1:
+                continue
+            out.append(s[:3] + ([(min(y1, max(y0, y)), z) for y, z in s[3]],) + s[4:])
+        elif k == "t":
+            pts = [(x, min(y1, max(y0, y)), z) for x, y, z in s[1]]
+            if max(p[1] for p in s[1]) < y0 or min(p[1] for p in s[1]) > y1:
+                continue
+            keep = [(pt, r) for pt, r in zip(pts, s[2])]
+            ded = []
+            for pt, r in keep:                      # zusammengefallene Punkte weglassen
+                if not ded or abs(pt[1] - ded[-1][0][1]) > 1e-4 or abs(pt[2] - ded[-1][0][2]) > 1e-4:
+                    ded.append((pt, r))
+            if len(ded) < 2:
+                continue
+            out.append(("t", [d[0] for d in ded], [d[1] for d in ded]) + s[3:])
+        else:
+            cy, sy = s[2], s[5]
+            lo, hi = max(y0, cy - sy / 2), min(y1, cy + sy / 2)
+            if hi - lo < 1e-3:
+                continue
+            out.append(s[:2] + ((lo + hi) / 2,) + s[3:5] + (hi - lo,) + s[6:])
+    return out
+
+
+def _lum(c):
+    return (c[0] + c[1] + c[2]) / 3.0
+
+
+def _c_tan(c):                                   # SCAR-L: sandfarbene Kunststoffteile, Visier-Leuchtpunkte bleiben
+    l = _lum(c)
+    return c if (l > 0.6 or l < 0.11) else (l * 2.5, l * 2.15, l * 1.45)
+
+
+def _c_ak(c):                                    # AK: Holzschaft und -griff, dunkler Stahl
+    l = _lum(c)
+    if l > 0.6:
+        return c
+    if c[0] > c[2] + 0.04:                       # bräunliche/olivgrüne Teile -> Holz
+        return (0.30 + l * 0.9, 0.16 + l * 0.45, 0.06 + l * 0.15)
+    return (c[0] * 0.65, c[1] * 0.65, c[2] * 0.7)
+
+
+def _c_wood_steel(wood, steel):
+    def f(c):
+        l = _lum(c)
+        if l > 0.6:
+            return c
+        if l > 0.21 or c[0] > c[2] + 0.04:
+            return tuple(v * (0.8 + l) for v in wood)
+        return tuple(v * (0.8 + l * 1.5) for v in steel)
+    return f
+
+
+def _c_silver(c):                                # Baretta: Silberschlitten, schwarzer Griff
+    l = _lum(c)
+    if l > 0.6:
+        return c
+    if c[0] > c[2] + 0.05:                       # Holzgriff -> schwarzer Kunststoff
+        return (0.07, 0.07, 0.08)
+    if l > 0.19:
+        return (0.70, 0.71, 0.74)
+    return (c[0] * 0.8, c[1] * 0.8, c[2] * 0.85)
+
+
+def _c_olive(c):                                 # Stinger: olivgrünes Rohr
+    l = _lum(c)
+    return c if (l > 0.6 or l < 0.11) else (l * 1.15, l * 1.35, l * 0.7)
+
+
+def _gs_variant(base, fn=None, clip=None, add=(), mag_fn=None):
+    b = GUN_SHAPES[base]
+    out = {}
+    for k in ("body", "barrel", "iron", "mag"):
+        sh = list(b[k])
+        if clip is not None and k != "mag":
+            sh = _gs_clip(sh, *clip)
+        f = mag_fn if (k == "mag" and mag_fn is not None) else fn
+        if f is not None:
+            sh = _gs_recolor(sh, f)
+        out[k] = sh
+    out["body"] = out["body"] + list(add)
+    return out
+
+
+_STEEL_BL = (0.11, 0.11, 0.13)
+GUN_SHAPES["SCAR-L"] = _gs_variant("Colt M4 Carbine", _c_tan,
+                                   add=[("b", 0, 0.42, 0.048, 0.05, 0.30, 0.012, (0.16, 0.15, 0.13))])   # lange Schiene
+GUN_SHAPES["AK"] = _gs_variant("Colt M4 Carbine", _c_ak, mag_fn=lambda c: (0.42, 0.20, 0.08) if _lum(c) < 0.6 else c,
+                               add=[("t", [(0, 0.62, 0.035), (0, 0.69, 0.035)], [0.014, 0.012], _STEEL_BL, 10),   # Gasrohr
+                                    ("b", 0.032, 0.10, 0.012, 0.008, 0.05, 0.012, (0.15, 0.15, 0.16))])          # Spannhebel
+GUN_SHAPES["VSS"] = _gs_variant("DSR", _c_wood_steel((0.36, 0.22, 0.11), (0.10, 0.10, 0.11)), clip=(-0.6, 0.62),
+                                add=[("t", [(0, 0.30, 0.02), (0, 0.33, 0.02), (0, 0.76, 0.02), (0, 0.78, 0.02)],
+                                      [0.026, 0.034, 0.034, 0.028], (0.09, 0.09, 0.10), 14)])   # Integrierter Schalldämpfer
+GUN_SHAPES["Karabiner 98k"] = _gs_variant("DSR", _c_wood_steel((0.40, 0.23, 0.10), _STEEL_BL),
+                                          add=[("b", 0.03, 0.0, 0.035, 0.035, 0.012, 0.01, (0.55, 0.56, 0.6)),   # Kammerstängel
+                                               ("e", 0.05, 0.0, 0.03, 0.012, 0.012, 0.012, (0.55, 0.56, 0.6))])  # Kugelknopf
+GUN_SHAPES["Baretta"] = _gs_variant("Colt ACP", _c_silver)
+GUN_SHAPES["Dual Baretta"] = GUN_SHAPES["Baretta"]
+GUN_SHAPES["Abgesägte Schrotflinte"] = _gs_variant("Schrotflinte", lambda c: (c[0] * 0.9, c[1] * 0.88, c[2] * 0.86),
+                                                   clip=(-0.13, 0.46))
+GUN_SHAPES["Stinger"] = _gs_variant("Raketenwerfer", _c_olive,
+                                    add=[("b", 0.12, 0.30, 0.06, 0.07, 0.16, 0.12, (0.13, 0.14, 0.12)),      # Suchkopf-Einheit
+                                         ("b", 0.12, 0.30, 0.13, 0.006, 0.006, 0.08, (0.08, 0.08, 0.08)),    # Antenne
+                                         ("e", 0.12, 0.385, 0.06, 0.03, 0.006, 0.03, (0.3, 0.6, 0.35))])     # grünes Fenster
 
 
 def weapon_polys(wname, iron=True):
@@ -15109,9 +15773,9 @@ def rect_polys(prts, off=(0.0, 0.0)):
 # Rennhaltung (BF3-artig): (dx, dy, dz, heading, pitch, roll). Pistolen: Lauf nach oben vor der Brust;
 # grosse Waffen: quer vor dem Körper.
 SPRINT_POSE = {
-    "Pistole": (-0.08, -0.03, 0.0, 8.0, 42.0, -6.0),
+    "Colt ACP": (-0.08, -0.03, 0.0, 8.0, 42.0, -6.0),
     "Revolver": (-0.08, -0.03, 0.0, 8.0, 42.0, -6.0),
-    "Maschinenpistole": (-0.14, -0.04, 0.02, 38.0, 16.0, -8.0),
+    "MP9": (-0.14, -0.04, 0.02, 38.0, 16.0, -8.0),
     "Raketenwerfer": (-0.22, -0.12, -0.04, 58.0, 8.0, -12.0),
     "Minigun": (-0.22, -0.10, -0.08, 55.0, 6.0, -10.0),
 }
@@ -15178,20 +15842,31 @@ def _melee_shapes():
            ("e", 0, 0.06, 0.0, 0.0155, 0.006, 0.006, (0.55, 0.08, 0.1))]
         + _mw_blade(0.108, 0.31, lambda t: 0.011 - 0.005 * t, 0.045, cz=bend, top=lambda t: 0.008 - 0.004 * t, edge_k=0.5,
                     wcore=0.007, wedge=0.003, ccore=(0.30, 0.31, 0.34), cedge=(0.82, 0.84, 0.88)))
-    # ---------------- Erschöpfungsklinge (10d, vorher Machete): breite Klinge aus dunklem Stahl mit glimmenden Runen,
-    # Ebenholzgriff mit Goldringen, Edelstein-Knauf
-    S["Erschöpfungsklinge"] = (
-        [("e", 0, -0.04, 0.004, 0.012, 0.012, 0.012, C["rune"]),
-         ("e", 0, -0.024, 0.004, 0.02, 0.016, 0.022, C["gold"])]
-        + _mw_wrap(-0.014, 0.112, (0.0145, 0.018), C["ebony"], C["gold"], 4)
-        + [("p", 0, 0.032, [(0.114, 0.004), (0.12, -0.034), (0.132, -0.046), (0.128, -0.03), (0.126, 0.0), (0.128, 0.034),
-                             (0.134, 0.05), (0.12, 0.04)], C["gold"]),
-           ("e", 0, 0.124, 0.003, 0.02, 0.006, 0.006, C["rune"])]
-        + _mw_blade(0.129, 0.505, lambda t: 0.018 + 0.016 * t ** 1.5, 0.05, cz=lambda y: 0.006 * ((y - 0.13) / 0.37) ** 2,
-                    top=lambda t: 0.012 + 0.012 * t ** 2, edge_k=0.35, wcore=0.008, wedge=0.0035,
-                    ccore=C["dagger"], cedge=(0.55, 0.52, 0.62))
-        + [("b", 0, y, 0.006 * ((y - 0.13) / 0.37) ** 2 + 0.004, 0.0095, 0.012, 0.005, C["rune"]) for y in (0.17, 0.23, 0.29, 0.35, 0.41)]
-        + [("b", 0, y + 0.012, 0.006 * ((y - 0.13) / 0.37) ** 2 - 0.004, 0.0095, 0.005, 0.009, C["rune"]) for y in (0.2, 0.26, 0.32, 0.38)])
+    # ---------------- v48: Kriegsaxt - Dark-Magic/Ritual-Look: schwarzer Stiel, rote Lederwicklung, dunkler Bartaxt-Kopf
+    # mit blutroter Schneide, Ziegenbock-Gravur (beide Seiten) mit rot leuchtenden Augen; schwarzer Rauch am Stiel
+    # kommt zur Laufzeit dazu (AXE_SMOKE_T)
+    blk, iron_d, crim = (0.06, 0.045, 0.045), (0.13, 0.13, 0.15), (0.50, 0.07, 0.07)
+    goat, eye = (0.03, 0.015, 0.015), (1.0, 0.06, 0.02)
+    axe = [("e", 0, -0.152, 0.0, 0.024, 0.02, 0.024, iron_d),
+           ("t", [(0, -0.14, 0), (0, 0.64, 0)], [(0.016, 0.019), (0.014, 0.017)], blk, 8)]
+    axe += _mw_wrap(-0.125, 0.06, (0.0175, 0.0205), (0.32, 0.04, 0.04), (0.04, 0.03, 0.03), 5)
+    axe += [("b", 0, 0.575, 0.0, 0.036, 0.10, 0.05, iron_d),                                      # Tülle
+            ("p", 0, 0.012, [(0.525, 0.02), (0.515, 0.09), (0.475, 0.165), (0.535, 0.19), (0.60, 0.198),
+                             (0.665, 0.19), (0.70, 0.15), (0.66, 0.09), (0.625, 0.02)], (0.15, 0.15, 0.17)),
+            ("p", 0, 0.006, [(0.475, 0.165), (0.535, 0.19), (0.60, 0.198), (0.665, 0.19), (0.70, 0.15),
+                             (0.708, 0.158), (0.672, 0.205), (0.60, 0.216), (0.53, 0.207), (0.466, 0.176)], crim),
+            ("p", 0, 0.014, [(0.545, -0.02), (0.57, -0.10), (0.585, -0.108), (0.605, -0.02)], iron_d),   # Dorn
+            ("b", 0, 0.575, 0.0, 0.04, 0.012, 0.056, crim)]                                    # roter Ring unter dem Kopf
+    for sx in (-1, 1):                                                                         # Ziegenbock-Gravur
+        x = sx * 0.0068
+        axe += [("p", x, 0.0015, [(0.574, 0.07), (0.596, 0.07), (0.606, 0.10), (0.60, 0.13), (0.57, 0.13),
+                                  (0.564, 0.10)], goat),
+                ("p", x, 0.0015, [(0.57, 0.128), (0.548, 0.148), (0.54, 0.172), (0.552, 0.168), (0.566, 0.142)], goat),
+                ("p", x, 0.0015, [(0.60, 0.128), (0.622, 0.148), (0.63, 0.172), (0.618, 0.168), (0.604, 0.142)], goat),
+                ("p", x, 0.0015, [(0.578, 0.07), (0.592, 0.07), (0.585, 0.055)], goat),           # Bart
+                ("e", sx * 0.0078, 0.578, 0.112, 0.0035, 0.0045, 0.0035, eye),
+                ("e", sx * 0.0078, 0.592, 0.112, 0.0035, 0.0045, 0.0035, eye)]
+    S["Kriegsaxt"] = axe
     # ---------------- Schwert: Parierstange, Lederwicklung, Knauf, Hohlkehle, zweischneidig
     blade = [("p", 0, 0.0105, [(0.096, -0.0085), (0.70, -0.0055), (0.80, 0.0), (0.70, 0.0055), (0.096, 0.0085)], C["steel"]),
              ("p", 0, 0.004, [(0.096, 0.0085), (0.096, 0.024), (0.70, 0.019), (0.80, 0.0), (0.70, 0.0055)], C["edge"]),
@@ -15344,8 +16019,8 @@ def show_food(nodes, n):
 
 
 # ---- Ausrüstungsteile als Quader (Waffen-Koordinaten wie GUN_PARTS; Magazin-Teile relativ zur Magazinmitte)
-GRIP_AT = {"Pistole": (0.17, -0.02), "Revolver": (0.20, 0.0), "Maschinenpistole": (0.20, -0.035),
-           "Sturmgewehr": (0.42, -0.035), "Schrotflinte": (0.35, -0.065), "Scharfschütze": (0.35, -0.035)}
+GRIP_AT = {"Colt ACP": (0.17, -0.02), "Revolver": (0.20, 0.0), "MP9": (0.20, -0.035),
+           "Colt M4 Carbine": (0.42, -0.035), "Schrotflinte": (0.35, -0.065), "DSR": (0.35, -0.035)}
 ATT_MUZZLE_EXT = (0.0, 0.20, 0.20, 0.07)        # Verlängerung der Mündung je Lauf-Aufsatz (Mündungsfeuer sitzt am Ende)
 _AK, _AK2 = (0.12, 0.12, 0.14), (0.20, 0.20, 0.22)
 
@@ -15383,6 +16058,12 @@ def att_parts(wname, si, v):
     if v == 2:                                       # Winkelgriff: nach vorn geneigt (Stufen)
         return [(0, y, zt - 0.006, 0.03, 0.08, 0.012, _AK), (0, y + 0.006, zt - 0.03, 0.026, 0.045, 0.05, (0.16, 0.16, 0.18)),
                 (0, y + 0.024, zt - 0.056, 0.026, 0.045, 0.03, (0.16, 0.16, 0.18))]
+    if v == 4:                                       # v48: Granatwerfer (40 mm) unter dem Lauf - statt eines Griffs
+        return [(0, y + 0.05, zt - 0.006, 0.034, 0.24, 0.012, _AK),                   # Schiene/Halter
+                (0, y + 0.07, zt - 0.042, 0.056, 0.26, 0.056, (0.17, 0.18, 0.15)),    # Rohr
+                (0, y + 0.20, zt - 0.042, 0.046, 0.012, 0.046, (0.03, 0.03, 0.03)),   # Mündung
+                (0, y - 0.08, zt - 0.05, 0.03, 0.05, 0.05, (0.12, 0.12, 0.13)),       # Abzugsgruppe
+                (0, y - 0.095, zt - 0.09, 0.024, 0.03, 0.06, (0.12, 0.12, 0.13))]
     return [(0, y, zt - 0.022, 0.03, 0.07, 0.032, _AK),                            # Laserpointer mit rotem Auge
             (0, y + 0.037, zt - 0.022, 0.014, 0.012, 0.014, (1.0, 0.1, 0.1))]
 
@@ -15411,7 +16092,7 @@ def weapon_icon(wi, width=0.42, height=0.2, parts=None, name=None, extra=None, s
     if parts is not None:
         return polys_icon(rect_polys(list(parts) + list(extra or [])), width, height, name or "icon_melee")
     wname = WEAPONS[wi].name
-    iron = not (scope is not None and scope != SC_IRON and wname == "Sturmgewehr")
+    iron = not (scope is not None and scope != SC_IRON and mdl(wname) == "Colt M4 Carbine")
     polys = list(weapon_polys(wname, iron))
     if extra:
         polys += rect_polys(extra)
@@ -16075,10 +16756,12 @@ class Fx:
     """Animierter Effekt (Feuerball, Druckwelle, Rauch): Grösse und Farbe laufen von Anfang
     bis Ende, die Deckkraft sinkt als (1-t)^p; optional steigt er auf."""
 
-    def __init__(self, np, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0):
+    def __init__(self, np, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0, alpha=1.0, drift=(0.0, 0.0)):
         self.np, self.life, self.age = np, life, 0.0
         self.s0, self.s1, self.c0, self.c1, self.p, self.rise = s0, s1, c0, c1, p, rise
         self.x, self.y, self.z = pos
+        self.alpha = alpha        # v48: höchste Deckkraft (Staub halbtransparent)
+        self.drift = drift        # v48: seitliches Treiben (m/s)
 
     def update(self, dt):
         """False, wenn der Effekt zu Ende ist."""
@@ -16088,10 +16771,12 @@ class Fx:
         t = self.age / self.life
         s = self.s0 + (self.s1 - self.s0) * (1 - (1 - t) ** 2)
         self.z += self.rise * dt
+        self.x += self.drift[0] * dt
+        self.y += self.drift[1] * dt
         self.np.setPos(self.x, self.y, self.z)
         self.np.setScale(max(s, 0.01))
         c = [a + (b - a) * t for a, b in zip(self.c0, self.c1)]
-        self.np.setColorScale(c[0], c[1], c[2], (1 - t) ** self.p)
+        self.np.setColorScale(c[0], c[1], c[2], self.alpha * (1 - t) ** self.p)
         return True
 
 
@@ -16842,6 +17527,8 @@ class Crosshair:
         self.root = parent.attachNewNode("crosshair")
         self.gap = self.BASE
         self.arms = []
+        self.lit = []                       # v48: helle Striche (für die Färbung beim Stinger)
+        self.col = None
         for dx, dz in ((-1, 0), (1, 0), (0, 1), (0, -1)):
             hold = self.root.attachNewNode("arm")
             for grow, col in ((0.0012, (0, 0, 0, 0.7)), (0.0, (1, 1, 1, 0.92))):
@@ -16854,6 +17541,8 @@ class Crosshair:
                 c = hold.attachNewNode(cm.generate())
                 c.setColor(*col)
                 c.setTransparency(TransparencyAttrib.MAlpha)
+                if col[0] > 0.5:
+                    self.lit.append(c)
             hold.setH(0)
             self.arms.append((hold, dx, dz))
         self.root.setBin("fixed", 38)
@@ -16872,6 +17561,14 @@ class Crosshair:
     def target(self, walk, run, turn, air, bloom, crouch, hip=0.0):
         return max(0.008, min(0.14, self.BASE + hip + 0.010 * walk + 0.018 * run + 0.026 * turn
                               + 0.022 * air + 0.012 * bloom - 0.004 * crouch))
+
+    def set_color(self, rgb):
+        """v48: Farbe der Striche (None = weiss)."""
+        if rgb == self.col:
+            return
+        self.col = rgb
+        for c in self.lit:
+            c.setColor(*((rgb if rgb is not None else (1, 1, 1)) + (0.92,)))
 
     def update(self, dt, **k):
         t = self.target(**k)
@@ -17463,9 +18160,10 @@ class LoadoutScreen:
             cur = g.loadout[4 if prim else 5][si]
             wi_ = g.loadout[0 if prim else 1]
             self.text(f"{ATT_SLOTS[si]} wählen - Mauszeiger darüber zeigt die Wirkung", 0, -0.45, 0.04, (0.85, 0.9, 0.95, 1))
-            n = len(ATTACHMENTS[si])
-            for v in range(n):
-                x = (v - (n - 1) / 2) * 0.5
+            vs_ = [v for v in range(len(ATTACHMENTS[si])) if v == 0 or att_fits(wi_, si, v)]   # v48: nur Passendes
+            n = len(vs_)
+            for k_, v in enumerate(vs_):
+                x = (k_ - (n - 1) / 2) * 0.5
                 sel = cur == v
                 base = (1.0, 0.85, 0.2, 1.0) if sel else (0.4, 0.4, 0.45, 0.8)
                 frame = self.card(x, -0.68, 0.46, 0.32, base, 19)
@@ -17984,7 +18682,7 @@ class SetupPage:
         if g.menu_msg:
             self.text("msg", g.menu_msg, 0, -0.885, 0.034, (1.0, 0.5, 0.35, 1.0))
         elif g.cfg["mode"] == "experimental":
-            self.text(None, "Experimental: wie Deathmatch, aber alle starten mit der Pistole - alles Weitere kommt aus der Beute",
+            self.text(None, "Experimental: wie Deathmatch, aber alle starten mit der Colt ACP - alles Weitere kommt aus der Beute",
                       0, -0.885, 0.028, self.YELLOW)
         else:
             self.text(None, "Tasten:  Ziffern = Karte    Pfeile = Modus und Zeitlimit    W = Weitere    "
@@ -18175,7 +18873,7 @@ class CharPreview:
         if self.view is not None:
             self.view.root.removeNode()
         p = SimpleNamespace(pid=key[1], look=code, x=0.0, y=0.0, z=0.0, heading=0.0, heli=-1, hp=100.0, crouch=0.0,
-                            moving=False, lean=0.0, cur=[i for i, w_ in enumerate(WEAPONS) if w_.name == "Sturmgewehr"][0])
+                            moving=False, lean=0.0, cur=[i for i, w_ in enumerate(WEAPONS) if w_.name == "Colt M4 Carbine"][0])
         self.view = PlayerView(p)
         self.view.root.reparentTo(self.pivot)
         self.fake = p
@@ -19198,7 +19896,7 @@ class HostSession:
                 return
             if pl.stun_t > 0.3:
                 return                            # betäubt: kein Schuss (kleine Toleranz für Laufzeit)
-            wp = eff_weapon(idx, m.get("a"))      # Schaden/Tempo kommen vom Host (Aufsätze werden geprüft)
+            wp = eff_weapon(idx, att_clean(idx, m.get("a")))   # Schaden/Tempo kommen vom Host (Aufsätze werden geprüft)
             if idx not in pl.slots:
                 return                            # nur Waffen, die er laut Host wirklich trägt
             dirs = []
@@ -19214,7 +19912,21 @@ class HostSession:
                     eye = (float(o[0]), float(o[1]), float(o[2]))
             pl.cur = idx
             note_hand(pl)
+            if m.get("gl"):                       # v48: Granatwerfer - nur mit montiertem Werfer, höchstens im Nachladetakt
+                now = time.time()
+                if att_has_gl(idx, pl.att.get(idx)) and now - getattr(pl, "last_gl", 0.0) >= GL_RELOAD * 0.7:
+                    pl.last_gl = now
+                    w.add_gl(pl, eye, dirs[0])
+                return
             w.add_shot(pl, eye, dirs, wp)
+        elif t == "axe":                          # v48: Kriegsaxt geworfen - Flug und Treffer rechnet der Host
+            d = m.get("d")
+            p_ = m.get("p")
+            now = time.time()
+            if (isinstance(d, list) and len(d) == 3 and finite(*d) and isinstance(p_, (int, float)) and finite(p_)
+                    and pl.stun_t <= 0.3 and now - getattr(pl, "last_axe", 0.0) >= 0.4):
+                pl.last_axe = now
+                w.axe_throw_host(pl, (float(d[0]), float(d[1]), float(d[2])), float(p_))
         elif t == "shock":                        # 7c: Stromstoss (Schild-Set)
             w.shock(pl)
         elif t == "mspec":                        # 9c: Sonderattacke (Katana/Schwert) - Treffer entscheidet der Host
@@ -19915,10 +20627,12 @@ class ClientSession:
                             "y": r1(yaw), "a": list(att) if att else None})
         self.conn.flush()
 
-    def send_shot(self, pl, eye, dirs, w):
-        """World.shot_sink: den Schuss dem Host melden (er erzeugt die Kugeln)."""
+    def send_shot(self, pl, eye, dirs, w, gl=False):
+        """World.shot_sink: den Schuss dem Host melden (er erzeugt die Kugeln). gl: 40-mm-Granate (v48)."""
         msg = {"t": "fire", "w": pl.cur, "o": [r2(v) for v in eye],
                "d": [[round(v, 4) for v in d] for d in dirs]}
+        if gl:
+            msg["gl"] = 1
         a = pl.att.get(pl.cur)
         if a:
             msg["a"] = list(a)
@@ -19937,6 +20651,11 @@ class ClientSession:
 
     def send_shock(self):
         self.conn.send({"t": "shock"})
+        self.conn.flush()
+
+    def send_axe(self, d, power):
+        """v48: World.axe_sink - Axtwurf (Richtung, Kraft) dem Host melden."""
+        self.conn.send({"t": "axe", "d": [round(v, 4) for v in d], "p": round(float(power), 3)})
         self.conn.flush()
 
     def send_mspec(self, kind, d):
@@ -20054,12 +20773,40 @@ SOLDIER_THROW_L = ((0.00, SOLDIER_HAND[0]), (0.20, (-0.30, 0.10, 0.28)), (0.80, 
 
 # Gehaltene Waffe der Mitspieler: (Massstab, rechter Griff (y, z), linke Hand (y, z)) im Waffenraum. Die rechte Hand
 # sitzt immer am Griff (SOLDIER_HAND[1]), die linke am Handschutz bzw. unter dem Griff.
-HELD_GUN = {"Pistole": (0.90, (0.0, -0.05), (0.02, -0.12)), "Revolver": (0.90, (-0.03, -0.05), (-0.02, -0.12)),
-            "Maschinenpistole": (0.80, (-0.02, -0.05), (0.08, -0.10)), "Sturmgewehr": (0.68, (0.06, -0.09), (0.42, -0.035)),
-            "Schrotflinte": (0.62, (-0.03, -0.04), (0.35, -0.065)), "Scharfschütze": (0.56, (-0.09, -0.07), (0.35, -0.04)),
+HELD_GUN = {"Colt ACP": (0.90, (0.0, -0.05), (0.02, -0.12)), "Revolver": (0.90, (-0.03, -0.05), (-0.02, -0.12)),
+            "MP9": (0.80, (-0.02, -0.05), (0.08, -0.10)), "Colt M4 Carbine": (0.68, (0.06, -0.09), (0.42, -0.035)),
+            "Schrotflinte": (0.62, (-0.03, -0.04), (0.35, -0.065)), "DSR": (0.56, (-0.09, -0.07), (0.35, -0.04)),
             "Raketenwerfer": (0.50, (0.10, -0.10), (0.36, -0.10)), "Minigun": (0.50, (0.0, -0.12), (0.05, 0.12)),
             "Railgun": (0.62, (0.05, -0.10), (0.35, 0.0))}
 _HELD_CACHE = {}
+
+
+def _alias_weapon_tables():
+    """v48: Haltung, Griffpunkte, Magazin, Visier-Schiene ... der neuen Waffen von ihrem Vorbild übernehmen
+    (Weapon.model). Eigene Werte (unten) gehen vor."""
+    no_scope_rail = {"Abgesägte Schrotflinte", "Baretta", "Dual Baretta"}
+    for w in WEAPONS:
+        base = w.model
+        if not base:
+            continue
+        for d in (ADS_Z, IRON_ADS_Z, RHAND_GRIP, MAG_PARTS, GUN_PARTS, SPRINT_POSE, GRIP_AT, HELD_GUN, SCOPE_MOUNT,
+                  IRON_EXTRA):
+            if base in d and w.name not in d:
+                if d is SCOPE_MOUNT and w.name in no_scope_rail:
+                    continue
+                if d is IRON_EXTRA and w.name in no_scope_rail:
+                    continue
+                d[w.name] = d[base]
+    GUN_PARTS["Abgesägte Schrotflinte"] = (GUN_PARTS["Schrotflinte"][0], (0, 0.47, 0.03))   # Mündung am Sägeschnitt
+    GUN_PARTS["VSS"] = (GUN_PARTS["DSR"][0], (0, 0.79, 0.02))                             # Ende des Schalldämpfers
+    HELD_GUN["Abgesägte Schrotflinte"] = (0.75, (-0.03, -0.04), (0.30, -0.065))
+    SPRINT_POSE["Abgesägte Schrotflinte"] = SPRINT_POSE["MP9"]
+    SPRINT_POSE["Baretta"] = SPRINT_POSE["Dual Baretta"] = SPRINT_POSE["Colt ACP"]
+    for w in WEAPONS:                                # jede Waffe braucht Modell, Griff und Mündung
+        assert w.name in GUN_SHAPES and w.name in GUN_PARTS and w.name in HELD_GUN, w.name
+
+
+_alias_weapon_tables()
 
 
 def held_gun_geom(wi):
@@ -20170,6 +20917,8 @@ class PlayerView:
             nd.setScale(s_)
             nd.setPos(hr[0], hr[1] - s_ * rg[0], hr[2] - s_ * rg[1])
             self.held[wi] = nd
+            if name == "Dual Baretta":                                    # v48: zweite Baretta in der linken Hand
+                nd.attachNewNode(held_gun_geom(wi)).setPos(-0.34, 0.0, 0.0)
             fl = nd.attachNewNode("mflash")                               # Mündungsfeuer: zwei gekreuzte Sterne am Laufende
             for hh in (0, 90):
                 fl.attachNewNode(flash_geom()).setH(hh)
@@ -20213,7 +20962,7 @@ class PlayerView:
         if not (0 <= wi < len(WEAPONS)) or self.th_t > 0:
             return
         w = WEAPONS[wi]
-        self.rl_sg = w.name == SG_NAME
+        self.rl_sg = mdl(w.name) == SG_NAME
         self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
         self.rl_t = self.rl_tot
 
@@ -20548,6 +21297,11 @@ def synth_sounds():
     ev(1.16, mix((mul(sweep(m, 160, 80, 40), env(m, 40)), 1.0),), 0.6)
     out["reload"] = norm(rl, 0.8)
     out["pistol"] = gun(0.30, 70, 0.35, 18, 200, 80, 40)
+    n = int(0.16 * SR)                                              # v48: Schalldämpfer - gedämpftes "Pfft" mit Verschluss-Klick
+    hs = [a - b for a, b in zip(noise(n), lowpass(noise(n), 0.15))]
+    out["silenced"] = norm(mix((mul(lowpass(hs, 0.55), env(n, 38)), 1.0),
+                               (mul(lowpass(noise(n), 0.12), env(n, 60)), 0.6),
+                               (mul(sweep(n, 1700, 1100, 90), env(n, 160)), 0.25)), 0.55)
     out["rifle"] = gun(0.35, 55, 0.25, 14, 140, 60, 30)
     out["shotgun"] = gun(0.70, 40, 0.15, 7, 90, 40, 12)
     out["heavy"] = gun(1.00, 45, 0.20, 5, 70, 35, 8, echo=0.18)
@@ -115705,7 +116459,7 @@ class Sfx:
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
-            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2}
+            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
@@ -115713,7 +116467,7 @@ class Sfx:
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
              "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0,
-             "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0}
+             "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0, "silenced": 16.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
@@ -115721,7 +116475,7 @@ class Sfx:
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
            "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0,
-           "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0}
+           "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0, "silenced": 2.0}
 
     def __init__(self, game):
         self.game = game
@@ -115948,31 +116702,38 @@ class Sfx:
             return
         pos = None if own else (pl.x, pl.y, pl.z + 1.4)
         name = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
-        kind, rate = {"Pistole": ("pistol", 1.0), "Revolver": ("pistol", 0.78), "Sturmgewehr": ("rifle", 1.0),
-                      "Maschinenpistole": ("rifle", 1.3), "Minigun": ("rifle", 1.12),
-                      "Schrotflinte": ("shotgun_shot", 1.0), "Scharfschütze": ("sniper", 1.0),
-                      "Railgun": ("railgun", 1.0), "Raketenwerfer": ("rocket", 1.0)}.get(name, ("rifle", 1.0))
-        if name == "Sturmgewehr" and "ar_single" in self.pool:
-            # Jeder Schuss spielt die Einzelschuss-Aufnahme bis zum Ende; bei Dauerfeuer überlagern sich die Schüsse.
-            self.play("ar_single", pos, 0.45 if own else 0.6, g.prng.uniform(0.985, 1.015))
+        shooter = pl if pl is not None else g.player
+        if shooter is not None and att_silenced(wi, getattr(shooter, "att", {}).get(wi)):
+            # v48: Schalldämpfer - nur ein leises Zischen, das man bloss in der Nähe hört (Sfx.RANGE["silenced"])
+            self.play("silenced", pos, 0.55 if own else 0.75, g.prng.uniform(0.94, 1.06) * SILENCED_PITCH.get(mdl(name), 1.0))
             return
-        single = {"Pistole": ("pistol_single", 0.8, 0.9), "Revolver": ("revolver_single", 0.75, 0.85),
-                  "Maschinenpistole": ("smg_single", 0.55, 0.65)}.get(name)
+        kind, rate = {"Colt ACP": ("pistol", 1.0), "Revolver": ("pistol", 0.78), "Colt M4 Carbine": ("rifle", 1.0),
+                      "MP9": ("rifle", 1.3), "Minigun": ("rifle", 1.12),
+                      "Schrotflinte": ("shotgun_shot", 1.0), "DSR": ("sniper", 1.0),
+                      "Railgun": ("railgun", 1.0), "Raketenwerfer": ("rocket", 1.0)}.get(mdl(name), ("rifle", 1.0))
+        rate *= SHOT_PITCH.get(name, 1.0)                       # v48: neue Waffen klingen wie ihr Vorbild, etwas verstimmt
+        if mdl(name) == "Colt M4 Carbine" and "ar_single" in self.pool:
+            # Jeder Schuss spielt die Einzelschuss-Aufnahme bis zum Ende; bei Dauerfeuer überlagern sich die Schüsse.
+            self.play("ar_single", pos, 0.45 if own else 0.6, g.prng.uniform(0.985, 1.015) * SHOT_PITCH.get(name, 1.0))
+            return
+        single = {"Colt ACP": ("pistol_single", 0.8, 0.9), "Revolver": ("revolver_single", 0.75, 0.85),
+                  "MP9": ("smg_single", 0.55, 0.65)}.get(mdl(name))
         if single and single[0] in self.pool:                   # Einzelschuss-Aufnahme, jeder Schuss klingt aus -> Überlagerung
-            self.play(single[0], pos, single[1] if own else single[2], g.prng.uniform(0.985, 1.015))
+            self.play(single[0], pos, single[1] if own else single[2], g.prng.uniform(0.985, 1.015) * SHOT_PITCH.get(name, 1.0))
             return
         r = g.prng.uniform(0.96, 1.04) if kind not in ("sniper", "shotgun_shot") else g.prng.uniform(0.99, 1.01)
         self.play(kind, pos, 0.85 if own else 1.0, rate * r)
 
     def reload(self, wi):
         w = WEAPONS[wi] if 0 <= wi < len(WEAPONS) else None
-        if w and w.name == SG_NAME and "sg_open" in self.pool:
+        if w and mdl(w.name) == SG_NAME and "sg_open" in self.pool:
             return                                              # die Klänge kommen im Takt der Animation (Game.update_views)
-        key = {"Scharfschütze": "reload_sniper", "Sturmgewehr": "reload_rifle", "Pistole": "reload_pistol",
-                                                  "Revolver": "reload_revolver", "Maschinenpistole": "reload_smg"}.get(w.name) if w else None
+        key = {"DSR": "reload_sniper", "Colt M4 Carbine": "reload_rifle", "Colt ACP": "reload_pistol",
+                                                  "Revolver": "reload_revolver", "MP9": "reload_smg"}.get(mdl(w.name)) if w else None
         if key and key in self.pool:
             self.stop_reload()
-            snd = self.play(key, None, 0.9, 1.0)                    # Aufnahme auf die Nachladezeit der Waffe abgestimmt
+            rate_ = clampf(WEAPONS[WEAPON_IDX[mdl(w.name)]].reload / max(0.1, w.reload), 0.5, 1.5)   # v48: neue Waffen
+            snd = self.play(key, None, 0.9, rate_)                  # Aufnahme auf die Nachladezeit der Waffe abgestimmt
             self.rl_snd = snd
             me = self.game.world.players.get(self.game.my_id)
             self.rl_mag = me.guns[wi].mag if me is not None else 0
@@ -116660,6 +117421,9 @@ class Game(ShowBase):
         self.death_picker = None
         self.fx = []                          # Feuerball, Druckwelle, Rauch
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        for av_ in getattr(self, "axe_vis", {}).values():    # v48: fliegende/steckende Äxte der alten Welt
+            av_["np"].removeNode()
+        self.axe_vis = {}
         self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # Rauch, Feuer, Airdrops
         self.gad_views = {}
         self.tur_views = {}
@@ -118736,6 +119500,9 @@ class Game(ShowBase):
         self.bullet_nodes, self.mob_views, self.player_views = {}, {}, {}
         self.close_end_screen()
         self.gren_views, self.drop_views, self.veh_views = {}, {}, {}
+        for av_ in getattr(self, "axe_vis", {}).values():    # v48: fliegende/steckende Äxte der alten Welt
+            av_["np"].removeNode()
+        self.axe_vis = {}
         self.smoke_views, self.fire_views, self.ad_views = {}, {}, {}   # 10e
         self.drop_pop = {}                    # 7b: Drop-ID -> (Startzeit, Kistenposition) für den Flug aus der Kiste
         self.gad_views = {}
@@ -118833,7 +119600,7 @@ class Game(ShowBase):
         self.hurt_flash = 0.0
         self.fov_cur = self.fov_base
 
-    LOAD_TIPS = ("Im Einzelfeuer-Modus (V) streut das Sturmgewehr weniger - die Kugelabweichung sinkt.",
+    LOAD_TIPS = ("Im Einzelfeuer-Modus (V) streuen Sturmgewehre weniger - die Kugelabweichung sinkt.",
                  "Mit F steigst du in Fahrzeuge, Geschütze und Hubschrauber ein und wieder aus.",
                  "Im Hubschrauber: Leertaste steigt, Shift sinkt - ohne Taste verliert er an Höhe.",
                  "Die Bordwaffen des Hubschraubers zeigen dorthin, wohin die Nase zeigt (grünes Fadenkreuz).",
@@ -119022,6 +119789,7 @@ class Game(ShowBase):
             world.gren_sink = self.client.send_grenade
             world.melee_sink = self.client.send_melee
             world.mspec_sink = self.client.send_mspec
+            world.axe_sink = self.client.send_axe
             world.gad_sink = self.client.send_gadget
             self.attempt = None
 
@@ -119210,7 +119978,7 @@ class Game(ShowBase):
         for si_ in range(len(ATT_SLOTS)):
             for v_ in range(1, len(ATTACHMENTS[si_])):
                 am = Mesh()
-                prts = att_parts("Sturmgewehr", si_, v_)
+                prts = att_parts("Colt M4 Carbine", si_, v_)
                 if prts:
                     cx_ = sum(q[0] for q in prts) / len(prts)
                     cy_ = sum(q[1] for q in prts) / len(prts)
@@ -119224,7 +119992,7 @@ class Game(ShowBase):
                 self.att_drop_models[si_ * ATT_CODE + v_] = NodePath(am.node("att_drop"))
         for v_ in range(1, len(ATT_SCOPE_NAMES)):             # 7b: Visiere am Boden
             am = Mesh()
-            prts = scope_parts(v_, "Sturmgewehr", rel=True)
+            prts = scope_parts(v_, "Colt M4 Carbine", rel=True)
             if prts:
                 k_ = 0.5 / max(max(q[3], q[4], q[5]) for q in prts)
                 cy_ = sum(q[1] for q in prts) / len(prts)
@@ -119289,18 +120057,22 @@ class Game(ShowBase):
             magp = MAG_PARTS.get(w.name)
             sg_h = sg_a = None
             build_shapes(gm, sh["body"], rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
-            if w.name == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
+            if mdl(w.name) == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
                 gb = Mesh()
                 build_shapes(gb, sh["barrel"], rng)
             model = self.gun_pivot.attachNewNode(w.name)
             model.attachNewNode(gm.node("g"))
-            if w.name == SG_NAME:
+            if mdl(w.name) == SG_NAME:
                 sg_h = model.attachNewNode("sg_hinge")
                 sg_h.setPos(*SG_PIV)
                 sg_a = sg_h.attachNewNode("sg_barrel")
                 sg_a.setPos(-SG_PIV[0], -SG_PIV[1], -SG_PIV[2])
                 sg_a.attachNewNode(gb.node("b"))
-                self.sg_hinge, self.sg_front = sg_h, None
+                if not hasattr(self, "sg_hinges"):
+                    self.sg_hinges = {}
+                self.sg_hinges[WEAPON_IDX[w.name]] = sg_h      # v48: je Kipplauf-Waffe (Schrotflinte, Abgesägte)
+                if w.name == SG_NAME:
+                    self.sg_hinge, self.sg_front = sg_h, None
             mag = ej = None
             if magp is not None:
                 for k in range(2):                          # k=0: Magazin an der Waffe, k=1: ausgeworfenes
@@ -119317,7 +120089,7 @@ class Game(ShowBase):
             an = {}
             if w.name in PRIMARY_NAMES or w.name in SECONDARY_NAMES:            # Ausrüstungsteile: alle vorbauen, der gewählte wird gezeigt
                 for si_ in (0, 2):
-                    for v_ in (1, 2, 3):
+                    for v_ in range(1, len(ATTACHMENTS[si_])):     # v48: Griff-Platz hat jetzt 4 (Granatwerfer)
                         am_ = Mesh()
                         for part in att_parts(w.name, si_, v_):
                             box(am_, *part, rng)
@@ -119341,6 +120113,16 @@ class Game(ShowBase):
             self.flash_np.instanceTo(fl)
             fl.setTwoSided(True)
             fl.hide()
+            if w.name == "Dual Baretta":                    # v48: zweite Baretta in der linken Hand
+                left_ = model.attachNewNode("dual_left")
+                model.find("g").instanceTo(left_)
+                left_.setPos(*DUAL_LEFT_POS)
+                fl2 = left_.attachNewNode("flash_l")
+                fl2.setPos(*muzzle)
+                self.flash_np.instanceTo(fl2)
+                fl2.setTwoSided(True)
+                fl2.hide()
+                self.dual_left, self.dual_flash = left_, fl2
             self.gun_models.append(model)
             self.gun_flash.append(fl)
             sn = {}
@@ -120306,7 +121088,7 @@ class Game(ShowBase):
         counts = {}
         for c in pl.att_store:
             s_, v_ = divmod(c, ATT_CODE)
-            if s_ == si and 0 < v_ < nmax:
+            if s_ == si and 0 < v_ < nmax and (si == ATT_SCOPE or att_fits(wi, si, v_)):   # v48: nur was passt
                 counts[v_] = counts.get(v_, 0) + 1
         items = [0] + sorted(set(counts) | ({cur} if cur else set()))
         cw, ch, gap = 0.37, 0.19, 0.035
@@ -120977,6 +121759,10 @@ class Game(ShowBase):
             return
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
+            return
+        if (pl.ads and not pl.melee_out and not pl.gad_out and 0 <= pl.cur < len(WEAPONS)
+                and len(WEAPONS[pl.cur].zooms) > 1):         # v48: VSS - Mausrad verstellt beim Zielen die Vergrösserung
+            self.step_zoom(d)
             return
         order = [wi for wi in pl.slots[:N_FREE_SLOTS] if wi is not None] + [MELEE_SEL]   # Slot 1, Slot 2, Nahkampf
         if pl.gad_out:
@@ -121713,6 +122499,7 @@ class Game(ShowBase):
         if not 0 <= wi < len(WEAPONS):
             return
         if self.net_mode == "client":
+            old_b = pl.guns[BARETTA_WI] if (wi == DUAL_WI and BARETTA_WI in pl.slots) else None   # v48: Dual Baretta
             new = [None] * N_SLOTS
             for i, v in enumerate(list(slots or ())[:N_SLOTS]):
                 if isinstance(v, int) and 0 <= v < len(WEAPONS):
@@ -121729,6 +122516,9 @@ class Game(ShowBase):
                 stock_ammo(pl, wi)
             else:
                 pl.guns[wi] = GunState(pl.wp(wi))
+                if old_b is not None:                # Restmunition der ersten Baretta kommt zur Reserve
+                    g_ = pl.guns[wi]
+                    g_.reserve = min(pl.wp(wi).max_reserve, g_.reserve + old_b.reserve + old_b.mag)
             if pl.cur not in pl.slots:               # die Waffe in der Hand wurde getauscht
                 pl.cur = pl.switch_to = wi
                 pl.switch_t, pl.reload_t = SWITCH_T * 0.5, 0.0
@@ -122857,6 +123647,11 @@ class Game(ShowBase):
         t = self.death_t if hasattr(self, "death_t") else 0.0
         eye = pl.z + (eye_h(pl) + bob) * (1 - t) + 0.35 * t
         pitch = pl.pitch * (1 - t) + (self.sp_cam.x if hasattr(self, "sp_cam") else 0.0)
+        cs_ = getattr(self, "cam_slam", 0.0)
+        if cs_ and pl.melee_out and pl.hp > 0:                    # v48: Schwert-Sonderangriff (Kamerafahrt)
+            pitch = clampf(pitch + cs_, -89.0, 89.0)
+        elif cs_:
+            self.cam_slam = 0.0
         roll = (self.sp_hurt.x if hasattr(self, "sp_hurt") else 0.0) + 70.0 * t
         roll += pl.lean / LEAN_MAX * LEAN_ROLL * (1 - t)          # Lehnen: Kopf kippt zur Seite
         hc = self.my_heli() if pl.hp > 0 else None
@@ -123111,7 +123906,17 @@ class Game(ShowBase):
         if pl.hp <= 0 or pl.cur not in SELECTIVE_FIRE or pl.switch_t > 0 or pl.reload_t > 0 or pl.gad_out:
             return
         g = pl.guns[pl.cur]
-        g.semi = not g.semi
+        if att_has_gl(pl.cur, pl.att.get(pl.cur)):     # v48: Auto -> Semi -> Granatwerfer -> Auto
+            if g.gl_mode:
+                g.gl_mode, g.semi = False, False
+            elif g.semi:
+                g.gl_mode = True
+                self.toast(f"Granatwerfer  ({g.gl} Granaten)", (1.0, 0.75, 0.3), 1.2)
+            else:
+                g.semi = True
+        else:
+            g.gl_mode = False
+            g.semi = not g.semi
         self.sp_back.kick(0.9)
         self.sp_pitch.kick(-40)
         self.sp_roll.kick(18 if g.semi else -18)
@@ -123232,9 +124037,9 @@ class Game(ShowBase):
         if kind in ("ground", "rock", "tree") and r.random() < 0.4:
             self.smoke_puff(pos, 0.12, 0.7, 0.62 if kind != "tree" else 0.45)     # Staubwölkchen
 
-    def fx_spawn(self, model, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0, fog=True):
+    def fx_spawn(self, model, pos, life, s0, s1, c0, c1, p=1.0, rise=0.0, fog=True, alpha=1.0, drift=(0.0, 0.0)):
         """Animierten Effekt (Fx) anlegen: Instanz eines Effektmodells, transparent."""
-        if len(self.fx) > 90:
+        if len(self.fx) > 140:
             self.fx.pop(0).np.removeNode()
         np = self.render.attachNewNode("fx")           # 10f: eigener Knoten je Effekt (vorher lagen alle übereinander)
         model.instanceTo(np)
@@ -123243,7 +124048,7 @@ class Game(ShowBase):
         np.setLightOff()
         if not fog:
             np.setFogOff()
-        f = Fx(np, pos, life, s0, s1, c0, c1, p, rise)
+        f = Fx(np, pos, life, s0, s1, c0, c1, p, rise, alpha, drift)
         f.update(0.0)
         self.fx.append(f)
         return f
@@ -123256,6 +124061,114 @@ class Game(ShowBase):
             else:
                 f.np.removeNode()
         self.fx = keep
+
+    def axe_vis_add(self, aid, pos, vel):
+        """v48: fliegende Kriegsaxt darstellen (Flugbahn rechnet jeder Rechner selbst nach, wie der Host)."""
+        if not hasattr(self, "axe_vis"):
+            self.axe_vis = {}
+        old = self.axe_vis.pop(aid, None)
+        if old is not None:
+            old["np"].removeNode()
+        nd = self.render.attachNewNode("axe_%d" % aid)
+        inner = nd.attachNewNode("spin")
+        mdl_ = inner.attachNewNode(melee_model(MELEE_IDX[AXE_NAME], 1.0).node("m"))
+        mdl_.setPos(0, -0.42, -0.06)                     # Drehpunkt nahe am schweren Kopf
+        self.axe_vis[aid] = dict(np=nd, inner=inner, p=list(pos), v=list(vel), stuck=None, ang=0.0, smoke=0.0, t=0.0)
+
+    def axe_smoke(self, pos, k=1.0):
+        """v48: schwarzer Rauch der Kriegsaxt (Dark-Magic-Look)."""
+        r = self.prng
+        self.fx_spawn(self.sphere_np, (pos[0] + r.uniform(-0.04, 0.04), pos[1] + r.uniform(-0.04, 0.04), pos[2]),
+                      r.uniform(0.8, 1.3), 0.025 * k, 0.16 * k, (0.05, 0.03, 0.05), (0.01, 0.01, 0.01), p=1.1,
+                      rise=r.uniform(0.25, 0.6), alpha=0.75)
+
+    def update_axe_vis(self, dt):
+        """v48: geworfene Äxte bewegen/drehen bzw. am Fahrzeug mitführen; Rauch an Axt und Stiel in der Hand."""
+        world = self.world
+        for aid, a in list(getattr(self, "axe_vis", {}).items()):
+            a["t"] += dt
+            if a["t"] > AXE_LIFE + AXE_STICK_T[1] + 4.0:     # Ende nie angekommen: aufräumen
+                a["np"].removeNode()
+                del self.axe_vis[aid]
+                continue
+            if a["stuck"] is not None:
+                kind, oid, off, rh = a["stuck"]
+                o = world.vehicle_by_id(oid) if kind == "veh" else world.heli_by_id(oid)
+                if o is None:
+                    a["np"].hide()
+                    continue
+                hd = math.radians(o.heading)
+                c, sn = math.cos(hd), math.sin(hd)
+                a["p"] = [o.x + off[0] * c - off[1] * sn, o.y + off[0] * sn + off[1] * c, o.z + off[2]]
+                a["np"].setPos(*a["p"])
+                a["np"].setHpr(o.heading + rh, 0, 0)
+                a["inner"].setP(-55.0)                   # Klinge steckt, Stiel ragt heraus
+            else:
+                a["v"][2] -= GRAV_BULLET * AXE_GRAV * dt
+                for i in range(3):
+                    a["p"][i] += a["v"][i] * dt
+                a["ang"] = (a["ang"] - AXE_SPIN * dt) % 360.0
+                a["np"].setPos(*a["p"])
+                a["np"].setH(math.degrees(math.atan2(-a["v"][0], a["v"][1])))
+                a["inner"].setP(a["ang"])
+            a["smoke"] -= dt
+            if a["smoke"] <= 0:
+                a["smoke"] = AXE_SMOKE_T * (0.6 if a["stuck"] is None else 1.5)
+                self.axe_smoke(a["p"], 1.2)
+        # Rauch am Stiel der Axt in der Hand (eigene Ego-Ansicht und andere Spieler)
+        self.axe_hand_smoke = getattr(self, "axe_hand_smoke", 0.0) - dt
+        if self.axe_hand_smoke > 0:
+            return
+        self.axe_hand_smoke = AXE_SMOKE_T
+        ai = MELEE_IDX.get(AXE_NAME, -1)
+        pl = self.player
+        if (pl is not None and pl.hp > 0 and pl.melee == ai and pl.melee_out and pl.vehicle < 0 and pl.heli < 0
+                and self.mode == "play"):
+            try:
+                p3 = self.render.getRelativePoint(self.camera, Point3(0.20, 0.50, -0.22))
+                self.axe_smoke((p3[0], p3[1], p3[2]), 0.7)
+            except Exception:
+                pass
+        for pid, op in world.players.items():
+            if pid == self.my_id or op.hp <= 0 or getattr(op, "melee", -1) != ai or not getattr(op, "melee_out", False):
+                continue
+            hr = math.radians(op.heading)
+            self.axe_smoke((op.x + math.cos(hr) * 0.32 - math.sin(hr) * 0.3, op.y + math.sin(hr) * 0.32 + math.cos(hr) * 0.3,
+                            op.z + 1.15), 0.8)
+
+    def sword_slam_fx(self, pos, heading):
+        """v48: Schwert-Aufschlag - Luft-Druckwellen nach vorn, Erde spritzt in V-Form etwa SWORD_DIRT_H m hoch,
+        halbtransparenter Staub hängt SWORD_DUST_T s in der Luft und verschwindet dann ganz."""
+        r = self.prng
+        x, y, z = pos
+        gz = self.world.ground_for(x, y, z + 0.5)
+        gz = max(gz, z - 1.0)
+        h = math.radians(heading)
+        fx_, fy_ = -math.sin(h), math.cos(h)
+        for k in range(3):                                    # Druckwellen: flache Ringe, die nach vorn laufen
+            d = 0.6 + 1.1 * k
+            self.fx_spawn(self.disc_np, (x + fx_ * d, y + fy_ * d, gz + 0.15 + 0.25 * k), 0.45 + 0.12 * k,
+                          0.4, SWORD_SLAM_R * (0.55 + 0.25 * k), (0.95, 0.95, 1.0), (0.8, 0.85, 0.95), p=1.6,
+                          fog=False, alpha=0.55 - 0.12 * k)
+        self.fx_spawn(self.sphere_np, (x + fx_ * 1.2, y + fy_ * 1.2, gz + 0.6), 0.3, 0.3, SWORD_SLAM_R * 0.45,
+                      (1.0, 1.0, 1.0), (0.85, 0.9, 1.0), p=2.0, fog=False, alpha=0.35)      # Luftstoss
+        vz = math.sqrt(2.0 * 9.81 * SWORD_DIRT_H)              # Startgeschwindigkeit für ~SWORD_DIRT_H m Höhe
+        earth = ((0.36, 0.27, 0.16), (0.42, 0.32, 0.19), (0.30, 0.23, 0.14))
+        for side in (-1, 1):                                  # zwei Erdfontänen, die als V auseinanderlaufen
+            a = h + math.radians(side * SWORD_V_ANGLE)
+            dx, dy = -math.sin(a), math.cos(a)
+            for k in range(14):
+                d = 0.5 + k * (SWORD_SLAM_R * 0.85 / 14)
+                k_up = 1.0 - 0.35 * k / 14                    # vorn am höchsten, nach aussen etwas flacher
+                p0 = (x + dx * d + r.uniform(-0.12, 0.12), y + dy * d + r.uniform(-0.12, 0.12), gz + 0.05)
+                self.add_particle(p0, (dx * r.uniform(0.6, 1.8) + side * -dy * 0.6, dy * r.uniform(0.6, 1.8) + side * dx * 0.6,
+                                       vz * k_up * r.uniform(0.85, 1.08)),
+                                  r.choice(earth), r.uniform(0.05, 0.11), r.uniform(0.9, 1.4), 0.15, 1.0)
+                if k % 2 == 0:                                # Staub entlang des V - hängt in der Luft und verblasst
+                    self.fx_spawn(self.sphere_np, (p0[0], p0[1], gz + r.uniform(0.3, 1.2) * SWORD_DIRT_H * 0.6),
+                                  SWORD_DUST_T * r.uniform(0.9, 1.1), 0.25, r.uniform(0.8, 1.3),
+                                  (0.50, 0.42, 0.30), (0.42, 0.36, 0.27), p=1.3, rise=r.uniform(0.05, 0.2),
+                                  alpha=0.45, drift=(dx * 0.25, dy * 0.25))
 
     def smoke_puff(self, pos, size=0.3, life=1.4, grey=0.55):
         r = self.prng
@@ -123368,8 +124281,8 @@ class Game(ShowBase):
             if kind == "shot":
                 if e[2] == self.my_id:
                     self.sfx.shot(e[1], e[2])
-                    if 0 <= e[1] < len(WEAPONS):
-                        self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * WEAPONS[e[1]].loud,
+                    if 0 <= e[1] < len(WEAPONS):           # v48: mit Schalldämpfer nur die kleine Welle
+                        self.noise_wave(self.player.x, self.player.y, self.world.shot_noise(self.player, WEAPONS[e[1]], e[1]),
                                         self.world.noise_z(self.player))
                 if e[2] != self.my_id:      # nur eigene Schüsse: Rückstoss, Feuer, Hülse
                     continue
@@ -123380,12 +124293,33 @@ class Game(ShowBase):
                 self.sp_roll.kick(rr.uniform(-1, 1) * w.kick_back * 6)
                 self.sp_cam.kick(w.kick * 22)
                 self.flash_t = 0.05
+                self.flash_left = e[1] == DUAL_WI and getattr(self.player, "dual_side", 0) == 0   # v48: links geschossen
+                if self.flash_left:
+                    self.dual_kick = 1.0
                 self.gun_flash[e[1]].setR(rr.uniform(0, 360))
                 self.gun_flash[e[1]].setScale(rr.uniform(0.8, 1.4) * (1.6 if w.pellets > 1 else 1.0))
                 if w.blast_r <= 0:
                     self.eject_shell(w)
                 else:
                     self.rocket_launch_fx()
+            elif kind == "glshot":                  # v48: 40-mm-Granate aus dem Werfer (alle Spieler)
+                pw = self.world.players.get(e[1])
+                own_ = e[1] == self.my_id
+                if own_ and self.net_mode == "client" and not (len(e) > 2 and e[2]):
+                    continue                        # eigener Schuss kam als Mitspieler schon lokal
+                if pw is not None or own_:
+                    pos_ = None if own_ else (pw.x, pw.y, pw.z + 1.4)
+                    self.sfx.play("thud", pos_, 0.9, 1.35)
+                    self.sfx.play("shotgun", pos_, 0.35 if own_ else 0.5, 1.6)
+                if own_:
+                    self.sp_back.kick(1.6)
+                    self.sp_pitch.kick(70)
+                    self.sp_cam.kick(5.0)
+                    self.flash_t = 0.05
+                    self.noise_wave(self.player.x, self.player.y, NOISE_SHOT * 0.9, self.world.noise_z(self.player))
+            elif kind == "dryfire":                 # v48: Stinger ohne Zielerfassung - nur ein Klicken
+                if e[1] == self.my_id:
+                    self.sfx.play("click", None, 0.7, 0.8)
             elif kind == "impact":
                 self.burst(e[1], e[2])
             elif kind == "throw":                   # Handgranate geworfen (alle Spieler)
@@ -123781,7 +124715,11 @@ class Game(ShowBase):
             elif kind == "melee":              # neue Nahkampfwaffe aus Kiste / vom Boden
                 if e[1] == self.my_id and 0 <= e[2] < len(MELEE):
                     self.player.melee = e[2]
-                    self.toast(f"Nahkampf: {MELEE[e[2]].name}", (1.0, 0.85, 0.5), 1.8)
+                    if not (len(e) > 3 and e[3] == -2):     # v48: -2 = Axt geworfen (kein Hinweis)
+                        self.toast(f"Nahkampf: {MELEE[e[2]].name}", (1.0, 0.85, 0.5), 1.8)
+                op_ = self.world.players.get(e[1])
+                if op_ is not None and 0 <= e[2] < len(MELEE):
+                    op_.melee = e[2]
             elif kind == "hasmelee":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
@@ -123818,19 +124756,20 @@ class Game(ShowBase):
                 self.sfx.play("burp", (e[2], e[3], e[4]), 1.0, self.prng.uniform(0.95, 1.05))
                 if e[1] == self.my_id:
                     self.toast("*RÜLPS*", (0.9, 1.0, 0.6), 1.4)
-            elif kind == "leech":              # 9c: Erschöpfungsdolch heilt
-                if e[1] == self.my_id:
-                    self.toast(f"+{e[2]:.0f} HP (Lebensraub)", (0.8, 0.5, 1.0), 1.0)
-            elif kind == "drain":              # 9c: Erschöpfungsdolch trifft einen Spieler
-                me_a, me_t = e[1] == self.my_id, e[2] == self.my_id
-                if self.net_mode == "client" and (me_a or me_t):
-                    apply_drain(self.player if me_a else None, self.player if me_t else None)
-                if me_t:
-                    self.toast("Erschöpft! Alle Fähigkeiten auf Abklingzeit", (0.8, 0.45, 1.0), 2.0)
-                    self.sp_hurt.kick(3.0)
-                elif me_a:
-                    self.toast(f"Kraft entzogen: Fähigkeiten bereit, nächster Einsatz x{DAGGER_AMP:g}", (0.85, 0.6, 1.0), 2.0)
-                self.sfx.play("zap", self.ppos(e[2]), 0.5, 0.6)
+            elif kind == "axe_fly":            # v48: Kriegsaxt geworfen (alle zeichnen sie selbst weiter)
+                self.axe_vis_add(e[1], (e[2], e[3], e[4]), (e[5], e[6], e[7]))
+                op_ = self.world.players.get(e[8]) if len(e) > 8 else None
+                self.sfx.play("swing", None if e[8] == self.my_id else ((op_.x, op_.y, op_.z + 1.4) if op_ else None), 0.9, 0.75)
+            elif kind == "axe_stick":          # v48: Axt steckt in Fahrzeug/Heli
+                av_ = self.axe_vis.get(e[1]) if hasattr(self, "axe_vis") else None
+                if av_ is not None:
+                    av_["stuck"] = (e[2], e[3], (e[4], e[5], e[6]), e[7])
+                    self.sfx.play("thud", tuple(av_["p"]), 1.0, 1.4)
+                    self.sfx.play("slash", tuple(av_["p"]), 0.8, 0.7)
+            elif kind == "axe_end":            # v48: Axt liegt (als Drop) oder fällt aus dem Fahrzeug
+                av_ = self.axe_vis.pop(e[1], None) if hasattr(self, "axe_vis") else None
+                if av_ is not None:
+                    av_["np"].removeNode()
             elif kind == "mspec":              # 9c: Katana-Rundumschlag / Schwert-Aufschlag
                 pos = (e[3], e[4], e[5] + 0.3)
                 self.spawn_slash_fx(e[2], (e[3], e[4], e[5]), e[6])        # 10d: Ring / Windstoss + Schockwelle
@@ -123845,13 +124784,8 @@ class Game(ShowBase):
                 else:
                     self.sfx.play("thud", pos, 1.0, 0.9)
                     self.sfx.play("explosion", pos, 0.25, 1.6)
-                    h_ = math.radians(e[6])
-                    for k_ in range(30):
-                        a_ = h_ + math.radians(self.prng.uniform(-SWORD_SLAM_ARC, SWORD_SLAM_ARC))
-                        dx_, dy_ = -math.sin(a_), math.cos(a_)
-                        self.add_particle((pos[0] + dx_ * 0.8, pos[1] + dy_ * 0.8, pos[2]),
-                                          (dx_ * SWORD_SLAM_R * 1.6, dy_ * SWORD_SLAM_R * 1.6, 1.5), (0.45, 0.36, 0.22),
-                                          0.06, 0.6, 0.3)
+                    self.sfx.play("swoosh", pos, 0.9, 0.55)
+                    self.sword_slam_fx((e[3], e[4], e[5]), e[6])     # v48: Druckwellen, Erde in V-Form, Staub
                     if e[1] == self.my_id:
                         self.sp_cam.kick(4.0)
                 v = self.player_views.get(e[1])
@@ -123949,6 +124883,8 @@ class Game(ShowBase):
         w = WEAPONS[pl.cur]
         if w.sight == "rocket":
             return "rocket"
+        if w.sight == "stinger":                              # v48: offenes Visier mit Erfassungs-Fadenkreuz
+            return "stinger"
         if w.scope:
             return "sniper"                                   # Railgun
         if w.name in SCOPE_MOUNT:                             # 7b: Visier je Waffe (Aufsatz)
@@ -123963,8 +124899,63 @@ class Game(ShowBase):
         if sight == "acog":
             return 27.0
         if sight == "sniper":
-            return w.ads_fov if w.scope else 14.0
+            if w.zooms:                                       # v48: fest verbautes Glas (VSS 4/6/8x per Mausrad, 98k 10x)
+                return SCOPE_FOV_8X * 8.0 / float(w.zooms[self.zoom_index(pl.cur)])
+            return w.ads_fov if w.scope else SCOPE_FOV_8X
         return w.ads_fov
+
+    def update_lock_hud(self, pl, w, on, dt):
+        """v48: Stinger-Erfassung im Fadenkreuz: rot = kein Ziel, gelb = Erfassung läuft (Piepen), grün = schussbereit."""
+        lt = getattr(self, "lock_text", None)
+        if lt is None:
+            lt = self.lock_text = OnscreenText(text="", parent=self.aspect2d, pos=(0, -0.09), scale=0.034,
+                                               fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), align=TextNode.ACenter)
+            lt.setBin("fixed", 39)
+            self.lock_prev, self.lock_beep = "red", 0.0
+        if not on:
+            self.cross.set_color(None)
+            lt.hide()
+            self.lock_prev = "red"
+            return
+        st = stinger_state(pl, w)
+        col = {"red": (1.0, 0.22, 0.18), "yellow": (1.0, 0.85, 0.15), "green": (0.25, 1.0, 0.35)}[st]
+        self.cross.set_color(col)
+        txt = {"red": "KEIN ZIEL", "yellow": f"ERFASSE ... {int(100 * pl.lock_t / max(0.01, w.lock_t))} %",
+               "green": "ZIEL ERFASST - FEUER FREI"}[st]
+        lt.setText(txt)
+        lt["fg"] = col + (1.0,)
+        lt.show()
+        self.lock_beep = max(0.0, self.lock_beep - dt)
+        if st == "yellow" and self.lock_beep <= 0:
+            self.sfx.play("tap", None, 0.5, 2.6)
+            self.lock_beep = 0.45 - 0.3 * pl.lock_t / max(0.01, w.lock_t)
+        if st == "green" and self.lock_prev != "green":
+            self.sfx.play("scan", None, 0.6, 1.3)
+        self.lock_prev = st
+
+    def zoom_index(self, wi):
+        """v48: gewählte Vergrösserung (Index in Weapon.zooms) der Waffe wi."""
+        zs = WEAPONS[wi].zooms if 0 <= wi < len(WEAPONS) else ()
+        if not zs:
+            return 0
+        zl = getattr(self, "zoom_lvl", None)
+        if zl is None:
+            zl = self.zoom_lvl = {}
+        return max(0, min(len(zs) - 1, zl.get(wi, 0)))
+
+    def step_zoom(self, d):
+        """v48: Mausrad beim Zielen mit verstellbarem Zielfernrohr (VSS): 4x -> 6x -> 8x (Rad hoch = näher)."""
+        pl = self.player
+        zs = WEAPONS[pl.cur].zooms
+        i = self.zoom_index(pl.cur)
+        j = max(0, min(len(zs) - 1, i - d))
+        if j != i:
+            self.zoom_lvl[pl.cur] = j
+            self.toast(f"{WEAPONS[pl.cur].name}: {zs[j]}-fach", (0.9, 0.95, 1.0), 0.9)
+            try:
+                self.sfx.ui_click()
+            except Exception:
+                pass
 
     def ads_z(self, pl, w):
         if w.name in SCOPE_MOUNT:
@@ -124046,16 +125037,18 @@ class Game(ShowBase):
             if e_ is not None:
                 e_.hide()
         self.vm_shell.hide()
-        sg_on = w.name == SG_NAME and pl.reload_t > 0
-        if hasattr(self, "sg_hinge"):
-            self.sg_hinge.setP(0.0)
+        sg_on = mdl(w.name) == SG_NAME and pl.reload_t > 0
+        for h_ in getattr(self, "sg_hinges", {}).values():
+            h_.setP(0.0)
         if not sg_on:
             self.sg_ev = -1
         if sg_on:                                 # Schrotflinte: Lauf aufklappen, Patronen einlegen, zuklappen
             tt = max(0.0, pl.reload_tot - pl.reload_t)
             n = sg_count(pl.reload_tot)
             ang, lift, hp_, shell = sg_pose(tt, n)
-            self.sg_hinge.setP(ang)
+            h_ = getattr(self, "sg_hinges", {}).get(pl.cur)
+            if h_ is not None:
+                h_.setP(ang)
             pz += 0.13 * lift
             py += 0.07 * lift
             pitch += 16 * lift
@@ -124079,6 +125072,37 @@ class Game(ShowBase):
             if magp is not None and 0.88 <= u < 0.95:           # Magazin einrasten: kleiner Ruck
                 pitch -= 5.0 * math.sin(math.pi * (u - 0.88) / 0.07)
             self.hand_pos = self.reload_pose(u, magp, mag_n, ej_n)
+        if w.bolt and getattr(pl, "bolt_t", 0.0) > 0 and pl.reload_t <= 0 and not pl.melee_out:
+            # v48: Repetierer (Karabiner 98k) - Waffe kippt nach rechts, Kammer auf, zurück, zu, wieder anlegen
+            u = 1.0 - pl.bolt_t / w.interval
+            k = smoothstep(BOLT_PHASES[0], BOLT_PHASES[1], u) * (1.0 - smoothstep(BOLT_PHASES[4], BOLT_PHASES[5], u))
+            roll += 28 * k
+            pitch += 10 * k
+            pz -= 0.05 * k
+            px -= 0.04 * k
+            pull = smoothstep(BOLT_PHASES[1], BOLT_PHASES[2], u) * (1.0 - smoothstep(BOLT_PHASES[3], BOLT_PHASES[4], u))
+            py -= 0.035 * pull                  # Kammer zurückziehen: die Waffe ruckt mit
+            hdg_add += 4 * pull
+            ev_ = sum(1 for t_ in (BOLT_PHASES[1], BOLT_PHASES[2], BOLT_PHASES[3], BOLT_PHASES[4]) if u >= t_)
+            if ev_ > getattr(self, "bolt_ev", 0):
+                self.bolt_ev = ev_
+                self.sfx.play("click", None, 0.8, (1.3, 0.8, 1.1, 1.5)[ev_ - 1])
+        else:
+            self.bolt_ev = 0
+        if w.spin > 0 and getattr(pl, "spin", 0.0) > 0 and not pl.melee_out:   # v48: Minigun zittert beim Hochdrehen
+            sp_ = pl.spin
+            rr_ = self.prng
+            px += rr_.uniform(-1, 1) * 0.0025 * sp_
+            pz += rr_.uniform(-1, 1) * 0.0025 * sp_
+            if sp_ < 1.0 and getattr(pl, "spin_idle", 99.0) <= 0.0 and getattr(self, "spin_snd_t", 0.0) <= 0:
+                self.sfx.play("servo", None, 0.55, 0.6 + 1.2 * sp_)
+                self.spin_snd_t = 0.22
+            self.spin_snd_t = max(0.0, getattr(self, "spin_snd_t", 0.0) - dt)
+        dn_ = getattr(self, "dual_left", None)
+        if dn_ is not None:                       # v48: Dual Baretta - linke Waffe ruckt nach ihrem Schuss
+            self.dual_kick = max(0.0, getattr(self, "dual_kick", 0.0) - dt * 7.0)
+            dn_.setPos(DUAL_LEFT_POS[0], DUAL_LEFT_POS[1] - 0.05 * self.dual_kick, DUAL_LEFT_POS[2] + 0.01 * self.dual_kick)
+            dn_.setP(18.0 * self.dual_kick)
         if pl.switch_t > 0:                       # Wechsel: Waffe senken, tauschen, heben
             dip = math.sin(math.pi * (1 - pl.switch_t / SWITCH_T))
             pz -= 0.45 * dip
@@ -124107,8 +125131,17 @@ class Game(ShowBase):
                 px -= 0.14 * k
                 pz -= 0.05 * k
         if pl.melee_out:                          # 9c: Laden, Sprungangriff, Sonderattacke, Essen
-            ch = clampf((pl.chg_hold - MELEE_HOLD_START) / max(0.1, MELEE_CHARGE_T - MELEE_HOLD_START), 0.0, 1.0) \
+            mname_ = MELEE[pl.melee].name if 0 <= pl.melee < len(MELEE) else ""
+            ct_ = AXE_CHARGE_T if MELEE_SPECIAL.get(mname_) == "throw" else MELEE_CHARGE_T - MELEE_HOLD_START
+            ch = clampf((pl.chg_hold - MELEE_HOLD_START) / max(0.1, ct_), 0.0, 1.0) \
                 if pl.chg_hold > MELEE_HOLD_START else 0.0
+            # v48: Schwert - Kamera folgt dem Hieb: beim Laden hebt sich der Blick mit der Klinge, beim Aufschlag
+            # saust er von oben nach unten (nur die Kamera, die Zielrichtung bleibt)
+            cam_t_ = 0.0
+            if MELEE_SPECIAL.get(mname_) == "slam":
+                cam_t_ = 14.0 * ch + (18.0 if pl.slam_pending else 0.0)
+            self.cam_slam = getattr(self, "cam_slam", 0.0)
+            self.cam_slam += (cam_t_ - self.cam_slam) * min(1.0, 5.0 * dt)
             if ch > 0:
                 full = ch >= 1.0
                 py -= 0.10 * ch
@@ -124133,6 +125166,8 @@ class Game(ShowBase):
                 else:
                     pitch -= 75.0 * math.sin(math.pi * min(1.0, u_ * 1.5))
                     pz -= 0.08 * math.sin(math.pi * u_)
+                    sw_ = smoothstep(0.0, 0.35, u_)          # v48: Kamera saust von oben nach unten, dann zurück
+                    self.cam_slam = (18.0 + (-24.0 - 18.0) * sw_) * (1.0 - smoothstep(0.35, 1.0, u_))
             if pl.eat_t > 0:                      # Pfanne vor das Gesicht; Stufe 3: je Sekunde ein Bissen zum Mund
                 el = pl.eat_dur - pl.eat_t
                 bite = math.sin(math.pi * (el % 1.0)) ** 2 if pl.eat_stage >= 3 else 0.25 + 0.15 * math.sin(el * 7.0)
@@ -124170,6 +125205,7 @@ class Game(ShowBase):
         self.update_gren_arm(pl, driving)
         scoped = sight in ("sniper", "acog") and self.ads_t > 0.85 and pl.swing_t <= 0
         rsc = w.sight == "rocket" and self.ads_t > 0.6 and pl.hp > 0 and not driving
+        rsc = rsc or (w.sight == "stinger" and self.ads_t > 0.6 and pl.hp > 0 and not driving)   # v48: Stinger an der Schulter
         gad_show = pl.gad_out and pl.hp > 0 and not driving
         self.gad_anim += ((1.0 if gad_show else 0.0) - self.gad_anim) * min(1.0, 9.0 * dt)
         for k, nd in enumerate(self.gad_hand):
@@ -124197,8 +125233,11 @@ class Game(ShowBase):
                 ej_n.hide()
         self.flash_t = max(0.0, self.flash_t - dt)
         self.sfx.update(dt)
+        fl_left = getattr(self, "flash_left", False) and pl.cur == DUAL_WI
         for i, f in enumerate(self.gun_flash):
-            (f.show if self.flash_t > 0 and i == pl.cur and not hidden and not driving else f.hide)()
+            (f.show if self.flash_t > 0 and i == pl.cur and not hidden and not driving and not fl_left else f.hide)()
+        if getattr(self, "dual_flash", None) is not None:
+            (self.dual_flash.show if self.flash_t > 0 and fl_left and not hidden and not driving else self.dual_flash.hide)()
         (self.scope.show if scoped and sight == "sniper" and pl.hp > 0 and not driving else self.scope.hide)()
         (self.acog.show if scoped and sight == "acog" and pl.hp > 0 and not driving else self.acog.hide)()
         if red_on and w.name in SCOPE_MOUNT:                       # der Punkt sitzt im Glas, auch beim Lehnen
@@ -124220,7 +125259,7 @@ class Game(ShowBase):
             self.gun_flash[pl.cur].setY(GUN_PARTS[w.name][1][1] + ATT_MUZZLE_EXT[att_[0]])
         for sc_, nd_ in self.scope_nodes[pl.cur].items():          # montiertes Visier der Primärwaffe zeigen
             (nd_.show if sc_ == pscope(pl, pl.cur) and w.name in SCOPE_MOUNT else nd_.hide)()
-            if sc_ == 0 and w.name == SG_NAME and getattr(self, "sg_front", None) is not None:
+            if sc_ == 0 and mdl(w.name) == SG_NAME and getattr(self, "sg_front", None) is not None:
                 (self.sg_front.show if sc_ == pscope(pl, pl.cur) else self.sg_front.hide)()
         if rsc:
             self.rscope.show()
@@ -124508,6 +125547,7 @@ class Game(ShowBase):
                 tv.root.reparentTo(self.render)
             tv.update(t, dt, self)
         self.update_fx(dt)
+        self.update_axe_vis(dt)
 
     def rank_line(self, i, p):
         mark = ">" if p.pid == self.my_id else " "
@@ -124566,10 +125606,19 @@ class Game(ShowBase):
             self.set_text(self.name_text, MELEE[pl.melee].name)
         else:
             ins = 0
-            if w.name == SG_NAME and pl.reload_t > 0:          # Kipplauf: Anzeige zählt mit jeder eingelegten Patrone hoch
+            if mdl(w.name) == SG_NAME and pl.reload_t > 0:          # Kipplauf: Anzeige zählt mit jeder eingelegten Patrone hoch
                 ins = max(0, min(sg_count(pl.reload_tot), int(getattr(self, "sg_ev", 0)), g.reserve))
-            self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}")
-            self.set_text(self.name_text, w.name + (("   " + ("Semi" if g.semi else "Auto")) if pl.cur in SELECTIVE_FIRE else ""))
+            mode_ = ("   " + ("Semi" if g.semi else "Auto")) if pl.cur in SELECTIVE_FIRE else ""
+            if getattr(g, "gl_mode", False) and att_has_gl(pl.cur, pl.att.get(pl.cur)):   # v48: Granatwerfer aktiv
+                self.set_text(self.ammo_text, f"40 mm  {g.gl}" + ("  ..." if g.gl_cd > 0 else ""))
+                mode_ = "   Granatwerfer"
+            elif w.spin > 0 and pl.spin < 1.0 and pl.spin > 0:     # v48: Minigun läuft an
+                self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}   Anlauf {int(pl.spin * 100)} %")
+            else:
+                self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}")
+            if w.zooms and len(w.zooms) > 1:                        # v48: VSS - eingestellte Vergrösserung
+                mode_ = f"   {w.zooms[self.zoom_index(pl.cur)]}x"
+            self.set_text(self.name_text, w.name + mode_)
         want = pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur)
         if self.melee_icon_cur != pl.melee:                 # Nahkampf-Karte: Bild der getragenen Waffe
             for nd in self.melee_icons.values():
@@ -124664,14 +125713,17 @@ class Game(ShowBase):
             (self.mm_zoom_text.hide if snip else self.mm_zoom_text.show)()  # Zoom-Hinweis ebenso             # Waffenleiste im Sniper-Visier ausblenden
         (self.breath_hint.show if snip and getattr(self, "hold_shown", False) is not True else self.breath_hint.hide)()       # Hinweis zum Luftanhalten im schwarzen Bereich
         rocket_view = w.sight == "rocket" and self.ads_t > 0.6 and pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-        (self.cross.hide if scoped or rocket_view or pl.hp <= 0 or pl.mount >= 0 or self.sprinting or pl.ads
-         or hc is not None or pl.vehicle >= 0 else self.cross.show)()
+        sting = (w.lock_t > 0 and not pl.melee_out and not pl.gad_out and pl.hp > 0 and pl.vehicle < 0 and pl.mount < 0
+                 and hc is None)                               # v48: Stinger - Fadenkreuz zeigt die Erfassung (auch beim Zielen)
+        (self.cross.hide if scoped or rocket_view or pl.hp <= 0 or pl.mount >= 0 or self.sprinting
+         or (pl.ads and not sting) or hc is not None or pl.vehicle >= 0 else self.cross.show)()
+        self.update_lock_hud(pl, w, sting, dt)
         self.update_heli_sight(hc if pl.hp > 0 else None)
         spin = min(1.0, (abs(self.sw_h.x) + abs(self.sw_p.x)) / 5.0 + (0.6 if self.key_turn else 0.0))
         mv = 1.0 if pl.moving and pl.on_ground else 0.0
         self.cross.update(dt, walk=mv, run=mv if self.run_now and pl.crouch < 0.5 else 0.0, turn=spin,
                           air=0.0 if pl.on_ground else 1.0, bloom=min(2.0, pl.bloom), crouch=pl.crouch,
-                          hip=0.022 if w.name == "Scharfschütze" else 0.0)
+                          hip=(0.022 if w.name == "DSR" else max(0.0, (w.spread - 1.2) * 0.008) if w.model else 0.0))
         self.hurt_flash = max(0.0, self.hurt_flash - 1.5 * dt)
         low = 0.35 * max(0.0, 1 - pl.hp / 40.0) if pl.hp > 0 else 0.5
         if pl.hp <= 0:                                    # tot: neutraler grauer Hintergrund statt Rot
@@ -124829,8 +125881,8 @@ class Game(ShowBase):
         show_dead = dead_screen and self.loadscreen is None and self.quit_box is None and (not lobby or equip_view)
         self.set_text(self.dead_hint, hint if show_dead else "")
         exp_ = bool(world.exp)                            # Experimental: keine Ausrüstungswahl, Start immer mit der Pistole
-        txt_ = (("WILLKOMMEN\n\nDu startest mit der Pistole." if getattr(pl, "prespawn", False)
-                 else "DU BIST GESTORBEN\n\nDu startest wieder mit der Pistole.") if exp_ else
+        txt_ = (("WILLKOMMEN\n\nDu startest mit der Colt ACP." if getattr(pl, "prespawn", False)
+                 else "DU BIST GESTORBEN\n\nDu startest wieder mit der Colt ACP.") if exp_ else
                 "AUSRÜSTUNG\n\nWaffen für den Start wählen:" if equip_view else "WILLKOMMEN\n\nAusrüstung wählen, dann spawnen:" if getattr(pl, "prespawn", False) else "DU BIST GESTORBEN\n\nAusrüstung für den nächsten Spawn wählen:")
         if show_dead and self.world.mode == "ctf" and self.world.team_of.get(self.my_id) in (0, 1):
             txt_ = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt_   # CTF: Teamname im Todesbildschirm
