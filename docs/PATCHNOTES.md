@@ -3,10 +3,18 @@
 Neueste Änderungen oben.
 
 ## Heli: Zielsystem wie in BF3 (2026-10-25)
-Nur Clientseite plus Bordwaffen-Richtung, das Netzprotokoll bleibt (NET_VERSION 44).
+Nur Kamera, HUD und Richtung der Bordwaffen; am Netzprotokoll ändert sich nichts.
 - GEÄNDERT **Kamera**: sie sitzt 15 m hinter und 4,2 m über dem Heli (`HELI_CAM_DIST`, `HELI_CAM_UP`) statt genau auf der Sichtachse. Der Heli hängt dadurch im unteren Bilddrittel unter dem Fadenkreuz, das Ziel am Boden bleibt frei.
 - GEÄNDERT **Fadenkreuz an der Maus**: Minigun und Raketen zielen auf den Punkt unter dem Fadenkreuz (Blickstrahl des Piloten, Kugelabfall ausgeglichen) und schwenken dafür bis zu 14° seitlich und 12° in der Höhe aus der Rumpfachse (`HELI_GUN_YAW`, `HELI_GUN_PIT`). Das Kreuz bleibt so fast in der Bildmitte, auch wenn der Rumpf noch nachdreht. Außerhalb des Schwenkbereichs zeigt es weiter den echten Einschlagpunkt.
 - GEÄNDERT **Heli folgt der Maus rascher**: Kurs 240°/s statt 125°/s, Nachlauf 8 statt 4; Nick 120°/s statt 62°/s, Nachlauf 9 statt 4,5 (90° Kurswechsel in ca. 0,5 s statt 0,9 s).
+
+## Feste Waffen-Slots: Hauptwaffe und Sekundärwaffe (2026-10-25)
+Gilt für KotH, DM, CTF und Experimental gleichermassen. **NET_VERSION 45**: alle müssen aktualisieren (Host und Mitspieler müssen dieselben Slot-Regeln haben).
+- NEU **Waffenkategorie**: jede Waffe hat `weapon_type` (`WT_PRIMARY`, `WT_SECONDARY`, `WT_SPECIAL`). Haupt: Sturmgewehr, Schrotflinte, Scharfschütze. Sekundär: Pistole, Revolver, Maschinenpistole. Spezial (wie bisher nur Slot 3): Raketenwerfer, Minigun, Railgun. `PRIMARY_NAMES`/`SECONDARY_NAMES` werden daraus abgeleitet.
+- NEU **Feste Slots** `SLOT_PRIMARY` (Taste 1) und `SLOT_SECONDARY` (Taste 2), dazu `TYPE_SLOT` (Kategorie -> Slot). Zwei Hauptwaffen oder zwei Sekundärwaffen gleichzeitig sind nicht mehr möglich.
+- GEÄNDERT **Aufheben/Tauschen**: eine Waffe kommt immer in den Slot ihrer Kategorie. Ist er belegt, fällt die alte Waffe dort (mit Aufsätzen) auf den Boden. Bisher landete jede normale Waffe im ersten freien Slot bzw. tauschte die Waffe in der Hand. Der Hinweis „tauscht gegen …" zeigt die richtige Waffe.
+- GEÄNDERT **Start**: Experimental startet mit der Pistole in Slot 2 (Slot 1 bleibt leer bis zur ersten Hauptwaffe). Ein ungültiges Loadout mit zwei Waffen derselben Kategorie behält nur die erste.
+- GEÄNDERT **Mausrad** schaltet nur noch zwischen Slot 1 und Slot 2 um. Kistenwaffe (3), Gadget (4) und Nahkampf (5/F) nur noch über ihre Tasten; hält man eins davon, bringt das Mausrad die zuletzt benutzte Waffe aus Slot 1/2 zurück.
 
 ## Waffenleiste mit 6 Slots (2026-10-25)
 - GEÄNDERT **Slots unten**: 1 Sturmgewehr, 2 Sekundärwaffe (beide wie bisher), **3 Spezialwaffe**, **4 Gadget** (neue eigene Karte), **5 Nahkampfwaffe**, **6 Granate**.
