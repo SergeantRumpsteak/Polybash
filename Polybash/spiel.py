@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 45         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 46         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 201               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -790,6 +790,8 @@ VEH_BODY_H = 0.85                    # Höhe der Karosserie: darüber ragt der F
 HELI_MG_CD, HELI_RK_CD, HELI_SPREAD = 0.05, 1.2, 0.35
 HELI_RELOAD_MG, HELI_RELOAD_RK = 90.0, 1.0   # Schuss/s bzw. s pro Rakete auf dem Pad
 HELI_PAD_R = 8.0
+PT_FLAK = ((128.0, 172.0), (172.0, 128.0))   # Polytown: Flak-Sockel auf den Burg-Ecktürmen NW und SO (Karte hat Sockel, Oberkante 8,9 m)
+PT_FLAK_Z = 9.35                             # m: Geschützmitte über dem Sockel (wie in der alten Burg: Turmdach 8,0 + 1,35)
 HELI_ROCKET_KILL_R = 3.5             # Rakete: Treffer näher als HELI_R + dieser Wert zerstört ihn sofort
 FLAK_R, FLAK_DMG, FLAK_PROX = 10.0, 75.0, 8.0
 FLAK_SPEED, FLAK_INTERVAL, FLAK_LIFE, FLAK_HEAT = 260.0, 0.55, 2.6, 0.14
@@ -4598,6 +4600,10 @@ class World:
             self.add_box(x - 0.45, y - 0.45, x + 0.45, y + 0.45, gz - 1.0, gz + 0.9, (0.30, 0.32, 0.34))
             self.turrets.append(Turret(len(self.turrets), x, y, gz + 0.9 + 1.35,
                                        math.degrees(math.atan2(-(CENTER - x), CENTER - y)), kind))
+        if self.pt:                                       # Polytown: die Flak der Burg (Sockel steckt schon in der Karte)
+            for x, y in PT_FLAK:
+                self.turrets.append(Turret(len(self.turrets), x, y, PT_FLAK_Z,
+                                           math.degrees(math.atan2(-(CENTER - x), CENTER - y)), "flak"))
 
     # ------------------------------------------------------------ Geheime Tunnel
     def build_tunnels(self):

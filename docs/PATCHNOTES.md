@@ -2,6 +2,11 @@
 
 Neueste Änderungen oben.
 
+## Flak-Geschütze der Burg auf Polytown bedienbar (2026-10-25)
+**NET_VERSION 46**: die Geschützliste der Welt ändert sich, alte Clients können nicht mehr beitreten.
+- NEU Auf den Burg-Ecktürmen NW (128/172) und SO (172/128) stehen zwei Flak-Geschütze (`PT_FLAK`, Mitte 9,35 m über dem Sockel, den die Karte schon enthält). Wie in der alten Burg: **F** am Geschütz zum Bedienen, Maus zielt, Linke Maustaste schießt, Hitzebalken. Die Flak-Granate zündet in der Nähe von Helikoptern (`FLAK_PROX`) und macht Flächenschaden (`FLAK_R`/`FLAK_DMG`).
+- Ton: `flak_single` (eingebettete Aufnahme, wurde schon für die alte Burg verwendet), Lautstärke 0,8 am eigenen Geschütz.
+
 ## Mausrad erreicht die Nahkampfwaffe (2026-10-25)
 - GEÄNDERT Das Mausrad schaltet jetzt Slot 1 -> Slot 2 -> Nahkampfwaffe (Slot 5) -> wieder Slot 1 (rückwärts umgekehrt). Spezialwaffe (3) und Gadget (4) bleiben bei den Tasten; hat man eines davon in der Hand, geht das Rad zurück zur zuletzt benutzten Waffe aus Slot 1/2. Nur Eingabe, das Netzprotokoll bleibt.
 
