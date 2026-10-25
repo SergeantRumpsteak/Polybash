@@ -22,9 +22,9 @@ docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von m
 - Vier gleichberechtigte Modi: King of the Hill, Deathmatch, Capture the Flag und **Experimental**. Experimental ist
   Deathmatch, nur dass alle mit der Pistole starten und respawnen (kein Ausrüstungsmenü; alles Weitere kommt aus der
   Beute). Technisch: `World.exp` = Pistolenstart, `World.mode` = "dm". Keine Modus-Klasse steht über einer anderen.
-- In **allen** Modi: Nahkampfwaffen (Taste 4 / F), alle Granatenarten (G halten, H wechselt), Rüstung, Brände, Rauch,
-  **Tomahawk-Säulen** (Polytown: acht feste Orte auf der Kreisstraße um die Burg, steht die Säule lange unbenutzt, zeigt der Radar einen schrumpfenden Suchkreis; andere Karten wählen die Orte automatisch; es gibt keinen Kommandoraum-Knopf mehr), Airdrops, Heli-Abstürze, Buffs (Fluchttier) und Gadget-Beute (C4 / Claymore / Funkbake). **Taste 3** = Gadget bzw.
-  Spezialwaffe in jedem Modus. Bonuskisten und Bonushasen sind überall standardmäßig an und lassen sich vor Rundenbeginn
+- In **allen** Modi: Nahkampfwaffen (Taste 5 / F), alle Granatenarten (G oder 6 halten, H wechselt), Rüstung, Brände, Rauch,
+  **Tomahawk-Säulen** (Polytown: acht feste Orte auf der Kreisstraße um die Burg, steht die Säule lange unbenutzt, zeigt der Radar einen schrumpfenden Suchkreis; andere Karten wählen die Orte automatisch; es gibt keinen Kommandoraum-Knopf mehr), Airdrops, Heli-Abstürze, Buffs (Fluchttier) und Gadget-Beute (C4 / Claymore / Funkbake). **Tasten**: 1 Sturmgewehr, 2 Sekundärwaffe, 3 Spezialwaffe, 4 Gadget, 5 Nahkampf, 6 Granate
+  in jedem Modus. Bonuskisten und Bonushasen sind überall standardmäßig an und lassen sich vor Rundenbeginn
   unter "Weitere Einstellungen" aus- und einschalten.
 - Robins Patches 13a-13d und 13f (Granaten-Beute, Tomahawk-Radar, Geräusch-Pathing, Jet-Strike, lila Drohne, Boss-Zyklen,
   Wegsuche, Titan-Mörser) gelten ebenfalls in allen Modi. Ohne 13e (zerstörbare Umgebung, Baumwachstum).

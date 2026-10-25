@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## Waffenleiste mit 6 Slots (2026-10-25)
+- GEÄNDERT **Slots unten**: 1 Sturmgewehr, 2 Sekundärwaffe (beide wie bisher), **3 Spezialwaffe**, **4 Gadget** (neue eigene Karte), **5 Nahkampfwaffe**, **6 Granate**.
+  Bisher teilten sich Gadget und Spezialwaffe Taste 3, die Nahkampfwaffe lag auf 4. Taste 3 wählt jetzt nur die Spezialwaffe aus der Kiste (ohne eine gibt es einen Hinweis).
+- GEÄNDERT Die Granaten-Karte ist etwas kleiner als die anderen. Taste 6 wirkt wie G (halten lädt den Wurf, Loslassen wirft, H wechselt die Art); G bleibt.
+- Nur die Oberfläche und die Tasten ändern sich, das Netzprotokoll bleibt (NET_VERSION 44).
+
 ## Netz: Snapshots komprimiert gegen Hamachi-Timeouts (2026-10-23)
 **NET_VERSION 44**: alle müssen aktualisieren. Auswertung der Logs von Host und Client: Ein Snapshot ist ~8 KB und geht 30-mal pro Sekunde
 (~2 MBit/s je Mitspieler) unkomprimiert durch Hamachi. Die Leitung staute sich ständig, nach rund einer Minute kam vom Host gar nichts mehr

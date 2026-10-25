@@ -1006,7 +1006,7 @@ MELEE_IDX = {m.name: i for i, m in enumerate(MELEE)}
 
 START_MELEE = 0
 
-MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 4 / F ohne Ziel / Mausrad)
+MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel / Mausrad)
 
 MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in MELEE
 
@@ -1071,9 +1071,11 @@ PAN_FP_ROLL = -70.0       # Grad: Pfanne in der Ego-Ansicht so gedreht, dass man
 # --- Waffen-Slots
 N_FREE_SLOTS = 2               # Slot 1..N_FREE_SLOTS: freie Plätze für jede normale Waffe
 
-SPECIAL_SLOT = N_FREE_SLOTS    # der Slot danach (Taste 3) ist nur für Spezialwaffen
+SPECIAL_SLOT = N_FREE_SLOTS    # der Slot danach (Taste 3) ist nur für Spezialwaffen; Taste 4 Gadget, 5 Nahkampf, 6 Granate
 
-N_SLOTS = N_FREE_SLOTS + 1     # Slots insgesamt (Tasten 1..N_SLOTS)
+N_SLOTS = N_FREE_SLOTS + 1     # Waffenslots insgesamt (Tasten 1..N_SLOTS)
+
+HUD_CARDS = N_SLOTS + 1        # Karten der Leiste: 1 Sturmgewehr, 2 Sekundärwaffe, 3 Spezialwaffe, 4 Gadget; 5 Nahkampf und 6 Granate rechts daneben
 
 START_WEAPON = WEAPON_IDX["Pistole"]   # damit startet/respawnt jeder; kommt nicht in Kisten
 
@@ -3337,9 +3339,9 @@ TOAST_T = 3.0                   # s: so lange steht ein Hinweis wie "Buff: Schad
 SB_EVERY = 15                         # Scoreboard-Werte (Tab) nur in jedem so-vielten Snapshot
 KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "springen / steigen"),
               ("Maus", "umschauen"), ("Linke M.", "schiessen"), ("Rechte M.", "zielen"), ("R", "nachladen"),
-              ("1 2 3", "Waffe wählen"), ("Mausrad", "Waffe wechseln"), ("G", "Granate (halten = weiter)"),
+              ("1 2 3", "Sturmgewehr / Sekundär / Spezial"), ("Mausrad", "Waffe wechseln"), ("G / 6", "Granate (halten = weiter)"),
               ("H / G+Mausrad", "Granatenart"), ("F", "benutzen / Schlag"),
-              ("4", "Nahkampfwaffe"),
+              ("4", "Gadget"), ("5", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
               ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
               ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
@@ -3441,7 +3443,7 @@ def drop_info(d):
     """7b: Kurzinfo eines Drops beim Draufschauen (Name + wichtigste Werte)."""
     if getattr(d, "gren", 0) > 0 and str(getattr(d, "gk", "")).startswith("gad:"):
         k = int(d.gk[4:])
-        return f"{GADGETS[k]} x{d.gren}  (Gadget)\n{GAD_INFO[k].split(': ', 1)[-1]}\nTaste 3: ausrüsten"
+        return f"{GADGETS[k]} x{d.gren}  (Gadget)\n{GAD_INFO[k].split(': ', 1)[-1]}\nTaste 4: ausrüsten"
     if getattr(d, "gren", 0) > 0:
         gk = getattr(d, "gk", "frag")
         return f"{GREN_NAMES.get(gk, 'Granate')} x{d.gren}\n{GREN_INFO.get(gk, '')}\nG halten: weiter werfen, H: Art wechseln"
@@ -9000,7 +9002,7 @@ class Player:
         if not exp and 0 <= self.gadget < 3:
             self.gad_stock[self.gadget] = GAD_START
         self.gad_n = self.gad_stock[self.gadget] if 0 <= self.gadget < 3 else 0   # eigene Anzeige: verbleibende Stück
-        self.gad_out = False              # Gadget in der Hand (Taste 3)
+        self.gad_out = False              # Gadget in der Hand (Taste 4)
         self.slots = [None] * N_SLOTS     # Slot 1..N_FREE_SLOTS: normale Waffen, danach: Spezialwaffe aus der Beute
         self.slots[0] = pri
         if sec is not None and N_FREE_SLOTS > 1:
@@ -117322,12 +117324,16 @@ class Game(ShowBase):
             elif 1 <= d <= 2:
                 self.request_weapon(d - 1)
             elif d == 3:
-                if self.player.slots[SPECIAL_SLOT] is not None and not self.gadgets_held():
-                    self.request_weapon(SPECIAL_SLOT)      # Spezialwaffe aus der Kiste, wenn kein Gadget übrig ist
+                if self.player.slots[SPECIAL_SLOT] is not None:
+                    self.request_weapon(SPECIAL_SLOT)      # 3 = Spezialwaffe (aus der Kiste)
                 else:
-                    self.toggle_gadget()
+                    self.toast("Keine Spezialwaffe - gibt es in Kisten", (0.9, 0.85, 0.7), 1.5)
             elif d == 4:
-                self.sel_req = MELEE_SEL               # 4 = Nahkampfwaffe
+                self.toggle_gadget()                   # 4 = Gadget
+            elif d == 5:
+                self.sel_req = MELEE_SEL               # 5 = Nahkampfwaffe
+            elif d == 6:
+                self.on_grenade()                      # 6 = Granate (wie G: halten = weiter werfen)
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -119191,7 +119197,7 @@ class Game(ShowBase):
         self.vm_shell = self.gun_pivot.attachNewNode(shm.node("shell"))
         self.vm_shell.hide()
         self.sg_ev = -1
-        # Gadget in der Hand (Taste 3): zwei Arme, rechts mit dem Gadget auf der Hand
+        # Gadget in der Hand (Taste 4): zwei Arme, rechts mit dem Gadget auf der Hand
         self.gad_arms = []
         for _side in (0, 1):
             am = Mesh()
@@ -119348,8 +119354,8 @@ class Game(ShowBase):
 
         self.bar_root.setX(-0.08)                      # Platz für Nahkampf und Granaten rechts
         self.slot_frames, self.slot_icons, self.slot_labels = [], [], []
-        for i in range(N_SLOTS):                       # Waffenslots (kein Gadget-Slot in Experimental)
-            x = (i - N_SLOTS / 2) * 0.34
+        for i in range(HUD_CARDS):                     # Karten 1-3: Waffen, Karte 4: Gadget
+            x = (i - HUD_CARDS / 2) * 0.34
             self.slot_frames.append(hud_card(x, 0.32, 0.17, (0.4, 0.4, 0.4, 0.6), 19))
             hud_card(x, 0.30, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
             holder = self.bar_root.attachNewNode("slot_holder")   # eigener Halter je Karte
@@ -119368,14 +119374,14 @@ class Game(ShowBase):
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
         self.drone_hud = DroneHud(self.a2dBottomRight)  # 13d: lila Drohne aktiv - Kästchen mit Uhrzeiger-Countdown
-        # Nahkampf-Slot (eigener Slot: Taste 4 oder F ohne etwas Benutzbares in der Nähe)
-        mx_ = (N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
+        # Nahkampf-Slot (Slot 5: Taste 5 oder F ohne etwas Benutzbares in der Nähe)
+        mx_ = (HUD_CARDS - 1 - HUD_CARDS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
         hud_card(mx_, 0.24, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
         self.melee_holder = self.bar_root.attachNewNode("melee_holder")
         self.melee_holder.setPos(mx_, 0, 0.11)
         self.melee_icons, self.melee_icon_cur = {}, None
-        self.melee_label = OnscreenText(text="4 Nahkampf", parent=self.bar_root, pos=(mx_ - 0.115, 0.165),
+        self.melee_label = OnscreenText(text="5 Nahkampf", parent=self.bar_root, pos=(mx_ - 0.115, 0.165),
                                         scale=0.034, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft,
                                         mayChange=True)
         self.melee_label.setBin("fixed", 25)
@@ -119397,32 +119403,32 @@ class Game(ShowBase):
         self.chg_full = False
         self.amp_text = OnscreenText(text="", parent=self.a2dBottomLeft, pos=(0.06, 0.88), scale=0.034,
                                      fg=(0.85, 0.6, 1.0, 1), shadow=(0, 0, 0, 1), align=TextNode.ALeft, mayChange=True)
-        gx_ = mx_ + 0.25
-        self.gren_frame = hud_card(gx_, 0.2, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
-        hud_card(gx_, 0.18, 0.15, (0.05, 0.06, 0.09, 0.78), 20)
+        gx_ = mx_ + 0.23                               # Slot 6 (Granate): etwas kleiner als die anderen Karten
+        self.gren_frame = hud_card(gx_, 0.17, 0.14, (0.4, 0.4, 0.4, 0.6), 19)
+        hud_card(gx_, 0.15, 0.12, (0.05, 0.06, 0.09, 0.78), 20)
         self.gren_icons = {}                           # 10e: Symbol je Granatenart (die gewählte wird gezeigt)
         for k_ in GREN_KINDS:
-            gi = self.bar_root.attachNewNode(gren_icon_mesh(k_, 0.042).node("gren_icon_" + k_))
-            gi.setPos(gx_ - 0.035, 0, 0.11)
+            gi = self.bar_root.attachNewNode(gren_icon_mesh(k_, 0.036).node("gren_icon_" + k_))
+            gi.setPos(gx_ - 0.03, 0, 0.11)
             gi.setTwoSided(True)
             gi.setBin("fixed", 21)
             gi.setDepthTest(False)
             gi.setDepthWrite(False)
             gi.hide()
             self.gren_icons[k_] = gi
-        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.045, 0.095),
-                                      scale=0.055, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
+        self.gren_text = OnscreenText(text="", parent=self.bar_root, pos=(gx_ + 0.04, 0.095),
+                                      scale=0.05, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                       align=TextNode.ACenter, mayChange=True)
         self.gren_text.setBin("fixed", 25)
-        self.gren_label = OnscreenText(text="G", parent=self.bar_root, pos=(gx_ - 0.085, 0.165), scale=0.034,
+        self.gren_label = OnscreenText(text="6", parent=self.bar_root, pos=(gx_ - 0.07, 0.15), scale=0.03,
                                        fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.8), align=TextNode.ALeft, mayChange=True)
         self.gren_label.setBin("fixed", 25)
-        self.gren_more = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.215), scale=0.026,
+        self.gren_more = OnscreenText(text="", parent=self.bar_root, pos=(gx_, 0.2), scale=0.024,
                                       fg=(0.85, 0.88, 0.95, 0.85), shadow=(0, 0, 0, 0.8), align=TextNode.ACenter,
                                       mayChange=True)              # 10e: weitere Arten (Kürzel + Anzahl)
         self.gren_more.setBin("fixed", 25)
-        # Gadget: dritter Slot der Waffenleiste, Stückzahl rechts unten in der Karte
-        self.gad_count = OnscreenText(text="", parent=self.bar_root, pos=((N_SLOTS - 1 - N_SLOTS / 2) * 0.34 + 0.15, 0.065), scale=0.05,
+        # Gadget: Slot 4 der Waffenleiste, Stückzahl rechts unten in der Karte
+        self.gad_count = OnscreenText(text="", parent=self.bar_root, pos=((HUD_CARDS - 1 - HUD_CARDS / 2) * 0.34 + 0.15, 0.065), scale=0.05,
                                       fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8), align=TextNode.ARight, mayChange=True)
         self.gad_count.setBin("fixed", 25)
         self.build_gren_hud()
@@ -120693,7 +120699,7 @@ class Game(ShowBase):
 
     # ------------------------------------------------------------ Eingabe
     def toggle_gadget(self):
-        """Taste 3: Gadget (C4, Claymore, Funkbake) in die Hand nehmen; weiter drücken wechselt zur nächsten Art, nach
+        """Taste 4: Gadget (C4, Claymore, Funkbake) in die Hand nehmen; weiter drücken wechselt zur nächsten Art, nach
         der letzten wird weggesteckt."""
         pl = self.player
         if pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
@@ -121039,7 +121045,7 @@ class Game(ShowBase):
         for k_, nd in self.gren_icons.items():
             (nd.show if k_ == kind else nd.hide)()
         self.set_text(self.gren_text, f"x{n}")
-        self.set_text(self.gren_label, f"G {GREN_SHORT[kind]}")
+        self.set_text(self.gren_label, f"6 {GREN_SHORT[kind]}")
         more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
         self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
         ch = self.gren_charge() if pl.hp > 0 else -1.0
@@ -122747,7 +122753,7 @@ class Game(ShowBase):
             trigger=trig, edge=edge, ads=down(MouseButton.three()) and not getattr(self, "tab_held", False) and self.captured,
             reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
             throw=self.throw_req, mdx=0, mdy=0)
-        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])))   # 10e: G halten = weiter werfen
+        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])) or down(k("6")))   # 10e: G halten = weiter werfen
         if self.quit_box is not None:
             inp = SimpleNamespace(forward=0, strafe=0, run=False, jump=False, turn=0, look=0, lean=0,
                                   duck=False, trigger=False, edge=False, ads=False, reload=False, select=None,
@@ -123657,7 +123663,7 @@ class Game(ShowBase):
                         pl.gadget = e[3]
                     pl.gad_n = pl.gad_stock[pl.gadget]
                     if len(e) > 5 and isinstance(e[4], int) and 0 <= e[4] < 3 and e[5] > 0:
-                        self.toast(f"+{e[5]} {GADGETS[e[4]]}   (Taste 3: ausrüsten)", (1.0, 0.9, 0.55), 1.8)
+                        self.toast(f"+{e[5]} {GADGETS[e[4]]}   (Taste 4: ausrüsten)", (1.0, 0.9, 0.55), 1.8)
             elif kind == "gadfull":
                 if e[1] == self.my_id:
                     self.toast(f"{GADGETS[e[2]]}: Vorrat voll", (0.9, 0.9, 0.95), 1.5)
@@ -124339,7 +124345,7 @@ class Game(ShowBase):
         tcar = world.vehicle_by_id(tur.vid) if tur is not None and tur.kind == "car" else None
         self.update_tacho(car if car is not None else tcar)            # Heckschütze sieht Tempo + Wagen-Leben
         self.update_heli_hud(hc)
-        # Gadget (Slot 3): Stückzahl
+        # Gadget (Slot 4): Stückzahl
         placed = sum(1 for g in world.gadgets if g.owner == pl.pid and g.kind == pl.gadget)
         self.set_text(self.gad_count, f"x{pl.gad_n}" + (f"+{placed}" if placed and pl.gadget == GAD_C4 else ""))
         if car is not None:
@@ -124407,19 +124413,16 @@ class Game(ShowBase):
         self.melee_frame.setColor(*((1.0, 0.85, 0.2, 1.0) if mact else (0.4, 0.4, 0.4, 0.6)))
         self.melee_label.setFg((1, 0.9, 0.3, 1) if mact else (1, 1, 1, 0.8))
         gad_ok = bool(self.gadgets_held())
-        for i in range(3):                           # Waffenleiste mit Bildern; Slot 3 = Gadget (oder Spezialwaffe, wenn kein Gadget da ist)
-            spec = i == 2 and pl.slots[2] is not None and not gad_ok
-            wi = pl.slots[i] if (i < 2 or spec) else ("g", pl.gadget)
-            if i < 2 or spec:
+        on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
+        for i in range(HUD_CARDS):                   # Waffenleiste mit Bildern: 1 Sturmgewehr, 2 Sekundär, 3 Spezial, 4 Gadget
+            if i < N_SLOTS:
+                wi = pl.slots[i]
                 self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
                                    pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
-            else:
-                self.set_slot_icon(i, wi)
-            on_foot = pl.vehicle < 0 and pl.mount < 0 and pl.heli < 0
-            if i == 2 and not spec:
-                active = pl.gad_out and on_foot
-            else:
                 active = wi is not None and wi == want and on_foot and not pl.gad_out
+            else:
+                self.set_slot_icon(i, ("g", pl.gadget) if gad_ok else None)
+                active = pl.gad_out and on_foot and gad_ok
             self.slot_frames[i].setColor(*((1.0, 0.85, 0.2, 1.0) if active else (0.4, 0.4, 0.4, 0.6)))
             self.slot_labels[i].setFg((1, 0.9, 0.3, 1) if active else (1, 1, 1, 0.8))
         self.update_gren_hud(pl)                       # gewählte Granatenart, Anzahl, Ladebalken, Bogen
