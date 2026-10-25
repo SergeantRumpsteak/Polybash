@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 46         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 47         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 201               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -2220,6 +2220,59 @@ def pt_find():
     return None
 
 
+def _pt_strip_flak(groups, r=2.6, zmin=8.95):
+    """Die Karte enthält die Flak der Burg als festes Modell (Lafette, Rohre, Schild). Im Spiel gibt es dafür das bewegliche
+    Geschütz (TurretView); damit nicht zwei Geschütze übereinander stehen, werden die Dreiecke des festen Modells entfernt
+    (nur Darstellung, die Kollision der Sockel bleibt). Entfernt wird, was ganz innerhalb von r um den Sockel liegt und über zmin."""
+    for g in groups:
+        nv, ni = g["nv"], g["ni"]
+        if ni < 3:
+            continue
+        P = struct.unpack("<%df" % (nv * 3), g["P"])
+        if not any(8.95 < P[k + 2] < 13.0 and any(abs(P[k] - fx) < r and abs(P[k + 1] - fy) < r for fx, fy in PT_FLAK)
+                   for k in range(0, len(P), 3)):
+            continue
+        idx = struct.unpack("<%dH" % ni, g["I"])
+        keep = []
+        for k in range(0, ni - 2, 3):
+            t3 = idx[k:k + 3]
+            dead = False
+            for fx, fy in PT_FLAK:
+                if all(abs(P[3 * i] - fx) < r and abs(P[3 * i + 1] - fy) < r for i in t3) and sum(P[3 * i + 2] for i in t3) / 3.0 > zmin:
+                    dead = True
+                    break
+            if not dead:
+                keep.extend(t3)
+        if len(keep) != ni:
+            g["I"] = struct.pack("<%dH" % len(keep), *keep)
+            g["ni"] = len(keep)
+
+
+def pt_rail_boxes():
+    """Unsichtbare Kollision für die Geländer der Hoftreppen (West/Ost) zum Wehrgang der Burg. In der Karte sind nur Pfosten und
+    schräge Holme modelliert (dazwischen klafft eine Lücke, durch die man von der Treppe fiel). Masse wie in
+    tools/blender/polytown_neu/burg.py (wehrgang_treppe): stufenweise Quader entlang der Hofseite, am Podest und an dessen Stirnseite."""
+    out = []
+    C, H, TD, ZW = CENTER, 22.0, 3.0, 5.0
+    n, sd, sh, w, hz, t = 10, 0.8, 0.5, 2.5, 1.05, 0.07
+    for s_ in (-1, 1):
+        dy = -s_
+        inner = C + s_ * (H - TD)
+        y0 = C + s_ * 10.0
+        yt = y0 + dy * n * sd
+        ye = yt + dy * w
+        xf = C + s_ * (H - TD - w + 0.06)
+        yf = ye - dy * 0.06
+        for i in range(n):                                   # Treppe: je Stufe ein Quader von der Stufenunterkante bis über das Geländer
+            ya, yb = sorted((y0 + dy * i * sd, y0 + dy * (i + 1) * sd))
+            out.append((xf - t, ya, i * sh, xf + t, yb, (i + 1) * sh + hz))
+        ya, yb = sorted((yt, ye))
+        out.append((xf - t, ya, ZW - 0.5, xf + t, yb, ZW + hz))                # Podest, Hofseite
+        xa, xb = sorted((xf, inner))
+        out.append((xa - t, yf - t, ZW - 0.5, xb + t, yf + t, ZW + hz))        # Podest, Stirnseite
+    return out
+
+
 def load_ptmap(path):
     """Polytown-Karte laden: {'head', 'meta', 'groups': [...], 'cmv', 'cmt', 'boxes', 'minimap'}.
     Die Darstellung liegt in fertigen Vertex-Feldern (Position float32, Normale 16 Bit, Farbe RGBA mit eingebackenem Licht)."""
@@ -2267,6 +2320,7 @@ def load_ptmap(path):
     mm = blob[pos:pos + meta["mm"] * meta["mm"] * 3]
     pos += meta["mm"] * meta["mm"] * 3
     wmask = blob[pos:pos + meta["wm"] ** 2] if meta.get("wm") else None                  # Wassermaske (World.water_at)
+    _pt_strip_flak(groups)
     return {"head": head, "meta": meta, "groups": groups, "cmv": V, "cmt": Tr, "boxes": Bx, "minimap": mm, "kinds": kinds, "wmask": wmask}
 
 
@@ -2567,7 +2621,7 @@ class Turret:
         self.heat, self.over, self.firing = 0.0, False, False
         self.cd = 0.0
         self.op = -1                                       # Spieler-ID des Bedieners
-        self.pmin, self.pmax = {"mg": (-65.0, 55.0), "flak": (-50.0, 88.0), "car": (-40.0, 50.0)}[kind]
+        self.pmin, self.pmax = {"mg": (-65.0, 55.0), "flak": (-72.0, 88.0), "car": (-40.0, 50.0)}[kind]
         self.seat = 1.35 if kind != "car" else 1.25         # Drehpunkt über den Füssen des Schützen
 
 
@@ -4476,6 +4530,8 @@ class World:
             bx_ = Box(b[i], b[i + 1], b[i + 3], b[i + 4], b[i + 2], b[i + 5], col, False, False)
             bx_.clip = k >= n_all - nclip
             self.boxes.append(bx_)
+        for r_ in pt_rail_boxes():                                          # Geländer der Burgtreppen (Lücken zwischen den Pfosten)
+            self.boxes.append(Box(r_[0], r_[1], r_[3], r_[4], r_[2], r_[5], col, False, False))
         for hc in self.helis:                                              # Hubschrauber stehen auf dem Gelände des Pads
             hc.home = (hc.x, hc.y, self.cm.top(hc.x, hc.y) or 0.0, hc.heading)
             hc.reset()
@@ -15810,7 +15866,7 @@ def vehicle_hit_t(p0, p1, obj, heli=False):
     return best
 
 
-def build_turret_model():
+def build_turret_model(kind="mg"):
     """Geschütz auf dem Turm. Ursprung = Drehpunkt (Rohrmitte), Rohr zeigt nach +y.
     Gibt (root, head, barrel, glow, lamp) zurück: head dreht sich (Heading), barrel neigt sich (Pitch)."""
     rng = random.Random(8)
@@ -15828,7 +15884,8 @@ def build_turret_model():
     box(hm, 0, -0.62, 0.02, 0.7, 0.34, 0.42, dark, rng)               # Munitionskasten
     for sx in (-1, 1):
         box(hm, sx * 0.46, 0.12, 0.05, 0.08, 0.66, 0.56, steel, rng)  # Seitenpanzer
-    box(hm, 0, 0.42, 0.34, 0.5, 0.3, 0.1, steel, rng)                 # Dach vorn
+    if kind != "flak":                                                # (Flak: kein Dach - es nahm dem Schützen die Sicht nach unten)
+        box(hm, 0, 0.42, 0.34, 0.5, 0.3, 0.1, steel, rng)             # Dach vorn
     head.attachNewNode(hm.node("housing"))
     barrel = head.attachNewNode("barrel")
     barrel.setPos(0, 0.4, 0.0)
@@ -15857,7 +15914,7 @@ class TurretView:
     der Hitze, bei Überhitzung bläulich mit Dampf (Cooldown). Lampe: grün bereit, rot feuert, blau Pause."""
 
     def __init__(self, t):
-        self.root, self.head, self.barrel, self.glow, self.lamp = build_turret_model()
+        self.root, self.head, self.barrel, self.glow, self.lamp = build_turret_model(t.kind)
         self.root.setPos(t.x, t.y, t.z)
         self.px, self.py, self.pz = t.x, t.y, t.z
         self.flash_t = self.steam_t = 0.0
@@ -122736,7 +122793,11 @@ class Game(ShowBase):
             hr, pr = math.radians(pl.heading), math.radians(pitch)
             fx, fy = -math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr)
             dn = clampf(-pitch, 0.0, 65.0) / 65.0               # beim Blick nach unten höher und weiter hinten
-            self.camera.setPos(tur.x - fx * (0.15 + 0.6 * dn), tur.y - fy * (0.15 + 0.6 * dn), tur.z + 0.55 + 0.6 * dn)
+            if tur.kind == "flak":                              # Flak: noch höher, damit das Gehäuse nicht die Sicht nach unten verdeckt
+                dn = clampf(-pitch, 0.0, 72.0) / 72.0
+                self.camera.setPos(tur.x - fx * (0.15 + 0.9 * dn), tur.y - fy * (0.15 + 0.9 * dn), tur.z + 0.55 + 1.1 * dn)
+            else:
+                self.camera.setPos(tur.x - fx * (0.15 + 0.6 * dn), tur.y - fy * (0.15 + 0.6 * dn), tur.z + 0.55 + 0.6 * dn)
             self.camera.setHpr(pl.heading, pitch, roll * 0.3)
             return
         veh = self.my_vehicle() if pl.hp > 0 else None

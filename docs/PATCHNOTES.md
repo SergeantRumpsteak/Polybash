@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## Flak nur noch beweglich, mehr Sicht nach unten; Treppengeländer der Burg (2026-10-25)
+**NET_VERSION 47**: Neigungsgrenze der Flak geändert (Host und Mitspieler müssen gleich klammern).
+- GEÄNDERT Das feste Flak-Modell aus der Karte wird beim Laden entfernt (`_pt_strip_flak`, nur Darstellung); es gibt nur noch das bewegliche Geschütz, das sich mit dem Bediener dreht.
+- GEÄNDERT **Flak zielt weiter nach unten**: Neigung bis -72° statt -50°; das Dach-Brett vorn am Gehäuse (verdeckte die Sicht nach unten) entfällt bei der Flak, die Kamera steigt beim Blick nach unten höher und weiter zurück.
+- BEHOBEN **Absturz von der Burgtreppe**: an den Hoftreppen zum Wehrgang (West/Ost) waren nur Pfosten und schräge Holme modelliert, dazwischen konnte man durchfallen. `pt_rail_boxes` legt unsichtbare Kollision (Stufe für Stufe, Podest, Stirnseite) darüber. Andere Geländer der Karte sind noch nicht geprüft.
+
 ## Flak-Geschütze der Burg auf Polytown bedienbar (2026-10-25)
 **NET_VERSION 46**: die Geschützliste der Welt ändert sich, alte Clients können nicht mehr beitreten.
 - NEU Auf den Burg-Ecktürmen NW (128/172) und SO (172/128) stehen zwei Flak-Geschütze (`PT_FLAK`, Mitte 9,35 m über dem Sockel, den die Karte schon enthält). Wie in der alten Burg: **F** am Geschütz zum Bedienen, Maus zielt, Linke Maustaste schießt, Hitzebalken. Die Flak-Granate zündet in der Nähe von Helikoptern (`FLAK_PROX`) und macht Flächenschaden (`FLAK_R`/`FLAK_DMG`).
