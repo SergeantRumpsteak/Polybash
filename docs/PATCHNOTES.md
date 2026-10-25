@@ -2,6 +2,12 @@
 
 Neueste Änderungen oben.
 
+## Heli: Zielsystem wie in BF3 (2026-10-25)
+Nur Clientseite plus Bordwaffen-Richtung, das Netzprotokoll bleibt (NET_VERSION 44).
+- GEÄNDERT **Kamera**: sie sitzt 15 m hinter und 4,2 m über dem Heli (`HELI_CAM_DIST`, `HELI_CAM_UP`) statt genau auf der Sichtachse. Der Heli hängt dadurch im unteren Bilddrittel unter dem Fadenkreuz, das Ziel am Boden bleibt frei.
+- GEÄNDERT **Fadenkreuz an der Maus**: Minigun und Raketen zielen auf den Punkt unter dem Fadenkreuz (Blickstrahl des Piloten, Kugelabfall ausgeglichen) und schwenken dafür bis zu 14° seitlich und 12° in der Höhe aus der Rumpfachse (`HELI_GUN_YAW`, `HELI_GUN_PIT`). Das Kreuz bleibt so fast in der Bildmitte, auch wenn der Rumpf noch nachdreht. Außerhalb des Schwenkbereichs zeigt es weiter den echten Einschlagpunkt.
+- GEÄNDERT **Heli folgt der Maus rascher**: Kurs 240°/s statt 125°/s, Nachlauf 8 statt 4; Nick 120°/s statt 62°/s, Nachlauf 9 statt 4,5 (90° Kurswechsel in ca. 0,5 s statt 0,9 s).
+
 ## Waffenleiste mit 6 Slots (2026-10-25)
 - GEÄNDERT **Slots unten**: 1 Sturmgewehr, 2 Sekundärwaffe (beide wie bisher), **3 Spezialwaffe**, **4 Gadget** (neue eigene Karte), **5 Nahkampfwaffe**, **6 Granate**.
   Bisher teilten sich Gadget und Spezialwaffe Taste 3, die Nahkampfwaffe lag auf 4. Taste 3 wählt jetzt nur die Spezialwaffe aus der Kiste (ohne eine gibt es einen Hinweis).

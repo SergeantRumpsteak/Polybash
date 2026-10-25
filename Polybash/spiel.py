@@ -777,8 +777,13 @@ HELI_R, HELI_HIT_H = 3.0, 3.0
 HELI_SINK = 4.0                      # ohne Tastendruck sinkt der Helikopter mit dieser Geschwindigkeit (m/s)
 HELI_PITCH_MAX = 20.0                # Nickwinkel (Grad nach unten) bei voller Vorwärtsfahrt; die Waffen zeigen entlang der Nase
 HELI_AIM_MIN, HELI_AIM_MAX = -42.0, 16.0   # Nickbereich der Nase beim Zielen (Grad)
-HELI_AIM_RATE = 62.0                 # höchste Nickgeschwindigkeit der Nase (Grad/s)
-HELI_YAW_RATE = 125.0                # höchste Drehgeschwindigkeit des Rumpfes (Grad/s)
+HELI_AIM_RATE = 120.0                # höchste Nickgeschwindigkeit der Nase (Grad/s)  (vorher 62: folgt der Maus jetzt rascher)
+HELI_YAW_RATE = 240.0                # höchste Drehgeschwindigkeit des Rumpfes (Grad/s)  (vorher 125)
+HELI_YAW_GAIN = 8.0                  # Nachlaufstärke Kurs: Grad/s je Grad Abweichung zur Maus (vorher 4)
+HELI_AIM_GAIN = 9.0                  # dasselbe für den Nick (vorher 4,5)
+HELI_CAM_DIST = 15.0                 # BF3-Kamera: so weit hinter dem Heli auf der Blickachse ...
+HELI_CAM_UP = 4.2                    # ... und so hoch darüber: der Heli sitzt unterhalb der Bildmitte, das Ziel am Fadenkreuz bleibt frei
+HELI_GUN_YAW, HELI_GUN_PIT = 14.0, 12.0   # Bordwaffen schwenken so weit (Grad) aus der Rumpfachse zum Fadenkreuz-Ziel
 HELI_RESPAWN = 45.0
 HELI_REPAIR = 50.0                   # Lebenspunkte pro Sekunde, die der Heli gelandet auf einem Pad regeneriert
 VEH_BODY_H = 0.85                    # Höhe der Karosserie: darüber ragt der Fahrer heraus und ist direkt treffbar
@@ -6807,10 +6812,47 @@ class World:
         w = WEAPONS[MINIGUN_WI]
         return self.trace_shot(self.heli_muzzle(hc, d), d, w.speed, w.grav)[0]
 
-    def heli_dir(self, hc):
-        """Richtung der Bordwaffen: entlang der Nase des Helikopters (Kurs + Nickwinkel des Rumpfes)."""
+    def heli_hull_dir(self, hc):
+        """Richtung der Nase des Helikopters (Kurs + Nickwinkel des Rumpfes)."""
         hr, pr = math.radians(hc.heading), math.radians(hc.pitch)
         return (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+
+    def heli_dir(self, hc):
+        """Richtung der Bordwaffen (BF3-Art): sie zielen auf den Punkt unter dem Fadenkreuz der Verfolgerkamera
+        (Blickstrahl des Piloten, Kugelabfall ausgeglichen) und schwenken dazu höchstens HELI_GUN_YAW / HELI_GUN_PIT
+        Grad aus der Rumpfachse. Folgt der Rumpf der Maus noch nicht, trifft die Garbe so trotzdem das Fadenkreuz.
+        Ohne Pilot: entlang der Nase."""
+        hull = self.heli_hull_dir(hc)
+        drv = self.players.get(hc.driver) if hc.driver >= 0 and hc.hp > 0 else None
+        if drv is None:
+            return hull
+        key = (round(drv.heading, 2), round(drv.pitch, 2), round(hc.x, 1), round(hc.y, 1), round(hc.z, 1),
+               round(hc.heading, 1), round(hc.pitch, 1))
+        c = getattr(self, "_heli_aim_c", None)
+        if c is not None and c[0] == hc.id and c[1] == key:
+            return c[2]
+        hr, pr = math.radians(drv.heading), math.radians(drv.pitch)
+        f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
+        o = (hc.x, hc.y, hc.z + 2.5 + HELI_CAM_UP)           # Blickstrahl der Kamera, ab Höhe des Hecks (parallel zur Sicht)
+        tgt, _ = self.trace_shot(o, f, 400.0, 0.0, max_t=1.5)
+        mz = self.heli_muzzle(hc, hull)
+        v = (tgt[0] - mz[0], tgt[1] - mz[1], tgt[2] - mz[2])
+        dist = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        if dist < 6.0:
+            res = hull
+        else:
+            w = WEAPONS[MINIGUN_WI]
+            t_fl = dist / max(w.speed, 1.0)
+            lift = 0.5 * GRAV_BULLET * w.grav * t_fl * t_fl          # so viel fällt die Garbe bis zum Ziel
+            yaw_t = math.degrees(math.atan2(-v[0], v[1]))
+            pit_t = math.degrees(math.asin(clampf(v[2] / dist, -1.0, 1.0))) + math.degrees(math.atan2(lift, dist))
+            dy = (yaw_t - hc.heading + 180.0) % 360.0 - 180.0
+            yaw = hc.heading + clampf(dy, -HELI_GUN_YAW, HELI_GUN_YAW)
+            pit = hc.pitch + clampf(pit_t - hc.pitch, -HELI_GUN_PIT, HELI_GUN_PIT)
+            yr, pr2 = math.radians(yaw), math.radians(pit)
+            res = (-math.sin(yr) * math.cos(pr2), math.cos(yr) * math.cos(pr2), math.sin(pr2))
+        self._heli_aim_c = (hc.id, key, res)
+        return res
 
     def heli_rocket(self, pl):
         """Rechte Maustaste im Cockpit: eine Rakete entlang der Blickrichtung (abwechselnd links/rechts)."""
@@ -6869,8 +6911,9 @@ class World:
                     hc.firing = True
                     drv.protect = 0.0
                     sp = math.radians(HELI_SPREAD)
-                    h = math.radians(hc.heading) + self.mrng.uniform(-sp, sp)      # Waffen folgen der Rumpflage
-                    p = math.radians(hc.pitch) + self.mrng.uniform(-sp, sp)
+                    d0 = self.heli_dir(hc)                                          # Waffen zielen auf das Fadenkreuz
+                    h = math.atan2(-d0[0], d0[1]) + self.mrng.uniform(-sp, sp)
+                    p = math.asin(clampf(d0[2], -1.0, 1.0)) + self.mrng.uniform(-sp, sp)
                     d = (-math.sin(h) * math.cos(p), math.cos(h) * math.cos(p), math.sin(p))
                     w = WEAPONS[MINIGUN_WI]
                     self.bullets.append(Bullet(*self.heli_muzzle(hc, d),
@@ -9524,7 +9567,7 @@ def fly_heli(h, fwd, strafe, vert, yaw, dt, world, stall=False, aim_pitch=0.0):
         fwd = strafe = 0.0
         yaw = h.heading
     dh = (yaw - h.heading + 180.0) % 360.0 - 180.0
-    h.heading += clampf(dh * 4.0, -HELI_YAW_RATE, HELI_YAW_RATE) * dt      # der Rumpf schwingt in Mausrichtung
+    h.heading += clampf(dh * HELI_YAW_GAIN, -HELI_YAW_RATE, HELI_YAW_RATE) * dt      # der Rumpf schwingt in Mausrichtung
     a = math.radians(h.heading)
     fx, fy, rx, ry = -math.sin(a), math.cos(a), math.cos(a), math.sin(a)
     mx, my = fx * fwd + rx * strafe, fy * fwd + ry * strafe
@@ -9587,7 +9630,7 @@ def fly_heli(h, fwd, strafe, vert, yaw, dt, world, stall=False, aim_pitch=0.0):
         vf, vr = h.vx * fx + h.vy * fy, h.vx * rx + h.vy * ry
         # Nase folgt der Maus (Nick), dazu leichte Neigung nach vorn/hinten bei Beschleunigung
         tgt = clampf(aim_pitch, HELI_AIM_MIN, HELI_AIM_MAX) - vf / HELI_VMAX * 5.0
-        h.pitch += clampf((tgt - h.pitch) * 4.5, -HELI_AIM_RATE, HELI_AIM_RATE) * dt
+        h.pitch += clampf((tgt - h.pitch) * HELI_AIM_GAIN, -HELI_AIM_RATE, HELI_AIM_RATE) * dt
         h.roll += (vr / HELI_VMAX * 16.0 - h.roll) * min(1.0, 4.0 * dt)
 
 
@@ -120397,7 +120440,8 @@ class Game(ShowBase):
         self.pop_col = (1.0, 0.85, 0.2, 1) if head else (1, 1, 1, 1)
 
     def update_heli_sight(self, hc):
-        """Im Cockpit: Fadenkreuz auf den Punkt vor der Nase. Es wandert mit Nick- und Kursbewegungen des Rumpfes."""
+        """Im Cockpit: Fadenkreuz dort, wo die Garbe wirklich einschlägt. Die Bordwaffen zielen auf die Bildmitte
+        (Maus), das Kreuz sitzt also fest an der Maus und weicht nur ab, wenn der Rumpf zu weit hinterher ist."""
         pos = None
         cs = getattr(self, "cam_state", None)
         if hc is not None and cs is not None:
@@ -122664,7 +122708,8 @@ class Game(ShowBase):
         if hc is not None:                                        # Verfolgerkamera: Blick = Zielrichtung, Waffen schiessen entlang der Sichtlinie
             hr, pr = math.radians(pl.heading), math.radians(pitch)
             fx, fy, fz = -math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr)
-            cx, cy, cz = hc.x - fx * 14.0, hc.y - fy * 14.0, hc.z + 2.5 - fz * 14.0
+            cx, cy, cz = (hc.x - fx * HELI_CAM_DIST, hc.y - fy * HELI_CAM_DIST,
+                          hc.z + 2.5 + HELI_CAM_UP - fz * HELI_CAM_DIST)     # BF3: über dem Heli, er hängt unter dem Fadenkreuz
             cz = max(cz, self.world.height(cx, cy, cz) + 0.8)
             self.camera.setPos(cx, cy, cz)
             self.camera.setHpr(pl.heading, pitch, roll + hc.roll * 0.2)
