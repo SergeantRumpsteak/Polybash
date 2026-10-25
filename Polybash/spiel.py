@@ -1639,6 +1639,11 @@ MOB_DETOUR_ANGS = (75.0, -75.0, 140.0, -140.0, 180.0)   # ... nacheinander um di
                            # eigentliche Richtung (erst seitlich, dann schräg zurück, dann ganz zurück aus einer Ecke)
 MOB_DETOUR_GROW = 5        # hängt er wieder fest, wird der Umweg länger (bis zum 5-Fachen, gleiche Seite)
 
+# --- Hindernis-Ausweichen (Fühler): Bodenmonster prüfen vorausschauend und weichen aus, statt in die Wand zu laufen
+MOB_AVOID_DT = 0.18        # s: so oft wird neu geprüft (dazwischen gilt die letzte Wahl) -> ca. 2-8 Kollisionsabfragen je Sekunde
+MOB_AVOID_ESC = 3.0         # s: Rückwärtsgang aus einer Sackgasse (bei jeder weiteren Umkehr länger, bis 3x)
+MOB_AVOID_ANGS = (0.0, 35.0, 65.0, 90.0, 125.0, 160.0)   # Fühlerwinkel (Grad) neben der Wunschrichtung; erst die gemerkte Seite, dann die andere
+
 MOB_DETOUR_FORGET = 10.0   # s frei gelaufen: Umweg-Zähler zurücksetzen
 
 # --- 7a: Drohnen fliegen unterschiedlich hoch und steigen zu höheren Zielen
@@ -3202,6 +3207,8 @@ class Mob:
                 speed = k["speed"] * HOME_RETURN_K if going_home else k["wander"]
                 ux, uy = tdx / td, tdy / td
         stuck_kind = self.kind in MOB_STUCK_KINDS
+        if speed > 0 and self.hover <= 0 and self.detour_t <= 0 and self.state == "chase" and self.aggressive():
+            ux, uy = self.steer_around(ux, uy, speed, dt, world)   # Hindernis voraus: seitlich daran vorbei
         if stuck_kind and self.detour_t > 0 and speed > 0:   # 7a: Umweg nach dem Festfahren
             self.detour_t -= dt
             a = math.radians(MOB_DETOUR_ANGS[(self.stuck_n - 1) % len(MOB_DETOUR_ANGS)]) * self.detour_side
@@ -3259,6 +3266,81 @@ class Mob:
                 self.stuck_n = self.detour_grow = 0
         self.speed_now = speed
         self.phase += (speed if speed > 0 else (1.5 if self.hover > 0 else 0.0)) * dt * 2.0
+
+    def steer_around(self, ux, uy, speed, dt, world):
+        """Billiges Ausweichen mit Fühlern: zwei Punkte voraus (Länge ~ Radius + Tempo); liegt einer im Hindernis (gleiche
+        Prüfung wie die Bewegung, push_out), werden Winkel nach links/rechts probiert. Die gewählte Ausweichrichtung wird als
+        Vektor in Weltkoordinaten gemerkt und gehalten, solange der direkte Weg zum Ziel blockiert ist - so gleitet das
+        Monster an einer Wand bis zur Ecke, statt hin und her zu pendeln, wenn sich die Zielrichtung dreht. Ohne Hindernis
+        kostet es zwei Prüfungen alle MOB_AVOID_DT Sekunden. Sackgassen (U-Form) fängt das Festfahren-Umweg-Verfahren ab.
+        -> (ux, uy) Wunschrichtung oder Ausweichrichtung."""
+        t = getattr(self, "avoid_t", 0.0) - dt
+        av = getattr(self, "avoid_v", None)
+        esc = getattr(self, "avoid_esc", 0.0) - dt          # > 0: rückwärts aus einer Sackgasse heraus
+        self.avoid_esc = esc
+        if esc > 0.0:
+            self.turn_toward(av[0], av[1], dt, 300.0)
+            return av
+        post = getattr(self, "avoid_post", None)
+        if post is not None:                               # Rückwärtsgang vorbei: seitlich am Hindernis vorbei (nicht gleich wieder hinein)
+            self.avoid_post = None
+            av = (-av[1] * post[1], av[0] * post[1])       # 90 Grad zur Rückzugsrichtung
+            self.avoid_v, self.avoid_esc, self.avoid_t = av, post[0], MOB_AVOID_DT
+            return av
+        if t <= 0.0:
+            skip = TITAN_PASS_PROPS if self.kind == "titan" else ()
+            low = self.gz if self.kind == "titan" else None
+            ln = self.radius * 2.0 + 0.7 + speed * 0.45
+            r = self.radius
+
+            def blocked(vx, vy):
+                for f in (0.5, 1.0):
+                    px, py = self.x + vx * ln * f, self.y + vy * ln * f
+                    qx, qy = push_out(px, py, r, world, self.gz, skip=skip, low_pass=low)
+                    if abs(qx - px) + abs(qy - py) > 0.05:
+                        return True
+                return False
+
+            def rot(a):
+                c, sn = math.cos(math.radians(a)), math.sin(math.radians(a))
+                return ux * c - uy * sn, ux * sn + uy * c
+
+            if not blocked(ux, uy):
+                av = None                                  # direkter Weg frei
+            elif av is not None and not blocked(*av):
+                pass                                       # gemerkte Ausweichrichtung noch frei: behalten
+            else:
+                side = (1.0 if self.id % 2 else -1.0)
+                if av is not None:                         # dieselbe Handseite wie zuvor
+                    side = 1.0 if (ux * av[1] - uy * av[0]) > 0 else -1.0
+                old = av
+                av = None
+                for sgn in (side, -side):                  # erst die gemerkte Seite mit allen Winkeln, dann die andere
+                    for m in MOB_AVOID_ANGS[1:]:
+                        v = rot(m * sgn)
+                        if not blocked(*v):
+                            av = v
+                            break
+                    if av is not None:
+                        break
+                if av is not None and old is not None and av[0] * old[0] + av[1] * old[1] < -0.7:
+                    self.avoid_flips = getattr(self, "avoid_flips", 0) + 1     # Richtung umgekehrt: pendelt in einer Ecke
+                    if self.avoid_flips >= 2:                                    # Sackgasse: erst ein Stück zurück heraus
+                        av = rot(180.0 + 25.0 * side)
+                        self.avoid_esc = MOB_AVOID_ESC * min(3, self.avoid_flips - 1)
+                        self.avoid_post = (self.avoid_esc * 3.0, side)
+                        self.avoid_v = av
+                        self.avoid_t = MOB_AVOID_DT
+                        return av
+            if av is None:
+                self.avoid_flips = max(0, getattr(self, "avoid_flips", 0) - 1) if not blocked(ux, uy) else getattr(self, "avoid_flips", 0)
+            self.avoid_v = av
+            t = MOB_AVOID_DT
+        self.avoid_t = t
+        if av is None:
+            return ux, uy
+        self.turn_toward(av[0], av[1], dt, 300.0)
+        return av
 
     def calm_move(self, dt, world, pl, d, sees):
         """Fluchttier: sieht oder hört es etwas, flieht es in unvorhersehbaren Haken - jede Strecke zufällig lang,

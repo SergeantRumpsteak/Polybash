@@ -2,6 +2,13 @@
 
 Neueste Änderungen oben.
 
+## Mobs weichen Hindernissen aus (2026-10-25)
+Nur Verhalten der Monster auf dem Host; das Netzprotokoll bleibt.
+- NEU **Fühler-Ausweichen** (`Mob.steer_around`): Bodenmonster (Zombie, Brute, Jägerin, Koloss, Titan) prüfen im Verfolgen zwei Punkte voraus mit derselben Kollisionsabfrage wie die Bewegung (`push_out`). Liegt ein Hindernis voraus, laufen sie seitlich daran vorbei: die gewählte Richtung wird in Weltkoordinaten gemerkt und gehalten, bis der direkte Weg wieder frei ist (gleiten an der Wand bis zur Ecke, kein Hin-und-Her).
+- NEU **Sackgassen**: pendelt ein Monster zwischen zwei Ecken (U-Form), läuft es erst ein Stück rückwärts heraus und dann seitlich am Hindernis vorbei (`MOB_AVOID_ESC`). Das alte Festfahren-Umweg-Verfahren bleibt als Reserve.
+- Kosten: zwei Kollisionsabfragen alle 0,18 s je Monster (gemessen ca. +6 µs je Monster und Bild). Drohnen, Fluchttiere und Geräusch-/Wandern-Ziele ohne Verfolgung sind unverändert; Wege durch Gebäude (Tür) übernimmt weiter `nav_steer`.
+- Grenzen: das ist lokales Ausweichen, keine Wegsuche über die ganze Karte. In sehr großen Sackgassen braucht ein Monster 30-60 s.
+
 ## Flak nur noch beweglich, mehr Sicht nach unten; Treppengeländer der Burg (2026-10-25)
 **NET_VERSION 47**: Neigungsgrenze der Flak geändert (Host und Mitspieler müssen gleich klammern).
 - GEÄNDERT Das feste Flak-Modell aus der Karte wird beim Laden entfernt (`_pt_strip_flak`, nur Darstellung); es gibt nur noch das bewegliche Geschütz, das sich mit dem Bediener dreht.
