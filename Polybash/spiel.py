@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 44         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 45         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 190               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -947,39 +947,45 @@ class Weapon:
     blast_dmg: float = 0.0    # Schaden im Explosionszentrum
     loud: float = 1.0         # Lautstärke-Faktor des Schusses (Lärmsystem: NOISE_SHOT * loud)
     head_mult: float = 2.0    # Faktor auf den Schaden bei Kopftreffern
+    weapon_type: str = ""     # WT_PRIMARY (nur Slot 1) | WT_SECONDARY (nur Slot 2) | WT_SPECIAL (nur Slot 3, Kistenwaffe)
 
+
+WT_PRIMARY, WT_SECONDARY, WT_SPECIAL = "primary", "secondary", "special"   # Werte für Weapon.weapon_type
 
 WEAPONS = (
     Weapon("Pistole", 28, 0.30, 12, 96, 240, 0.9, 1.3, kick=1.6, kick_yaw=0.4,
-           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, loud=0.75),
+           kick_back=3.5, ads_fov=61, bloom=0.25, pickup=12, loud=0.75, weapon_type=WT_SECONDARY),
     Weapon("Sturmgewehr", 17, 0.09, 30, 240, 360, 1.6, 2.0, auto=True, kick=0.9,
-           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0),
+           kick_yaw=0.5, kick_back=2.2, ads_fov=55, bloom=0.12, pickup=30, loud=1.0, weapon_type=WT_PRIMARY),
     Weapon("Schrotflinte", 9, 0.85, 7, 36, 200, 4.5, 2.4, pellets=9, kick=5.0,
-           kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6, loud=1.1),
+           kick_yaw=0.8, kick_back=7.0, ads_fov=65, ads_spread=0.6, pickup=6, loud=1.1, weapon_type=WT_PRIMARY),
     Weapon("Scharfschütze", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,
-           kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25),
+           kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25, weapon_type=WT_PRIMARY),
     Weapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
-           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9),
+           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9, weapon_type=WT_SECONDARY),
     Weapon("Maschinenpistole", 11, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.5,
-           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, loud=0.85),
+           kick_yaw=0.6, kick_back=1.6, ads_fov=59, bloom=0.10, pickup=32, loud=0.85, weapon_type=WT_SECONDARY),
     Weapon("Raketenwerfer", 0, 1.4, 1, 6, 95, 0.4, 2.6, kick=5.0, kick_yaw=0.4,
            kick_back=9.0, ads_fov=26, ads_spread=0.5, grav=0.12, blast_r=6.0, sight="rocket",
-           blast_dmg=130, kind="special", loud=1.4),
+           blast_dmg=130, kind="special", loud=1.4, weapon_type=WT_SPECIAL),
     Weapon("Minigun", 9, 0.045, 150, 450, 380, 3.0, 4.0, auto=True, kick=0.35,
-           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="special", loud=1.3),
+           kick_yaw=0.7, kick_back=1.4, ads_fov=66, ads_spread=0.6, bloom=0.05, kind="special", loud=1.3, weapon_type=WT_SPECIAL),
     Weapon("Railgun", 140, 1.5, 4, 20, 1100, 0.15, 3.0, kick=4.5, kick_yaw=0.3,
-           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2),
+           kick_back=7.0, ads_fov=25, ads_spread=0.05, grav=0.02, scope=True, kind="special", loud=1.2, weapon_type=WT_SPECIAL),
 )
+
+for _w in WEAPONS:                             # jede Waffe braucht eine gültige Kategorie (Spezialwaffen = kind "special")
+    assert _w.weapon_type in (WT_PRIMARY, WT_SECONDARY, WT_SPECIAL), _w.name
+    assert (_w.weapon_type == WT_SPECIAL) == (_w.kind == "special"), _w.name
 
 
 
 WEAPON_IDX = {w.name: i for i, w in enumerate(WEAPONS)}
 
-# Ansicht/Aufsätze/Visier gelten wie in den anderen Modi für Haupt- (Slot 1) und Kleinwaffen; hier ist "kind" nur
-# normal/special, darum die Einteilung nach Namen:
-PRIMARY_NAMES = ("Sturmgewehr", "Schrotflinte", "Scharfschütze")
+# Ansicht/Aufsätze/Visier gelten für Haupt- (Slot 1) und Kleinwaffen (Slot 2); die Namenslisten folgen aus weapon_type:
+PRIMARY_NAMES = tuple(w.name for w in WEAPONS if w.weapon_type == WT_PRIMARY)       # Sturmgewehr, Schrotflinte, Scharfschütze
 
-SECONDARY_NAMES = ("Pistole", "Revolver", "Maschinenpistole")
+SECONDARY_NAMES = tuple(w.name for w in WEAPONS if w.weapon_type == WT_SECONDARY)   # Pistole, Revolver, Maschinenpistole
 
 @dataclass
 class Melee:
@@ -1006,7 +1012,7 @@ MELEE_IDX = {m.name: i for i, m in enumerate(MELEE)}
 
 START_MELEE = 0
 
-MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel / Mausrad)
+MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel)
 
 MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in MELEE
 
@@ -1069,9 +1075,15 @@ PAN_FP_ROLL = -70.0       # Grad: Pfanne in der Ego-Ansicht so gedreht, dass man
 
 # ======================================================================== LOOT (zum Balancen)
 # --- Waffen-Slots
-N_FREE_SLOTS = 2               # Slot 1..N_FREE_SLOTS: freie Plätze für jede normale Waffe
+N_FREE_SLOTS = 2               # Slot 1..N_FREE_SLOTS: normale Waffen (Slot 1 Haupt-, Slot 2 Sekundärwaffe)
+
+SLOT_PRIMARY = 0               # Slot 1 (Taste 1): nur eine Hauptwaffe (weapon_type WT_PRIMARY)
+
+SLOT_SECONDARY = 1             # Slot 2 (Taste 2): nur eine Sekundärwaffe (weapon_type WT_SECONDARY)
 
 SPECIAL_SLOT = N_FREE_SLOTS    # der Slot danach (Taste 3) ist nur für Spezialwaffen; Taste 4 Gadget, 5 Nahkampf, 6 Granate
+
+TYPE_SLOT = {WT_PRIMARY: SLOT_PRIMARY, WT_SECONDARY: SLOT_SECONDARY, WT_SPECIAL: SPECIAL_SLOT}   # Kategorie -> fester Slot
 
 N_SLOTS = N_FREE_SLOTS + 1     # Waffenslots insgesamt (Tasten 1..N_SLOTS)
 
@@ -9003,10 +9015,16 @@ class Player:
             self.gad_stock[self.gadget] = GAD_START
         self.gad_n = self.gad_stock[self.gadget] if 0 <= self.gadget < 3 else 0   # eigene Anzeige: verbleibende Stück
         self.gad_out = False              # Gadget in der Hand (Taste 4)
-        self.slots = [None] * N_SLOTS     # Slot 1..N_FREE_SLOTS: normale Waffen, danach: Spezialwaffe aus der Beute
-        self.slots[0] = pri
-        if sec is not None and N_FREE_SLOTS > 1:
-            self.slots[1] = sec
+        self.slots = [None] * N_SLOTS     # SLOT_PRIMARY, SLOT_SECONDARY, SPECIAL_SLOT - je Kategorie genau ein Platz
+        for wi_ in (pri, sec):            # jede Waffe in den Slot ihrer Kategorie (Experimental: Pistole -> Slot 2);
+            if wi_ is not None and 0 <= wi_ < len(WEAPONS):   # zwei derselben Kategorie: die erste bleibt
+                sl_ = TYPE_SLOT[WEAPONS[wi_].weapon_type]
+                if self.slots[sl_] is None:
+                    self.slots[sl_] = wi_
+        if pri not in self.slots:
+            pri = next((wi_ for wi_ in self.slots if wi_ is not None), START_WEAPON)
+            if pri not in self.slots:
+                self.slots[TYPE_SLOT[WEAPONS[pri].weapon_type]] = pri
         self.cur = self.switch_to = pri
         self.switch_t = 0.0
         self.reload_t = 0.0
@@ -9141,20 +9159,14 @@ def stock_ammo(pl, wi):
     g.reserve = min(w.max_reserve, g.reserve + w.mag * DUP_AMMO_MAGS)
 
 def target_slot(pl, wi):
-    """In welchen Slot käme die Waffe wi (Regeln siehe take_weapon)?"""
-    if WEAPONS[wi].kind == "special":
-        return SPECIAL_SLOT
-    slot = next((i for i in range(N_FREE_SLOTS) if pl.slots[i] is None), None)
-    if slot is None:
-        slot = pl.slots.index(pl.cur) if pl.cur in pl.slots[:N_FREE_SLOTS] else pl.last_slot
-        slot = slot if 0 <= slot < N_FREE_SLOTS else 0
-    return slot
+    """In welchen Slot käme die Waffe wi? Fest nach Kategorie (TYPE_SLOT): Haupt- -> SLOT_PRIMARY,
+    Sekundär- -> SLOT_SECONDARY, Spezialwaffe -> SPECIAL_SLOT."""
+    return TYPE_SLOT[WEAPONS[wi].weapon_type]
 
 def take_weapon(pl, wi):
     """Waffe ins Inventar legen. Regeln:
-    - normale Waffe: in einen freien Slot 1..N_FREE_SLOTS; sind alle voll, wird die normale Waffe in der Hand
-      getauscht - hält man gerade die Spezialwaffe, die zuletzt benutzte normale Waffe (pl.last_slot);
-    - Spezialwaffe: nur in SPECIAL_SLOT; ist er belegt, wird die alte Spezialwaffe getauscht;
+    - jede Waffe kommt in den Slot ihrer Kategorie (target_slot); ist er belegt, wird die Waffe darin getauscht
+      (give_weapon lässt sie am Boden fallen). Zwei Hauptwaffen oder zwei Sekundärwaffen gleichzeitig gibt es nicht;
     - trägt man die Waffe schon: nur Munition (stock_ammo).
     Neue Waffen kommen mit frischer Munition. -> (verdrängte Waffe oder None, schon_vorhanden)"""
     if wi in pl.slots:
@@ -120766,7 +120778,8 @@ class Game(ShowBase):
             self.sel_req = wi
 
     def cycle_weapon(self, d):
-        """Mausrad: durch Haupt-, Klein- und Kistenwaffe und das Gadget (letzter Platz) blättern.
+        """Mausrad: zwischen Slot 1 (Hauptwaffe) und Slot 2 (Sekundärwaffe) umschalten; Kistenwaffe, Gadget und
+        Nahkampf nur über 3/4/5. Hält man gerade etwas anderes, geht es zurück zur zuletzt benutzten der beiden.
         10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
@@ -120776,22 +120789,21 @@ class Game(ShowBase):
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        gad_ok = bool(self.gadgets_held())
-        order = [wi for wi in pl.slots if wi is not None] + (["gad"] if gad_ok else []) + [MELEE_SEL]
+        order = [wi for wi in pl.slots[:N_FREE_SLOTS] if wi is not None]   # nur SLOT_PRIMARY und SLOT_SECONDARY
         if not order:
             return
-        if pl.gad_out and "gad" in order:
+        if pl.gad_out:
             cur = "gad"
         else:
             cur = self.sel_req if self.sel_req is not None else (
                 pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur))
-        i = order.index(cur) if cur in order else 0
-        nxt = order[(i + d) % len(order)]
-        if nxt == "gad":
-            if not pl.gad_out:
-                self.toggle_gadget()
-        else:
-            self.sel_req = nxt
+        if cur in order:
+            nxt = order[(order.index(cur) + d) % len(order)]
+        else:                                       # Spezialwaffe/Gadget/Nahkampf in der Hand: zurück zu Slot 1/2
+            last = pl.slots[pl.last_slot] if 0 <= pl.last_slot < N_FREE_SLOTS else None
+            nxt = last if last in order else order[0]
+        if nxt != cur:
+            self.sel_req = nxt                      # eine Waffenwahl steckt auch Gadget/Nahkampfwaffe weg
 
     def on_r(self):
         if self.mode != "play" or self.quit_box is not None:

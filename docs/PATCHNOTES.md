@@ -2,6 +2,14 @@
 
 Neueste Änderungen oben.
 
+## Feste Waffen-Slots: Hauptwaffe und Sekundärwaffe (2026-10-25)
+Gilt für KotH, DM, CTF und Experimental gleichermassen. **NET_VERSION 45**: alle müssen aktualisieren (Host und Mitspieler müssen dieselben Slot-Regeln haben).
+- NEU **Waffenkategorie**: jede Waffe hat `weapon_type` (`WT_PRIMARY`, `WT_SECONDARY`, `WT_SPECIAL`). Haupt: Sturmgewehr, Schrotflinte, Scharfschütze. Sekundär: Pistole, Revolver, Maschinenpistole. Spezial (wie bisher nur Slot 3): Raketenwerfer, Minigun, Railgun. `PRIMARY_NAMES`/`SECONDARY_NAMES` werden daraus abgeleitet.
+- NEU **Feste Slots** `SLOT_PRIMARY` (Taste 1) und `SLOT_SECONDARY` (Taste 2), dazu `TYPE_SLOT` (Kategorie -> Slot). Zwei Hauptwaffen oder zwei Sekundärwaffen gleichzeitig sind nicht mehr möglich.
+- GEÄNDERT **Aufheben/Tauschen**: eine Waffe kommt immer in den Slot ihrer Kategorie. Ist er belegt, fällt die alte Waffe dort (mit Aufsätzen) auf den Boden. Bisher landete jede normale Waffe im ersten freien Slot bzw. tauschte die Waffe in der Hand. Der Hinweis „tauscht gegen …" zeigt die richtige Waffe.
+- GEÄNDERT **Start**: Experimental startet mit der Pistole in Slot 2 (Slot 1 bleibt leer bis zur ersten Hauptwaffe). Ein ungültiges Loadout mit zwei Waffen derselben Kategorie behält nur die erste.
+- GEÄNDERT **Mausrad** schaltet nur noch zwischen Slot 1 und Slot 2 um. Kistenwaffe (3), Gadget (4) und Nahkampf (5/F) nur noch über ihre Tasten; hält man eins davon, bringt das Mausrad die zuletzt benutzte Waffe aus Slot 1/2 zurück.
+
 ## Waffenleiste mit 6 Slots (2026-10-25)
 - GEÄNDERT **Slots unten**: 1 Sturmgewehr, 2 Sekundärwaffe (beide wie bisher), **3 Spezialwaffe**, **4 Gadget** (neue eigene Karte), **5 Nahkampfwaffe**, **6 Granate**.
   Bisher teilten sich Gadget und Spezialwaffe Taste 3, die Nahkampfwaffe lag auf 4. Taste 3 wählt jetzt nur die Spezialwaffe aus der Kiste (ohne eine gibt es einen Hinweis).
