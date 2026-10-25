@@ -2,6 +2,9 @@
 
 Neueste Änderungen oben.
 
+## Mausrad erreicht die Nahkampfwaffe (2026-10-25)
+- GEÄNDERT Das Mausrad schaltet jetzt Slot 1 -> Slot 2 -> Nahkampfwaffe (Slot 5) -> wieder Slot 1 (rückwärts umgekehrt). Spezialwaffe (3) und Gadget (4) bleiben bei den Tasten; hat man eines davon in der Hand, geht das Rad zurück zur zuletzt benutzten Waffe aus Slot 1/2. Nur Eingabe, das Netzprotokoll bleibt.
+
 ## Heli: Zielsystem wie in BF3 (2026-10-25)
 Nur Kamera, HUD und Richtung der Bordwaffen; am Netzprotokoll ändert sich nichts.
 - GEÄNDERT **Kamera**: sie sitzt 15 m hinter und 4,2 m über dem Heli (`HELI_CAM_DIST`, `HELI_CAM_UP`) statt genau auf der Sichtachse. Der Heli hängt dadurch im unteren Bilddrittel unter dem Fadenkreuz, das Ziel am Boden bleibt frei.

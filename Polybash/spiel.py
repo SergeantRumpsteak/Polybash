@@ -1017,7 +1017,7 @@ MELEE_IDX = {m.name: i for i, m in enumerate(MELEE)}
 
 START_MELEE = 0
 
-MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel)
+MELEE_SEL = -2            # "Auswahl" für die Nahkampfwaffe (Taste 5 / F ohne Ziel / Mausrad)
 
 MELEE_WI0 = 100           # Kill-Anzeige/Statistik: Waffe = MELEE_WI0 + Index in MELEE
 
@@ -120822,8 +120822,8 @@ class Game(ShowBase):
             self.sel_req = wi
 
     def cycle_weapon(self, d):
-        """Mausrad: zwischen Slot 1 (Hauptwaffe) und Slot 2 (Sekundärwaffe) umschalten; Kistenwaffe, Gadget und
-        Nahkampf nur über 3/4/5. Hält man gerade etwas anderes, geht es zurück zur zuletzt benutzten der beiden.
+        """Mausrad: Slot 1 (Hauptwaffe) -> Slot 2 (Sekundärwaffe) -> Nahkampfwaffe (Slot 5) -> wieder Slot 1; Kistenwaffe
+        und Gadget nur über 3/4. Hält man gerade eines davon, geht es zurück zur zuletzt benutzten Waffe aus Slot 1/2.
         10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
@@ -120833,9 +120833,7 @@ class Game(ShowBase):
         pl = self.player
         if pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world.phase != "play":
             return
-        order = [wi for wi in pl.slots[:N_FREE_SLOTS] if wi is not None]   # nur SLOT_PRIMARY und SLOT_SECONDARY
-        if not order:
-            return
+        order = [wi for wi in pl.slots[:N_FREE_SLOTS] if wi is not None] + [MELEE_SEL]   # Slot 1, Slot 2, Nahkampf
         if pl.gad_out:
             cur = "gad"
         else:
@@ -120843,7 +120841,7 @@ class Game(ShowBase):
                 pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur))
         if cur in order:
             nxt = order[(order.index(cur) + d) % len(order)]
-        else:                                       # Spezialwaffe/Gadget/Nahkampf in der Hand: zurück zu Slot 1/2
+        else:                                       # Spezialwaffe/Gadget in der Hand: zurück zu Slot 1/2
             last = pl.slots[pl.last_slot] if 0 <= pl.last_slot < N_FREE_SLOTS else None
             nxt = last if last in order else order[0]
         if nxt != cur:
