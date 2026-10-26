@@ -19,6 +19,10 @@ Steuerung:
                  zeigt Spieler im Umkreis auf der Minimap). 3 Stück pro Leben; mit dem Tod verschwinden sie.
                  Aufgehobene Waffen und Kistenwaffen ersetzen die Waffe in der Hand.
   X / Y          Minimap heraus- / hineinzoomen
+  U              Einzelteile ablegen (Ausrüstung ohne Set: Schweres Exo-Jetpack, Hermes-Boots). Wer ein Teil für einen
+                 Slot aufhebt, den ein Einzelteil sperrt, tauscht automatisch (das Einzelteil fällt ab).
+  B (Helikopter) Flares: 3 s keine Stinger-Erfassung, anfliegende Stinger jagen der Wärmequelle nach. So viele Ladungen
+                 wie eine volle Stinger Munition hat (5); auf dem Helipad sofort wieder voll.
   R (tot)        respawnen - vorher mit 1-6 Haupt- und Kleinwaffe, 7-9 Gadget wählen
   Fahrzeug       W/S Gas/Rückwärts, A/D lenken, Leertaste Handbremse, Maus: Kamera
 
@@ -37,16 +41,17 @@ Standardkarte "Polytown" (maps/polytown.ptmap): die in Blender gebaute Karte 1:1
 Bauernhof, Mühlen, Wälder; Export: tools/blender/polytown_neu/export_spiel.py). Alle Spieler brauchen die Datei im
 Ordner 'maps'; fehlt sie, meldet das Setup-Menü das. Die frühere, im Code erzeugte Polytown-Karte gibt es nicht mehr.
 Kartendateien (.json aus dem Karteneditor) sind 200 x 200 m.
-Eingebaute Karte "Testgelände" (v50, Entwickler-Sandbox, 240 x 240 m, Graubox mit 1-m-Raster): Arsenal mit allen
-Waffen, Nahkampfwaffen, Ausrüstungsteilen, Aufsätzen, Visieren, Granaten und Gadgets auf Tischen (nach 3 s wieder da),
+Eingebaute Karte "Testgelände" (v50, Entwickler-Sandbox, 240 x 240 m, Graubox mit 1-m-Raster): Waffenkammer (Waffen und
+Nahkampf auf quadratischen Tischen in der Mitte, Aufsätze/Visiere und Granaten/Gadgets auf eigenen Tischen an den Wänden)
+und Rüstkammer (je Set ein Wandsims, Einzelteile auf kurzen Simsen); alles liegt nach 3 s wieder da,
 Showroom mit allen Monstern als Standmodelle (unverwundbar, ohne KI) und der Spielfigur, Testflächen unter freiem Himmel:
 Schlucht zwischen zwei 8-m-Plateaus mit Brücke, Planke und kaputter Brücke, Labyrinth (12 x 12 Zellen), dreistöckiges
 Testhaus mit Treppen und Dach, Fahrzeugzone mit 6 Geländewagen und 4 Helipads. Immer Deathmatch ohne Monster,
 Bonus und Tomahawk, 2 h Rundenzeit; die Karte entsteht auf jedem Rechner aus dem Code (dev_map_raw).
   F1 (nur dort)  Dev-Menü: Monster (Zombie, Jägerin, Brute, Koloss, Titan, Drohne) mit KI-Verhalten (aggressiv, passiv,
                  Zielscheibe = steht, fällt nie, heilt sich nach 3 s), Geländewagen oder Helikopter aus dem Pool am
-                 Fadenkreuz spawnen, fertige Loadout-Sets anlegen, Godmode, unendlich Munition, Aggro zurücksetzen,
-                 alles Gespawnte entfernen. Mitspieler schicken die Befehle an den Host (Nachricht 'dev').
+                 Fadenkreuz spawnen, fertige Loadout-Sets anlegen, Godmode, unendlich Munition, Flugmodus (No-Clip:
+                 Leertaste steigt, Strg sinkt, 2x Renntempo, mit Shift 3x), Aggro zurücksetzen, alles Gespawnte entfernen. Mitspieler schicken die Befehle an den Host (Nachricht 'dev').
 Fallschaden: bis 5,5 m Fallhöhe nichts, darüber 11 HP pro Meter (Sprung vom Turm ~50, ab ~14,5 m tödlich).
 Mitgelieferte Karte "TTT Minecraft b5": eine Minecraft-Welt Block für Block mit Originaltexturen
 (Datei maps/ttt_minecraft_b5.mcmap, im Setup-Menü Zeile 7 wählbar; Deathmatch ohne Monster;
@@ -366,7 +371,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 50         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 51         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 200               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -1084,6 +1089,10 @@ STINGER_LIFE = 6.0             # s Flugzeit
 STINGER_VEH_DMG = 260.0        # Schaden bei direktem Treffer an Fahrzeug (Explosion kommt dazu)
 STINGER_HELI_DMG = 520.0       # Schaden bei direktem Treffer am Helikopter (Helikopter: 1000)
 STINGER_AIR_H = 2.5            # v49: Spieler gilt als fliegend (erfassbar), wenn er so hoch über dem Boden ist (oder Jetpack)
+HELI_FLARE_MAX = WEAPONS[STINGER_WI].mag + WEAPONS[STINGER_WI].max_reserve   # v51: Flares je Heli = volle Stinger-Munition
+HELI_FLARE_JAM = 3.0           # v51: s nach einem Flare ist der Heli für Stinger nicht erfassbar (Erfassung bricht ab)
+HELI_FLARE_CD = 1.0            # v51: s zwischen zwei Flares
+HELI_FLARE_BACK = 7.0          # v51: so weit hinter/unter dem Heli lockt die Wärmequelle anfliegende Raketen weg (m)
 
 # Ansicht/Aufsätze/Visier gelten für Haupt- (Slot 1) und Kleinwaffen (Slot 2); die Namenslisten folgen aus weapon_type:
 PRIMARY_NAMES = tuple(w.name for w in WEAPONS if w.weapon_type == WT_PRIMARY)       # Sturmgewehr, Schrotflinte, Scharfschütze
@@ -1576,6 +1585,7 @@ DOUBLE_JUMP_V = JUMP_V    # Doppelsprung: zweiter Sprung in der Luft
 
 # Zentrale Tastenzuordnung (Grundlage für ein späteres Menü "Steuerung"). Gelesen werden sie mit
 # Game.key_down(name); die übrigen Tasten (F, R, G, V, Tab, 1-3 ...) sind noch per accept() verdrahtet.
+GEAR_OFF_KEY = "u"       # v51: Einzelteile (Exo-Jetpack, Hermes-Boots) ablegen
 INSPECT_KEY = "t"        # 9b: Waffen-Inspektion (Aufsätze/Visier wechseln); mit der Bratpfanne: deren Fähigkeit (9c)
 
 INSPECT_FILL = 0.62      # 9b: so viel der Bildbreite füllt die Waffe in der Inspektion (höchstens)
@@ -2293,9 +2303,12 @@ DEV_R = (0.88, 0.36, 0.30)                # Akzent Kanten: Schluchtrand, Brücke
 DEV_Y = (0.92, 0.82, 0.30)                # Akzent Fahrzeugzone
 DEV_COLS = (DEV_W, DEV_G, DEV_O, DEV_B, DEV_R, DEV_Y)
 DEV_FLOOR = (0.80, 0.81, 0.83)            # Boden (mit 1-m-Raster)
-DEV_ARSENAL = (12.0, 10.0, 72.0, 46.0)    # Abschnitt A: Arsenal (Aussenkanten der Wände)
-DEV_ARS_ROWS = (16.0, 23.0, 30.0, 37.0)   # y der vier Tischreihen
-DEV_ARS_X0, DEV_ARS_DX, DEV_ARS_Z = 17.0, 2.4, 0.95   # erster Platz, Abstand, Tischhöhe
+DEV_ARSENAL = (12.0, 10.0, 72.0, 46.0)    # Abschnitt A2: Waffenkammer (Waffen, Nahkampf, Aufsätze, Granaten)
+DEV_ARMORY = (174.0, 10.0, 230.0, 46.0)   # Abschnitt A1: Rüstkammer (Ausrüstung an den Wänden, je Set ein Sims)
+DEV_ARS_Z = 0.95                          # Tischhöhe Waffenkammer
+DEV_LEDGE_Z, DEV_LEDGE_D = 1.1, 0.9       # Wandsims Rüstkammer: Oberkante, Tiefe
+DEV_LEDGE_DX, DEV_LEDGE_GAP = 1.2, 1.0    # Abstand der Teile auf einem Sims, Lücke zwischen zwei Simsen
+DEV_SETS = ("armor", "shield", "second", "spring", "hacker", "necro")   # Reihenfolge der Sets an der Südwand
 DEV_ARS_RESPAWN = 3.0                     # s, bis ein genommenes Teil wieder auf dem Tisch liegt
 DEV_SHOWROOM = (84.0, 10.0, 164.0, 50.0)  # Abschnitt B: Showroom (hohe Halle - der Titan passt hinein)
 DEV_SHOW = (("grunt", 94.0, 22.0), ("huntress", 101.0, 22.0), ("brute", 108.5, 22.0), ("drone", 116.0, 22.0),
@@ -2308,7 +2321,7 @@ DEV_HOUSE = (186.0, 92.0, 210.0, 110.0)   # Testhaus (Aussenkanten), 3 Stockwerk
 DEV_STORY = 3.6                           # Geschosshöhe
 DEV_VEHICLES = tuple((28.0 + 13.0 * k, 172.0, 0.0) for k in range(6))      # Fahrzeug-Pool (Parkplatz)
 DEV_PADS = ((140.0, 206.0, 0.0), (165.0, 206.0, 0.0), (190.0, 206.0, 0.0), (215.0, 206.0, 0.0))  # Helikopter-Pool
-DEV_SPAWNS = tuple((182.0 + 11.0 * i, 18.0 + 13.0 * j) for j in range(3) for i in range(4))
+DEV_SPAWNS = tuple((92.0 + 13.0 * i, 55.0 + 8.0 * j) for j in range(2) for i in range(6))   # Weg vor den Gebäuden
 DEV_MOBS = ("grunt", "huntress", "brute", "colossus", "titan", "drone")   # Dev-Menü: wählbare Monster
 DEV_MOB_NAMES = {"grunt": "Zombie", "huntress": "Jägerin", "brute": "Brute", "colossus": "Koloss", "titan": "Titan",
                  "drone": "Drohne"}
@@ -2317,6 +2330,7 @@ DEV_AI_NAMES = {"aggr": "Aggressiv", "passive": "Passiv", "static": "Zielscheibe
 DEV_STATIC_HEAL_T = 3.0                   # s ohne Treffer, dann ist eine Zielscheibe wieder voll
 DEV_MAX_MOBS = 60                         # höchstens so viele gespawnte Monster gleichzeitig
 DEV_AIM_RANGE = 160.0                     # m: so weit reicht das Fadenkreuz für den Spawnpunkt
+DEV_FLY_K, DEV_FLY_BOOST = 2.0, 3.0       # v51: Flugmodus (No-Clip): Tempo x Rennen, mit Shift x Rennen
 DEV_LOADOUTS = (                          # Dev-Menü: fertige Ausrüstungs-Sets (Namen aus WEAPONS/MELEE/GEAR)
     ("Sturm", ("Colt M4 Carbine", "Colt ACP"), "Messer", ("Armeehelm", "Splitterweste", "Kampfstiefel"),
      (("frag", 3), ("smoke", 2), ("flash", 2))),
@@ -2451,13 +2465,14 @@ def dev_map_raw():
             ya, yb = (y0 + i * sd, y0 + (i + 1) * sd) if north else (y0 - (i + 1) * sd, y0 - i * sd)
             blk(x0, ya, x1, yb, base - (2.0 if base <= 0 else 0.25), top, col, mm=False)
 
-    # --- Abschnitt A: Arsenal (Tischreihen, die Teile legt die Welt darauf: dev_arsenal_slots)
+    # --- Abschnitt A: zwei Gebäude - Waffenkammer (Tische) und Rüstkammer (Wandsimse); Teile: dev_arsenal_slots
     ax0, ay0, ax1, ay1 = DEV_ARSENAL
-    room(ax0, ay0, ax1, ay1, 4.6, {"N": ((42.0, 2.2, 0.0, 3.2), (24.0, 2.0, 1.2, 2.6), (60.0, 2.0, 1.2, 2.6)),
-                                   "E": ((28.0, 1.6, 0.0, 2.8),)}, DEV_W)
-    for yr in DEV_ARS_ROWS:
-        blk(DEV_ARS_X0 - 1.6, yr - 0.6, DEV_ARS_X0 + 19 * DEV_ARS_DX + 1.6, yr + 0.6, -1.0, DEV_ARS_Z, DEV_O, mm=False)
-    blk(ax0 + 1.0, ay1 - 2.2, ax0 + 6.0, ay1 - 1.0, -1.0, 1.4, DEV_G, mm=False)              # Werkbank in der Ecke
+    room(ax0, ay0, ax1, ay1, 4.6, {"N": ((42.0, 2.2, 0.0, 3.2), (26.0, 2.0, 1.2, 2.6), (58.0, 2.0, 1.2, 2.6))}, DEV_W)
+    rx0, ry0, rx1, ry1 = DEV_ARMORY
+    room(rx0, ry0, rx1, ry1, 4.6, {"N": ((202.0, 2.2, 0.0, 3.2), (186.0, 2.0, 1.2, 2.6), (218.0, 2.0, 1.2, 2.6)),
+                                   "W": ((32.0, 1.6, 0.0, 2.8),)}, DEV_W)
+    for x0, y0, x1, y1, z1, col in dev_layout()[0]:
+        blk(x0, y0, x1, y1, -1.0, z1, col, mm=False)
     # --- Abschnitt B: Showroom (Sockel mit Rand je Monster)
     sx0, sy0, sx1, sy1 = DEV_SHOWROOM
     room(sx0, sy0, sx1, sy1, 17.0, {"N": ((124.0, 3.5, 0.0, 5.0), (100.0, 3.0, 3.0, 8.0), (148.0, 3.0, 3.0, 8.0)),
@@ -2529,20 +2544,71 @@ def dev_map_raw():
             "vehicles": [list(v) for v in DEV_VEHICLES], "pads": [list(p) for p in DEV_PADS]}
 
 
+def dev_layout():
+    """v51: Möbel und Plätze der zwei Ausrüstungsgebäude -> (Möbel [(x0, y0, x1, y1, Oberkante, Farbe)],
+    Plätze [(x, y, z, Art, Wert)]). Art: 'w' Waffe, 'm' Nahkampf, 'g' Granate (Art, Anzahl), 'd' Gadget (Art, Anzahl),
+    'e' Ausrüstung, 'a' Aufsatz (Platz * ATT_CODE + Index).
+    Waffenkammer: zwei quadratische Tische in der Mitte (Waffen bzw. Nahkampf rundum am Rand), ein langer Tisch an der
+    Südwand für Aufsätze und Visiere, einer an der Westwand für Granaten und Gadgets - Platz für mehr ist überall.
+    Rüstkammer: an der Südwand je Set ein eigener Sims (Kopf, Torso, Füsse; 1 m Lücke dazwischen), an der Ostwand je
+    Einzelteil ein kurzer Sims."""
+    furn, slots = [], []
+
+    def square(cx, cy, half, items, col):
+        furn.append((cx - half, cy - half, cx + half, cy + half, DEV_ARS_Z, col))
+        e = half - 0.4                                   # Teile 0,4 m vom Rand: von aussen erreichbar
+        n = len(items)
+        per = [n // 4 + (1 if k < n % 4 else 0) for k in range(4)]
+        k = 0
+        for side, m in enumerate(per):                   # Süd, Ost, Nord, West - je Seite gleichmässig verteilt
+            for i in range(m):
+                t = -e + 2 * e * (i + 1) / (m + 1)
+                x, y = ((cx + t, cy - e), (cx + e, cy + t), (cx - t, cy + e), (cx - e, cy - t))[side]
+                slots.append((x, y, DEV_ARS_Z) + items[k])
+                k += 1
+
+    def row(x0, y0, x1, y1, items, col, horiz):
+        furn.append((x0, y0, x1, y1, DEV_ARS_Z, col))
+        n = len(items)
+        for i, it in enumerate(items):
+            t = (i + 0.5) / n
+            x, y = ((x0 + (x1 - x0) * t, (y0 + y1) / 2) if horiz else ((x0 + x1) / 2, y0 + (y1 - y0) * t))
+            slots.append((x, y, DEV_ARS_Z) + it)
+
+    guns = [("w", wi) for wi in range(len(WEAPONS)) if WEAPONS[wi].name != "Dual Baretta"]
+    melee = [("m", mi) for mi in range(len(MELEE))]
+    atts = ([("a", si * ATT_CODE + v) for si in range(len(ATTACHMENTS)) for v in range(1, len(ATTACHMENTS[si]))]
+            + [("a", ATT_SCOPE * ATT_CODE + v) for v in range(1, len(ATT_SCOPE_NAMES))])
+    grens = [("g", (k, GREN_LOOT_N.get(k, 1) + 1)) for k in GREN_KINDS] + [("d", (k, 2)) for k in range(len(GADGETS))]
+    square(32.0, 30.0, 3.6, guns, DEV_O)                                   # Waffen (Haupt-, Sekundär-, Spezialwaffen)
+    square(50.0, 30.0, 2.4, melee, DEV_O)                                  # Nahkampf
+    row(18.0, 11.2, 66.0, 12.4, atts, DEV_G, True)                         # Aufsätze und Visiere (Südwand)
+    row(13.2, 16.0, 14.4, 42.0, grens, DEV_G, False)                       # Granaten und Gadgets (Westwand)
+    # Rüstkammer
+    rx0, ry0, rx1, ry1 = DEV_ARMORY
+    face_s, face_e = ry0 + 0.16, rx1 - 0.16                                # Innenflächen Süd- und Ostwand
+    slot_i = {"head": 0, "torso": 1, "feet": 2}
+    x = rx0 + 4.0
+    for st in DEV_SETS:
+        parts = sorted((gi for gi, g in enumerate(GEAR) if g.set == st and not g.legacy), key=lambda gi: slot_i[GEAR[gi].slot])
+        ln = len(parts) * DEV_LEDGE_DX + 0.6
+        furn.append((x, face_s, x + ln, face_s + DEV_LEDGE_D, DEV_LEDGE_Z, DEV_B))
+        for i, gi in enumerate(parts):
+            slots.append((x + 0.3 + (i + 0.5) * DEV_LEDGE_DX, face_s + DEV_LEDGE_D / 2, DEV_LEDGE_Z, "e", gi))
+        x += ln + DEV_LEDGE_GAP
+    y = ry0 + 6.0
+    for gi, g in enumerate(GEAR):                                          # Einzelteile (kein Set): kurze Simse
+        if g.set or g.legacy:
+            continue
+        furn.append((face_e - DEV_LEDGE_D, y, face_e, y + 1.6, DEV_LEDGE_Z, DEV_Y))
+        slots.append((face_e - DEV_LEDGE_D / 2, y + 0.8, DEV_LEDGE_Z, "e", gi))
+        y += 1.6 + DEV_LEDGE_GAP
+    return furn, slots
+
+
 def dev_arsenal_slots():
-    """v50: Plätze im Arsenal -> [(x, y, z, Art, Wert)]. Art: 'w' Waffe, 'm' Nahkampf, 'g' Granate (Art, Anzahl),
-    'd' Gadget (Art, Anzahl), 'e' Ausrüstung, 'a' Aufsatz (Platz * ATT_CODE + Index)."""
-    rows = [[("w", wi) for wi in range(len(WEAPONS)) if WEAPONS[wi].name != "Dual Baretta"],
-            [("m", mi) for mi in range(len(MELEE))] + [("g", (k, GREN_LOOT_N.get(k, 1) + 1)) for k in GREN_KINDS]
-            + [("d", (k, 2)) for k in range(len(GADGETS))],
-            [("e", gi) for gi in range(len(GEAR)) if not getattr(GEAR[gi], "legacy", False)],
-            [("a", si * ATT_CODE + v) for si in range(len(ATTACHMENTS)) for v in range(1, len(ATTACHMENTS[si]))]
-            + [("a", ATT_SCOPE * ATT_CODE + v) for v in range(1, len(ATT_SCOPE_NAMES))]]
-    out = []
-    for yr, row in zip(DEV_ARS_ROWS, rows):
-        for k, (kind, val) in enumerate(row[:20]):
-            out.append((DEV_ARS_X0 + k * DEV_ARS_DX, yr, DEV_ARS_Z, kind, val))
-    return out
+    """v50/v51: Plätze aller Teile in Waffen- und Rüstkammer -> [(x, y, z, Art, Wert)] (siehe dev_layout)."""
+    return dev_layout()[1]
 
 
 SOUND_EXT = (".wav", ".ogg", ".mp3", ".flac")
@@ -3153,6 +3219,7 @@ class Heli:
         self.pitch = self.roll = self.speed = self.vx = self.vy = self.vz = 0.0
         self.hp, self.driver, self.dead_t = HELI_HP, -1, 0.0
         self.mg, self.rk = float(HELI_MG_MAX), HELI_RK_MAX
+        self.flares, self.flare_t, self.flare_cd = HELI_FLARE_MAX, 0.0, 0.0   # v51: Täuschkörper gegen Stinger
         self.ground = True
         self.stall_t = -1.0       # Drohne: Antrieb lahmgelegt (s, > 0) - der Heli sinkt; bis -1 s danach zählt
                                   # ein Aufprall noch als Folge (Netzlaufzeit)
@@ -7640,6 +7707,27 @@ class World:
         self.events.append(("hrk", pl.pid))
         return True
 
+    def heli_flare(self, pl):
+        """v51: Pilot wirft Flares (Taste B im Cockpit): HELI_FLARE_JAM s keine Stinger-Erfassung auf diesen Heli, laufende
+        Erfassungen brechen ab, anfliegende Stinger-Raketen jagen der Wärmequelle hinter dem Heli nach. -> True, wenn geworfen."""
+        hc = self.heli_by_id(pl.heli) if pl.heli >= 0 else None
+        if hc is None or hc.driver != pl.pid or hc.hp <= 0 or self.phase != "play":
+            return False
+        if hc.flares <= 0 or hc.flare_cd > 0:
+            self.events.append(("hflareno", pl.pid, hc.flares))
+            return False
+        hc.flares -= 1
+        hc.flare_t, hc.flare_cd = HELI_FLARE_JAM, HELI_FLARE_CD
+        h = math.radians(hc.heading)
+        fx, fy = -math.sin(h), math.cos(h)
+        dx, dy, dz = hc.x - fx * HELI_FLARE_BACK, hc.y - fy * HELI_FLARE_BACK, hc.z - 2.0
+        for b in self.bullets:
+            if b.wi == STINGER_WI and b.target == ("heli", hc.id):
+                b.target, b.decoy = None, (dx, dy, dz)
+        self.events.append(("hflare", hc.id, round(hc.x, 2), round(hc.y, 2), round(hc.z + 1.0, 2), round(hc.heading, 1),
+                            hc.flares))
+        return True
+
     def update_helis(self, dt):
         for hc in self.helis:
             if hc.hp <= 0:                               # Wrack stürzt ab; später steht ein neuer da
@@ -7685,7 +7773,10 @@ class World:
                                                d[0] * w.speed, d[1] * w.speed, d[2] * w.speed, w.dmg, drv.pid,
                                                self.next_bid, MINIGUN_WI))
                     self.next_bid += 1
+            hc.flare_t = max(0.0, getattr(hc, "flare_t", 0.0) - dt)
+            hc.flare_cd = max(0.0, getattr(hc, "flare_cd", 0.0) - dt)
             if hc.ground and hc.speed < 3.0 and self.on_pad(hc.x, hc.y):
+                hc.flares = HELI_FLARE_MAX                                         # v51: Flares sofort voll
                 hc.mg = min(float(HELI_MG_MAX), hc.mg + HELI_RELOAD_MG * dt)       # auf dem Pad: auftanken
                 hc.hp = min(HELI_HP, hc.hp + HELI_REPAIR * dt)                     # ... und reparieren
                 if hc.rk < HELI_RK_MAX:
@@ -8000,9 +8091,8 @@ class World:
             self.events.append(("hasgear", pl.pid, gi))
             return False
         blk = gear_blocked(pl, g.slot)                   # v49: Slot gesperrt (Exo-Jetpack: kein Helm, keine Stiefel)
-        if blk is not None:
-            self.events.append(("gearblock", pl.pid, gi, blk))
-            return False
+        if blk is not None:                              # v51: das sperrende Einzelteil wird abgelegt und getauscht
+            self.gear_off(pl, GEAR[blk].slot, swap=gi)
         old = pl.gear.get(g.slot)
         if old is not None:
             self.add_drop(pl.x, pl.y, pl.z, -1, old)
@@ -8018,6 +8108,30 @@ class World:
             pl.shield_hp = min(shield_max(pl), pl.shield_hp + g.shield)
         self.events.append(("gear", pl.pid, gi, gear_list(pl), crate))
         return True
+
+    def gear_off(self, pl, slot, swap=-1):
+        """v51: Teil aus dem Slot ablegen (fällt vor die Füsse). swap: Index des Teils, gegen das getauscht wird
+        (nur für den Hinweis beim Spieler). -> abgelegter Index oder None."""
+        gi = pl.gear.get(slot)
+        if gi is None:
+            return None
+        pl.gear[slot] = None
+        if GEAR[gi].kind == "jetpack":
+            pl.jet_on = False
+        self.add_drop(pl.x, pl.y, pl.z, -1, gi)
+        update_max_hp(pl)
+        pl.hp = min(pl.hp, pl.max_hp)
+        self.events.append(("gearoff", pl.pid, gi, gear_list(pl), swap))
+        return gi
+
+    def drop_single_gear(self, pl):
+        """v51: Taste U - getragene Einzelteile (Ausrüstung ohne Set: Exo-Jetpack, Hermes-Boots) ablegen."""
+        if pl.hp <= 0:
+            return
+        done = [self.gear_off(pl, sl) for sl, gi in list(pl.gear.items())
+                if gi is not None and not GEAR[gi].set and not GEAR[gi].legacy]
+        if not any(d is not None for d in done):
+            self.events.append(("gearoff", pl.pid, -1, gear_list(pl), -1))
 
     def give_gadget(self, pl, kind, n):
         """Experimental: Gadget-Stücke aufheben (Beute). Je Art ein Vorrat (höchstens GAD_MAX); ist er voll, bleibt
@@ -8969,6 +9083,7 @@ class World:
                         v.pitch = v.roll = v.speed = v.vx = v.vy = v.vz = 0.0
                         v.hp, v.dead_t, v.ground, v.stall_t = HELI_HP, 0.0, True, -1.0
                         v.mg, v.rk = float(HELI_MG_MAX), HELI_RK_MAX
+                        v.flares, v.flare_t, v.flare_cd = HELI_FLARE_MAX, 0.0, 0.0
                     msg = f"{name} {v.id + 1} ans Fadenkreuz gestellt"
         elif c == "clear":
             n0 = len(self.mobs)
@@ -8996,6 +9111,10 @@ class World:
         elif c == "ammo":
             pl.dev_ammo = not getattr(pl, "dev_ammo", False)
             msg = "Unendlich Munition " + ("an" if pl.dev_ammo else "aus")
+        elif c == "fly":                                 # v51: Flugmodus (No-Clip) - die Figur bewegt ihr Rechner selbst
+            pl.dev_fly = not getattr(pl, "dev_fly", False)
+            pl.vz = 0.0
+            msg = ("Flugmodus an - Leertaste steigt, Strg sinkt, Shift schneller" if pl.dev_fly else "Flugmodus aus")
         elif c == "aggro":
             for m in self.mobs:
                 if getattr(m, "dev_ai", None) == "show" or m.state == "dead":
@@ -9017,7 +9136,7 @@ class World:
         else:
             return
         self.events.append(("devstate", pl.pid, 1 if getattr(pl, "dev_god", False) else 0,
-                            1 if getattr(pl, "dev_ammo", False) else 0, msg))
+                            1 if getattr(pl, "dev_ammo", False) else 0, msg, 1 if getattr(pl, "dev_fly", False) else 0))
 
     def dev_kit(self, pl, k):
         """v50: fertiges Ausrüstungs-Set anlegen (Waffen, Nahkampf, Ausrüstung, Granaten, ggf. Visiere)."""
@@ -9821,6 +9940,10 @@ class World:
                     break
             if tg is None:
                 b.target = None
+        elif getattr(b, "decoy", None) is not None:      # v51: Flare - die Rakete jagt der Wärmequelle nach
+            tg = b.decoy
+            if (tg[0] - b.x) ** 2 + (tg[1] - b.y) ** 2 + (tg[2] - b.z) ** 2 < 9.0:
+                b.decoy = None                           # vorbei: fliegt geradeaus weiter, bis sie sich zerlegt
         if tg is not None:
             w = norm((tg[0] - b.x, tg[1] - b.y, tg[2] - b.z))
             c = max(-1.0, min(1.0, d[0] * w[0] + d[1] * w[1] + d[2] * w[2]))
@@ -10776,6 +10899,20 @@ def update_crouch(pl, dt, world):
     pl.crouch += clampf(want - pl.crouch, -6.0 * dt, 6.0 * dt)
 
 
+def dev_fly_step(pl, dx, dy, l, run, dt):
+    """v51: Flugmodus des Testgeländes (No-Clip): durch alles hindurch, keine Schwerkraft, kein Fallschaden.
+    Tempo DEV_FLY_K x Rennen (mit Shift DEV_FLY_BOOST x), Leertaste steigt, Strg sinkt."""
+    sp = RUN * (DEV_FLY_BOOST if run else DEV_FLY_K)
+    if l > 0:
+        pl.x = clampf(pl.x + dx / l * sp * dt, 0.5, WORLD - 0.5)
+        pl.y = clampf(pl.y + dy / l * sp * dt, 0.5, WORLD - 0.5)
+    up = (1 if getattr(pl, "fly_up", False) else 0) - (1 if getattr(pl, "fly_down", False) else 0)
+    pl.z = clampf(pl.z + up * sp * dt, -5.0, PLAYER_Z_MAX - 2.0)
+    pl.vz, pl.on_ground, pl.fall_dmg = 0.0, False, 0.0
+    pl.moving = l > 0 or up != 0
+    pl.jet_on = False
+
+
 def step(pl, forward, strafe, run, jump, dt, world):
     """Ein Simulationsschritt. forward/strafe in -1..1. Lange Bilder (niedrige fps) werden in höchstens 0,05-s-Schritte
     zerlegt, damit man auch dann nicht durch dünne Wände/Zäune tunnelt."""
@@ -10797,6 +10934,9 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
     pl.moving = l > 0
     pl.running = pl.moving and bool(run) and pl.crouch < 0.3        # für das Lärmsystem
     ox, oy = pl.x, pl.y
+    if getattr(pl, "dev_fly", False) and getattr(world, "dev", False):
+        dev_fly_step(pl, dx, dy, l, run, dt)                            # v51: Testgelände - Flugmodus (No-Clip)
+        return
     gear = getattr(pl, "gear", None)
     if gear is not None:                                            # Ausrüstung: Abklingzeiten (beim Spieler)
         pl.dash_cd = max(0.0, pl.dash_cd - dt)
@@ -11499,7 +11639,7 @@ def stinger_target(world, eye, f, cone, rng_max, me=-1):
             continue
         cands.append(("plr", p, p.z + 1.0))
     for kind, o, tz in cands:
-        if getattr(o, "hp", 0) <= 0:
+        if getattr(o, "hp", 0) <= 0 or getattr(o, "flare_t", 0.0) > 0:     # v51: Flares stören die Wärmesuche
             continue
         dx, dy, dz = o.x - eye[0], o.y - eye[1], tz - eye[2]
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -21112,6 +21252,10 @@ class HostSession:
                 w.press_button(pl, float(m["x"]), float(m["y"]), d if isinstance(d, int) else None)
         elif t == "hr":                           # Rakete aus dem Helikopter
             w.heli_rocket(pl)
+        elif t == "flare":                        # v51: Flares aus dem Helikopter
+            w.heli_flare(pl)
+        elif t == "goff":                         # v51: Einzelteile ablegen (Taste U)
+            w.drop_single_gear(pl)
         elif t == "fall":                         # Fallschaden, vom Mitspieler beim Aufprall gemeldet
             d = m.get("d")
             if finite(d) and pl.hp > 0 and pl.vehicle < 0 and pl.heli < 0:
@@ -21189,7 +21333,7 @@ class HostSession:
                         1 if t.firing else 0, t.op] for t in w.turrets],
                 "hc": [[q.id, r2(q.x), r2(q.y), r2(q.z), r1(q.heading), r1(q.pitch), r1(q.roll),
                         r1(q.speed), r1(q.hp), q.driver, r1(q.dead_t), int(q.mg), q.rk, 1 if q.ground else 0,
-                        1 if q.firing else 0, r1(q.stall_t)] for q in w.helis],
+                        1 if q.firing else 0, r1(q.stall_t), q.flares, r1(q.flare_t)] for q in w.helis],
                 "tm": [w.strike, r1(w.strike_t), w.strike_by, w.strike_dur, r1(w.strike_wait),
                        r1(w.strike_ang), r1(w.strike_x), r1(w.strike_y)],   # Ziel nur für den Anflug, nie angezeigt
                 "k": w.kills, "ev": self.events}
@@ -21625,6 +21769,8 @@ class ClientSession:
                 continue
             q.hp, q.driver, q.dead_t, q.mg, q.rk, q.firing = hp, drv, dd, mg, rk, bool(fr)
             q.stall_t = row[15] if len(row) > 15 else -1.0
+            if len(row) > 17:                        # v51: Flares (Anzahl, Störzeit)
+                q.flares, q.flare_t = int(row[16]), float(row[17])
             if drv != self.my_id:                    # den eigenen Helikopter bestimmt der Pilot selbst
                 q.x, q.y, q.z, q.heading, q.pitch, q.roll, q.speed, q.ground = x, y, z, hd, pt, rl, sp, bool(gr)
         pil = {q.driver: q.id for q in w.helis if q.driver >= 0}
@@ -21830,6 +21976,14 @@ class ClientSession:
 
     def send_rocket(self):
         self.conn.send({"t": "hr"})
+        self.conn.flush()
+
+    def send_flare(self):
+        self.conn.send({"t": "flare"})            # v51: Flares (Helikopter)
+        self.conn.flush()
+
+    def send_gear_off(self):
+        self.conn.send({"t": "goff"})             # v51: Einzelteile ablegen
         self.conn.flush()
 
     def send_fall(self, dmg):
@@ -118669,6 +118823,7 @@ class Game(ShowBase):
         self.accept("f3", self.toggle_fps)
         self.accept("f11", self.toggle_fullscreen)
         self.accept(DEV_KEY, self.on_dev)                     # v50: Dev-Menü (nur auf dem Testgelände)
+        self.accept(GEAR_OFF_KEY, self.on_gear_off)           # v51: Einzelteile ablegen (Exo-Jetpack, Hermes-Boots)
         self.accept("c", self.toggle_duck)
         self.duck_lock = False
         self.accept("m", self.toggle_bigmap)
@@ -122090,6 +122245,17 @@ class Game(ShowBase):
         return (self.mode == "play" and pl is not None and pl.hp > 0 and not pl.melee_out and not pl.gad_out
                 and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and self.world.phase == "play")
 
+    def on_gear_off(self):
+        """v51: Taste U - Einzelteile (Ausrüstung ohne Set) ablegen; der Host entscheidet."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0 or self.loadscreen is not None:
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_gear_off()
+        else:
+            self.world.drop_single_gear(pl)
+
     # ------------------------------------------------------------ v50: Dev-Menü (Testgelände, F1)
     def on_dev(self):
         """v50: F1 auf dem Testgelände öffnet das Dev-Menü; der Spawnpunkt ist der Punkt unter dem Fadenkreuz im Moment
@@ -122137,17 +122303,18 @@ class Game(ShowBase):
             self.show_dev()
 
         def quick(j):
-            self.dev_cmd(("god", "ammo", "aggro", "clear")[j], {})
+            self.dev_cmd(("god", "ammo", "fly", "aggro", "clear")[j], {})
             self.show_dev()
 
         god, ammo = getattr(pl, "dev_god", False), getattr(pl, "dev_ammo", False)
+        fly = getattr(pl, "dev_fly", False)
         self.open_overlay("dev", "Dev-Menü   " + DEV_MAP_NAME, [
             RowSpec("Monster", [DEV_MOB_NAMES[k] for k in DEV_MOBS], st["k"], sel("k")),
             RowSpec("KI-Verhalten", [DEV_AI_NAMES[a] for a in DEV_AI], st["ai"], sel("ai")),
             RowSpec("Am Fadenkreuz spawnen", ["Monster", "Geländewagen", "Helikopter"], -1, spawn),
             RowSpec("Loadout-Set anlegen", [ent[0] for ent in DEV_LOADOUTS], -1, kit),
             RowSpec("Schnellbefehle", ["Godmode " + ("AN" if god else "aus"), "Munition ∞ " + ("AN" if ammo else "aus"),
-                                       "Aggro reset", "Alles entfernen"], -1, quick),
+                                       "Fliegen " + ("AN" if fly else "aus"), "Aggro reset", "Alles weg"], -1, quick),
             ("Schließen   (F1 / Esc)", self.close_quit_box)],
             where, width=1.55)
 
@@ -123137,6 +123304,13 @@ class Game(ShowBase):
         Nekromanten-Set = Nest-Wählrad (Taste halten, Maus wählt, loslassen setzt). Der Host entscheidet."""
         pl = self.player
         if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if pl.heli >= 0:                                       # v51: im Cockpit wirft B Flares (gegen Stinger)
+            if self.net_mode == "client":
+                if self.client is not None and not self.client.lost:
+                    self.client.send_flare()
+            else:
+                self.world.heli_flare(pl)
             return
         if set_full(pl, "necro"):
             self.open_nest_wheel()
@@ -125462,6 +125636,8 @@ class Game(ShowBase):
             self.pre_seat = None
         self.was_seated = seated
         pl.duck = bool(getattr(inp, "duck", False)) and not dead and veh is None and hc is None and tur is None
+        if getattr(pl, "dev_fly", False) and getattr(world, "dev", False):   # v51: Flugmodus - Strg sinkt statt ducken
+            pl.fly_up, pl.fly_down, pl.duck = bool(jump), pl.duck, False
         update_crouch(pl, dt, world)
         if hc is None:
             self.heli_ads = True               # erst nach neuem Drücken der rechten Maustaste feuert die Rakete
@@ -126372,7 +126548,32 @@ class Game(ShowBase):
                     self.toast(f"Buff: {buff_text(e[2], pl.max_hp)}  -  {int(e[3])} s",
                                self.BUFF_LOOK.get(e[2], ("", (1, 0.85, 0.3)))[1])
                     self.sfx.ui_click()
-            elif kind in ("gear", "gearbreak"):    # Ausrüstung angelegt / Helm bzw. Platte hat gerettet
+            elif kind == "hflare":             # v51: Heli wirft Flares - glühende Täuschkörper fallen seitlich weg
+                r_ = self.prng
+                h_ = math.radians(e[5])
+                bx, by = math.sin(h_), -math.cos(h_)                  # nach hinten
+                for k_ in range(10):
+                    side = 1 if k_ % 2 else -1
+                    v_ = (bx * 6.0 + math.cos(h_) * side * r_.uniform(5.0, 11.0), by * 6.0 + math.sin(h_) * side * r_.uniform(5.0, 11.0),
+                          r_.uniform(-2.0, 3.0))
+                    self.add_particle((e[2], e[3], e[4]), v_, (1.0, r_.uniform(0.75, 0.95), 0.45), 0.16, r_.uniform(2.0, 3.0),
+                                      bounce=0.1)
+                for k_ in range(3):
+                    self.fx_spawn(self.sphere_np, (e[2] + bx * 2.0 * k_, e[3] + by * 2.0 * k_, e[4] - 0.6 * k_), 1.1, 0.35, 1.0,
+                                  (1.0, 1.0, 0.85), (1.0, 0.55, 0.15), p=1.0, rise=-0.5, fog=False)
+                self.sfx.play("gas", (e[2], e[3], e[4]), 0.9, 1.6)
+                hc_ = self.my_heli()
+                if hc_ is not None and hc_.id == e[1]:
+                    self.toast(f"Flares! Noch {e[6]}", (1.0, 0.8, 0.4), 1.2)
+            elif kind == "hflareno":           # v51: keine Flares mehr / Abklingzeit
+                if e[1] == self.my_id:
+                    self.toast("Keine Flares - auf dem Helipad landen" if e[2] <= 0 else "Flares laden ...",
+                               (1.0, 0.7, 0.4), 1.4)
+            elif kind in ("gear", "gearbreak", "gearoff"):    # Ausrüstung angelegt / Helm bzw. Platte hat gerettet / abgelegt
+                if kind == "gearoff" and e[2] < 0:
+                    if e[1] == self.my_id:
+                        self.toast("Kein Einzelteil angelegt (U legt Exo-Jetpack / Hermes-Boots ab)", (0.9, 0.9, 0.95), 1.8)
+                    continue
                 gi = e[2] if 0 <= e[2] < len(GEAR) else None
                 if e[1] == self.my_id:
                     pl = self.player
@@ -126387,6 +126588,10 @@ class Game(ShowBase):
                         self.sfx.play("railgun", None, 0.8, 1.6)
                 if kind == "gear" and gi is not None and e[1] == self.my_id:
                     self.toast(f"Angelegt: {GEAR[gi].name}", tuple(c * 0.6 + 0.4 for c in GEAR[gi].col), 1.8)
+                if kind == "gearoff" and gi is not None and e[1] == self.my_id:
+                    sw = e[4] if len(e) > 4 and isinstance(e[4], int) and 0 <= e[4] < len(GEAR) else -1
+                    self.toast(f"Abgelegt: {GEAR[gi].name}" + (f"  (getauscht gegen {GEAR[sw].name})" if sw >= 0 else ""),
+                               (0.9, 0.85, 0.7), 1.8)
             elif kind == "mswing":             # fremder Nahkampf-Schlag: Ton + Animation
                 if e[1] != self.my_id:
                     op = self.world.players.get(e[1])
@@ -126502,6 +126707,9 @@ class Game(ShowBase):
             elif kind == "devstate":           # v50: Testgelände - Antwort auf einen Dev-Befehl (Schalter, Meldung)
                 if e[1] == self.my_id and self.player is not None:
                     self.player.dev_god, self.player.dev_ammo = bool(e[2]), bool(e[3])
+                    fly_ = len(e) > 5 and bool(e[5])
+                    if fly_ != getattr(self.player, "dev_fly", False):
+                        self.player.dev_fly, self.player.vz = fly_, 0.0      # v51: Flugmodus
                     if e[4]:
                         self.toast(str(e[4]), (0.55, 0.9, 1.0), 2.0)
                     if self.quit_box is not None and self.overlay_kind == "dev":
@@ -127332,7 +127540,7 @@ class Game(ShowBase):
             self.set_text(self.ammo_text, "")                      # im Auto: Tacho statt Waffe und Munition
             self.set_text(self.name_text, "")
         elif hc is not None:
-            self.set_text(self.ammo_text, f"MG {int(hc.mg)}   Raketen {hc.rk}")
+            self.set_text(self.ammo_text, f"MG {int(hc.mg)}   Raketen {hc.rk}   Flares {hc.flares} (B)")
             self.set_text(self.name_text, "Helikopter")
         elif tur is not None:                                      # Munition unbegrenzt: Hitze statt Munition
             self.set_text(self.ammo_text, "ÜBERHITZT" if tur.over else f"Hitze {int(clampf(tur.heat, 0.0, 1.0) * 100)} %")
@@ -127417,6 +127625,8 @@ class Game(ShowBase):
         txt = ""
         if hc is not None:
             txt = ""                                                # Flugdaten stehen im Höhenband rechts
+            if getattr(hc, "flare_t", 0.0) > 0:
+                txt += "Flares aktiv - Stinger-Erfassung gestört   "
             if hc.ground and world.on_pad(hc.x, hc.y) and (hc.rk < HELI_RK_MAX or hc.mg < HELI_MG_MAX - 1
                                                           or hc.hp < HELI_HP - 0.5):
                 txt += "Munition wird aufgeladen, Rumpf repariert ..." if hc.hp < HELI_HP - 0.5 else "Munition wird aufgeladen ..."

@@ -2,6 +2,27 @@
 
 Neueste Änderungen oben.
 
+## Einzelteile ablegen, Heli-Flares, Testgelände: Flugmodus und zwei Ausrüstungsgebäude (Robin, 2026-10-26)
+Gilt für alle Modi. **NET_VERSION 51**: neue Nachrichten `flare` und `goff`, Ereignisse `hflare`, `hflareno`, `gearoff`, Heli-Zeile im Snapshot mit Flares - alle müssen aktualisieren.
+
+Einzelteile (Ausrüstung ohne Set: Schweres Exo-Jetpack, Hermes-Boots):
+- **Taste U** legt getragene Einzelteile jederzeit ab (fallen vor die Füsse). Ohne Einzelteil: kurzer Hinweis.
+- **Automatischer Tausch**: Wer ein Teil für einen Slot aufhebt, den ein Einzelteil sperrt (z. B. Hermes-Boots oder ein Helm, während das Exo-Jetpack Kopf und Füsse sperrt), legt das sperrende Teil automatisch ab und trägt das neue. Vorher wurde das Aufheben blockiert. Umgekehrt (Exo-Jetpack über Boots/Helm) fallen die gesperrten Teile wie bisher ab.
+
+Helikopter-Flares (Stinger-Abwehr):
+- **Taste B im Cockpit** wirft Flares: der Heli ist 3 s lang für Stinger nicht erfassbar (`HELI_FLARE_JAM`), laufende Erfassungen brechen ab, anfliegende Stinger-Raketen auf diesen Heli jagen der Wärmequelle 7 m hinter dem Heli nach und fliegen vorbei. 1 s zwischen zwei Würfen.
+- Ladungen: so viele wie eine volle Stinger Munition hat (Magazin + Reserve = **5**, `HELI_FLARE_MAX` wird aus der Waffe berechnet - ändert sich die Stinger, ändern sich die Flares mit).
+- Auf dem Helipad sofort wieder voll. HUD: "Flares x (B)", Hinweis solange die Störung läuft. Glühende Täuschkörper und Zischen für alle sichtbar.
+
+Testgelände:
+- **Flugmodus (No-Clip)** im Dev-Menü (Schnellbefehle, "Fliegen"): durch alles hindurch, keine Schwerkraft, kein Fallschaden. Leertaste steigt, Strg sinkt; Tempo 2x Rennen (15 m/s), mit Shift 3x (22,5 m/s). Ausschalten in der Luft = normaler Fall.
+- **Zwei Ausrüstungsgebäude** statt des Arsenals:
+  - *Waffenkammer* (Südwesten): zwei quadratische Tische in der Mitte - Waffen rundum am Rand (4 je Seite), daneben Nahkampf; eigener langer Tisch an der Südwand für Aufsätze und Visiere, einer an der Westwand für Granaten und Gadgets (viel Platz für mehr).
+  - *Rüstkammer* (Südosten, wo vorher die Startpunkte lagen): an der Südwand je Set ein eigener Wandsims (Kopf, Torso, Füsse) mit 1 m Lücke, an der Ostwand kurze Simse für die Einzelteile.
+- Startpunkte liegen jetzt auf dem Weg vor den Gebäuden.
+
+Technik: `World.gear_off`, `drop_single_gear`, `heli_flare`, `Bullet.decoy`, `Heli.flares/flare_t/flare_cd`, `dev_layout`, `dev_fly_step`, `GEAR_OFF_KEY`.
+
 ## Testgelände: Dev-Sandbox mit F1-Menü (Robin, 2026-10-26)
 Neue eingebaute Karte für alle Modi-Tests. **NET_VERSION 50**: neue Nachricht `dev` (Mitspieler -> Host) und Ereignis `devstate` - alle müssen aktualisieren.
 

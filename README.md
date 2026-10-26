@@ -36,10 +36,10 @@ docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von m
 ## Testgelände (Dev-Sandbox)
 
 - Eingebaute Karte "Testgelände" (zweite Kachel im Setup): Graubox mit 1-m-Raster, immer Deathmatch ohne Monster.
-  Arsenal (alle Teile auf Tischen), Showroom (alle Monster als Standmodelle), Schlucht mit Brücken, Labyrinth,
+  Waffenkammer (Tische) und Rüstkammer (Wandsimse), Showroom (alle Monster als Standmodelle), Schlucht mit Brücken, Labyrinth,
   dreistöckiges Testhaus, Fahrzeugzone. Wird aus dem Code erzeugt (`dev_map_raw`), keine Kartendatei nötig.
 - F1 (nur dort): Dev-Menü - Monster mit KI-Verhalten, Geländewagen und Helikopter am Fadenkreuz spawnen, Loadout-Sets,
-  Godmode, unendlich Munition, Aggro zurücksetzen, alles entfernen.
+  Godmode, unendlich Munition, Flugmodus (No-Clip), Aggro zurücksetzen, alles entfernen.
 
 ## Starten
 
@@ -51,4 +51,5 @@ docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von m
 - Tasten (in allen Modi gleich): 1 / 2 Primär- und Sekundärwaffe, 3 Gadget bzw. Spezialwaffe, 4 Nahkampf, G Granate.
   Mausrad wechselt in dieser Reihenfolge. F schlägt ohne etwas Benutzbares mit der Nahkampfwaffe (Messer).
 - B: Ausrüstungs-Fähigkeit - Schockwelle (Schild-Set), Quadranten-Scan (Hacker-Weste) oder Nest-Wählrad (Nekromanten-Set,
-  halten). T: Waffen-Inspektion, dort Aufsätze aus dem Aufsatz-Lager wechseln.
+  halten). T: Waffen-Inspektion, dort Aufsätze aus dem Aufsatz-Lager wechseln. U: Einzelteile (Exo-Jetpack, Hermes-Boots)
+  ablegen. B im Helikopter: Flares gegen Stinger.
