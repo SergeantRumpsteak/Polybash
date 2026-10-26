@@ -2,6 +2,38 @@
 
 Neueste Änderungen oben.
 
+## Testgelände: Dev-Sandbox mit F1-Menü (Robin, 2026-10-26)
+Neue eingebaute Karte für alle Modi-Tests. **NET_VERSION 50**: neue Nachricht `dev` (Mitspieler -> Host) und Ereignis `devstate` - alle müssen aktualisieren.
+
+Karte "Testgelände" (Setup: zweite Kachel neben Polytown, 240 x 240 m):
+- Graubox-Look: heller Boden und alle Bauten mit 1-m-Raster (feine Linie je Meter, kräftige je 4 m), Akzentfarben je Bereich, wenig Nebel. Kein Gras, keine Bäume.
+- Immer Deathmatch (Experimental geht auch), keine natürlichen Monster, keine Bonuskisten/-hasen, kein Tomahawk, Rundenzeit 2 h (das Zeitlimit im Setup gilt hier nicht).
+- Die Karte entsteht auf jedem Rechner aus dem Code (`dev_map_raw`); übers Netz geht nur die Kennung. Keine Datei im Ordner `maps` nötig.
+
+Abschnitte:
+- **A Arsenal** (Raum im Südwesten): vier Tischreihen mit allen Waffen (ohne Dual Baretta - zwei Barettas nehmen), allen Nahkampfwaffen, allen Granatenarten inkl. Airdrop-Fackel und Jet-Strike, den drei Gadgets, allen aktuellen Ausrüstungsteilen, allen Aufsätzen und Visieren. Genommenes liegt nach 3 s wieder da (`DEV_ARS_RESPAWN`); Arsenal-Teile verfallen nicht und zählen nicht zur Drop-Obergrenze.
+- **B Showroom** (17 m hohe Halle): Zombie, Jägerin, Brute, Drohne, Hase, Koloss und Titan als Standmodelle auf Sockeln (unverwundbar, keine KI, nicht wegschleuderbar), dazu die eigene Spielfigur.
+- **C Testflächen** unter freiem Himmel:
+  - Schlucht: zwei 8-m-Plateaus, dazwischen 14 m Lücke bis zum Boden; Hauptbrücke (2 m), Planke (0,8 m), kaputte Brücke (4 m Lücke); Treppen von Süden (beide) und Norden (West). Rote Kanten.
+  - Labyrinth: 12 x 12 Zellen à 4 m, 3,2 m hohe Wände, mehrere Wege, Eingänge Süd/Nord/West.
+  - Testhaus: drei Geschosse (3,6 m) + begehbares Dach mit Brüstung, Türen, Fenster, Zwischenwände, Treppen abwechselnd Ost/West mit offenen Treppenlöchern.
+  - Fahrzeugzone: 6 Geländewagen, 4 Helipads mit Helikoptern, Container-Deckung, Slalom-Pfosten, Zielwände.
+
+Dev-Menü (**F1**, nur auf dem Testgelände; nochmal F1 oder Esc schließt):
+- Spawnpunkt ist der Punkt unter dem Fadenkreuz beim Öffnen (Boden, Dach, Plateau, Brücke - auch in der Höhe). Weitere Spawns werden ringsum frei verteilt.
+- Monster: Zombie, Jägerin, Brute, Koloss, Titan, Drohne. KI-Verhalten: **Aggressiv** (sucht sofort), **Passiv** (greift nie an, wandert, folgt Geräuschen), **Zielscheibe** (steht, fällt nie unter 1 HP, nach 3 s ohne Treffer wieder voll). Höchstens 60 gleichzeitig; keine Beute, kein Respawn.
+- Fahrzeuge: ein freier Geländewagen bzw. Helikopter aus dem Pool wird ans Fadenkreuz gestellt (reihum, voll repariert und munitioniert, Blick wie der Spieler).
+- Loadout-Sets: Sturm, Sniper, Schwer, Anti-Fz, Nahkampf (Waffen, Nahkampf, Rüstung, Granaten; Sniper mit Zielfernrohr).
+- Schnellbefehle: Godmode (kein Schaden, auch kein Fallschaden), Munition unendlich (Magazin, Reserve, Granatwerfer), Aggro zurücksetzen (alle Monster vergessen ihr Ziel), Alles entfernen (gespawnte Monster und Nester weg, Fahrzeuge zurück, lose Teile weg; Showroom und Arsenal bleiben).
+- Mitspieler schicken die Befehle an den Host; Rückmeldung als Hinweis in der Bildmitte.
+
+Erste Beobachtungen auf dem Testgelände (noch nicht geändert, zum Nachjustieren):
+- Schlucht: Zombie/Brute auf dem einen Plateau laufen auf ein Ziel auf dem anderen Plateau direkt zu und fallen an der Kante hinunter, statt die Brücke zu nehmen.
+- Labyrinth: Monster finden zum Spieler in der Mitte.
+- Testhaus: ein Monster vor dem Haus verfolgt einen Spieler im 3. Geschoss nicht (Höhenunterschied > 3,5 m blendet das Ziel aus).
+
+Technik: `DEV_*`-Konstanten, `dev_map_raw`, `dev_maze_walls`, `dev_arsenal_slots`, `dev_fill_ammo`; `World.dev`, `dev_setup`, `dev_refill`, `dev_update`, `dev_command`, `dev_kit`, `dev_aim`, `dev_free_spot`, `dev_add_mob`; `Mob.dev_ai` (show/aggr/passive/static); Textur `devgrid`; `Game.on_dev`, `show_dev`, `dev_cmd`; `ClientSession.send_dev`.
+
 ## Aufsatz-Inventar, Waffen-Fixes, Rüstungs-Rework, Hacker- und Nekromanten-Set (Robin, 2026-10-26)
 Gilt für alle Modi. **NET_VERSION 49**: neue Ausrüstungs-Indizes, neue Nachrichten (`hscan`, `nest`, Dash-Zähler `ds`), Nester im Snapshot (`ne`), Granaten-Werfer im Snapshot - alle müssen aktualisieren.
 

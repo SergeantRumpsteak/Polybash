@@ -33,6 +33,14 @@ docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von m
 - `main` ist der Stand für alle Freunde. Zusammengeführt wird per Pull Request.
 - Neue Regeln für einen Modus: über `world.exp` bzw. `world.mode` verzweigen, nicht Klassen duplizieren.
 
+## Testgelände (Dev-Sandbox)
+
+- Eingebaute Karte "Testgelände" (zweite Kachel im Setup): Graubox mit 1-m-Raster, immer Deathmatch ohne Monster.
+  Arsenal (alle Teile auf Tischen), Showroom (alle Monster als Standmodelle), Schlucht mit Brücken, Labyrinth,
+  dreistöckiges Testhaus, Fahrzeugzone. Wird aus dem Code erzeugt (`dev_map_raw`), keine Kartendatei nötig.
+- F1 (nur dort): Dev-Menü - Monster mit KI-Verhalten, Geländewagen und Helikopter am Fadenkreuz spawnen, Loadout-Sets,
+  Godmode, unendlich Munition, Aggro zurücksetzen, alles entfernen.
+
 ## Starten
 
 - Linux: `python3 Polybash/spiel.py` (benötigt `panda3d>=1.10.14,<1.11`)

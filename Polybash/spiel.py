@@ -37,6 +37,16 @@ Standardkarte "Polytown" (maps/polytown.ptmap): die in Blender gebaute Karte 1:1
 Bauernhof, Mühlen, Wälder; Export: tools/blender/polytown_neu/export_spiel.py). Alle Spieler brauchen die Datei im
 Ordner 'maps'; fehlt sie, meldet das Setup-Menü das. Die frühere, im Code erzeugte Polytown-Karte gibt es nicht mehr.
 Kartendateien (.json aus dem Karteneditor) sind 200 x 200 m.
+Eingebaute Karte "Testgelände" (v50, Entwickler-Sandbox, 240 x 240 m, Graubox mit 1-m-Raster): Arsenal mit allen
+Waffen, Nahkampfwaffen, Ausrüstungsteilen, Aufsätzen, Visieren, Granaten und Gadgets auf Tischen (nach 3 s wieder da),
+Showroom mit allen Monstern als Standmodelle (unverwundbar, ohne KI) und der Spielfigur, Testflächen unter freiem Himmel:
+Schlucht zwischen zwei 8-m-Plateaus mit Brücke, Planke und kaputter Brücke, Labyrinth (12 x 12 Zellen), dreistöckiges
+Testhaus mit Treppen und Dach, Fahrzeugzone mit 6 Geländewagen und 4 Helipads. Immer Deathmatch ohne Monster,
+Bonus und Tomahawk, 2 h Rundenzeit; die Karte entsteht auf jedem Rechner aus dem Code (dev_map_raw).
+  F1 (nur dort)  Dev-Menü: Monster (Zombie, Jägerin, Brute, Koloss, Titan, Drohne) mit KI-Verhalten (aggressiv, passiv,
+                 Zielscheibe = steht, fällt nie, heilt sich nach 3 s), Geländewagen oder Helikopter aus dem Pool am
+                 Fadenkreuz spawnen, fertige Loadout-Sets anlegen, Godmode, unendlich Munition, Aggro zurücksetzen,
+                 alles Gespawnte entfernen. Mitspieler schicken die Befehle an den Host (Nachricht 'dev').
 Fallschaden: bis 5,5 m Fallhöhe nichts, darüber 11 HP pro Meter (Sprung vom Turm ~50, ab ~14,5 m tödlich).
 Mitgelieferte Karte "TTT Minecraft b5": eine Minecraft-Welt Block für Block mit Originaltexturen
 (Datei maps/ttt_minecraft_b5.mcmap, im Setup-Menü Zeile 7 wählbar; Deathmatch ohne Monster;
@@ -356,7 +366,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 49         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 50         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 200               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -2128,6 +2138,8 @@ def sanitize_map(raw):
     Fehlt eine Liste, nimmt das Spiel für diese Sache die Standard-Karte; eine vorhandene (auch leere) Liste gilt wörtlich."""
     if not isinstance(raw, dict) or raw.get("format") != MAP_FORMAT:
         raise ValueError("Das ist keine Polybash-Karte")
+    if raw.get("dev") and "blocks" not in raw:           # v50: Testgelände - übers Netz kommt nur die Kennung
+        raw = dev_map_raw()
     m = {"name": str(raw.get("name") or "Karte")[:40], "author": str(raw.get("author") or "")[:30]}
     WS = _mnum(raw.get("size"), MAP_SIZE_MIN, MAP_SIZE_MAX, MAP_WORLD)
     m["size"] = WS
@@ -2258,7 +2270,279 @@ def sanitize_map(raw):
                     out.append((p[0], p[1], _mnum(it[2], -720, 720, 0.0) if len(it) > 2 else 0.0))
             v = out
         m[key] = v
+    m["dev"] = bool(raw.get("dev"))                     # v50: eingebautes Testgelände (Dev-Sandbox)
     return m
+
+
+# ------------------------------------------------------------ v50: Testgelände (eingebaute Entwickler-Sandbox)
+# Graubox-Karte zum Ausprobieren: Arsenal (alle Waffen, Ausrüstung, Aufsätze, Granaten auf Tischen), Showroom (alle
+# Monster als Standmodelle), Testgelände unter freiem Himmel (Schlucht mit Brücken, Labyrinth, dreistöckiges Testhaus,
+# Fahrzeugzone mit Wagen und Helipads). Die Karte wird auf jedem Rechner aus diesem Code erzeugt (dev_map_raw); übers
+# Netz geht nur die Kennung DEV_MAP_STUB. Monster, Fahrzeuge und Ausrüstung kommen per Dev-Menü (F1) ans Fadenkreuz.
+DEV_MAP_NAME = "Testgelände"
+DEV_MAP_PATH = "builtin:testgelaende"     # steht statt eines Dateipfads in cfg["map"] (Setup-Menü)
+DEV_MAP_STUB = {"format": MAP_FORMAT, "name": DEV_MAP_NAME, "dev": 1}   # so geht die Karte übers Netz
+DEV_SIZE = 240.0                          # m Kantenlänge
+DEV_LIMIT = 2 * 3600.0                    # s Rundenzeit (Sandbox; höchster Wert, den Mitspieler annehmen)
+DEV_KEY = "f1"                            # öffnet das Dev-Menü (nur auf dem Testgelände)
+DEV_W = (0.86, 0.87, 0.88)                # Graubox hell (Wände, Plateaus)
+DEV_G = (0.64, 0.65, 0.67)                # Graubox dunkel (Tische, Sockel, Stufen, Labyrinth)
+DEV_O = (0.93, 0.60, 0.26)                # Akzent Arsenal
+DEV_B = (0.45, 0.64, 0.90)                # Akzent Showroom
+DEV_R = (0.88, 0.36, 0.30)                # Akzent Kanten: Schluchtrand, Brücken
+DEV_Y = (0.92, 0.82, 0.30)                # Akzent Fahrzeugzone
+DEV_COLS = (DEV_W, DEV_G, DEV_O, DEV_B, DEV_R, DEV_Y)
+DEV_FLOOR = (0.80, 0.81, 0.83)            # Boden (mit 1-m-Raster)
+DEV_ARSENAL = (12.0, 10.0, 72.0, 46.0)    # Abschnitt A: Arsenal (Aussenkanten der Wände)
+DEV_ARS_ROWS = (16.0, 23.0, 30.0, 37.0)   # y der vier Tischreihen
+DEV_ARS_X0, DEV_ARS_DX, DEV_ARS_Z = 17.0, 2.4, 0.95   # erster Platz, Abstand, Tischhöhe
+DEV_ARS_RESPAWN = 3.0                     # s, bis ein genommenes Teil wieder auf dem Tisch liegt
+DEV_SHOWROOM = (84.0, 10.0, 164.0, 50.0)  # Abschnitt B: Showroom (hohe Halle - der Titan passt hinein)
+DEV_SHOW = (("grunt", 94.0, 22.0), ("huntress", 101.0, 22.0), ("brute", 108.5, 22.0), ("drone", 116.0, 22.0),
+            ("critter", 122.0, 22.0), ("colossus", 116.0, 38.0), ("titan", 145.0, 30.0))   # Standmodelle (Art, x, y)
+DEV_SOLDIER = (96.0, 38.0)                # Standmodell der Spielfigur
+DEV_PLAT_Z = 8.0                          # Höhe der Plateaus an der Schlucht
+DEV_GORGE = ((12.0, 80.0, 46.0, 140.0), (60.0, 80.0, 94.0, 140.0))   # Plateau West, Plateau Ost
+DEV_MAZE = (106.0, 80.0, 4.0, 12)         # Labyrinth: Ecke x, y, Zellgrösse, Zellen je Seite
+DEV_HOUSE = (186.0, 92.0, 210.0, 110.0)   # Testhaus (Aussenkanten), 3 Stockwerke + Dach
+DEV_STORY = 3.6                           # Geschosshöhe
+DEV_VEHICLES = tuple((28.0 + 13.0 * k, 172.0, 0.0) for k in range(6))      # Fahrzeug-Pool (Parkplatz)
+DEV_PADS = ((140.0, 206.0, 0.0), (165.0, 206.0, 0.0), (190.0, 206.0, 0.0), (215.0, 206.0, 0.0))  # Helikopter-Pool
+DEV_SPAWNS = tuple((182.0 + 11.0 * i, 18.0 + 13.0 * j) for j in range(3) for i in range(4))
+DEV_MOBS = ("grunt", "huntress", "brute", "colossus", "titan", "drone")   # Dev-Menü: wählbare Monster
+DEV_MOB_NAMES = {"grunt": "Zombie", "huntress": "Jägerin", "brute": "Brute", "colossus": "Koloss", "titan": "Titan",
+                 "drone": "Drohne"}
+DEV_AI = ("aggr", "passive", "static")    # aggressiv | passiv (greift nie an) | Zielscheibe (steht, heilt sich)
+DEV_AI_NAMES = {"aggr": "Aggressiv", "passive": "Passiv", "static": "Zielscheibe"}
+DEV_STATIC_HEAL_T = 3.0                   # s ohne Treffer, dann ist eine Zielscheibe wieder voll
+DEV_MAX_MOBS = 60                         # höchstens so viele gespawnte Monster gleichzeitig
+DEV_AIM_RANGE = 160.0                     # m: so weit reicht das Fadenkreuz für den Spawnpunkt
+DEV_LOADOUTS = (                          # Dev-Menü: fertige Ausrüstungs-Sets (Namen aus WEAPONS/MELEE/GEAR)
+    ("Sturm", ("Colt M4 Carbine", "Colt ACP"), "Messer", ("Armeehelm", "Splitterweste", "Kampfstiefel"),
+     (("frag", 3), ("smoke", 2), ("flash", 2))),
+    ("Sniper", ("DSR", "Revolver"), "Messer", ("Basic-Helm", "Splitterweste", "Kampfstiefel"),
+     (("decoy", 3), ("smoke", 2)), (("DSR", 3, 3),)),
+    ("Schwer", ("Minigun", "Raketenwerfer"), "Kriegsaxt", ("Armeehelm", "Plattenrüstung", "Kampfstiefel"),
+     (("frag", 4), ("molotov", 2))),
+    ("Anti-Fz", ("Stinger", "Railgun"), "Messer", ("Schild-Helm", "Schild", "Schild-Stiefel"),
+     (("flare", 3), ("jet", 2), ("drone", 2))),
+    ("Nahkampf", ("Abgesägte Schrotflinte", "Baretta"), "Katana", ("Krallenhelm", "Sprungweste", "Hermes-Boots"),
+     (("flash", 3), ("guard", 1))),
+)
+
+
+def dev_maze_walls():
+    """Labyrinth des Testgeländes: Wandstücke (x0, y0, x1, y1) aus einem festen Zufallslabyrinth (Tiefensuche) mit
+    ein paar zusätzlichen Durchbrüchen (mehrere Wege) und je einem Eingang im Süden, Norden und Westen."""
+    x0, y0, c, n = DEV_MAZE
+    rng = random.Random(5150)
+    hwall = [[True] * n for _ in range(n + 1)]    # hwall[j][i]: Wand zwischen Zeile j-1 und j bei Spalte i
+    vwall = [[True] * (n + 1) for _ in range(n)]  # vwall[j][i]: Wand zwischen Spalte i-1 und i in Zeile j
+    seen, stack = {(0, 0)}, [(0, 0)]
+    while stack:
+        i, j = stack[-1]
+        nb = [(i + di, j + dj) for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1))
+              if 0 <= i + di < n and 0 <= j + dj < n and (i + di, j + dj) not in seen]
+        if not nb:
+            stack.pop()
+            continue
+        a, b = rng.choice(nb)
+        if a != i:
+            vwall[j][max(a, i)] = False
+        else:
+            hwall[max(b, j)][i] = False
+        seen.add((a, b))
+        stack.append((a, b))
+    for _ in range(10):                           # Schleifen: mehrere Wege, Ecken zum Umrunden
+        if rng.random() < 0.5:
+            hwall[rng.randrange(1, n)][rng.randrange(n)] = False
+        else:
+            vwall[rng.randrange(n)][rng.randrange(1, n)] = False
+    for i in (n // 2 - 1, n // 2):                # Eingänge: Süden und Norden (je 2 Zellen breit), Westen
+        hwall[0][i] = hwall[n][i] = False
+    vwall[n // 2][0] = False
+    t = 0.2
+    out = []
+    for j in range(n + 1):                        # waagerechte Wände, zu Läufen verschmolzen
+        i = 0
+        while i < n:
+            if not hwall[j][i]:
+                i += 1
+                continue
+            k = i
+            while k < n and hwall[j][k]:
+                k += 1
+            out.append((x0 + i * c - t, y0 + j * c - t, x0 + k * c + t, y0 + j * c + t))
+            i = k
+    for i in range(n + 1):                        # senkrechte Wände
+        j = 0
+        while j < n:
+            if not vwall[j][i]:
+                j += 1
+                continue
+            k = j
+            while k < n and vwall[k][i]:
+                k += 1
+            out.append((x0 + i * c - t, y0 + j * c - t, x0 + i * c + t, y0 + k * c + t))
+            j = k
+    return out
+
+
+def dev_map_raw():
+    """v50: das Testgelände als Kartendatei (Format polybash-map, flaches Gelände, nur Quader mit absoluten Höhen)."""
+    import base64
+    blocks = []
+
+    def blk(x0, y0, x1, y1, zb, za, col=DEV_W, mm=None):
+        if x1 - x0 < 0.3 or y1 - y0 < 0.3 or za - zb < 0.2:
+            return
+        blocks.append({"x0": round(x0, 3), "y0": round(y0, 3), "x1": round(x1, 3), "y1": round(y1, 3),
+                       "zb": round(zb, 3), "za": round(za, 3), "c": list(col),
+                       "mm": bool(za - max(zb, 0.0) >= 2.0) if mm is None else bool(mm)})
+
+    def wall(xa, ya, xb, yb, zb, za, ops=(), col=DEV_W, t=0.32):
+        """Gerade Wand von (xa, ya) nach (xb, yb) (achsenparallel), Dicke t, mit Öffnungen ops = (Mitte, halbe
+        Breite, z unten, z oben) entlang der Wand (Türen, Fenster)."""
+        horiz = abs(yb - ya) < 1e-6
+        a0, a1 = (min(xa, xb), max(xa, xb)) if horiz else (min(ya, yb), max(ya, yb))
+        c_ = ya if horiz else xa
+
+        def put(p0, p1, z0, z1):
+            if horiz:
+                blk(p0, c_ - t / 2, p1, c_ + t / 2, z0, z1, col)
+            else:
+                blk(c_ - t / 2, p0, c_ + t / 2, p1, z0, z1, col)
+        cur = a0
+        for m_, hw, zlo, zhi in sorted(ops):
+            p0, p1 = m_ - hw, m_ + hw
+            if p0 > cur:
+                put(cur, p0, zb, za)
+            if zlo > zb + 0.05:
+                put(p0, p1, zb, zlo)
+            if zhi < za - 0.05:
+                put(p0, p1, zhi, za)
+            cur = p1
+        if cur < a1:
+            put(cur, a1, zb, za)
+
+    def room(x0, y0, x1, y1, h, ops, col, roof=0.3):
+        """Raum mit vier Wänden (ops je Seite N/S/E/W) und flachem Dach."""
+        wall(x0, y1, x1, y1, -1.0, h, ops.get("N", ()), col)
+        wall(x0, y0, x1, y0, -1.0, h, ops.get("S", ()), col)
+        wall(x1, y0, x1, y1, -1.0, h, ops.get("E", ()), col)
+        wall(x0, y0, x0, y1, -1.0, h, ops.get("W", ()), col)
+        blk(x0 - 0.16, y0 - 0.16, x1 + 0.16, y1 + 0.16, h, h + roof, col, mm=True)
+
+    def slab(x0, y0, x1, y1, z, holes=(), col=DEV_W, th=0.3):
+        """Geschossdecke mit Aussparungen (Treppenlöcher): Rechteck minus Löcher als Streifen."""
+        xs = sorted({x0, x1} | {v for h_ in holes for v in (h_[0], h_[2]) if x0 < v < x1})
+        for xa, xb in zip(xs, xs[1:]):
+            ys = sorted({y0, y1} | {v for h_ in holes if h_[0] < xb and h_[2] > xa for v in (h_[1], h_[3]) if y0 < v < y1})
+            for ya, yb in zip(ys, ys[1:]):
+                mx_, my_ = (xa + xb) / 2, (ya + yb) / 2
+                if any(h_[0] <= mx_ <= h_[2] and h_[1] <= my_ <= h_[3] for h_ in holes):
+                    continue
+                blk(xa, ya, xb, yb, z - th, z, col, mm=False)
+
+    def stairs(x0, x1, y0, base, n, sh, sd, col=DEV_G, north=True):
+        """Treppe zwischen x0..x1, beginnt bei y0 und steigt nach Norden (north) bzw. Süden; n Stufen sh x sd."""
+        for i in range(n):
+            top = base + (i + 1) * sh
+            ya, yb = (y0 + i * sd, y0 + (i + 1) * sd) if north else (y0 - (i + 1) * sd, y0 - i * sd)
+            blk(x0, ya, x1, yb, base - (2.0 if base <= 0 else 0.25), top, col, mm=False)
+
+    # --- Abschnitt A: Arsenal (Tischreihen, die Teile legt die Welt darauf: dev_arsenal_slots)
+    ax0, ay0, ax1, ay1 = DEV_ARSENAL
+    room(ax0, ay0, ax1, ay1, 4.6, {"N": ((42.0, 2.2, 0.0, 3.2), (24.0, 2.0, 1.2, 2.6), (60.0, 2.0, 1.2, 2.6)),
+                                   "E": ((28.0, 1.6, 0.0, 2.8),)}, DEV_W)
+    for yr in DEV_ARS_ROWS:
+        blk(DEV_ARS_X0 - 1.6, yr - 0.6, DEV_ARS_X0 + 19 * DEV_ARS_DX + 1.6, yr + 0.6, -1.0, DEV_ARS_Z, DEV_O, mm=False)
+    blk(ax0 + 1.0, ay1 - 2.2, ax0 + 6.0, ay1 - 1.0, -1.0, 1.4, DEV_G, mm=False)              # Werkbank in der Ecke
+    # --- Abschnitt B: Showroom (Sockel mit Rand je Monster)
+    sx0, sy0, sx1, sy1 = DEV_SHOWROOM
+    room(sx0, sy0, sx1, sy1, 17.0, {"N": ((124.0, 3.5, 0.0, 5.0), (100.0, 3.0, 3.0, 8.0), (148.0, 3.0, 3.0, 8.0)),
+                                    "W": ((30.0, 1.6, 0.0, 2.8),)}, DEV_B)
+    for kind, x, y in DEV_SHOW:
+        r = max(1.2, MOB_KINDS[kind].get("hit_r", 0.45 * MOB_KINDS[kind]["scale"]) + 1.0)
+        blk(x - r, y - r, x + r, y + r, -1.0, 0.3, DEV_G, mm=False)
+        blk(x - r - 0.25, y - r - 0.25, x + r + 0.25, y - r, -1.0, 0.9, DEV_B, mm=False)        # Absperrung vorne/hinten
+        blk(x - r - 0.25, y + r, x + r + 0.25, y + r + 0.25, -1.0, 0.9, DEV_B, mm=False)
+    blk(DEV_SOLDIER[0] - 1.2, DEV_SOLDIER[1] - 1.2, DEV_SOLDIER[0] + 1.2, DEV_SOLDIER[1] + 1.2, -1.0, 0.3, DEV_G, mm=False)
+    # --- Abschnitt C1: Schlucht mit Brücken (zwei Plateaus, dazwischen 14 m tief bis zum Boden)
+    (wx0, wy0, wx1, wy1), (ex0, ey0, ex1, ey1) = DEV_GORGE
+    Z = DEV_PLAT_Z
+    blk(wx0, wy0, wx1 - 0.6, wy1, -1.0, Z, DEV_W)
+    blk(wx1 - 0.6, wy0, wx1, wy1, -1.0, Z, DEV_R)                                         # roter Rand an der Kante
+    blk(ex0 + 0.6, ey0, ex1, ey1, -1.0, Z, DEV_W)
+    blk(ex0, ey0, ex0 + 0.6, ey1, -1.0, Z, DEV_R)
+    blk(wx1, 103.0, ex0, 105.0, Z - 0.4, Z, DEV_R, mm=True)                                # Hauptbrücke, 2 m breit
+    blk(wx1, 90.0, ex0, 90.8, Z - 0.3, Z, DEV_R, mm=True)                                  # Planke, 0,8 m (schmal)
+    blk(wx1, 124.0, wx1 + 4.5, 126.0, Z - 0.4, Z, DEV_R, mm=True)                          # kaputte Brücke: 4 m Lücke
+    blk(ex0 - 4.5, 124.0, ex0, 126.0, Z - 0.4, Z, DEV_R, mm=True)
+    n_ = int(round(Z / 0.5))
+    stairs(20.0, 23.0, wy0 - n_ * 0.8, 0.0, n_, 0.5, 0.8)                                 # Treppe West (von Süden)
+    stairs(81.0, 84.0, ey0 - n_ * 0.8, 0.0, n_, 0.5, 0.8)                                 # Treppe Ost (von Süden)
+    stairs(30.0, 33.0, wy1 + n_ * 0.8, 0.0, n_, 0.5, 0.8, north=False)                    # Treppe West (von Norden)
+    # --- Abschnitt C2: Labyrinth
+    for x0, y0, x1, y1 in dev_maze_walls():
+        blk(x0, y0, x1, y1, -1.0, 3.2, DEV_G)
+    # --- Abschnitt C3: Testhaus, drei Geschosse + begehbares Dach, Treppen abwechselnd Ost/West
+    hx0, hy0, hx1, hy1 = DEV_HOUSE
+    S = DEV_STORY
+    east, west = (206.4, 209.7), (186.3, 189.6)
+    holes = {1: [(east[0], 94.0, east[1], 100.0)], 2: [(west[0], 94.0, west[1], 100.0)], 3: [(east[0], 94.0, east[1], 100.0)]}
+    for k in range(3):
+        zb, za = k * S, (k + 1) * S
+        dz = 0.0 if k else -1.0
+        door = (0.0 + zb, 2.4 + zb)
+        win = (1.0 + zb, 2.3 + zb)
+        wall(hx0, hy0, hx1, hy0, zb + dz, za, ((198.0, 1.3, *door), (191.0, 1.0, *win), (204.0, 1.0, *win)) if k == 0
+             else ((191.0, 1.0, *win), (198.0, 1.6, *win), (204.0, 1.0, *win)))
+        wall(hx0, hy1, hx1, hy1, zb + dz, za, ((198.0, 1.3, *door),) if k == 0 else ((194.0, 1.2, *win), (202.0, 1.2, *win)))
+        wall(hx0, hy0, hx0, hy1, zb + dz, za, ((104.0, 1.0, *win),))
+        wall(hx1, hy0, hx1, hy1, zb + dz, za, ((104.0, 1.0, *win),) if k else ((106.0, 1.1, *door),))
+        wall(hx0 + 4.0, 101.0, hx1 - 4.0, 101.0, zb, za, ((196.0, 0.9, zb, zb + 2.3), (201.5, 0.9, zb, zb + 2.3)),
+             DEV_G, 0.2)                                                                  # Zwischenwand mit zwei Türen
+        sx = east if k % 2 == 0 else west
+        stairs(sx[0] + 0.1, sx[1] - 0.3, 94.0, zb, 12, S / 12, 0.5)
+        slab(hx0, hy0, hx1, hy1, za, holes[k + 1])
+    wall(hx0, hy0, hx1, hy0, 3 * S, 3 * S + 1.0, ())                                     # Brüstung auf dem Dach
+    wall(hx0, hy1, hx1, hy1, 3 * S, 3 * S + 1.0, ())
+    wall(hx0, hy0, hx0, hy1, 3 * S, 3 * S + 1.0, ())
+    wall(hx1, hy0, hx1, hy1, 3 * S, 3 * S + 1.0, ())
+    # --- Abschnitt C4: Fahrzeug- und Waffenzone: Deckung, Zielwände, Slalom
+    for k in range(5):
+        x = 30.0 + 22.0 * k
+        blk(x, 190.0, x + 6.0, 192.4, -1.0, 2.6, DEV_Y if k % 2 else DEV_G)                # Container-Deckung
+    for k in range(8):
+        x = 20.0 + 26.0 * k
+        blk(x, 226.0, x + 8.0, 227.0, -1.0, 5.0, DEV_W)                                    # Zielwände im Norden
+    for k in range(6):
+        blk(118.0 + 12.0 * k, 180.0 + (6.0 if k % 2 else 0.0), 119.2 + 12.0 * k, 181.2 + (6.0 if k % 2 else 0.0),
+            -1.0, 1.2, DEV_Y, mm=False)                                                    # Slalom-Pfosten
+    z0 = base64.b64encode(zlib.compress(bytes(2 * 9))).decode("ascii")                    # 3x3 Gitterpunkte, alle 0 m
+    return {"format": MAP_FORMAT, "name": DEV_MAP_NAME, "author": "Polybash", "dev": 1, "size": DEV_SIZE,
+            "keep": {"castle": False, "runway": False, "tunnels": False},
+            "terrain": {"n": 3, "step": DEV_SIZE / 2, "z": z0},
+            "ponds": [], "rocks": [], "trees": [], "houses": [], "towers": [], "ruins": [], "crates": [], "turrets": [],
+            "blocks": blocks, "spawns": [list(p) for p in DEV_SPAWNS],
+            "vehicles": [list(v) for v in DEV_VEHICLES], "pads": [list(p) for p in DEV_PADS]}
+
+
+def dev_arsenal_slots():
+    """v50: Plätze im Arsenal -> [(x, y, z, Art, Wert)]. Art: 'w' Waffe, 'm' Nahkampf, 'g' Granate (Art, Anzahl),
+    'd' Gadget (Art, Anzahl), 'e' Ausrüstung, 'a' Aufsatz (Platz * ATT_CODE + Index)."""
+    rows = [[("w", wi) for wi in range(len(WEAPONS)) if WEAPONS[wi].name != "Dual Baretta"],
+            [("m", mi) for mi in range(len(MELEE))] + [("g", (k, GREN_LOOT_N.get(k, 1) + 1)) for k in GREN_KINDS]
+            + [("d", (k, 2)) for k in range(len(GADGETS))],
+            [("e", gi) for gi in range(len(GEAR)) if not getattr(GEAR[gi], "legacy", False)],
+            [("a", si * ATT_CODE + v) for si in range(len(ATTACHMENTS)) for v in range(1, len(ATTACHMENTS[si]))]
+            + [("a", ATT_SCOPE * ATT_CODE + v) for v in range(1, len(ATT_SCOPE_NAMES))]]
+    out = []
+    for yr, row in zip(DEV_ARS_ROWS, rows):
+        for k, (kind, val) in enumerate(row[:20]):
+            out.append((DEV_ARS_X0 + k * DEV_ARS_DX, yr, DEV_ARS_Z, kind, val))
+    return out
 
 
 SOUND_EXT = (".wav", ".ogg", ".mp3", ".flac")
@@ -3225,6 +3509,14 @@ class Mob:
         if self.kind == "gdrone" and self.state != "dead":
             self.guard_update(dt, world)                   # 10h: Abwehrdrohne hat ihr eigenes Verhalten
             return
+        dai = getattr(self, "dev_ai", None)                # v50: Testgelände - Standmodell / Zielscheibe / passiv
+        if dai in ("show", "static") and self.state != "dead":
+            self.speed_now = self.kx = self.ky = 0.0
+            self.hurt_t = max(0.0, self.hurt_t - dt)
+            self.state, self.noise_at, self.noise_src = "idle", None, None
+            return
+        if dai == "passive":
+            players = ()                                   # sieht niemanden: wandert, geht Geräuschen nach, greift nie an
         k = MOB_KINDS[self.kind]
         decay = math.exp(-7.0 * dt)
         if self.state == "dead":
@@ -4629,6 +4921,11 @@ class World:
         self.steep = bool(mapdata and mapdata.get("steep"))   # steile Hänge sperren den Weg
         if self.mc:
             spawn_mobs, mode = False, "dm"   # Minecraft-Karte: Deathmatch ohne Monster
+        self.dev = bool(mapdata.get("dev"))  # v50: Testgelände - Deathmatch ohne Monster, Bonus und Tomahawk (Dev-Menü F1)
+        if self.dev:
+            spawn_mobs, mode, tomahawk = False, "dm", False
+            self.bonus_crates = self.bonus_hares = False
+            limit = max(float(limit), DEV_LIMIT)
         self.hgrid = mapdata["terrain"] if mapdata else None
         self.cm = None                       # Dreiecksnetz-Kollision (Karten mit "mesh")
         if mapdata and mapdata.get("mesh"):
@@ -6228,7 +6525,7 @@ class World:
 
     def damage_player(self, pl, dmg, attacker=-1, wi=-1, head=False):
         """attacker = Spieler-ID des Schützen, -1 = Monster. head: Kopftreffer (für den Helm)."""
-        if pl.hp <= 0 or pl.protect > 0 or self.phase != "play":
+        if pl.hp <= 0 or pl.protect > 0 or self.phase != "play" or getattr(pl, "dev_god", False):   # v50: Godmode
             return
         if pl.mount >= 0 and attacker == pl.pid:         # am Geschütz kann man sich nie selbst verletzen
             return
@@ -6384,6 +6681,9 @@ class World:
     def hurt_mob(self, m, dmg, pos, d, head, owner=0, wi=-1, loot=True):
         if getattr(m, "dig_t", 0.0) > 0:                  # 13f: steckt noch im Boden
             return
+        dai = getattr(m, "dev_ai", None)
+        if dai == "show":                                # v50: Standmodell im Showroom - unverwundbar
+            return
         dmg *= self.dmg_mult(owner)
         if isinstance(owner, int) and owner >= 0:       # v49: wer ein Monster angreift, ist für dieses enttarnt
             m.provoked = getattr(m, "provoked", set())
@@ -6397,6 +6697,8 @@ class World:
         imp = dmg * 0.03 / m.scale                       # Knockback in Schussrichtung
         m.kx = clampf(m.kx + d[0] * imp, -6, 6)
         m.ky = clampf(m.ky + d[1] * imp, -6, 6)
+        if dai == "static":                              # v50: Zielscheibe - fällt nie, rührt sich nicht, heilt sich
+            m.hp, m.dev_hit_t, m.kx, m.ky = max(1.0, m.hp), 0.0, 0.0, 0.0
         self.events.append(("mob_hit", pos, d, dmg, head, owner, pct))
         if m.hp <= 0 and m.state != "dead" and m.kind in TEMP_MOBS:   # 10e: eigene Drohne abgeschossen (kein Monster)
             m.state, m.dead_t = "dead", 0.0
@@ -6420,7 +6722,7 @@ class World:
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(killer)
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if not loot or getattr(m, "nest", -1) >= 0:  # 13d: lila Drohne / v49: Nest-Monster - keine Beute
+            if not loot or getattr(m, "nest", -1) >= 0 or getattr(m, "dev_ai", None):   # 13d / v49 / v50: Dev-Monster
                 pass
             else:
                 if m.kind in MOB_LOOT or extra:          # 10b: Beute von Monstern (Titan: 6 Teile)
@@ -6609,8 +6911,9 @@ class World:
     # ------------------------------------------------------------ Waffen am Boden
     def add_drop(self, x, y, z, wi, gear=-1, melee=-1, att=-1, atts=None, owner=-1, lock=0.0, scope=-1, gren=0,
                  gk="frag"):
-        while len(self.drops) >= MAX_DROPS:
-            self.drops.pop(0)
+        cap = MAX_DROPS + len(getattr(self, "dev_slots", None) or ())   # v50: Arsenal-Teile zählen nicht mit
+        while len(self.drops) >= cap:
+            self.drops.pop(next((i for i, d in enumerate(self.drops) if not getattr(d, "dev", False)), 0))
         if wi >= 0:                                      # v49: in ALLEN Modi (auch Experimental) liegen Waffen blank in
             atts, scope = None, -1                       # der Welt - Aufsätze/Visiere gibt es nur separat (Beute, Menü)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
@@ -7647,6 +7950,8 @@ class World:
 
     def knock_mob(self, m, cx, cy, r_out):
         """v49: Monster von (cx, cy) weg bis auf r_out schieben - in kleinen Schritten, an Wänden ist Schluss."""
+        if getattr(m, "dev_ai", None) in ("show", "static"):    # v50: Standmodell / Zielscheibe bleibt stehen
+            return
         d = math.hypot(m.x - cx, m.y - cy)
         ux, uy = ((m.x - cx) / d, (m.y - cy) / d) if d > 0.05 else (1.0, 0.0)
         left = r_out - d
@@ -8533,6 +8838,253 @@ class World:
         """Anzeigename des Spielmodus (Experimental läuft als Deathmatch mit Pistolenstart)."""
         return MODE_NAMES["experimental" if self.exp else self.mode]
 
+    # ------------------------------------------------------------ v50: Testgelände (Dev-Sandbox, nur Host/Einzelspiel)
+    def dev_setup(self):
+        """v50: Arsenal bestücken und die Standmodelle im Showroom aufstellen (Rundenstart; mehrfach aufrufbar)."""
+        if not getattr(self, "dev_slots", None):
+            self.dev_slots = [[slot, None, 0.0] for slot in dev_arsenal_slots()]   # [Platz, Drop, Wartezeit]
+        self.dev_refill(0.0, force=True)
+        have = {m.kind for m in self.mobs if getattr(m, "dev_ai", None) == "show"}
+        for kind, x, y in DEV_SHOW:
+            if kind not in have:
+                self.dev_add_mob(kind, x, y, self.floor_at(x, y, 1.0), "show", 0.0)
+        self.dev_ready = True
+
+    def dev_refill(self, dt, force=False):
+        """v50: Arsenal: ein genommenes Teil liegt nach DEV_ARS_RESPAWN s wieder auf seinem Platz."""
+        live = {id(d) for d in self.drops}
+        for s in self.dev_slots:
+            if s[1] is not None and id(s[1]) in live:
+                continue
+            if s[1] is not None:                         # gerade genommen: Wartezeit starten
+                s[1], s[2] = None, DEV_ARS_RESPAWN
+            s[2] -= dt
+            if s[2] > 0 and not force:
+                continue
+            x, y, z, kind, val = s[0]
+            if kind == "w":
+                d = self.add_drop(x, y, z, val)
+            elif kind == "m":
+                d = self.add_drop(x, y, z, -1, -1, val)
+            elif kind == "e":
+                d = self.add_drop(x, y, z, -1, val)
+            elif kind == "a":
+                d = self.add_drop(x, y, z, -1, att=val)
+            elif kind == "g":
+                d = self.add_drop(x, y, z, -1, gren=val[1], gk=val[0])
+            else:
+                d = self.add_drop(x, y, z, -1, gren=val[1], gk="gad:%d" % val[0])
+            d.life, d.dev = 1e9, True
+            s[1], s[2] = d, 0.0
+
+    def dev_add_mob(self, kind, x, y, z, ai, heading=None):
+        """v50: Monster mit Dev-Verhalten (dev_ai: show | aggr | passive | static) an genau dieser Stelle."""
+        m = Mob(kind, x, y, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.dev_ai = ai
+        m.gz = z
+        m.z = z + m.hover
+        if heading is not None:
+            m.heading = heading
+        if ai == "aggr":
+            m.alert_t = 3.0                              # sieht sich gleich um (greift an, sobald jemand in Sicht ist)
+        self.mobs.append(m)
+        return m
+
+    def dev_free_spot(self, p, r, mobs=True):
+        """v50: freier Platz für etwas mit Radius r möglichst nah am Zielpunkt p = (x, y, z) - auf der Fläche, die das
+        Fadenkreuz getroffen hat (auch Dach, Plateau, Brücke). -> (x, y, Bodenhöhe) oder None."""
+        x0, y0, z0 = p
+        lo = edge_margin(self) + r + 0.5
+        for ring_ in range(7):
+            n = 1 if ring_ == 0 else 8 + 4 * ring_
+            for k in range(n):
+                a = 2 * math.pi * k / n + ring_ * 0.4
+                x, y = x0 + math.cos(a) * ring_ * max(1.0, r * 1.1), y0 + math.sin(a) * ring_ * max(1.0, r * 1.1)
+                if not (lo < x < WORLD - lo and lo < y < WORLD - lo):
+                    continue
+                z = self.floor_at(x, y, z0 + 0.6)
+                if z < z0 - 2.5 and ring_ > 0:           # neben einer Kante (Plateau, Brücke): nicht hinunter versetzen
+                    continue
+                px_, py_ = push_out(x, y, r, self, z)
+                if abs(px_ - x) + abs(py_ - y) > 0.05 or self.in_solid(x, y, r, z):
+                    continue
+                if self.ceiling_at(x, y, z) < z + 1.6:
+                    continue
+                if mobs and any(o.state != "dead" and math.hypot(o.x - x, o.y - y) < o.radius + r + 0.2
+                                and abs(o.gz - z) < 3.0 for o in self.mobs):
+                    continue
+                return x, y, z
+        return None
+
+    def dev_command(self, pl, c, a):
+        """v50: Befehl aus dem Dev-Menü (F1), nur auf dem Testgelände. a: Argumente (dict; Mitspieler: vom Netz)."""
+        if not self.dev or pl is None or not isinstance(a, dict):
+            return
+        p = a.get("p")
+        p = (tuple(float(v) for v in p) if isinstance(p, (list, tuple)) and len(p) == 3
+             and all(isinstance(v, (int, float)) and math.isfinite(v) for v in p) else None)
+        if p is not None:
+            p = (clampf(p[0], 1.0, WORLD - 1.0), clampf(p[1], 1.0, WORLD - 1.0), clampf(p[2], -5.0, MAP_ZMAX))
+        face = math.degrees(math.atan2(-(pl.x - p[0]), pl.y - p[1])) if p is not None else 0.0   # Blick zum Spieler
+        msg = ""
+        if c == "mob":
+            kind, ai = a.get("k"), a.get("ai")
+            if kind not in DEV_MOBS or ai not in DEV_AI or p is None:
+                return
+            n = sum(1 for m in self.mobs if getattr(m, "dev_ai", None) in DEV_AI and m.state != "dead")
+            k = MOB_KINDS[kind]
+            spot = None if n >= DEV_MAX_MOBS else self.dev_free_spot(p, k.get("hit_r", 0.45 * k["scale"]))
+            if n >= DEV_MAX_MOBS:
+                msg = f"Höchstens {DEV_MAX_MOBS} Monster gleichzeitig - erst aufräumen"
+            elif spot is None:
+                msg = "Kein Platz am Fadenkreuz"
+            else:
+                self.dev_add_mob(kind, spot[0], spot[1], spot[2], ai, face)
+                msg = f"{DEV_MOB_NAMES[kind]} gespawnt ({DEV_AI_NAMES[ai]})"
+        elif c == "veh":
+            kind = a.get("k")
+            if kind not in ("car", "heli") or p is None:
+                return
+            pool = [v for v in (self.vehicles if kind == "car" else self.helis) if v.driver < 0]
+            name = "Geländewagen" if kind == "car" else "Helikopter"
+            if not pool:
+                msg = f"Alle {name} sind besetzt"
+            else:
+                self.dev_vi = getattr(self, "dev_vi", {})
+                v = pool[self.dev_vi.get(kind, 0) % len(pool)]          # reihum: der nächste freie aus dem Pool
+                self.dev_vi[kind] = self.dev_vi.get(kind, 0) + 1
+                spot = self.dev_free_spot(p, (VEH_R if kind == "car" else HELI_R) + 0.3)
+                if spot is None:
+                    msg = "Kein Platz am Fadenkreuz"
+                else:
+                    hd = pl.heading
+                    if kind == "car":
+                        v.x, v.y, v.z, v.heading = spot[0], spot[1], spot[2], hd
+                        v.speed, v.hp, v.dead_t, v.stall_t = 0.0, VEH_HP, 0.0, 0.0
+                        self.sync_turret_pos()
+                    else:
+                        v.x, v.y, v.z, v.heading = spot[0], spot[1], spot[2], hd
+                        v.pitch = v.roll = v.speed = v.vx = v.vy = v.vz = 0.0
+                        v.hp, v.dead_t, v.ground, v.stall_t = HELI_HP, 0.0, True, -1.0
+                        v.mg, v.rk = float(HELI_MG_MAX), HELI_RK_MAX
+                    msg = f"{name} {v.id + 1} ans Fadenkreuz gestellt"
+        elif c == "clear":
+            n0 = len(self.mobs)
+            self.mobs = [m for m in self.mobs if getattr(m, "dev_ai", None) not in DEV_AI
+                         and getattr(m, "nest", -1) < 0]
+            for n_ in self.nests:
+                self.end_nest(n_, False)
+            self.nests = []
+            for v in self.vehicles:
+                if v.driver < 0:
+                    v.reset()
+                    v.z = self.height(v.x, v.y)
+            self.sync_turret_pos()
+            for hc in self.helis:
+                if hc.driver < 0:
+                    hc.reset()
+            nd = len(self.drops)
+            self.drops = [d for d in self.drops if getattr(d, "dev", False)]
+            msg = f"Aufgeräumt: {n0 - len(self.mobs)} Monster, {nd - len(self.drops)} lose Teile, Fahrzeuge zurück"
+        elif c == "god":
+            pl.dev_god = not getattr(pl, "dev_god", False)
+            if pl.dev_god and pl.hp > 0:
+                pl.hp, pl.since_hurt = pl.max_hp, 0.0
+            msg = "Godmode " + ("an" if pl.dev_god else "aus")
+        elif c == "ammo":
+            pl.dev_ammo = not getattr(pl, "dev_ammo", False)
+            msg = "Unendlich Munition " + ("an" if pl.dev_ammo else "aus")
+        elif c == "aggro":
+            for m in self.mobs:
+                if getattr(m, "dev_ai", None) == "show" or m.state == "dead":
+                    continue
+                if m.state in ("chase", "attack"):
+                    m.state = "idle"
+                m.alert_t = m.atk_t = 0.0
+                m.noise_at = m.noise_src = m.fear = None
+                m.searching = False
+                m.provoked = set()
+                m.tx, m.ty = m.x, m.y
+            msg = "Monster-Aggro zurückgesetzt"
+        elif c == "kit":
+            k = a.get("k")
+            if not isinstance(k, int) or not 0 <= k < len(DEV_LOADOUTS) or pl.hp <= 0:
+                return
+            self.dev_kit(pl, k)
+            msg = f"Loadout '{DEV_LOADOUTS[k][0]}' angelegt"
+        else:
+            return
+        self.events.append(("devstate", pl.pid, 1 if getattr(pl, "dev_god", False) else 0,
+                            1 if getattr(pl, "dev_ammo", False) else 0, msg))
+
+    def dev_kit(self, pl, k):
+        """v50: fertiges Ausrüstungs-Set anlegen (Waffen, Nahkampf, Ausrüstung, Granaten, ggf. Visiere)."""
+        ent = DEV_LOADOUTS[k]
+        guns, melee, gear, grens = ent[1], ent[2], ent[3], ent[4]
+        wis = {w.name: i for i, w in enumerate(WEAPONS)}
+        for g in guns:
+            wi = wis.get(g)
+            if wi is not None and wi not in pl.slots:
+                self.give_weapon(pl, wi, "pickup")
+        mi = next((i for i, m in enumerate(MELEE) if m.name == melee), None)
+        if mi is not None and pl.melee != mi:
+            self.give_melee(pl, mi)
+        for gname in gear:
+            gi = next((i for i, g in enumerate(GEAR) if g.name == gname), None)
+            if gi is not None and pl.gear.get(GEAR[gi].slot) != gi:
+                self.give_gear(pl, gi)
+        for kind, n in grens:
+            if pl.gren.get(kind, 0) < n:
+                self.add_grenades(pl, kind, n - pl.gren.get(kind, 0))
+        for gname, si, v in (ent[5] if len(ent) > 5 else ()):
+            wi = wis.get(gname)
+            if wi is not None and wi in pl.slots and si == ATT_SCOPE and att_fits(wi, ATT_SCOPE):
+                pl.scopes[wi] = v
+        self.att_state_event(pl)
+
+    def dev_update(self, dt, players):
+        """v50: Testgelände je Bild: Arsenal nachlegen, Zielscheiben heilen, unendliche Munition."""
+        if not getattr(self, "dev_ready", False):
+            self.dev_setup()
+        self.dev_refill(dt)
+        for m in self.mobs:
+            if getattr(m, "dev_ai", None) == "static" and m.state != "dead":
+                m.dev_hit_t = getattr(m, "dev_hit_t", 0.0) + dt
+                if m.dev_hit_t >= DEV_STATIC_HEAL_T:
+                    m.hp = m.max_hp
+        for pl in players:
+            if getattr(pl, "dev_ammo", False):
+                dev_fill_ammo(pl)
+
+    def dev_aim(self, pl, rng_=DEV_AIM_RANGE):
+        """v50: Punkt unter dem Fadenkreuz (Quader, Gelände) -> (x, y, z), etwas vor der getroffenen Fläche. Ohne Treffer
+        der Boden am Ende der Reichweite."""
+        hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
+        cp = math.cos(pr)
+        f = (-math.sin(hr) * cp, math.cos(hr) * cp, math.sin(pr))
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        end = tuple(eye[i] + f[i] * rng_ for i in range(3))
+        best = 1.0
+        for b in self.boxes_near(min(eye[0], end[0]), min(eye[1], end[1]), max(eye[0], end[0]), max(eye[1], end[1])):
+            t = seg_box(eye, end, b)
+            if t is not None and 0.0 < t < best:
+                best = t
+        n = int(rng_ / 0.5)
+        for i in range(1, n + 1):                        # Gelände (flach oder hügelig)
+            t = i / n
+            if t >= best:
+                break
+            q = tuple(eye[k] + f[k] * rng_ * t for k in range(3))
+            if q[2] <= self.height(q[0], q[1]):
+                best = t
+                break
+        dist = max(0.0, best * rng_ - 0.6)
+        q = tuple(eye[k] + f[k] * dist for k in range(3))
+        x, y = clampf(q[0], 1.0, WORLD - 1.0), clampf(q[1], 1.0, WORLD - 1.0)
+        return x, y, self.floor_at(x, y, q[2] + 0.3)
+
     # ------------------------------------------------------------ 13b: Titan steigt über Niedriges
     def low_obstacle(self, b, gz):
         """13b: Steigt der Titan (Boden gz) über den Quader b? Ja, wenn er auf seiner Ebene steht, nicht höher als seine
@@ -9385,6 +9937,7 @@ class World:
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
         self.nests = []                                  # v49: Monster-Nester
+        self.dev_ready = False                           # v50: Testgelände wird beim nächsten Update neu bestückt
         for v in self.vehicles:
             v.reset()
         self.strike, self.strike_t, self.strike_by, self.strike_wait = 0, 0.0, -1, 0.0
@@ -9472,6 +10025,8 @@ class World:
         self.update_helis(dt)
         self.update_strike(dt)
         self.update_crates(dt)
+        if self.dev:
+            self.dev_update(dt, players)                 # v50: Testgelände (Arsenal, Zielscheiben, Munition)
         for d in [d for d in self.drops if d.life <= dt]:
             self.drops.remove(d)
         for d in self.drops:
@@ -9495,7 +10050,7 @@ class World:
                     self.events.append(("tempdown", m.id, round(m.x, 2), round(m.y, 2), round(m.z, 2)))
         for m in [m for m in self.mobs if m.state == "dead" and m.dead_t > 4.0]:
             self.mobs.remove(m)
-            if m.kind in TEMP_MOBS or getattr(m, "nest", -1) >= 0:   # 10e / v49: Drohnen, Nest-Monster - kein Respawn
+            if m.kind in TEMP_MOBS or getattr(m, "nest", -1) >= 0 or getattr(m, "dev_ai", None):   # + v50: Dev-Monster
                 continue
             if m.kind in BOSS_KINDS:                     # 13f: Bosse kommen nur im Zyklus ihrer Art wieder
                 continue
@@ -10196,6 +10751,16 @@ def take_weapon(pl, wi):
 def eye_h(pl):
     """Augenhöhe über den Füssen (geduckt niedriger)."""
     return EYE - CROUCH_DROP * pl.crouch
+
+
+def dev_fill_ammo(pl):
+    """v50: Testgelände - unendliche Munition: Magazin, Reserve und Granatwerfer bleiben voll."""
+    for wi in pl.slots:
+        if wi is None or not 0 <= wi < len(pl.guns):
+            continue
+        g, w = pl.guns[wi], pl.wp(wi)
+        g.mag, g.reserve = w.mag, w.max_reserve
+        g.gl = max(getattr(g, "gl", 0), GL_START)
 
 
 def body_h(pl):
@@ -11885,6 +12450,23 @@ def _t_vignette(S):
     return out
 
 
+def _t_devgrid(S):
+    """v50: Graubox-Raster des Testgeländes: helle Fläche, feine Linie je Meter, kräftige je 4 m (Kachel = 4 m)."""
+    q = S // 4
+    out = []
+    for y in range(S):
+        row = []
+        for x in range(S):
+            v = 0.95
+            if x % q < 2 or y % q < 2:
+                v = 0.74
+            if x < 3 or y < 3:
+                v = 0.58
+            row.append((v, v, v))
+        out.append(row)
+    return out
+
+
 # Name -> (Auflösung, Maler, hat Alpha, kachelt, Meter pro Kachel)
 TEXGEN = {
     "grass": (384, _t_grass, False, True, 5.0), "dirt": (256, _t_dirt, False, True, 4.0),
@@ -11906,6 +12488,7 @@ TEXGEN = {
     "cloud": (128, _t_cloud, True, True, 200.0), "blob": (64, _t_blob, True, False, 1.0),
     "glow": (64, _t_glow, True, False, 1.0), "edge": (64, _t_edge, True, False, 1.0),
     "vignette": (96, _t_vignette, True, False, 1.0),
+    "devgrid": (256, _t_devgrid, False, True, 4.0),       # v50: Testgelände (1-m-Raster)
 }
 TILE = {k: v[4] for k, v in TEXGEN.items()}
 _TEX_CACHE = {}
@@ -12074,6 +12657,8 @@ for _c in AWN:
     _MATC[tuple(round(v, 3) for v in _c)] = "cloth"
 for _c in (WOOD_D, WOOD_M):
     _MATC[tuple(round(v, 3) for v in _c)] = "wood"
+for _c in DEV_COLS + (DEV_FLOOR,):                     # v50: Testgelände - alles mit Raster
+    _MATC[tuple(round(v, 3) for v in _c)] = "devgrid"
 
 
 def mat_for_color(col):
@@ -13828,6 +14413,7 @@ def build_scene(world, progress=None):
     rng = random.Random(world.seed + 1)
     m = Mesh()
     ponds = world.ponds
+    dev = getattr(world, "dev", False)              # v50: Testgelände (Graubox, kein Gras)
     shc = {}
 
     def sh(x, y):                                   # Geländehöhe mit Zwischenspeicher (Gitterpunkte kommen 4x vor)
@@ -13916,6 +14502,9 @@ def build_scene(world, progress=None):
             if n[2] < 0:
                 b, c = c, b
                 n = (-n[0], -n[1], -n[2])
+            if dev:                                     # v50: Testgelände - heller Rasterboden
+                m.tri(a, b, c, DEV_FLOOR, mat="devgrid")
+                continue
             cx_, cy_ = (a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3
             floor = None
             for fi_, (fx0, fy0, fx1, fy1, fc) in enumerate(world.floors):    # Hof und Fussböden (unebene; ebene = Platten oben)
@@ -14063,7 +14652,7 @@ def build_scene(world, progress=None):
         return gcells[k]
 
     def free_spot(x, y, clear):
-        if not (2 < x < WORLD - 2 and 2 < y < WORLD - 2):
+        if dev or not (2 < x < WORLD - 2 and 2 < y < WORLD - 2):
             return None
         if world.voids and world.in_void(x, y):
             return None
@@ -18915,8 +19504,11 @@ class HitRect:
 def json_map_preview(path, n=192):
     """Vorschaubild einer Editor-Karte (.json) von oben: Gelände nach Höhe, dazu Blöcke, Häuser, Türme, Teiche, Felsen
     -> (Breite, Höhe, RGB-Bytes) im 16:9-Format (Mittelstreifen der quadratischen Karte)."""
-    with open(path, encoding="utf-8") as f:
-        md = sanitize_map(json.load(f))
+    if path == DEV_MAP_PATH:                                        # v50: Testgelände (aus dem Code)
+        md = sanitize_map(dict(DEV_MAP_STUB))
+    else:
+        with open(path, encoding="utf-8") as f:
+            md = sanitize_map(json.load(f))
     tr = md.get("terrain")
     sc = md.get("size", MAP_WORLD) / n
     img = bytearray(n * n * 3)
@@ -18960,7 +19552,7 @@ def json_map_preview(path, n=192):
             elif h < -1.0:
                 col = (0.18, 0.28, 0.42)
             else:
-                col = (0.30, 0.42, 0.20)
+                col = (0.62, 0.63, 0.66) if md.get("dev") else (0.30, 0.42, 0.20)     # v50: Testgelände grau
             put(px, n - 1 - py, tuple(c * (0.55 + light) for c in col))
     pw = lambda v: int(v / sc)                                        # noqa: E731
 
@@ -19019,7 +19611,7 @@ def json_map_preview(path, n=192):
                     else:
                         out[k:k + 3] = bytes((22, 24, 28))
             return ow, oh, bytes(out)
-    if md.get("size", MAP_WORLD) > 250:                       # grosse Karte: ganz zeigen (16:9 mit dunklen Seitenstreifen)
+    if md.get("size", MAP_WORLD) > 250 or md.get("dev"):      # grosse Karte / Testgelände: ganz zeigen (16:9, Seitenstreifen)
         w2 = n * 16 // 9
         out = bytearray(bytes((22, 24, 28)) * (w2 * n))
         x0 = (w2 - n) // 2
@@ -19035,6 +19627,8 @@ def map_preview_rgb(key):
     """Vorschaubild einer Karte als (Breite, Höhe, RGB-Bytes) oder None. key: Name im Bilderspeicher oder
     ("mm", Pfad) = Minimap einer .mcmap-Datei (Mittelstreifen im 16:9-Format)."""
     try:
+        if key == "dev":
+            return json_map_preview(DEV_MAP_PATH)                 # v50: Testgelände
         if isinstance(key, str):
             ent = MAP_PREVIEWS.get(key)
             if ent is None:
@@ -19605,7 +20199,8 @@ class MorePage(SetupPage):
     def layout(self):
         g, X0, X1 = self.g, self.X0, self.X1
         self.text("title", "Weitere Einstellungen", 0, 0.80, 0.075, (1.0, 0.78, 0.3, 1.0))
-        self.text(None, "MONSTER" + ("   (auf Minecraft-Karten gibt es keine)" if g.cfg_is_mc() else ""), X0, 0.64, 0.034, self.GREY, "l")
+        self.text(None, "MONSTER" + (("   (Testgelände: Monster per F1-Menü)" if g.cfg_is_dev() else "   (auf Minecraft-Karten gibt es keine)")
+                                 if g.cfg_is_mc() else ""), X0, 0.64, 0.034, self.GREY, "l")
         n = len(MOB_LEVELS)
         bw = (X1 - X0 - 0.02 * (n - 1)) / n
         for k, (name, _f) in enumerate(MOB_LEVELS):
@@ -20458,6 +21053,12 @@ class HostSession:
             ki = m.get("k")
             if isinstance(ki, int):
                 w.place_nest(pl, ki)
+        elif t == "dev":                          # v50: Dev-Menü (nur Testgelände; dev_command prüft alles)
+            if getattr(w, "dev", False) and isinstance(m.get("a"), dict):
+                now = time.time()
+                if now - getattr(pl, "last_dev", 0.0) >= 0.08:
+                    pl.last_dev = now
+                    w.dev_command(pl, str(m.get("c")), m.get("a"))
         elif t == "mspec":                        # 9c: Sonderattacke (Katana/Schwert) - Treffer entscheidet der Host
             d = m.get("d")
             k = m.get("k")
@@ -21198,6 +21799,11 @@ class ClientSession:
 
     def send_nest(self, ki):
         self.conn.send({"t": "nest", "k": int(ki)})   # v49: Nekromanten-Nest
+        self.conn.flush()
+
+    def send_dev(self, c, a):
+        """v50: Dev-Befehl (Testgelände) an den Host."""
+        self.conn.send({"t": "dev", "c": str(c), "a": a})
         self.conn.flush()
 
     def send_axe(self, d, power):
@@ -118062,6 +118668,7 @@ class Game(ShowBase):
         self.accept("f", self.on_use)
         self.accept("f3", self.toggle_fps)
         self.accept("f11", self.toggle_fullscreen)
+        self.accept(DEV_KEY, self.on_dev)                     # v50: Dev-Menü (nur auf dem Testgelände)
         self.accept("c", self.toggle_duck)
         self.duck_lock = False
         self.accept("m", self.toggle_bigmap)
@@ -118311,7 +118918,7 @@ class Game(ShowBase):
             c = self.cfg
             mc = self.cfg_is_mc()
             spec = [("Weitere Einstellungen", None),
-                    ("Monster:  aus  (Minecraft-Karte)" if mc else f"Monster:  {'an' if c['mobs'] else 'aus'}", dig(1)),
+                    (("Monster:  per F1-Menü  (Testgelände)" if self.cfg_is_dev() else "Monster:  aus  (Minecraft-Karte)") if mc else f"Monster:  {'an' if c['mobs'] else 'aus'}", dig(1)),
                     (f"Tomahawk-Abklingzeit:  {strike_cd_label(c['cd'])}", dig(2)),
                     (f"Gesundheit regeneriert:  {regen_label(c['regen'])}", dig(3)),
                     (f"Respawn-Zeit:  {respawn_label(c['resp'])}", dig(4)),
@@ -118616,13 +119223,19 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         if not p:
             return "Standard" + ("" if self.map_list else "  (Ordner 'maps' leer)")
+        if p == DEV_MAP_PATH:
+            return DEV_MAP_NAME + "  (Sandbox, Dev-Menü F1)"
         n = next((n for n, q in self.map_list if q == p), os.path.basename(p))
         return n + "  (Minecraft 1:1, Deathmatch)" if p.lower().endswith(".mcmap") else n
 
     # ------------------------------------------------------------ Setup-Seite
     def cfg_is_mc(self):
+        """Karte nur mit Deathmatch/Experimental und ohne Monster: Minecraft-Karten und (v50) das Testgelände."""
         p = self.cfg.get("map")
-        return bool(p) and str(p).lower().endswith(".mcmap")
+        return bool(p) and (str(p).lower().endswith(".mcmap") or p == DEV_MAP_PATH)
+
+    def cfg_is_dev(self):
+        return self.cfg.get("map") == DEV_MAP_PATH                # v50: Testgelände
 
     def ctf_cfg_dict(self):
         """11: CTF-Regeln aus den Host-Einstellungen (für World und Netz)."""
@@ -118632,7 +119245,8 @@ class Game(ShowBase):
 
     def setup_entries(self):
         """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown."""
-        ents = [(STD_MAP_NAME, None, "Standardkarte", "polytown")]
+        ents = [(STD_MAP_NAME, None, "Standardkarte", "polytown"),
+                (DEV_MAP_NAME, DEV_MAP_PATH, "Dev-Sandbox, Menü mit F1", "dev")]     # v50: eingebautes Testgelände
         for name, path in self.map_list:
             if path.lower().endswith(".mcmap"):
                 try:
@@ -118811,7 +119425,7 @@ class Game(ShowBase):
 
     def open_setup(self, for_mode):
         self.map_list = list_maps()
-        if self.cfg.get("map") not in [p for _n, p in self.map_list]:
+        if self.cfg.get("map") not in [p for _n, p in self.map_list] + [DEV_MAP_PATH]:
             self.cfg["map"] = None
         self.setup_for = for_mode
         self.map_page = 0
@@ -119100,14 +119714,14 @@ class Game(ShowBase):
                 w.ctf_reset()
             else:
                 w.flags.clear()
-        w.limit = float(c["limit"]) * 60.0
+        w.limit = float(c["limit"]) * 60.0 if not w.dev else max(float(c["limit"]) * 60.0, DEV_LIMIT)   # v50
         w.strike_cd, w.regen_rate, w.respawn_delay = float(c["cd"]), float(c["regen"]), float(c["resp"])
         w.tomahawk_on = bool(c.get("tomahawk", True))
         if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
             w.place_toma()
         b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
         w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
-        w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc)
+        w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc and not w.dev)
         if self.host is not None:
             self.host.send_cfg()
         netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
@@ -119475,7 +120089,7 @@ class Game(ShowBase):
             else:
                 self.on_escape()
             return
-        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "settings_sound", "settings_round", "strike"):
+        if self.quit_box is None or self.overlay_kind in ("pause", "settings", "settings_gfx", "settings_game", "settings_sound", "settings_round", "strike", "dev"):
             return
         if self.overlay_kind == "leave":
             if yes:
@@ -119834,9 +120448,10 @@ class Game(ShowBase):
 
                 def set_mobs(k):
                     w.mob_level = int(k)
-                    w.mobs_on = w.mob_level > 0 and not w.mc
+                    w.mobs_on = w.mob_level > 0 and not w.mc and not w.dev
                     w.mobs.clear()
                     w.pending.clear()
+                    w.dev_ready = False                        # v50: Testgelände - Showroom wieder aufstellen
                     if w.mobs_on:
                         w.populate_mobs()
                     self.cfg["mobs"] = w.mob_level
@@ -120198,6 +120813,8 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         if not p:
             return STD_MAP_NAME
+        if p == DEV_MAP_PATH:
+            return DEV_MAP_NAME
         return next((n for n, q in self.map_list if q == p), os.path.splitext(os.path.basename(p))[0])
 
     def show_loading(self, mode, attempt):
@@ -120309,7 +120926,10 @@ class Game(ShowBase):
             path = self.cfg.get("map")
             if path:
                 try:
-                    if path.lower().endswith(".mcmap"):
+                    if path == DEV_MAP_PATH:                   # v50: Testgelände - aus dem Code, übers Netz nur die Kennung
+                        raw = dict(DEV_MAP_STUB)
+                        mapdata = sanitize_map(raw)
+                    elif path.lower().endswith(".mcmap"):
                         mapdata, raw = mc_mapdata(path)
                     else:
                         with open(path, encoding="utf-8") as f:
@@ -120465,7 +121085,7 @@ class Game(ShowBase):
             zp.setFogOff()
         fog = Fog("nebel")
         fog.setColor(*SKY)
-        fog.setExpDensity(0.004 if world.mc else (0.005 if WORLD > 250 else MTN_FOG))          # Minecraft-Karte: weite Sicht über das Meer
+        fog.setExpDensity(0.004 if world.mc else (0.0018 if world.dev else (0.005 if WORLD > 250 else MTN_FOG)))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
@@ -120474,6 +121094,15 @@ class Game(ShowBase):
 
         self.loading_step(0.92, "Oberfläche wird aufgebaut ...")
         self.build_crates()
+        if getattr(world, "dev", False):                  # v50: Testgelände - Standmodell der Spielfigur im Showroom
+            try:
+                parts = build_soldier(soldier_look(self.look_code, self.my_id, None))
+                parts[0].reparentTo(self.render)
+                parts[0].setPos(DEV_SOLDIER[0], DEV_SOLDIER[1], world.floor_at(DEV_SOLDIER[0], DEV_SOLDIER[1], 1.0))
+                parts[4].hide()                           # kein Lebensbalken
+                parts[5].hide()
+            except Exception:                             # nur Dekoration - nie den Start gefährden
+                pass
         self.build_toma()
         self.build_hud()
         if host is not None:
@@ -121460,6 +122089,75 @@ class Game(ShowBase):
         pl = self.player
         return (self.mode == "play" and pl is not None and pl.hp > 0 and not pl.melee_out and not pl.gad_out
                 and pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and self.world.phase == "play")
+
+    # ------------------------------------------------------------ v50: Dev-Menü (Testgelände, F1)
+    def on_dev(self):
+        """v50: F1 auf dem Testgelände öffnet das Dev-Menü; der Spawnpunkt ist der Punkt unter dem Fadenkreuz im Moment
+        des Öffnens. Nochmal F1 (oder Esc) schliesst."""
+        w, pl = self.world, self.player
+        if self.mode != "play" or w is None or pl is None or not getattr(w, "dev", False):
+            return
+        if self.quit_box is not None:
+            if self.overlay_kind == "dev":
+                self.close_quit_box()
+            return
+        if getattr(self, "end", None) is not None or self.loadscreen is not None:
+            return
+        if getattr(self, "insp_on", False):
+            self.close_inspect()
+        self.dev_pt = w.dev_aim(pl) if pl.hp > 0 else None
+        self.show_dev()
+
+    def show_dev(self):
+        """v50: Dev-Menü (neu) zeichnen - nach jedem Klick, damit Auswahl und Schalter stimmen."""
+        pl, p = self.player, getattr(self, "dev_pt", None)
+        st = self.dev_sel = getattr(self, "dev_sel", None) or {"k": 0, "ai": 0}
+        if p is not None and pl is not None:
+            where = (f"Spawnpunkt am Fadenkreuz: {math.hypot(p[0] - pl.x, p[1] - pl.y):.0f} m entfernt, Höhe {p[2]:.1f} m"
+                     "   -   neu zielen: schließen, zielen, F1")
+        else:
+            where = "Kein Spawnpunkt - erst spawnen, dann F1"
+
+        def sel(key):
+            def f(j):
+                st[key] = j
+                self.show_dev()
+            return f
+
+        def spawn(j):
+            if p is not None:
+                if j == 0:
+                    self.dev_cmd("mob", {"k": DEV_MOBS[st["k"]], "ai": DEV_AI[st["ai"]], "p": [round(v, 2) for v in p]})
+                else:
+                    self.dev_cmd("veh", {"k": "car" if j == 1 else "heli", "p": [round(v, 2) for v in p]})
+            self.show_dev()
+
+        def kit(j):
+            self.dev_cmd("kit", {"k": int(j)})
+            self.show_dev()
+
+        def quick(j):
+            self.dev_cmd(("god", "ammo", "aggro", "clear")[j], {})
+            self.show_dev()
+
+        god, ammo = getattr(pl, "dev_god", False), getattr(pl, "dev_ammo", False)
+        self.open_overlay("dev", "Dev-Menü   " + DEV_MAP_NAME, [
+            RowSpec("Monster", [DEV_MOB_NAMES[k] for k in DEV_MOBS], st["k"], sel("k")),
+            RowSpec("KI-Verhalten", [DEV_AI_NAMES[a] for a in DEV_AI], st["ai"], sel("ai")),
+            RowSpec("Am Fadenkreuz spawnen", ["Monster", "Geländewagen", "Helikopter"], -1, spawn),
+            RowSpec("Loadout-Set anlegen", [ent[0] for ent in DEV_LOADOUTS], -1, kit),
+            RowSpec("Schnellbefehle", ["Godmode " + ("AN" if god else "aus"), "Munition ∞ " + ("AN" if ammo else "aus"),
+                                       "Aggro reset", "Alles entfernen"], -1, quick),
+            ("Schließen   (F1 / Esc)", self.close_quit_box)],
+            where, width=1.55)
+
+    def dev_cmd(self, c, a):
+        """v50: Dev-Befehl ausführen - beim Mitspieler über den Host (er rechnet die Welt)."""
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_dev(c, a)
+        elif self.world is not None and self.player is not None:
+            self.world.dev_command(self.player, c, a)
 
     def on_inspect(self):
         """9b: T - Waffe von der Seite ansehen; Markierungen an allen veränderbaren Stellen (Klick = Auswahl aus
@@ -124626,6 +125324,9 @@ class Game(ShowBase):
             self.update_hover()
             if self.slider_drag:
                 self.slider_follow()
+        if (self.player is not None and self.world is not None and getattr(self.world, "dev", False)
+                and getattr(self.player, "dev_ammo", False)):
+            dev_fill_ammo(self.player)                 # v50: Testgelände - Munition bleibt voll (auch beim Mitspieler)
 
         def down(btn):
             return mw.is_button_down(btn)
@@ -125798,6 +126499,13 @@ class Game(ShowBase):
             elif kind == "hasgear":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
+            elif kind == "devstate":           # v50: Testgelände - Antwort auf einen Dev-Befehl (Schalter, Meldung)
+                if e[1] == self.my_id and self.player is not None:
+                    self.player.dev_god, self.player.dev_ammo = bool(e[2]), bool(e[3])
+                    if e[4]:
+                        self.toast(str(e[4]), (0.55, 0.9, 1.0), 2.0)
+                    if self.quit_box is not None and self.overlay_kind == "dev":
+                        self.show_dev()
             elif kind == "gearblock":          # v49: Slot gesperrt (Schweres Exo-Jetpack)
                 if e[1] == self.my_id:
                     self.toast(f"{GEAR[e[3]].name} sperrt den Slot {GEAR_SLOT_NAMES[GEAR[e[2]].slot]}",
@@ -127027,7 +127735,7 @@ class Game(ShowBase):
                 for xx in range(max(0, px(cx - dx)), min(size - 1, px(cx + dx)) + 1):
                     img.setXel(xx, yy, *col)
 
-        rect(0, 0, WORLD, WORLD, (0.20, 0.34, 0.17))
+        rect(0, 0, WORLD, WORLD, (0.52, 0.54, 0.57) if getattr(world, "dev", False) else (0.20, 0.34, 0.17))   # v50: Testgelände grau
         if getattr(world, "pt", None):                              # Polytown aus Blender: fertige Draufsicht aus der Kartendatei
             n = int((WORLD + 2 * M) / 2.0)
             sm = PNMImage(n, n, 3)
