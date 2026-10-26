@@ -2,6 +2,37 @@
 
 Neueste Änderungen oben.
 
+## Aufsatz-Inventar, Waffen-Fixes, Rüstungs-Rework, Hacker- und Nekromanten-Set (Robin, 2026-10-26)
+Gilt für alle Modi. **NET_VERSION 49**: neue Ausrüstungs-Indizes, neue Nachrichten (`hscan`, `nest`, Dash-Zähler `ds`), Nester im Snapshot (`ne`), Granaten-Werfer im Snapshot - alle müssen aktualisieren.
+
+Aufsätze und Beute:
+- **Blank-Spawns überall**: Waffen liegen in allen Modi (auch Experimental/Pistolenstart) ohne Aufsätze in der Welt. Aufgehobene Waffen kommen ohne Visier - auch die **DSR** hat dann Kimme und Korn; Sniper-Visier, Mündungen, Griffe, Magazine gibt es nur als Beute. VSS und Karabiner 98k behalten ihr fest verbautes Glas (ist kein Aufsatz).
+- **Aufsatz-Inventar**: Aufsatz aufheben -> Platz an der Waffe in der Hand frei: wird sofort montiert. Platz belegt: der neue wandert ins Aufsatz-Lager, der alte bleibt dran (nichts wird überschrieben). Wechseln über die Waffen-Inspektion (**T**). Wird eine Waffe getauscht, kommen ihre Aufsätze ins Lager statt verloren zu gehen.
+- **Schalldämpfer-Verschleiß**: jeder gelootete Dämpfer hält zufällig **1,5-3 Magazine** (`SIL_DUR`); Rest steht im Inspektions-Fenster. Ist er aufgebraucht, fliegt er ab (Klirren, Splitter), die Waffe ist wieder laut, der Dämpfer ist weg.
+- **Granatwerfer-Nachschub**: trägt der Colt M4 Carbine schon einen Werfer, gibt ein weiterer nur **+3 Granaten** (höchstens 6).
+
+Waffen:
+- **Stinger**: Erfassung nur noch auf Fahrzeuge, Helikopter und **fliegende Spieler** (Jetpack an oder > 2,5 m über dem Boden, `STINGER_AIR_H`), nie auf Monster; nur mit **freier Sichtlinie** (nichts hinter Wänden/Deckung). Die Rakete lenkt auch auf Spieler.
+- **Minigun**: Anzeige "Anlauf %" entfernt. Das Hochdrehen hört man: mechanisches Rattern + Motorheulen, Tonhöhe und Takt steigen mit der Drehzahl (neuer Klang `minispin`).
+- **Dual Baretta**: beide Pistolen tragen die Aufsätze der ersten (auch am Modell der linken); die Inspektion (T) zeigt nur die rechte; Nachladen nacheinander - erst links, dann rechts (je ein Magazin-Geräusch).
+
+Ausrüstung - aus Sets werden Einzelteile:
+- **Schweres Exo-Jetpack** (Torso, ersetzt Jetpack-Set): Steigen/Sinken x1,6, Tank 15 s, kein Fallschaden; **sperrt Kopf und Füsse** (getragene Teile fallen ab, neue lassen sich nicht anlegen); am Boden 12 % langsamer. Bulligeres Modell mit Exo-Rahmen.
+- **Hermes-Boots** (Füsse, ersetzt Hermes-Set): x1,6 Tempo, **Blitzen-Dash** (15 m in 0,43 s), **60 s** Abklingzeit. Dafür doppelt so laute Schritte (Monster-Lärm und Schrittgeräusch für andere) und beim Dash ein **Überschallknall** (Lärmradius 110 m, bis ~400 m zu hören).
+- Hermes-Helm, Hermes-Weste, Jet-Helm, Jetpack-Stiefel sind ausgemustert (Indizes bleiben, kommen nicht mehr aus der Beute).
+
+Set-Reworks:
+- **Schild-Set - Schockwelle (B)**: Radius 4 -> **9 m**; schleudert Getroffene bis an den Rand (Wände bremsen; Titan/Koloss nur betäubt); fremde **Schilde sofort auf 0** und 6 s keine Aufladung; **Jetpack-Tank leer**, **Dash lädt neu**. Trifft das eigene Team nicht mehr.
+- **Springfeder-Set**: komplett -> in der Luft (Sprung, Doppelsprung, Wandsprung) und an der Wand streuen alle Waffen aus der Hüfte nur noch x0,35 (kein Luft-/Laufmalus); Fadenkreuz zieht sich zusammen. Kein Fallschaden wie bisher.
+- **Zweite Chance**: unverändert.
+
+Neue Sets:
+- **Hacker-Set** (blau): *Visor* - bläuliche Sicht, feindliche C4/Claymores und fliegende Granaten in 70 m werden markiert (auch durch Wände); *Weste* - **Quadranten-Scan (B)** alle 45 s: welche Kartenfelder (Polytown: 4 Quadranten) Gegner enthalten, 8 s als Raster neben der Minimap und auf der Karte (M); *Stiefel* - halb so laute Schritte. Set-Bonus: Scan alle 30 s und 9 Sektoren.
+- **Nekromanten-Set** (schwarz/Knochen): *Maske* - Monster bemerken dich erst aus halber Entfernung; *Robe* - 25 % weniger Monster-Schaden; *Grabstiefel* - Schritte locken keine Monster an. Set-Bonus: **Monster-Tarnung** (Monster ignorieren dich, bis du sie angreifst - je Monster) und das **Nest-Wählrad** (B halten, Maus wählt, loslassen setzt): Nest bis 12 m vor dir, lebt **5 min**, zerstörbar (Kugeln, Explosionen; nicht vom eigenen Team). Über die Lebensdauer schlüpfen ~20 Zombies / 14 Jägerinnen / 10 Brutes / 5 Kolosse / 2 Titanen; sie verschonen Beschwörer und Team, lassen keine Beute fallen und kommen nicht wieder. Ein Nest je Spieler, danach 30 s Pause.
+- Beute-Tabelle der Ausrüstung neu verteilt (Spalten je 100).
+
+Technik: `Gear.blocks`/`Gear.legacy`, `World.nests`/`Nest`, `hack_scan`, `place_nest`, `knock_mob`, Ereignisse `shockhit`, `hboom`, `hscan`, `nest*`, `silbreak`, `gearblock`; `attstate` trägt die Dämpfer-Haltbarkeit mit.
+
 ## Waffen-, Ausrüstungs- und Nahkampf-Paket (Robin, 2026-10-26)
 Gilt für alle Modi (KotH, DM, CTF, Experimental). **NET_VERSION 48**: neue Waffen- und Nahkampf-Indizes, neue Nachrichten (`fire` mit `gl`, `axe`), alle müssen aktualisieren.
 

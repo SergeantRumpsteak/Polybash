@@ -356,7 +356,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 48         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 49         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 200               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -1073,6 +1073,7 @@ STINGER_ACCEL = 90.0           # m/s² Beschleunigung
 STINGER_LIFE = 6.0             # s Flugzeit
 STINGER_VEH_DMG = 260.0        # Schaden bei direktem Treffer an Fahrzeug (Explosion kommt dazu)
 STINGER_HELI_DMG = 520.0       # Schaden bei direktem Treffer am Helikopter (Helikopter: 1000)
+STINGER_AIR_H = 2.5            # v49: Spieler gilt als fliegend (erfassbar), wenn er so hoch über dem Boden ist (oder Jetpack)
 
 # Ansicht/Aufsätze/Visier gelten für Haupt- (Slot 1) und Kleinwaffen (Slot 2); die Namenslisten folgen aus weapon_type:
 PRIMARY_NAMES = tuple(w.name for w in WEAPONS if w.weapon_type == WT_PRIMARY)       # Sturmgewehr, Schrotflinte, Scharfschütze
@@ -1270,25 +1271,27 @@ LOOT_TABLES = {
 
 # Ausrüstung in Kisten: Prozent innerhalb der Ausrüstung (jede Spalte ergibt 100). 7c: Set-Teile eher blau/gold.
 LOOT_GEAR_TABLES = {
-    #  Teil                   braun  blau   gold
-    "Basic-Helm":          (14.0,  6.0,  3.0),
-    "Armeehelm":           (12.0,  8.0,  7.0),     # Rüstungs-Set
-    "Schild-Helm":         ( 5.0,  8.0, 10.0),     # Schild-Set
-    "Hermes-Helm":         ( 3.0,  7.0, 10.0),     # Hermes-Set
-    "Plattenrüstung":      (14.0,  9.0,  8.0),     # Rüstungs-Set
-    "Schild":              ( 9.0, 10.0, 10.0),     # Schild-Set
-    "Jetpack":             ( 8.0, 10.0, 10.0),
-    "Hermes-Weste":        ( 3.0,  7.0, 10.0),     # Hermes-Set
-    "Hermes-Schuhe":       ( 8.0,  9.0,  9.0),     # Hermes-Set
-    "Springfeder-Schuhe":  (10.0,  9.0,  6.0),
-    "Kampfstiefel":        ( 9.0,  9.0,  7.0),     # Rüstungs-Set
-    "Schild-Stiefel":      ( 5.0,  8.0, 10.0),     # Schild-Set
-    "Splitterweste":       ( 8.0,  8.0,  7.0),     # 10c: Zweite-Chance-Set (mit Basic-Helm)
-    "Druckwellen-Stiefel": ( 8.0,  8.0,  7.0),
-    "Jet-Helm":            ( 6.0,  8.0,  8.0),     # 10c: Jetpack-Set (mit Jetpack)
-    "Jetpack-Stiefel":     ( 6.0,  8.0,  8.0),
-    "Sprungweste":         ( 8.0,  8.0,  6.0),     # 10c: Springfeder-Set (mit Springfeder-Schuhen)
-    "Krallenhelm":         ( 6.0,  8.0,  8.0),
+    #  Teil                    braun  blau   gold   (v49: Hermes-/Jetpack-Set aufgelöst, Hacker- und Nekromanten-Set neu)
+    "Basic-Helm":           (11.0,  4.0,  1.0),
+    "Armeehelm":            ( 9.0,  6.0,  4.0),     # Rüstungs-Set
+    "Schild-Helm":          ( 4.0,  5.0,  7.0),     # Schild-Set
+    "Plattenrüstung":       (10.0,  7.0,  5.0),     # Rüstungs-Set
+    "Schild":               ( 7.0,  7.0,  7.0),     # Schild-Set
+    "Schweres Exo-Jetpack": ( 5.0,  7.0,  7.0),     # v49: Einzelteil (sperrt Kopf und Füsse)
+    "Hermes-Boots":         ( 5.0,  6.0,  6.0),     # v49: Einzelteil
+    "Springfeder-Schuhe":   ( 7.0,  6.0,  4.0),     # Springfeder-Set
+    "Kampfstiefel":         ( 7.0,  6.0,  4.0),     # Rüstungs-Set
+    "Schild-Stiefel":       ( 4.0,  6.0,  7.0),     # Schild-Set
+    "Splitterweste":        ( 6.0,  5.0,  4.0),     # 10c: Zweite-Chance-Set (mit Basic-Helm)
+    "Druckwellen-Stiefel":  ( 6.0,  5.0,  4.0),
+    "Sprungweste":          ( 6.0,  5.0,  4.0),     # 10c: Springfeder-Set
+    "Krallenhelm":          ( 4.0,  4.0,  5.0),
+    "Hacker-Visor":         ( 2.0,  4.0,  6.0),     # v49: Hacker-Set
+    "Hacker-Weste":         ( 2.0,  4.0,  6.0),
+    "Hacker-Stiefel":       ( 2.0,  4.0,  6.0),
+    "Nekromanten-Maske":    ( 1.0,  3.0,  5.0),     # v49: Nekromanten-Set
+    "Nekromanten-Robe":     ( 1.0,  3.0,  4.0),
+    "Grabstiefel":          ( 1.0,  3.0,  4.0),
 }
 
 # Wie oft eine Kiste Waffe bzw. Ausrüstung enthält (je Kistenart). Danach entscheidet die jeweilige Tabelle.
@@ -1419,6 +1422,8 @@ class Gear:
     set: str = ""              # 7c: Set ("armor" | "shield" | "hermes"), sonst ""
     hp: float = 0.0            # 7c: + max. Lebenspunkte
     shield: float = 0.0        # 7c: Schild-HP dieses Teils (alle Schild-Teile ergeben EINEN Balken)
+    blocks: tuple = ()         # v49: diese anderen Slots sind gesperrt, solange das Teil getragen wird (Exo-Jetpack)
+    legacy: bool = False       # v49: ausgemustert (Index bleibt fürs Netz, kommt nicht mehr aus der Beute, keine Wirkung)
 
 # 7c: Sets - alle drei Teile desselben Sets = Set-Bonus (Werte unten)
 GEAR_HP_PART = 25.0            # Rüstungs-Set: jedes Teil +25 max. HP
@@ -1429,22 +1434,30 @@ GEAR = (
     Gear("Basic-Helm", "head", "save_head", "H", (0.55, 0.58, 0.5), "Helm", "second"),
     Gear("Armeehelm", "head", "hp", "A", (0.40, 0.45, 0.30), "Armeehelm", "armor", GEAR_HP_PART),
     Gear("Schild-Helm", "head", "shield", "S", (0.3, 0.7, 1.0), "Schildhelm", "shield", 0.0, SHIELD_HP_HEAD),
-    Gear("Hermes-Helm", "head", "dash", "D", (1.0, 0.85, 0.3), "Hermeshelm", "hermes"),
+    Gear("Hermes-Helm", "head", "legacy", "D", (1.0, 0.85, 0.3), "Hermeshelm", legacy=True),        # v49: ausgemustert
     Gear("Plattenrüstung", "torso", "hp", "P", (0.6, 0.62, 0.66), "Platte", "armor", GEAR_HP_PART),
     Gear("Schild", "torso", "shield", "S", (0.3, 0.7, 1.0), "Schild", "shield", 0.0, SHIELD_HP_TORSO),
-    Gear("Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Jetpack", "jet"),
-    Gear("Hermes-Weste", "torso", "dash", "D", (1.0, 0.85, 0.3), "Hermesweste", "hermes"),
-    Gear("Hermes-Schuhe", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes", "hermes"),
+    Gear("Schweres Exo-Jetpack", "torso", "jetpack", "J", (1.0, 0.55, 0.15), "Exo-Jetpack",   # v49: vorher Jetpack (Set)
+         blocks=("head", "feet")),
+    Gear("Hermes-Weste", "torso", "legacy", "D", (1.0, 0.85, 0.3), "Hermesweste", legacy=True),     # v49: ausgemustert
+    Gear("Hermes-Boots", "feet", "dash", "D", (1.0, 0.85, 0.3), "Hermes-Boots"),   # v49: Einzelteil (vorher Hermes-Schuhe)
     Gear("Springfeder-Schuhe", "feet", "spring", "F", (0.6, 1.0, 0.4), "Federn", "spring"),
     Gear("Kampfstiefel", "feet", "hp", "K", (0.28, 0.24, 0.20), "Kampfstiefel", "armor", GEAR_HP_PART),
     Gear("Schild-Stiefel", "feet", "shield", "S", (0.3, 0.7, 1.0), "Schildstiefel", "shield", 0.0, SHIELD_HP_FEET),
     # 10c: neue Teile (hinten angehängt - die Indexe der alten bleiben)
     Gear("Splitterweste", "torso", "save_body", "Z", (0.52, 0.54, 0.57), "Splitterweste", "second"),
     Gear("Druckwellen-Stiefel", "feet", "save_blast", "Z", (0.52, 0.54, 0.57), "Druckstiefel", "second"),
-    Gear("Jet-Helm", "head", "fuel", "J", (1.0, 0.55, 0.15), "Jet-Helm", "jet"),
-    Gear("Jetpack-Stiefel", "feet", "nofall", "J", (1.0, 0.55, 0.15), "Jetstiefel", "jet"),
+    Gear("Jet-Helm", "head", "legacy", "J", (1.0, 0.55, 0.15), "Jet-Helm", legacy=True),            # v49: ausgemustert
+    Gear("Jetpack-Stiefel", "feet", "legacy", "J", (1.0, 0.55, 0.15), "Jetstiefel", legacy=True),   # v49: ausgemustert
     Gear("Sprungweste", "torso", "double_jump", "F", (0.6, 1.0, 0.4), "Sprungweste", "spring"),
     Gear("Krallenhelm", "head", "cling", "K", (0.6, 1.0, 0.4), "Krallenhelm", "spring"),
+    # v49: Hacker-Set (Taktik/Aufklärung) und Nekromanten-Set (Monster) - hinten angehängt
+    Gear("Hacker-Visor", "head", "hack_hud", "H", (0.30, 0.65, 1.0), "Hacker-Visor", "hacker"),
+    Gear("Hacker-Weste", "torso", "hack_scan", "H", (0.30, 0.65, 1.0), "Hacker-Weste", "hacker"),
+    Gear("Hacker-Stiefel", "feet", "hack_quiet", "H", (0.30, 0.65, 1.0), "Hacker-Stiefel", "hacker"),
+    Gear("Nekromanten-Maske", "head", "necro_mask", "N", (0.55, 0.85, 0.35), "Nekro-Maske", "necro"),
+    Gear("Nekromanten-Robe", "torso", "necro_robe", "N", (0.55, 0.85, 0.35), "Nekro-Robe", "necro"),
+    Gear("Grabstiefel", "feet", "necro_boots", "N", (0.55, 0.85, 0.35), "Grabstiefel", "necro"),
 )
 
 GEAR_FIG_SCALE = {"head": 0.46, "torso": 0.74, "feet": 0.8}   # 7c: Ausrüstung an der Figur (Sinans Soldat ist schmaler)
@@ -1452,18 +1465,52 @@ GEAR_FIG_SCALE = {"head": 0.46, "torso": 0.74, "feet": 0.8}   # 7c: Ausrüstung 
 GEAR_FIG_HEAD_Z = 0.95         # Höhe des Helms über der Hüfte (Torso-Raum)
 
 SETS = {"armor": ("Rüstungs-Set", (0.55, 0.62, 0.40)), "shield": ("Schild-Set", (0.35, 0.75, 1.0)),
-        "hermes": ("Hermes-Set", (1.0, 0.85, 0.3)), "second": ("Zweite-Chance-Set", (0.85, 0.25, 0.22)),
-        "jet": ("Jetpack-Set", (1.0, 0.55, 0.15)), "spring": ("Springfeder-Set", (0.55, 0.95, 0.35))}
+        "second": ("Zweite-Chance-Set", (0.85, 0.25, 0.22)), "spring": ("Springfeder-Set", (0.55, 0.95, 0.35)),
+        "hacker": ("Hacker-Set", (0.30, 0.65, 1.0)), "necro": ("Nekromanten-Set", (0.55, 0.85, 0.35))}
+# v49: Hermes- und Jetpack-Set gibt es nicht mehr (Einzelteile Hermes-Boots / Schweres Exo-Jetpack)
 
 ARMOR_SET_BONUS = 75.0         # Rüstungs-Set komplett: zusätzlich + so viele max. HP (3 x 25 + 75 = +150 -> 250 HP)
 
 SHIELD_RATE_PART = 0.25        # Schild lädt je weiterem Schild-Teil um so viel schneller (1 Teil x1, 3 Teile x1,5)
 
-SHOCK_R = 4.0                  # Schild-Set: Stromstoss betäubt alles in diesem Umkreis (m) ...
+SHOCK_R = 9.0                  # Schild-Set: Schockwelle trifft alles in diesem Umkreis (m; v49: 4 -> 9) ...
 
-SHOCK_STUN_MIN, SHOCK_STUN_MAX = 1.0, 3.0   # ... zufällig so lange (s) ...
+SHOCK_STUN_MIN, SHOCK_STUN_MAX = 1.0, 3.0   # ... betäubt zufällig so lange (s) ...
 
 SHOCK_CD = 30.0                # ... Abklingzeit (s)
+
+SHOCK_KNOCK_T = 0.35           # v49: ... schleudert Getroffene in so vielen s bis an den Rand des Radius (Wände bremsen)
+SHOCK_SHIELD_BLOCK = 6.0       # v49: ... Schild eines getroffenen Schildträgers: sofort 0 und so lange keine Aufladung
+SHOCK_KNOCK_SKIP = ("titan", "colossus")   # v49: zu schwer zum Wegschleudern (werden nur betäubt)
+
+EXO_FUEL = 1.5                 # v49: Schweres Exo-Jetpack: Tank x so viel (JET_FUEL = 10 s -> 15 s) ...
+EXO_JET_SPEED = 1.6            # ... steigt und sinkt so viel schneller ...
+EXO_WALK = 0.88                # ... am Boden so viel langsamer (Gewicht); kein Fallschaden; sperrt Kopf und Füsse
+
+HERMES_SPEED = 1.6             # v49: Hermes-Boots: dauerhaft so viel schneller ...
+HERMES_DASH_SPEED = 2.3        # ... Blitzen-Dash so viel schneller als ein normaler Dash (DASH_DIST in kürzester Zeit) ...
+HERMES_DASH_CD = 60.0          # ... Abklingzeit (s, taktischer Joker) ...
+HERMES_STEP_K = 2.0            # ... Schritte sind doppelt so weit zu hören (Lärmradius und Schrittgeräusch) ...
+HERMES_BOOM_NOISE = 110.0      # ... und der Dash knallt (Überschall): Lärmradius für Monster, hörbar bis ~400 m
+
+SPRING_AIR_SPREAD = 0.35       # v49: Springfeder-Set komplett: Hüftstreuung in der Luft / an der Wand x so viel (statt mehr)
+
+HACK_SCAN_CD = 45.0            # v49: Hacker-Weste: Quadranten-Scan (Taste B), Abklingzeit ...
+HACK_SCAN_CD_SET = 30.0        # ... mit komplettem Hacker-Set
+HACK_GRID = 2                  # ... Karte in GRID x GRID Felder (Polytown: 4 Quadranten) ...
+HACK_GRID_SET = 3              # ... mit komplettem Set feiner (9 Sektoren)
+HACK_SCAN_SHOW = 8.0           # ... so lange (s) zeigen Karte und Raster die Felder mit Gegnern
+HACK_MARK_R = 70.0             # v49: Hacker-Visor: feindliche C4/Claymores und Granaten in so viel m werden markiert
+HACK_QUIET = 0.5               # v49: Hacker-Stiefel: Lärmradius der Schritte x so viel
+
+NECRO_SENSE = 0.5              # v49: Nekromanten-Maske: Monster bemerken dich erst aus so viel ihrer Entfernung
+NECRO_DMG_K = 0.75             # v49: Nekromanten-Robe: Monster-Schaden an dir x so viel
+NEST_LIFE = 300.0              # v49: Nekromanten-Set: Nest lebt so lange (s) ...
+NEST_CD = 30.0                 # ... höchstens ein Nest je Spieler; nach seinem Ende so lange (s) bis zum nächsten
+NEST_KINDS = (("grunt", 20, 160.0, 1.2), ("huntress", 14, 200.0, 1.6), ("brute", 10, 300.0, 2.2),
+              ("colossus", 5, 450.0, 3.2), ("titan", 2, 700.0, 4.5))   # Art, Monster je Lebensdauer, Nest-HP, Radius (m)
+NEST_RANGE = 12.0              # m: so weit vor dem Spieler wird das Nest platziert (auf dem Boden)
+NEST_PROVOKE_T = 6.0           # s: wer ein Monster angreift, ist für dieses Monster so lange nicht getarnt
 
 HERMES_SET_SPEED = 1.6         # Hermes-Set: dauerhaft so viel schneller (10c: 1,5 -> 1,6)
 
@@ -1568,6 +1615,7 @@ ATTACHMENTS = (
 ATT_SILENCER = (0, 1)          # v48: (Platz, Index) des Schalldämpfers
 ATT_GL = (2, 4)                # v48: (Platz, Index) des Granatwerfers (ersetzt den Griff, nur Colt M4 Carbine)
 ATT_NONE = (0, 0, 0)
+SIL_DUR = (1.5, 3.0)           # v49: Haltbarkeit eines Schalldämpfers in Magazinen der Waffe (je gelootetem Dämpfer zufällig)
 _EFF_CACHE = {}
 
 
@@ -2755,6 +2803,22 @@ class Gadget:
         self.arm = CLAY_ARM if kind == GAD_CLAY else 0.0
 
 
+class Nest:
+    """v49: Monster-Nest des Nekromanten-Sets. Ein Erdloch (Zombie) bis Krater (Titan) im Boden, aus dem über die
+    Lebensdauer NEST_LIFE verteilt Monster einer Art steigen. Zerstörbar (Kugeln, Explosionen); der Host simuliert es,
+    Mitspieler bekommen es im Snapshot ("ne")."""
+
+    def __init__(self, nid, owner, ki, x, y, z):
+        kind, n, hp, r = NEST_KINDS[ki]
+        self.nid, self.owner, self.ki = nid, owner, ki
+        self.kind, self.total, self.r = kind, n, r
+        self.x, self.y, self.z = x, y, z
+        self.hp = self.max_hp = hp
+        self.life = NEST_LIFE
+        self.spawned = 0
+        self.next_t = 2.5                    # das erste Monster kommt nach ein paar Sekunden
+
+
 class Drop:
     """Waffe, Ausrüstungsteil, Nahkampfwaffe oder Aufsatz am Boden (F zum Aufheben). wi = Waffe (-1 sonst),
     gear = Teil (-1), melee = Nahkampfwaffe (-1), att = Aufsatz (Platz * ATT_CODE + Index, -1).
@@ -3132,11 +3196,17 @@ class Mob:
         best, bd = None, 1e18
         on_terrain = None                                 # 12: erst berechnen, wenn es gebraucht wird (spart 2 Höhenabfragen)
         own = getattr(self, "owner", None)                # 10e: eigene Drohne - nie Besitzer oder Verbündete
+        prov = getattr(self, "provoked", ())
         for p in players:
             if p.hp <= 0:
                 continue
             if own is not None and world is not None and world.allied(own, p.pid):
                 continue
+            if p.pid not in prov and necro_camo(p):      # v49: Nekromanten-Set - gilt als Artgenosse (bis er angreift)
+                continue
+            no_ = getattr(self, "nest_owner", -1)
+            if no_ >= 0 and p.pid not in prov and world is not None and world.allied(no_, p.pid):
+                continue                                 # v49: Nest-Monster verschonen ihren Beschwörer und sein Team
             if self.hover > 0:                             # 7a: Drohne steigt bis DRONE_FLY_TOP - erreicht fast alle
                 if p.z - self.gz > DRONE_FLY_TOP + DRONE_TARGET_DZ:
                     continue
@@ -3205,7 +3275,8 @@ class Mob:
             dx, dy = pl.x - self.x, pl.y - self.y
             d = math.hypot(dx, dy) or 1e-6                 # 13f: genau übereinander -> keine Division durch 0
         d3 = math.hypot(d, pl.z - self.z) if pl is not None else d          # 10a: Sichtweite in 3D (Heli hoch oben)
-        sees = pl is not None and (d3 < k["aggro"] or (self.alert_t > 0 and d3 < 90))
+        aggro_ = k["aggro"] * (NECRO_SENSE if pl is not None and wears(pl, "necro_mask") else 1.0)   # v49: Nekro-Maske
+        sees = pl is not None and (d3 < aggro_ or (self.alert_t > 0 and d3 < 90))
         if sees and (dazed or (world.smokes and d3 > 2.5 and world.smoke_blocks(
                 (self.x, self.y, self.z + self.height * 0.85), (pl.x, pl.y, pl.z + 1.4)))):
             sees = False                                   # 10e: geblendet / Rauch dazwischen
@@ -3842,13 +3913,16 @@ def pan_food_count(pts):
 
 SET_BONUS_TEXT = {
     "armor": f"+{ARMOR_SET_BONUS:.0f} max. HP (zusammen +{3 * GEAR_HP_PART + ARMOR_SET_BONUS:.0f})",
-    "shield": f"Stromstoss (Taste {SET_ICON_KEY.upper()}): betäubt alles in {SHOCK_R:.0f} m für "
-              f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s, alle {SHOCK_CD:.0f} s",
-    "hermes": f"x{HERMES_SET_SPEED:g} Tempo, Dash x{HERMES_SET_DASH_DIST:g} so weit und x{HERMES_SET_DASH:g} so schnell, "
-              f"Shift halten = bis {HERMES_GLIDE_MAX:.0f} m gleiten",
+    "shield": f"Schockwelle (Taste {SET_ICON_KEY.upper()}, alle {SHOCK_CD:.0f} s): {SHOCK_R:.0f} m Radius, betäubt "
+              f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s und schleudert bis an den Rand;\n"
+              f"fremde Schilde auf 0 ({SHOCK_SHIELD_BLOCK:.0f} s keine Aufladung), Jetpack-Tank leer, Dash lädt neu",
     "second": f"Tödlicher Tomahawk-Treffer: du überlebst mit {SAVE_HP:.0f} HP - dafür zerbricht die ganze Ausrüstung",
-    "jet": f"Tank x{JET_SET_FUEL:g}, steigen und sinken x{JET_SET_SPEED:g} so schnell",
-    "spring": "Kein Fallschaden",
+    "spring": f"Kein Fallschaden; in der Luft und an der Wand streuen alle Waffen aus der Hüfte nur x{SPRING_AIR_SPREAD:g}",
+    "hacker": f"Scan alle {HACK_SCAN_CD_SET:.0f} s statt {HACK_SCAN_CD:.0f} s und feiner "
+              f"({HACK_GRID_SET * HACK_GRID_SET} statt {HACK_GRID * HACK_GRID} Sektoren)",
+    "necro": f"Monster-Tarnung (Monster halten dich für ihresgleichen, bis du sie angreifst);\n"
+             f"Nest-Wählrad (Taste {SET_ICON_KEY.upper()} halten): Nest für {NEST_LIFE / 60:.0f} min "
+             f"(Zombies, Jägerinnen, Brutes, Kolosse oder Titanen)",
 }
 
 def gear_info(gi, pl=None):
@@ -3868,10 +3942,22 @@ def gear_info(gi, pl=None):
         "hp": f"+{g.hp:.0f} max. Lebenspunkte.",
         "shield": f"Schild {g.shield:.0f} HP (alle Schild-Teile ein Balken) fängt Schaden vor den Lebenspunkten ab.\n"
                   f"{SHIELD_DELAY:.0f} s ohne Treffer: lädt mit {SHIELD_RATE:.0f} HP/s auf (je weiteres Teil schneller).",
-        "jetpack": f"Leertaste in der Luft halten = steigen, Strg = sinken.\n"
-                   f"Treibstoff {JET_FUEL * JET_PACK_SHARE:.0f} s (mit Jet-Helm {JET_FUEL:.0f} s), leer -> voll in {JET_REFILL_T:.0f} s.",
-        "dash": f"Shift beim Laufen: Dash {DASH_DIST:.0f} m nach vorne in {DASH_TIME:.1f} s,\n{DASH_CD:.0f} s Abklingzeit.",
+        "jetpack": f"Leertaste in der Luft halten = steigen, Strg = sinken (x{EXO_JET_SPEED:g} so schnell), kein Fallschaden.\n"
+                   f"Treibstoff {JET_FUEL * EXO_FUEL:.0f} s, leer -> voll in {JET_REFILL_T:.0f} s.\n"
+                   f"Schwer: sperrt Kopf und Füsse (kein Helm, keine Stiefel), am Boden {int(round((1 - EXO_WALK) * 100))} % langsamer.",
+        "dash": f"Dauerhaft x{HERMES_SPEED:g} Tempo. Shift beim Laufen: Blitzen-Dash {DASH_DIST:.0f} m in "
+                f"{DASH_TIME / HERMES_DASH_SPEED:.2f} s, {HERMES_DASH_CD:.0f} s Abklingzeit.\n"
+                f"Laut: Schritte doppelt so weit zu hören, der Dash knallt (Überschall).",
         "spring": f"Springt {SPRING_JUMP ** 2:.1f}-mal so hoch.",
+        "hack_hud": f"Blaue High-Tech-Sicht: feindliche C4, Claymores und fliegende Granaten\nin {HACK_MARK_R:.0f} m "
+                    f"werden markiert (auch durch Wände).",
+        "hack_scan": f"Quadranten-Scan (Taste {SET_ICON_KEY.upper()}, alle {HACK_SCAN_CD:.0f} s): zeigt grob, in welchen "
+                     f"Kartenfeldern Gegner sind\n({HACK_GRID * HACK_GRID} Felder, {HACK_SCAN_SHOW:.0f} s auf Karte und Raster).",
+        "hack_quiet": f"Gedämpfte Sohlen: Schritte nur x{HACK_QUIET:g} so laut (Monster hören dich später).",
+        "necro_mask": f"Monster bemerken dich erst aus {int(NECRO_SENSE * 100)} % ihrer normalen Entfernung.",
+        "necro_robe": f"Monster richten an dir nur {int(NECRO_DMG_K * 100)} % Schaden an.",
+        "necro_boots": "Deine Schritte locken keine Monster an (kein Schrittlärm für Monster).",
+        "legacy": "Ausgemustert - hat keine Wirkung mehr.",
     }.get(g.kind, "")
     out = f"{g.name}  ({GEAR_SLOT_NAMES[g.slot]})\n{desc}"
     if g.set:
@@ -4037,13 +4123,24 @@ def set_full(pl, name):
     return set_count(pl, name) >= 3
 
 def jet_fuel_max(pl):
-    """10c: Tankgrösse: Jetpack JET_PACK_SHARE, Jet-Helm +JET_HELM_SHARE, Jetpack-Set x JET_SET_FUEL."""
-    f = JET_FUEL * ((JET_PACK_SHARE if wears(pl, "jetpack") else 0.0) + (JET_HELM_SHARE if wears(pl, "fuel") else 0.0))
-    return f * (JET_SET_FUEL if set_full(pl, "jet") else 1.0)
+    """v49: Tankgrösse des Schweren Exo-Jetpacks (JET_FUEL x EXO_FUEL); ohne Jetpack 0."""
+    return JET_FUEL * EXO_FUEL if wears(pl, "jetpack") else 0.0
 
 def no_fall(pl):
-    """10c: kein Fallschaden (Jetpack-Stiefel oder Springfeder-Set)."""
-    return wears(pl, "nofall") or (SPRING_SET_NOFALL and set_full(pl, "spring"))
+    """10c: kein Fallschaden (Springfeder-Set; v49: Schweres Exo-Jetpack)."""
+    return wears(pl, "jetpack") or (SPRING_SET_NOFALL and set_full(pl, "spring"))
+
+def gear_blocked(pl, slot):
+    """v49: Ist der Slot durch ein getragenes Teil gesperrt (Exo-Jetpack sperrt Kopf und Füsse)? -> sperrendes Teil
+    (Index) oder None."""
+    for sl, gi in getattr(pl, "gear", {}).items():
+        if gi is not None and sl != slot and slot in GEAR[gi].blocks:
+            return gi
+    return None
+
+def necro_camo(pl):
+    """v49: Nekromanten-Set komplett - Monster halten den Träger für ihresgleichen."""
+    return set_full(pl, "necro")
 
 def gear_hp_bonus(pl):
     """7c: + max. HP aus der Ausrüstung (Rüstungs-Teile, Set-Bonus)."""
@@ -4577,6 +4674,8 @@ class World:
         self.airdrops = []       # 10e: Airdrops (Fackel, Flugzeug, Kiste am Fallschirm)
         self.next_fxid = 1
         self.gadgets = []        # platzierte Gadgets (C4, Claymore, Funkbake)
+        self.nests = []          # v49: Monster-Nester (Nekromanten-Set)
+        self.next_nest = 1
         self.next_gadid = 1
         self.drops = []
         self.turrets = []
@@ -6054,11 +6153,21 @@ class World:
             return NOISE_CLING
         if not pl.moving:
             return 0.0
+        if wears(pl, "necro_boots"):                       # v49: Grabstiefel - Schritte locken keine Monster an
+            return 0.0
+        k = (HERMES_STEP_K if wears(pl, "dash") else 1.0) * (HACK_QUIET if wears(pl, "hack_quiet") else 1.0)   # v49
         if pl.crouch > 0.5:
-            return NOISE_CROUCH
-        return NOISE_RUN if getattr(pl, "running", False) else NOISE_WALK
+            return NOISE_CROUCH * k
+        return (NOISE_RUN if getattr(pl, "running", False) else NOISE_WALK) * k
 
     def update_noise(self, dt, players):
+        for pl in players:                               # v49: Hermes-Dash - Überschallknall (Monster und Spieler hören ihn)
+            n_ = getattr(pl, "dash_n", 0)
+            if n_ != getattr(pl, "dash_seen", 0):
+                pl.dash_seen = n_
+                if pl.hp > 0 and n_ > 0:
+                    self.make_noise(pl.x, pl.y, HERMES_BOOM_NOISE, self.noise_z(pl))
+                    self.events.append(("hboom", pl.pid, round(pl.x, 1), round(pl.y, 1), round(pl.z + 1.0, 1)))
         self.noise_clock -= dt
         if self.noise_clock > 0:
             return
@@ -6219,6 +6328,7 @@ class World:
         self.gren_event(pl)
         pl.loot_history, pl.last_loot, pl.last_by = {}, None, {}     # Beute-Gedächtnis gilt nur für ein Leben
         pl.att_store = []                                # Aufsatz-Lager wird beim Tod geleert
+        pl.sil, pl.sil_store = {}, []                    # v49: Schalldämpfer-Haltbarkeit mit
         self.end_buff(pl)                                # Buff läuft beim Tod sofort ab
         pl.stun_t = pl.stun_lock = 0.0
         self.leave_vehicle(pl)
@@ -6275,6 +6385,9 @@ class World:
         if getattr(m, "dig_t", 0.0) > 0:                  # 13f: steckt noch im Boden
             return
         dmg *= self.dmg_mult(owner)
+        if isinstance(owner, int) and owner >= 0:       # v49: wer ein Monster angreift, ist für dieses enttarnt
+            m.provoked = getattr(m, "provoked", set())
+            m.provoked.add(owner)
         pct = round(min(dmg, max(m.hp, 0.0)) / m.max_hp * 100.0)
         m.hp -= dmg
         m.hurt_t = 0.15
@@ -6307,7 +6420,7 @@ class World:
             if not m.aggressive():                       # Fluchttier erlegt: Buff für den Schützen
                 self.give_buff(killer)
             extra = THIEF_EXTRA if (killer is not None and wi == MELEE_WI0 + MELEE_IDX.get(THIEF_NAME, -99)) else 0
-            if not loot:                                 # 13d: von der lila Drohne zerstört - keine Beute
+            if not loot or getattr(m, "nest", -1) >= 0:  # 13d: lila Drohne / v49: Nest-Monster - keine Beute
                 pass
             else:
                 if m.kind in MOB_LOOT or extra:          # 10b: Beute von Monstern (Titan: 6 Teile)
@@ -6353,6 +6466,10 @@ class World:
                 if pl.pid == owner:
                     f *= 0.5
                 self.damage_player(pl, dmg * f * self.dmg_mult(owner), owner, wi)
+        for n_ in self.nests:                            # v49: Monster-Nester
+            d = math.dist(pos, (n_.x, n_.y, n_.z))
+            if d < r + n_.r:
+                self.damage_nest(n_, dmg * max(0.2, 1.0 - max(0.0, d - n_.r) / r), owner)
         for m in self.mobs:
             if m.state == "dead":
                 continue
@@ -6494,8 +6611,8 @@ class World:
                  gk="frag"):
         while len(self.drops) >= MAX_DROPS:
             self.drops.pop(0)
-        if wi >= 0 and not self.exp:                     # v48: normale Modi - Waffen liegen immer blank in der Welt
-            atts, scope = None, -1                       # (Aufsätze gibt es separat bzw. im Ausrüstungsmenü)
+        if wi >= 0:                                      # v49: in ALLEN Modi (auch Experimental) liegen Waffen blank in
+            atts, scope = None, -1                       # der Welt - Aufsätze/Visiere gibt es nur separat (Beute, Menü)
         d = Drop(self.next_did, x, y, max(z, self.ground_for(x, y, z + 0.3)), wi, gear, melee, att, atts, owner, lock,
                  scope, gren, gk)
         self.next_did += 1
@@ -7366,8 +7483,10 @@ class World:
         return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
 
     def shock(self, pl):
-        """7c: Schild-Set-Fähigkeit "Stromstoss": betäubt alle Spieler und Monster im Umkreis SHOCK_R (nicht einen
-        selbst) zufällig SHOCK_STUN_MIN..MAX s. Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
+        """7c: Schild-Set-Fähigkeit (v49: "Schockwelle"): betäubt alle Gegner und Monster im Umkreis SHOCK_R (nicht einen
+        selbst, nicht das eigene Team) zufällig SHOCK_STUN_MIN..MAX s. v49: schleudert sie bis an den Rand des Radius
+        (Wände bremsen), setzt fremde Schilde auf 0 (SHOCK_SHIELD_BLOCK s keine Aufladung) und leert Jetpack-Tank und
+        Dash (beim Getroffenen über das Ereignis "shockhit"). Abklingzeit SHOCK_CD. -> True, wenn ausgelöst."""
         if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "shield") or getattr(pl, "shock_cd", 0.0) > 0
                 or pl.vehicle >= 0 or pl.heli >= 0):
             return False
@@ -7375,21 +7494,172 @@ class World:
         k = DAGGER_AMP if "shock" in pl.amp else 1.0     # 9c: Erschöpfungsdolch: doppelter Radius und Betäubung
         pl.amp.discard("shock")
         rng = self.mrng
+        R = SHOCK_R * k
         for q in self.players.values():
-            if q is pl or q.hp <= 0:
+            if q is pl or q.hp <= 0 or q.vehicle >= 0 or q.heli >= 0 or self.allied(pl.pid, q.pid):
                 continue
-            if math.hypot(q.x - pl.x, q.y - pl.y) <= SHOCK_R * k and abs(q.z - pl.z) < 2.5:
+            d = math.hypot(q.x - pl.x, q.y - pl.y)
+            if d <= R and abs(q.z - pl.z) < 3.0:
                 q.stun_lock = 0.0
                 self.stun_player(q, rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
+                # v49: Anti-Schild - fremder Schild sofort leer und SHOCK_SHIELD_BLOCK s ohne Aufladung
+                had_ = shield_max(q) > 0
+                if had_:
+                    q.shield_hp = 0.0
+                    q.shield_t = SHIELD_DELAY - SHOCK_SHIELD_BLOCK
+                # v49: bis an den Rand des Radius schleudern (der Getroffene bewegt sich selbst: Ereignis an ihn)
+                ux, uy = ((q.x - pl.x) / d, (q.y - pl.y) / d) if d > 0.05 else (-math.sin(math.radians(q.heading)),
+                                                                                  math.cos(math.radians(q.heading)))
+                v_ = max(0.0, R + 0.5 - d) / SHOCK_KNOCK_T
+                self.events.append(("shockhit", q.pid, round(ux * v_, 2), round(uy * v_, 2), 1 if had_ else 0))
         for m in self.mobs:
             if m.state == "dead":
                 continue
-            if math.hypot(m.x - pl.x, m.y - pl.y) <= SHOCK_R * k + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
+            d = math.hypot(m.x - pl.x, m.y - pl.y)
+            if d <= R + m.radius and z_overlap(pl.z - 0.5, pl.z + 3.0, m.z, m.z + m.height):
                 m.stun_t = max(getattr(m, "stun_t", 0.0), rng.uniform(SHOCK_STUN_MIN, SHOCK_STUN_MAX) * k)
                 m.state, m.atk_t, m.did_hit = "chase", 0.0, True
+                if m.kind not in SHOCK_KNOCK_SKIP and m.hover <= 0 and d < R:
+                    self.knock_mob(m, pl.x, pl.y, R + m.radius)
         self.make_noise(pl.x, pl.y, NOISE_MELEE * 2.0, pl.z + 1.0)
-        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2)))
+        self.events.append(("shock", pl.pid, round(pl.x, 2), round(pl.y, 2), round(pl.z, 2), round(R, 1)))
         return True
+
+    # ------------------------------------------------------------ v49: Hacker- und Nekromanten-Set
+    def hack_scan(self, pl):
+        """v49: Quadranten-Scan der Hacker-Weste. Teilt die Karte in g x g gleich grosse Felder (Polytown: 4 Quadranten,
+        komplettes Set: 9 Sektoren) und meldet dem Spieler, in welchen Feldern lebende Gegner sind (nur grob, keine
+        Positionen). -> True, wenn ausgelöst."""
+        if (pl.hp <= 0 or self.phase != "play" or not wears(pl, "hack_scan") or getattr(pl, "scan_cd", 0.0) > 0):
+            return False
+        full = set_full(pl, "hacker")
+        g = HACK_GRID_SET if full else HACK_GRID
+        cd = HACK_SCAN_CD_SET if full else HACK_SCAN_CD
+        pl.scan_cd = cd
+        cells = set()
+        for q in self.players.values():
+            if q is pl or q.hp <= 0 or q.prespawn or self.allied(pl.pid, q.pid):
+                continue
+            cx = int(clampf(q.x / WORLD * g, 0, g - 1e-6))
+            cy = int(clampf(q.y / WORLD * g, 0, g - 1e-6))
+            cells.add(cy * g + cx)
+        self.events.append(("hscan", pl.pid, g, sorted(cells), cd))
+        return True
+
+    def nest_spot(self, pl):
+        """v49: Platz für ein Nest: in Blickrichtung bis NEST_RANGE vor dem Spieler auf dem Boden, frei von Wänden und
+        in Sichtlinie (sonst näher heran). -> (x, y, z) oder None."""
+        h = math.radians(pl.heading)
+        fx, fy = -math.sin(h), math.cos(h)
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        dist = NEST_RANGE
+        while dist >= 2.0:
+            x, y = pl.x + fx * dist, pl.y + fy * dist
+            lo = edge_margin(self) + 2.0
+            if lo < x < WORLD - lo and lo < y < WORLD - lo:
+                z = self.floor_at(x, y, pl.z + 2.0)
+                px_, py_ = push_out(x, y, 0.8, self, z)
+                if (abs(px_ - x) + abs(py_ - y) < 0.05 and abs(z - pl.z) < 4.0
+                        and self.los(eye, (x, y, z + 0.4)) and not self.water_at(x, y, z)):
+                    return x, y, z
+            dist -= 1.5
+        return None
+
+    def place_nest(self, pl, ki):
+        """v49: Nekromanten-Set: Nest der Art ki (Index in NEST_KINDS) platzieren. Höchstens eins je Spieler,
+        danach NEST_CD s Pause. -> True, wenn gesetzt."""
+        if (pl.hp <= 0 or self.phase != "play" or not set_full(pl, "necro") or not 0 <= ki < len(NEST_KINDS)
+                or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0):
+            return False
+        if getattr(pl, "nest_cd", 0.0) > 0 or any(n.owner == pl.pid for n in self.nests):
+            self.events.append(("nestno", pl.pid, round(getattr(pl, "nest_cd", 0.0), 1)))
+            return False
+        spot = self.nest_spot(pl)
+        if spot is None:
+            self.events.append(("nestno", pl.pid, -1))
+            return False
+        n = Nest(self.next_nest, pl.pid, ki, *spot)
+        self.next_nest += 1
+        self.nests.append(n)
+        self.make_noise(n.x, n.y, NOISE_EXPLOSION * 0.4, n.z + 1.0)
+        self.events.append(("nest", n.nid, pl.pid, ki, round(n.x, 2), round(n.y, 2), round(n.z, 2)))
+        return True
+
+    def update_nests(self, dt):
+        """v49: Nester: Lebensdauer, Monster schlüpfen gleichmässig verteilt (NEST_KINDS-Anzahl je NEST_LIFE)."""
+        if not self.nests:
+            return
+        keep = []
+        for n in self.nests:
+            n.life -= dt
+            if n.hp <= 0 or n.life <= 0 or self.phase != "play":
+                self.end_nest(n, n.hp <= 0)
+                continue
+            n.next_t -= dt
+            if n.next_t <= 0 and n.spawned < n.total:
+                n.next_t = NEST_LIFE / n.total
+                n.spawned += 1
+                self.nest_mob(n)
+            keep.append(n)
+        self.nests = keep
+
+    def nest_mob(self, n):
+        """v49: ein Monster steigt aus dem Nest (buddelt sich wie die Bosse aus dem Boden)."""
+        rng = self.mrng
+        a, r = rng.uniform(0, math.tau), n.r * 0.35 * rng.random()
+        m = Mob(n.kind, n.x + math.cos(a) * r, n.y + math.sin(a) * r, self)
+        m.id = self.next_mid
+        self.next_mid += 1
+        m.nest, m.nest_owner = n.nid, n.owner
+        m.gz = self.floor_at(m.x, m.y, n.z + 1.0)
+        m.dig_t = BOSS_DIG_T
+        m.z = m.gz - m.height
+        m.heading = rng.uniform(0, 360)
+        self.events.append(("bossdig", m.id, round(m.x, 2), round(m.y, 2), round(m.gz, 2), m.kind))
+        self.mobs.append(m)
+
+    def end_nest(self, n, destroyed):
+        """v49: Nest vergeht (Lebensdauer um) oder wurde zerstört; der Besitzer wartet NEST_CD s auf das nächste."""
+        own = self.players.get(n.owner)
+        if own is not None:
+            own.nest_cd = NEST_CD
+        self.events.append(("nestdown", n.nid, n.owner, round(n.x, 2), round(n.y, 2), round(n.z, 2),
+                            1 if destroyed else 0, n.ki))
+
+    def damage_nest(self, n, dmg, owner):
+        """v49: Schaden am Nest - der Beschwörer (und sein Team) kann es nicht selbst zerstören."""
+        if n.hp <= 0 or (isinstance(owner, int) and owner >= 0 and self.allied(owner, n.owner)):
+            return
+        n.hp -= dmg
+        self.events.append(("nesthit", n.nid, round(max(0.0, n.hp) / n.max_hp, 2), owner))
+
+    def bullet_nest(self, b, p0):
+        """v49: Kugel trifft auf ihrer Strecke p0 -> jetzt ein Nest? -> True, wenn sie dort endet."""
+        p1 = (b.x, b.y, b.z)
+        for n in self.nests:
+            if seg_cyl(p0, p1, n.x, n.y, n.r, n.z - 0.6, n.z + 0.5) is not None:
+                if b.blast_r > 0:
+                    self.explode(p1, b.owner, b.blast_r, b.blast_dmg, b.wi)
+                else:
+                    self.damage_nest(n, b.dmg, b.owner)
+                return True
+        return False
+
+    def knock_mob(self, m, cx, cy, r_out):
+        """v49: Monster von (cx, cy) weg bis auf r_out schieben - in kleinen Schritten, an Wänden ist Schluss."""
+        d = math.hypot(m.x - cx, m.y - cy)
+        ux, uy = ((m.x - cx) / d, (m.y - cy) / d) if d > 0.05 else (1.0, 0.0)
+        left = r_out - d
+        while left > 0.01:
+            st = min(0.5, left)
+            nx, ny = push_out(m.x + ux * st, m.y + uy * st, m.radius, self, m.gz)
+            moved = (nx - m.x) * ux + (ny - m.y) * uy
+            m.x, m.y = nx, ny
+            if moved < st * 0.5:                         # Wand: dagegen geprallt
+                break
+            left -= st
+        m.gz = self.floor_at(m.x, m.y, m.gz + STEP_H)
+        m.z = m.gz + getattr(m, "hover", 0.0)
 
     def give_buff(self, pl):
         """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank)."""
@@ -7424,9 +7694,17 @@ class World:
         if pl.gear.get(g.slot) == gi:
             self.events.append(("hasgear", pl.pid, gi))
             return False
+        blk = gear_blocked(pl, g.slot)                   # v49: Slot gesperrt (Exo-Jetpack: kein Helm, keine Stiefel)
+        if blk is not None:
+            self.events.append(("gearblock", pl.pid, gi, blk))
+            return False
         old = pl.gear.get(g.slot)
         if old is not None:
             self.add_drop(pl.x, pl.y, pl.z, -1, old)
+        for sl in g.blocks:                              # v49: das neue Teil sperrt Slots - was dort steckt, fällt ab
+            if pl.gear.get(sl) is not None:
+                self.add_drop(pl.x, pl.y, pl.z, -1, pl.gear[sl])
+                pl.gear[sl] = None
         pl.gear[g.slot] = gi
         if g.kind == "shield" and old != gi:
             pl.shield_t = 0.0                            # Schildstand gehört dem Spieler (kein Zurücksetzen)
@@ -8195,15 +8473,19 @@ class World:
             pl.dual_reserve = 0
             if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
                 pl.scopes[wi] = scope
+            elif att_fits(wi, ATT_SCOPE):
+                pl.scopes[wi] = SC_IRON                  # v49: blank aufgehoben - auch die DSR ohne Zielfernrohr
             else:
                 pl.scopes.pop(wi, None)
+            if wi != DUAL_WI:
+                getattr(pl, "sil", {}).pop(wi, None)
         else:
             pl.att[wi] = out_att if out_att else pl.att.get(wi)
             if pl.att.get(wi) is None:
                 pl.att.pop(wi, None)
         if out is not None:
-            osc = pl.scopes.pop(out, -1)
-            self.add_drop(pl.x, pl.y, pl.z, out, atts=pl.att.pop(out, None), scope=osc)
+            att_unmount_all(pl, out)                     # v49: Aufsätze der getauschten Waffe -> Aufsatz-Lager
+            self.add_drop(pl.x, pl.y, pl.z, out)
         self.events.append((how, pl.pid, wi, list(pl.slots), 1 if dup else 0, extra,
                             list(pl.att.get(wi) or ATT_NONE)))
         self.att_state_event(pl)
@@ -8211,13 +8493,33 @@ class World:
     def att_state_event(self, pl, msg=0, code=-1, wi=-1):
         """7b: Aufsätze, Visiere und Aufsatz-Lager des Spielers an alle (der Spieler übernimmt sie)."""
         self.events.append(("attstate", pl.pid, {str(k): list(v) for k, v in pl.att.items()},
-                            {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi))
+                            {str(k): v for k, v in pl.scopes.items()}, list(pl.att_store), msg, code, wi,
+                            {str(k): round(v, 2) for k, v in getattr(pl, "sil", {}).items()},     # v49: Dämpfer-Rest
+                            [round(v, 2) for v in getattr(pl, "sil_store", [])]))
 
     def give_attachment(self, pl, si, v):
-        """7b: Aufsatz aufheben (siehe att_give). -> True (wird immer genommen)."""
-        msg, code, wi = att_give(pl, si, v)
+        """7b: Aufsatz aufheben (siehe att_give). -> True (wird immer genommen). v49: jeder gelootete Schalldämpfer
+        bekommt eine zufällige Haltbarkeit (SIL_DUR Magazine)."""
+        dur = round(self.mrng.uniform(*SIL_DUR), 2) if is_sil(si, v) else None
+        msg, code, wi = att_give(pl, si, v, dur)
         self.att_state_event(pl, msg, code, wi)
         return True
+
+    def wear_silencer(self, pl, w):
+        """v49: Schuss mit Schalldämpfer verbraucht 1/Magazingrösse seiner Haltbarkeit. Ist sie aufgebraucht, fliegt
+        er ab: die Waffe ist wieder laut, der Dämpfer ist weg (auch nicht im Lager)."""
+        wi = pl.cur
+        if not att_silenced(wi, pl.att.get(wi)):
+            return
+        pl.sil = getattr(pl, "sil", {})
+        left = pl.sil.get(wi, SIL_DUR[1]) - 1.0 / max(1, w.mag)
+        if left > 1e-6:
+            pl.sil[wi] = left
+            return
+        pl.sil.pop(wi, None)
+        att_set_value(pl, wi, ATT_SILENCER[0], 0)
+        self.events.append(("silbreak", pl.pid, wi, round(pl.x, 2), round(pl.y, 2), round(pl.z + eye_h(pl), 2)))
+        self.att_state_event(pl, 5, ATT_SILENCER[0] * ATT_CODE + ATT_SILENCER[1], wi)
 
     def equip_att(self, pl, wi, si, v):
         """7b: Aufsatz aus dem Lager an die Waffe wi stecken (siehe att_equip_local). -> True, wenn geändert."""
@@ -8751,13 +9053,14 @@ class World:
             self.shot_sink(pl, eye, dirs, w)
             return
         nr = self.shot_noise(pl, w)
+        self.wear_silencer(pl, w)                        # v49: Schalldämpfer nutzt sich ab (nach dem Lärm dieses Schusses)
         self.events.append(("shotpos", pl.pid, round(pl.x, 1), round(pl.y, 1),           # 10h: + Lärmradius, Höhe
                             round(nr, 1), round(world_noise_z(self, pl), 1)))
         pl.protect = 0.0                                 # Spawnschutz endet beim Schiessen
         self.make_noise(pl.x, pl.y, nr, world_noise_z(self, pl))
         tgt = None
         if pl.cur == STINGER_WI and dirs:                # v48: Lenkrakete - Ziel im Kegel um die Abschussrichtung
-            t = stinger_target(self, eye, dirs[0], STINGER_HOST_CONE, STINGER_RANGE * 1.1)
+            t = stinger_target(self, eye, dirs[0], STINGER_HOST_CONE, STINGER_RANGE * 1.1, pl.pid)
             if t is not None and not (t[0] == "heli" and getattr(t[2], "driver", -1) == pl.pid):
                 tgt = (t[0], t[1])
         for d in dirs:
@@ -8940,6 +9243,8 @@ class World:
                 if not self.bullet_substep(b, dt / n, cand):
                     ok = False
                     break
+            if ok and self.nests and self.bullet_nest(b, p0):   # v49: Monster-Nest getroffen
+                ok = False
             if self.mobs and b.blast_r <= 0:
                 self.bullet_alert(b, p0, not ok)
             if ok and -50 < b.x < WORLD + 50 and -50 < b.y < WORLD + 50:
@@ -8954,7 +9259,11 @@ class World:
         tg = None
         if b.target is not None:
             kind, tid = b.target
-            for o in (self.vehicles if kind == "veh" else self.helis):
+            if kind == "plr":                            # v49: fliegender Spieler (Jetpack, langer Sprung)
+                p_ = self.players.get(tid)
+                if p_ is not None and p_.hp > 0:
+                    tg = (p_.x, p_.y, p_.z + 1.0)
+            for o in (() if kind == "plr" else self.vehicles if kind == "veh" else self.helis):
                 if o.id == tid and o.hp > 0:
                     tg = (o.x, o.y, o.z + (1.2 if kind == "heli" else 0.8))
                     break
@@ -9038,6 +9347,7 @@ class World:
         self.bullets, self.grenades, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
+        self.nests = []                                  # v49: Monster-Nester
         self.events.append(("matchend",))
         self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
 
@@ -9074,6 +9384,7 @@ class World:
         self.grenades, self.drops, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
+        self.nests = []                                  # v49: Monster-Nester
         for v in self.vehicles:
             v.reset()
         self.strike, self.strike_t, self.strike_by, self.strike_wait = 0, 0.0, -1, 0.0
@@ -9156,6 +9467,7 @@ class World:
         self.update_airdrops(dt)
         self.update_vehicles(dt)
         self.update_gadgets(dt)
+        self.update_nests(dt)                            # v49: Monster-Nester (Nekromanten-Set)
         self.update_turrets(dt)
         self.update_helis(dt)
         self.update_strike(dt)
@@ -9183,7 +9495,7 @@ class World:
                     self.events.append(("tempdown", m.id, round(m.x, 2), round(m.y, 2), round(m.z, 2)))
         for m in [m for m in self.mobs if m.state == "dead" and m.dead_t > 4.0]:
             self.mobs.remove(m)
-            if m.kind in TEMP_MOBS:                      # 10e: keine Monster - kommen nicht wieder
+            if m.kind in TEMP_MOBS or getattr(m, "nest", -1) >= 0:   # 10e / v49: Drohnen, Nest-Monster - kein Respawn
                 continue
             if m.kind in BOSS_KINDS:                     # 13f: Bosse kommen nur im Zyklus ihrer Art wieder
                 continue
@@ -9215,6 +9527,8 @@ class World:
                     rate = SHIELD_RATE * (1.0 + SHIELD_RATE_PART * max(0, n_ - 1))
                     pl.shield_hp = min(smax, pl.shield_hp + rate * dt)
             pl.shock_cd = max(0.0, getattr(pl, "shock_cd", 0.0) - dt)
+            pl.scan_cd = max(0.0, getattr(pl, "scan_cd", 0.0) - dt)      # v49: Hacker-Scan
+            pl.nest_cd = max(0.0, getattr(pl, "nest_cd", 0.0) - dt)      # v49: Nekromanten-Nest
             tick_melee_timers(pl, dt)                    # 9c: Pfannen-Sperre, verstärkte Fähigkeiten
             self.update_eating(pl, dt)                   # 9c: Essen (Heilung beim Host)
             if pl.buff is not None:
@@ -9305,7 +9619,7 @@ class World:
         """Monsterschaden an einem Spieler - sitzt er im Wagen/Heli, trifft es das Fahrzeug."""
         occ = self.occupied_vehicle(pl)
         if occ is None:
-            self.damage_player(pl, dmg, -1, wi)
+            self.damage_player(pl, dmg * (NECRO_DMG_K if wears(pl, "necro_robe") else 1.0), -1, wi)   # v49: Nekro-Robe
         elif occ[0] == "car":
             self.damage_vehicle(occ[1], dmg * MOB_VEH_DMG, -1)
         else:
@@ -9462,7 +9776,8 @@ class World:
                 continue
             d = math.hypot(pl.x - x, pl.y - y) if not cover else math.dist((pl.x, pl.y, pl.z + 0.9), (x, y, z))
             if d <= r and not covered((pl.x, pl.y, pl.z + 1.0)):
-                self.damage_player(pl, amount(d), -1, wi)
+                a_ = amount(d)
+                self.damage_player(pl, a_ * NECRO_DMG_K if a_ < 9000 and wears(pl, "necro_robe") else a_, -1, wi)
 
     def smoke_blocks(self, p0, p1):
         """10e: Liegt auf der Sichtlinie p0-p1 dichter Rauch (mehr als SMOKE_BLOCK_M m)?"""
@@ -9664,11 +9979,18 @@ class Player:
         self.jet_on = False               # Jetpack feuert gerade (Anzeige, auch für andere)
         self.dash_cd, self.dash_t = 0.0, 0.0   # Hermes: Abklingzeit, laufender Dash (s)
         self.dash_dir = (0.0, 0.0)
+        self.dash_n = self.dash_seen = 0  # v49: Zähler der Dashes (Host erkennt daran den Überschallknall)
+        self.kb_t, self.kb_v = 0.0, (0.0, 0.0)   # v49: Wegschleudern durch die Schockwelle (Restzeit, m/s)
+        self.shock_lock = 0.0             # v49: Schild-Aufladung durch fremde Schockwelle gesperrt (s, nur Host)
+        self.scan_cd = 0.0                # v49: Hacker-Weste: Abklingzeit des Quadranten-Scans
+        self.nest_cd = 0.0                # v49: Nekromanten-Set: Abklingzeit bis zum nächsten Nest
         self.air_jump = False             # Doppelsprung in diesem Sprung schon benutzt
         self.jump_edge = self.run_edge = False   # Taste in diesem Bild neu gedrückt (für Doppelsprung/Dash)
         self.loot_history = {}            # Kisten-Gedächtnis (nur beim Host benutzt): Name -> in diesem Leben gezogen
         self.last_by = {}                 # 7b: zuletzt gezogen je Art (weapon/melee/gear/att)
         self.att_store = []               # 7b: Aufsatz-Lager (Codes Platz * ATT_CODE + Index), pro Leben
+        self.sil = {}                     # v49: Schalldämpfer-Haltbarkeit je Waffe (Rest in Magazinen)
+        self.sil_store = []               # v49: ... der Dämpfer im Lager (je einer pro Schalldämpfer-Code dort)
         self.scopes = {}                  # 7b: Visier je Waffe (sonst DEFAULT_SCOPE)
         self.last_loot = None             # zuletzt aus einer Kiste gezogen (kommt in der nächsten nicht)
         self.last_slot = 0                # zuletzt benutzter normaler Slot (für den Tausch, wenn man die
@@ -9719,19 +10041,54 @@ def att_set_value(pl, wi, si, v):
     clamp_ammo(pl, wi)
     return old
 
-def att_give(pl, si, v):
-    """7b: Aufsatz aufgehoben. Passt er auf die Waffe in der Hand, kommt er sofort darauf (ein dort steckender
-    Aufsatz desselben Platzes wandert ins Aufsatz-Lager); sonst (Nahkampf, Gadget, Spezialwaffe, passt nicht) ins
-    Lager. -> (Meldung 1 = angesteckt / 2 = Lager, Code, Waffe)"""
+def is_sil(si, v):
+    """v49: ist (Platz, Index) der Schalldämpfer?"""
+    return (si, v) == ATT_SILENCER
+
+
+def sil_from_store(pl):
+    """v49: Haltbarkeit des Schalldämpfers, der gerade aus dem Lager kommt (der mit dem meisten Rest zuerst)."""
+    st = getattr(pl, "sil_store", None)
+    if not st:
+        return SIL_DUR[1]
+    i = max(range(len(st)), key=lambda k: st[k])
+    return st.pop(i)
+
+
+def sil_to_store(pl, wi):
+    """v49: der Schalldämpfer der Waffe wi wandert (mit seinem Rest) ins Lager."""
+    pl.sil_store = getattr(pl, "sil_store", [])
+    pl.sil_store.append(getattr(pl, "sil", {}).pop(wi, SIL_DUR[1]))
+
+
+def att_give(pl, si, v, dur=None):
+    """7b/v49: Aufsatz aufgehoben.
+    - Granatwerfer, während der Colt M4 Carbine schon einen trägt: nur Granaten nachfüllen (GL_START, höchstens GL_MAX).
+    - Platz an der Waffe in der Hand frei und der Aufsatz passt: sofort anstecken (Szenario A).
+    - Platz belegt (auch Visier), passt nicht, Nahkampf/Gadget/Spezialwaffe in der Hand: ins Aufsatz-Lager (Szenario B) -
+      der steckende Aufsatz bleibt dran. Wechseln per Waffen-Inspektion (T).
+    dur = Haltbarkeit eines Schalldämpfers (Magazine). -> (Meldung 1 = angesteckt / 2 = Lager / 4 = Granaten, Code, Waffe)"""
     wi = pl.cur
     code = si * ATT_CODE + v
+    if (si, v) == ATT_GL and M4_WI in pl.slots and att_has_gl(M4_WI, pl.att.get(M4_WI)):
+        g = pl.guns[M4_WI]
+        g.gl = min(GL_MAX, getattr(g, "gl", 0) + GL_START)
+        return 4, code, M4_WI
+    if dur is None:
+        dur = SIL_DUR[1]
     if (not getattr(pl, "melee_out", False) and not getattr(pl, "gad_out", False) and wi in pl.slots
             and att_fits(wi, si, v)):
-        old = att_set_value(pl, wi, si, v)
-        if old:                                          # der bisherige Aufsatz (auch ein Visier ab Werk) ins Lager
-            pl.att_store.append(si * ATT_CODE + old)
-        return 1, code, wi
+        cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
+        if not cur:                                      # Platz frei: anstecken
+            att_set_value(pl, wi, si, v)
+            if is_sil(si, v):
+                pl.sil = getattr(pl, "sil", {})
+                pl.sil[wi] = dur
+            return 1, code, wi
     pl.att_store.append(code)
+    if is_sil(si, v):
+        pl.sil_store = getattr(pl, "sil_store", [])
+        pl.sil_store.append(dur)
     return 2, code, wi
 
 def att_equip_local(pl, wi, si, v):
@@ -9750,10 +10107,30 @@ def att_equip_local(pl, wi, si, v):
         return None
     if v:
         pl.att_store.remove(code)
+    if si != ATT_SCOPE and is_sil(si, cur):              # v49: abgenommener Schalldämpfer behält seinen Rest
+        sil_to_store(pl, wi)
     old = att_set_value(pl, wi, si, v)
     if old:
         pl.att_store.append(si * ATT_CODE + old)
+    if si != ATT_SCOPE and is_sil(si, v):
+        pl.sil = getattr(pl, "sil", {})
+        pl.sil[wi] = sil_from_store(pl)
     return code
+
+
+def att_unmount_all(pl, wi):
+    """v49: Waffe wi verlässt das Inventar (getauscht): ihre Aufsätze und ein nachgerüstetes Visier kommen ins
+    Aufsatz-Lager (Waffen liegen blank in der Welt, die Teile gehen also nicht verloren)."""
+    a = pl.att.pop(wi, None)
+    for si, v in enumerate(att_valid(a) or ATT_NONE):
+        if v:
+            pl.att_store.append(si * ATT_CODE + v)
+            if is_sil(si, v):
+                sil_to_store(pl, wi)
+    sc = pl.scopes.pop(wi, None)
+    if isinstance(sc, int) and sc > 0 and att_fits(wi, ATT_SCOPE):
+        pl.att_store.append(ATT_SCOPE * ATT_CODE + sc)
+    getattr(pl, "sil", {}).pop(wi, None)
 
 def stock_ammo(pl, wi):
     """Waffe aufgehoben, die man schon trägt: Reserve auffüllen statt eines zweiten Exemplars."""
@@ -9775,8 +10152,11 @@ def dual_upgrade(pl, wi, atts=None):
         return wi, atts
     old = pl.guns[BARETTA_WI]
     pl.slots[pl.slots.index(BARETTA_WI)] = None      # die erste Baretta wandert in die linke Hand (fällt nicht)
-    keep = pl.att.pop(BARETTA_WI, None)
+    keep = pl.att.pop(BARETTA_WI, None)              # v49: beide Pistolen teilen sich die Aufsätze der ersten
     scope = pl.scopes.pop(BARETTA_WI, None)
+    sil_ = getattr(pl, "sil", {}).pop(BARETTA_WI, None)
+    if sil_ is not None:
+        pl.sil[DUAL_WI] = sil_
     if pl.cur == BARETTA_WI:
         pl.cur = pl.switch_to = DUAL_WI
         pl.switch_t = SWITCH_T * 0.5
@@ -9856,23 +10236,20 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
     if gear is not None:                                            # Ausrüstung: Abklingzeiten (beim Spieler)
         pl.dash_cd = max(0.0, pl.dash_cd - dt)
         if (pl.run_edge and pl.moving and pl.dash_cd <= 0 and pl.dash_t <= 0 and pl.crouch < 0.3
-                and wears(pl, "dash")):                             # Hermes: Shift drücken = Dash nach vorn
-            hs = set_full(pl, "hermes")
-            pl.dash_t, pl.dash_cd = DASH_TIME * ((HERMES_SET_DASH_DIST / HERMES_SET_DASH) if hs else 1.0), DASH_CD
+                and wears(pl, "dash")):                             # Hermes-Boots: Shift drücken = Blitzen-Dash
+            pl.dash_t, pl.dash_cd = DASH_TIME / HERMES_DASH_SPEED, HERMES_DASH_CD   # v49: kurz, schnell, 60 s
             pl.dash_dir = (dx / l, dy / l)
             pl.dash_dist = 0.0
+            pl.dash_n = getattr(pl, "dash_n", 0) + 1                # v49: zählt Dashes (Host: Überschallknall)
             amp = getattr(pl, "amp", None)
             pl.dash_amp = DAGGER_AMP if amp and "dash" in amp else 1.0   # 9c: Erschöpfungsdolch: doppelt so weit
             if amp:
                 amp.discard("dash")
         pl.run_edge = False
     if gear is not None and pl.dash_t > 0:
-        hs = set_full(pl, "hermes")
-        sp = DASH_DIST / DASH_TIME * (HERMES_SET_DASH if hs else 1.0) * getattr(pl, "dash_amp", 1.0)
+        sp = DASH_DIST / DASH_TIME * HERMES_DASH_SPEED * getattr(pl, "dash_amp", 1.0)
         pl.dash_t -= dt
         pl.dash_dist += sp * dt
-        if hs and run and pl.dash_dist < HERMES_GLIDE_MAX:     # 7c: Shift halten = weitergleiten (bis 30 m)
-            pl.dash_t = max(pl.dash_t, dt * 1.5)
         pl.x += pl.dash_dir[0] * sp * dt
         pl.y += pl.dash_dir[1] * sp * dt
         pl.moving = True
@@ -9885,8 +10262,10 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
             speed *= BUFF_SPEED
         if getattr(pl, "eat_t", 0.0) > 0:
             speed = min(speed, WALK * PAN_EAT_SPEED)            # 9c: beim Essen nur langsam gehen
-        if gear is not None and set_full(pl, "hermes"):
-            speed *= HERMES_SET_SPEED                              # 7c: Hermes-Set
+        if gear is not None and wears(pl, "dash"):
+            speed *= HERMES_SPEED                                  # v49: Hermes-Boots
+        if gear is not None and wears(pl, "jetpack") and pl.on_ground:
+            speed *= EXO_WALK                                      # v49: Schweres Exo-Jetpack - Gewicht am Boden
         pl.x += dx / l * speed * dt
         pl.y += dy / l * speed * dt
         if pl.on_ground:
@@ -9896,6 +10275,11 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         pl.leap_t -= dt
         pl.x += pl.leap_dir[0] * pl.leap_v * dt
         pl.y += pl.leap_dir[1] * pl.leap_v * dt
+    if getattr(pl, "kb_t", 0.0) > 0:                 # v49: Schockwelle des Schild-Sets schleudert weg (Wände bremsen)
+        k_ = min(dt, pl.kb_t)
+        pl.kb_t -= dt
+        pl.x += pl.kb_v[0] * k_
+        pl.y += pl.kb_v[1] * k_
     wx_, wy_ = pl.x, pl.y
     pl.x, pl.y = push_out(pl.x, pl.y, PLAYER_R, world, pl.z)
     pushed = (wx_ - pl.x, wy_ - pl.y)
@@ -9958,7 +10342,7 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         if amp and "jet" in amp:
             amp.discard("jet")                       # 9c: Erschöpfungsdolch: dieser Flug mit doppeltem Schub
             pl.jet_amp = DAGGER_AMP
-    jsp = JET_SET_SPEED if gear is not None and set_full(pl, "jet") else 1.0
+    jsp = EXO_JET_SPEED if gear is not None and wears(pl, "jetpack") else 1.0     # v49: Schweres Exo-Jetpack
     sink = (gear is not None and not jet and getattr(pl, "duck", False) and not pl.on_ground and wears(pl, "jetpack")
             and pl.jet_fuel > 0 and pl.vz < -JET_DOWN_V * jsp + 0.5)   # 10a: Strg in der Luft = kontrolliert sinken
     pl.jet_on = jet or sink                          # Jetpack: Leertaste in der Luft halten
@@ -10242,7 +10626,11 @@ def fire(pl, w, world):
     spread *= 1.0 - 0.3 * pl.crouch
     if w.auto and pl.cur in SELECTIVE_FIRE and pl.guns[pl.cur].semi:
         spread *= SEMI_SPREAD                            # Einzelfeuer: gezielte Schüsse streuen weniger
-    spread *= 1.0 + pl.bloom + (0.8 if pl.moving else 0.0) + (1.0 if not pl.on_ground else 0.0)
+    air = not pl.on_ground or getattr(pl, "cling", False)
+    if air and not pl.ads and set_full(pl, "spring"):   # v49: Springfeder-Set - präzise Luftschüsse aus der Hüfte
+        spread *= SPRING_AIR_SPREAD * (1.0 + pl.bloom)    # (Sprung, Doppelsprung, Wand, Wandsprung: kein Luft-/Laufmalus)
+    else:
+        spread *= 1.0 + pl.bloom + (0.8 if pl.moving else 0.0) + (1.0 if not pl.on_ground else 0.0)
     dirs = []
     for _ in range(w.pellets):
         a = math.radians(spread) * math.sqrt(rng.random())   # gleichverteilt im Kegel
@@ -10520,22 +10908,46 @@ def update_weapon(pl, world, dt, trigger, edge, reload_req, ads, select):
             pl.lock_t, pl.lock_id = 0.0, None
 
 
-def stinger_target(world, eye, f, cone, rng_max):
-    """v48: bestes Ziel (Fahrzeug/Helikopter mit Leben) im Kegel um die Richtung f -> (Art, ID, Objekt) oder None.
-    Bewertet nach Winkel (kleiner = besser); eigene Fahrzeuge werden von außen nicht gefiltert (Aufrufer)."""
+def player_flying(world, p):
+    """v49: fliegt der Spieler (Jetpack an oder weit über dem Boden: langer Wandsprung, Sprung vom Dach ...)?
+    Nur zu Fuss - wer im Helikopter sitzt, wird über den Helikopter erfasst."""
+    if p.hp <= 0 or p.vehicle >= 0 or p.heli >= 0 or p.mount >= 0:
+        return False
+    if getattr(p, "jet_on", False):
+        return True
+    try:
+        return p.z - world.floor_at(p.x, p.y, p.z + 0.1) > STINGER_AIR_H
+    except Exception:
+        return False
+
+
+def stinger_target(world, eye, f, cone, rng_max, me=-1):
+    """v48: bestes Ziel im Kegel um die Richtung f -> (Art, ID, Objekt) oder None. Bewertet nach Winkel (kleiner =
+    besser). v49: Ziele sind NUR Fahrzeuge, Helikopter und fliegende Spieler (player_flying) - nie Monster - und nur
+    mit freier Sichtlinie (nichts hinter Wänden/Deckung). me = eigene Spieler-ID (wird samt Verbündeten übersprungen)."""
     best, bang = None, cone
-    for kind, objs in (("veh", getattr(world, "vehicles", ())), ("heli", getattr(world, "helis", ()))):
-        for o in objs:
-            if getattr(o, "hp", 0) <= 0:
-                continue
-            dx, dy, dz = o.x - eye[0], o.y - eye[1], (o.z + 1.0) - eye[2]
-            d = math.sqrt(dx * dx + dy * dy + dz * dz)
-            if d < 4.0 or d > rng_max:
-                continue
-            c = (dx * f[0] + dy * f[1] + dz * f[2]) / d
-            ang = math.degrees(math.acos(max(-1.0, min(1.0, c))))
-            if ang < bang:
-                best, bang = (kind, o.id, o), ang
+    cands = [("veh", o, o.z + 1.0) for o in getattr(world, "vehicles", ())]
+    cands += [("heli", o, o.z + 1.2) for o in getattr(world, "helis", ())]
+    allied = getattr(world, "allied", None)
+    for p in getattr(world, "players", {}).values():
+        if p.pid == me or (me >= 0 and allied is not None and allied(me, p.pid)) or not player_flying(world, p):
+            continue
+        cands.append(("plr", p, p.z + 1.0))
+    for kind, o, tz in cands:
+        if getattr(o, "hp", 0) <= 0:
+            continue
+        dx, dy, dz = o.x - eye[0], o.y - eye[1], tz - eye[2]
+        d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if d < 4.0 or d > rng_max:
+            continue
+        c = (dx * f[0] + dy * f[1] + dz * f[2]) / d
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, c))))
+        if ang >= bang:
+            continue
+        los = getattr(world, "los", None)          # Sichtlinie: Mitte oder Oberkante muss frei sein
+        if los is not None and not (los(eye, (o.x, o.y, tz)) or los(eye, (o.x, o.y, tz + 0.8))):
+            continue
+        best, bang = (kind, (o.pid if kind == "plr" else o.id), o), ang
     return best
 
 
@@ -10548,7 +10960,7 @@ def stinger_lock(pl, world, dt, w):
     hr, pr = math.radians(pl.heading), math.radians(pl.pitch)
     f = (-math.sin(hr) * math.cos(pr), math.cos(hr) * math.cos(pr), math.sin(pr))
     eye = (pl.x, pl.y, pl.z + eye_h(pl))
-    t = stinger_target(world, eye, f, STINGER_CONE, STINGER_RANGE)
+    t = stinger_target(world, eye, f, STINGER_CONE, STINGER_RANGE, pl.pid)
     if t is not None and t[0] == "heli" and getattr(t[2], "driver", -1) == pl.pid:
         t = None
     key = (t[0], t[1]) if t is not None else None
@@ -16931,7 +17343,11 @@ GEAR_LOOK = {"armor": ((0.36, 0.40, 0.25), (0.22, 0.25, 0.15), (0.50, 0.48, 0.32
              "second": ((0.50, 0.52, 0.55), (0.28, 0.29, 0.31), (0.85, 0.18, 0.15)),     # 10c: Stahl mit roten Streifen
              "jet": ((1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)),        # 10c: Orange/Alu
              "spring": ((0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)),    # 10c: Grün mit Stahlfedern
+             "hacker": ((0.16, 0.19, 0.25), (0.08, 0.09, 0.12), (0.30, 0.70, 1.00)),    # v49: Anthrazit mit Blau
+             "necro": ((0.13, 0.12, 0.14), (0.06, 0.05, 0.07), (0.88, 0.85, 0.74)),     # v49: Schwarz mit Knochenweiss
              "": ((0.55, 0.57, 0.58), (0.32, 0.33, 0.35), (0.80, 0.80, 0.78))}
+_HACK_GLOW = (0.35, 0.75, 1.0)    # v49: Leuchtlinien des Hacker-Sets
+_NECRO_GLOW = (0.45, 1.0, 0.35)   # v49: grünes Leuchten des Nekromanten-Sets
 
 _GL_GLOW = (0.45, 0.95, 1.0)
 
@@ -16972,6 +17388,8 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
         base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
     elif g.kind == "spring":
         base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    elif g.kind in ("dash", "legacy") and g.col == (1.0, 0.85, 0.3):     # v49: Hermes-Boots ohne Set, gleiches Gold
+        base, dark, acc = GEAR_LOOK["hermes"]
     if g.slot == "head":                                         # ---------------- Helme
         if g.set == "hermes":
             _dome(m, 0, 0, -0.02, 0.30, 0.29, 0.27, base, rng, mat="metal")
@@ -17012,6 +17430,22 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                         _tube(m, [(sx * 0.27, 0.12 - 0.12 * k, 0.12 + 0.04 * k), (sx * 0.38, 0.17 - 0.12 * k, 0.02 + 0.04 * k)],
                               [0.02, 0.004], acc, rng, 5)
                 _tube(m, [(0, 0.25, 0.2), (0, 0.06, 0.33), (0, -0.2, 0.27)], [0.025, 0.03, 0.02], dark, rng, 6)
+            elif g.set == "hacker":                                                           # v49 Hacker-Visor: Leuchtband, Antenne
+                loft(m, [(-0.27, 0.16, 0.05), (0, 0.3, 0.07), (0.27, 0.16, 0.05)], [0.035] * 3, [0.06, 0.07, 0.06],
+                     _HACK_GLOW, None, None, None, (True, True), 0.0, 6)
+                for sx in (-1, 1):
+                    box(m, sx * 0.29, 0.02, 0.06, 0.04, 0.12, 0.12, dark, rng)                   # Ohrmodule
+                    box(m, sx * 0.315, 0.02, 0.06, 0.01, 0.08, 0.02, _HACK_GLOW)
+                _tube(m, [(0.2, -0.12, 0.2), (0.24, -0.16, 0.48)], [0.012, 0.006], dark, rng, 5)  # Antenne
+                ell(m, (0.24, -0.16, 0.49), 0.02, 0.02, 0.02, _HACK_GLOW, None, rings=3)
+            elif g.set == "necro":                                                            # v49 Nekro-Maske: Schädel, grüne Augen
+                ell(m, (0, 0.24, 0.02), 0.2, 0.09, 0.2, acc, rng, rings=5)                     # Knochenmaske
+                for sx in (-1, 1):
+                    ell(m, (sx * 0.08, 0.32, 0.06), 0.05, 0.02, 0.045, (0.02, 0.02, 0.02), None, rings=3)
+                    ell(m, (sx * 0.08, 0.335, 0.06), 0.025, 0.012, 0.022, _NECRO_GLOW, None, rings=3)
+                    _tube(m, [(sx * 0.22, 0.0, 0.2), (sx * 0.3, -0.08, 0.42)], [0.035, 0.006], acc, rng, 6)   # Hörner
+                for k in range(5):                                                             # Zahnreihe
+                    box(m, -0.08 + 0.04 * k, 0.32, -0.1, 0.025, 0.02, 0.04, acc, rng)
             else:                                                                             # Schild-Helm: Visier + Emitter
                 loft(m, [(-0.22, 0.2, 0.06), (0, 0.29, 0.07), (0.22, 0.2, 0.06)], [0.03, 0.03, 0.03], [0.05, 0.055, 0.05],
                      _GL_GLOW, None, None, None, (True, True), 0.0, 6)
@@ -17030,6 +17464,12 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                 box(m, sx * 0.17, 0.0, 0.18, 0.05, 0.42, 0.04, (0.12, 0.12, 0.13), rng)        # Gurte
             box(m, 0, -0.3, 0.18, 0.1, 0.08, 0.1, (0.2, 0.2, 0.22), rng)                       # Steuerkasten
             box(m, 0, -0.345, 0.2, 0.04, 0.01, 0.03, (1.0, 0.3, 0.1))
+            for sx in (-1, 1):                                                                 # v49: Exo-Rahmen (schwer)
+                ell(m, (sx * 0.27, 0.0, 0.3), 0.12, 0.22, 0.07, dark, rng, rings=4)            # Schulterpanzer
+                box(m, sx * 0.26, -0.12, 0.0, 0.05, 0.05, 0.5, dark, rng, mat="metal")          # Seitenstreben
+                box(m, sx * 0.24, 0.2, -0.05, 0.04, 0.04, 0.3, acc, rng, mat="metal")
+                _cone(m, sx * 0.24, -0.34, -0.3, 0.05, 0.12, 10, acc, rng, 0.02)               # Zusatzdüsen
+            box(m, 0, 0.21, -0.2, 0.46, 0.05, 0.06, dark, rng, mat="metal")                    # Hüftgurt
         else:
             for sy in (1, -1):                                                                 # Brust- und Rückenplatte
                 loft(m, [(0, sy * 0.2, -0.22), (0, sy * 0.215, 0.05), (0, sy * 0.2, 0.3)], [0.27, 0.28, 0.25],
@@ -17058,6 +17498,24 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                     box(m, sx * 0.12, -0.27, -0.2, 0.14, 0.14, 0.03, dark, rng)
                     box(m, sx * 0.12, -0.27, 0.26, 0.14, 0.14, 0.03, dark, rng)
                 box(m, 0, 0.245, 0.0, 0.4, 0.012, 0.03, dark, rng)
+            elif g.set == "hacker":                                                            # v49 Hacker-Weste: Schaltkreise, Funkbox
+                for k in range(3):
+                    box(m, -0.12 + 0.12 * k, 0.24, 0.05 - 0.07 * k, 0.012, 0.012, 0.22, _HACK_GLOW)
+                    box(m, 0.0, 0.24, 0.16 - 0.1 * k, 0.3, 0.012, 0.012, _HACK_GLOW)
+                box(m, 0, -0.27, 0.05, 0.3, 0.1, 0.36, dark, rng, mat="metal")                  # Funkbox am Rücken
+                box(m, 0, -0.325, 0.12, 0.2, 0.01, 0.05, _HACK_GLOW)
+                _tube(m, [(0.1, -0.27, 0.23), (0.12, -0.3, 0.62)], [0.014, 0.006], dark, rng, 5)
+                ell(m, (0.12, -0.3, 0.63), 0.022, 0.022, 0.022, _HACK_GLOW, None, rings=3)
+            elif g.set == "necro":                                                             # v49 Nekro-Robe: Rippen, grüner Kern
+                for k in range(4):
+                    for sx in (-1, 1):
+                        loft(m, [(sx * 0.02, 0.255, 0.18 - 0.09 * k), (sx * 0.14, 0.245, 0.14 - 0.09 * k),
+                                 (sx * 0.22, 0.22, 0.12 - 0.09 * k)], [0.012] * 3, [0.014] * 3, acc, rng,
+                             None, None, (True, True), 0.0, 5)
+                box(m, 0, 0.26, -0.02, 0.025, 0.012, 0.36, acc, rng)                            # Brustbein
+                ell(m, (0, 0.27, 0.0), 0.05, 0.02, 0.05, _NECRO_GLOW, None, rings=3)
+                loft(m, [(0, -0.22, 0.3), (0, -0.26, -0.1), (0, -0.24, -0.45)], [0.26, 0.28, 0.3], [0.03, 0.03, 0.03],
+                     dark, rng, None, None, (True, True), 0.02, 8)                                  # Umhang
             elif g.set == "shield":                                                            # Generator-Kern + Leuchtlinien
                 loft(m, [(0, 0.23, 0.04), (0, 0.27, 0.04)], [0.09, 0.07], [0.09, 0.07], acc, rng, None, None, (True, True), 0.0, 6)
                 loft(m, [(0, 0.265, 0.04), (0, 0.28, 0.04)], [0.06, 0.05], [0.06, 0.05], _GL_GLOW, None, None, None, (True, True), 0.0, 6)
@@ -17109,12 +17567,53 @@ def gear_model(gi, rng=None, sides=(-1, 1)):
                 _tube(m, [(x, -0.15, -0.02), (x, -0.17, -0.08)], [0.035, 0.03], acc, rng, 8)
                 _cone(m, x, -0.17, -0.13, 0.025, 0.05, 8, (1.0, 0.75, 0.3), rng)
                 box(m, x, 0.0, 0.08, 0.18, 0.02, 0.03, dark, rng)
+            elif g.set == "hacker":                                                             # v49 Hacker-Stiefel: Dämpfersohle + Leuchtband
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.14)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                box(m, x, 0.05, -0.08, 0.2, 0.34, 0.04, (0.18, 0.18, 0.2), rng)
+                _ring_z(m, x, -0.06, 0.09, 0.11, 0.088, 0.078, _HACK_GLOW, None, 10)
+                box(m, x, 0.17, -0.02, 0.1, 0.01, 0.015, _HACK_GLOW)
+            elif g.set == "necro":                                                              # v49 Grabstiefel: Knochensporne
+                loft(m, [(x, -0.06, 0.0), (x, -0.06, 0.2)], [0.085, 0.08], [0.075, 0.07], base, rng, None, None,
+                     (False, True), 0.02, 10)
+                for k in range(3):
+                    _tube(m, [(x, -0.12, 0.04 + 0.06 * k), (x, -0.22, 0.08 + 0.06 * k)], [0.02, 0.003], acc, rng, 5)
+                ell(m, (x, 0.15, -0.01), 0.07, 0.045, 0.035, acc, rng, rings=3)
             elif g.kind == "spring":                                                            # Springfedern unter der Sohle
                 pts = [(x + 0.05 * math.cos(t * 0.5), 0.05 + 0.05 * math.sin(t * 0.5), -0.07 - 0.008 * t) for t in range(25)]
                 loft(m, pts, [0.012] * len(pts), [0.012] * len(pts), acc, rng, "metal", None, (True, True), 0.0, 5)
                 box(m, x, 0.05, -0.28, 0.16, 0.24, 0.03, sole, rng)
                 box(m, x, -0.04, 0.04, 0.17, 0.04, 0.02, (1.0, 1.0, 1.0), rng)
     return m
+
+_NEST_MODEL_CACHE = {}
+
+
+def nest_model(ki):
+    """v49: Monster-Nest im Boden (Ursprung: Bodenmitte). Grösse nach NEST_KINDS: Zombie = Erdloch, Titan = Krater.
+    Dunkles Loch mit grünem Glimmen, aufgeworfener Erdwall, Knochen und Wurzeln am Rand."""
+    if ki in _NEST_MODEL_CACHE:
+        return _NEST_MODEL_CACHE[ki]
+    r = NEST_KINDS[ki][3]
+    rng = random.Random(77 + ki)
+    m = Mesh()
+    ell(m, (0, 0, -0.02), r * 0.78, r * 0.78, 0.05, (0.03, 0.025, 0.02), None, rings=4)          # Loch
+    ell(m, (0, 0, -0.01), r * 0.42, r * 0.42, 0.04, (0.18, 0.55, 0.12), None, rings=3)           # Glimmen tief unten
+    ell(m, (0, 0, 0.0), r * 0.2, r * 0.2, 0.035, _NECRO_GLOW, None, rings=3)
+    n = max(10, int(r * 9))
+    for i in range(n):                                                                         # Erdwall
+        a = math.tau * i / n + rng.uniform(-0.1, 0.1)
+        rr = r * rng.uniform(0.86, 1.02)
+        h = 0.12 + 0.1 * r * rng.uniform(0.6, 1.0)
+        col = (0.26 + rng.uniform(-0.04, 0.04), 0.19, 0.12)
+        ell(m, (math.cos(a) * rr, math.sin(a) * rr, h * 0.25), 0.22 * r ** 0.6, 0.22 * r ** 0.6, h, col, rng, rings=3)
+    for i in range(max(3, int(r * 2))):                                                        # Knochen am Rand
+        a = rng.uniform(0, math.tau)
+        rr = r * rng.uniform(0.6, 0.95)
+        box(m, math.cos(a) * rr, math.sin(a) * rr, 0.06, 0.05, 0.28 * min(1.6, r ** 0.5), 0.05, (0.86, 0.83, 0.72), rng)
+    _NEST_MODEL_CACHE[ki] = m
+    return m
+
 
 def gear_icon_shapes(gi):
     """9d: HUD-Symbol (Seitenansicht y/z, Sinans Formsprache) eines Ausrüstungsteils."""
@@ -17124,6 +17623,8 @@ def gear_icon_shapes(gi):
         base, dark, acc = (1.0, 0.55, 0.15), (0.30, 0.30, 0.33), (0.78, 0.80, 0.84)
     elif g.kind == "spring":
         base, dark, acc = (0.45, 0.85, 0.35), (0.15, 0.30, 0.12), (0.72, 0.74, 0.78)
+    elif g.kind in ("dash", "legacy") and g.col == (1.0, 0.85, 0.3):     # v49: Hermes-Boots ohne Set, gleiches Gold
+        base, dark, acc = GEAR_LOOK["hermes"]
     S = []
     if g.slot == "head":
         dome = [(-0.3 * math.cos(a), 0.3 * math.sin(a)) for a in [math.pi * i / 16 for i in range(17)]]
@@ -17146,6 +17647,12 @@ def gear_icon_shapes(gi):
         elif g.kind == "cling":
             S += [("p", 0, 0.1, [(y - 0.03, 0.12), (y + 0.03, 0.12), (y + 0.06, -0.1), (y + 0.03, -0.08)], acc)
                   for y in (-0.15, 0.0, 0.15)]
+        elif g.set == "hacker":                                       # v49
+            S += [("p", 0, 0.1, [(0.06, 0.04), (0.32, 0.05), (0.3, 0.14), (0.04, 0.12)], _HACK_GLOW),
+                  ("b", 0, -0.2, 0.36, 0.1, 0.02, 0.16, dark), ("e", 0, -0.2, 0.45, 0.05, 0.03, 0.03, _HACK_GLOW)]
+        elif g.set == "necro":                                        # v49
+            S += [("e", 0, 0.16, 0.1, 0.05, 0.12, 0.14, acc), ("e", 0, 0.2, 0.13, 0.05, 0.03, 0.03, _NECRO_GLOW),
+                  ("p", 0, 0.1, [(-0.12, 0.26), (-0.22, 0.42), (-0.06, 0.28)], acc)]
         else:
             S += [("p", 0, 0.1, [(-0.25, 0.16), (0.0, 0.31), (0.25, 0.16), (0.0, 0.27)], acc)]
     elif g.slot == "torso":
@@ -17171,6 +17678,14 @@ def gear_icon_shapes(gi):
                 for y in (-0.14, 0.14):
                     for k in range(6):
                         S.append(("b", 0, y, -0.18 + 0.08 * k, 0.1, 0.14, 0.02, acc))
+            elif g.set == "hacker":                                   # v49
+                for z in (-0.12, 0.0, 0.12):
+                    S.append(("b", 0, 0.0, z, 0.1, 0.4, 0.015, _HACK_GLOW))
+                S.append(("b", 0, 0.12, -0.12, 0.1, 0.015, 0.26, _HACK_GLOW))
+            elif g.set == "necro":                                    # v49
+                for k in range(4):
+                    S.append(("b", 0, 0.0, 0.14 - 0.09 * k, 0.1, 0.4, 0.025, acc))
+                S.append(("e", 0, 0.0, 0.0, 0.05, 0.05, 0.05, _NECRO_GLOW))
             elif g.set == "shield":
                 S.append(("e", 0, 0.0, 0.03, 0.05, 0.09, 0.09, acc))
                 S.append(("e", 0, 0.0, 0.03, 0.05, 0.06, 0.06, _GL_GLOW))
@@ -17198,6 +17713,11 @@ def gear_icon_shapes(gi):
         elif g.kind == "nofall":
             S += [("p", 0, 0.1, [(-0.16, 0.0), (-0.1, 0.0), (-0.11, -0.12), (-0.15, -0.12)], acc),
                   ("p", 0, 0.1, [(-0.15, -0.12), (-0.11, -0.12), (-0.13, -0.18)], (1.0, 0.75, 0.3))]
+        elif g.set == "hacker":                                       # v49
+            S += [("b", 0, 0.0, 0.1, 0.1, 0.3, 0.02, _HACK_GLOW), ("b", 0, 0.03, -0.09, 0.1, 0.34, 0.03, dark)]
+        elif g.set == "necro":                                        # v49
+            S += [("p", 0, 0.1, [(-0.14, 0.04 + 0.06 * k), (-0.3, 0.08 + 0.06 * k), (-0.14, 0.08 + 0.06 * k)], acc)
+                  for k in range(3)]
         else:
             for k in range(5):
                 S.append(("b", 0, 0.03, -0.1 - 0.035 * k, 0.1, 0.16, 0.015, acc))
@@ -19856,6 +20376,9 @@ class HostSession:
             pl.running = bool(m.get("rn")) and pl.moving
             pl.jet_on = m.get("jt") == 1 and wears(pl, "jetpack")    # grobe Prüfung: nur mit Jetpack
             pl.cling = m.get("jt") == 2 and wears(pl, "cling")       # 10c: hängt an der Wand
+            ds_ = m.get("ds", 0)
+            if isinstance(ds_, int) and wears(pl, "dash") and ds_ != getattr(pl, "dash_n", 0):
+                pl.dash_n = ds_                          # v49: Dash gemeldet - update_noise lässt es knallen
             pl.melee_out = bool(m.get("mo"))
             gc_ = m.get("gc", -1)                     # 10e: hält G (Granate in der Hand, Molotow brennt)
             pl.gren_hold = gc_ if (isinstance(gc_, int) and -1 <= gc_ < len(GREN_KINDS)) else -1
@@ -19929,6 +20452,12 @@ class HostSession:
                 w.axe_throw_host(pl, (float(d[0]), float(d[1]), float(d[2])), float(p_))
         elif t == "shock":                        # 7c: Stromstoss (Schild-Set)
             w.shock(pl)
+        elif t == "hscan":                        # v49: Quadranten-Scan (Hacker-Weste)
+            w.hack_scan(pl)
+        elif t == "nest":                         # v49: Monster-Nest (Nekromanten-Set)
+            ki = m.get("k")
+            if isinstance(ki, int):
+                w.place_nest(pl, ki)
         elif t == "mspec":                        # 9c: Sonderattacke (Katana/Schwert) - Treffer entscheidet der Host
             d = m.get("d")
             k = m.get("k")
@@ -20040,7 +20569,7 @@ class HostSession:
                        for c in w.crates],                                   # 10e: Airdrop-Kiste verrät ihre Art nicht
                 "ro": [[r.rid, r2(r.x), r2(r.y), r2(r.z), r1(r.vx), r1(r.vy), r1(r.vz)] for r in w.rocks],
                 "gr": [[g.gid, r2(g.x), r2(g.y), r2(g.z), r1(g.vx), r1(g.vy), r1(g.vz), r1(g.fuse),
-                        GREN_KINDS.index(g.kind), 1 if g.active else 0] for g in w.grenades],
+                        GREN_KINDS.index(g.kind), 1 if g.active else 0, g.owner] for g in w.grenades],   # v49: + Werfer
                 "sm": [[q.sid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age)] for q in w.smokes],   # 10e
                 "fi": [[q.fid, r2(q.pos[0]), r2(q.pos[1]), r2(q.pos[2]), r1(q.age), q.owner] for q in w.fires],
                 "ad": [[a.aid, a.state, r2(a.fx), r2(a.fy), r2(a.fz), round(a.ang, 3), r1(a.dist), r2(a.cz), r1(a.age),
@@ -20050,6 +20579,8 @@ class HostSession:
                         DROP_GK.index(d.gk)] for d in w.drops],
                 "gd": [[g.gid, g.kind, g.owner, r2(g.x), r2(g.y), r2(g.z), r2(g.nx), r2(g.ny), r2(g.nz), r1(g.yaw),
                         1 if g.arm > 0 else 0] for g in w.gadgets],
+                "ne": [[n.nid, n.ki, n.owner, r2(n.x), r2(n.y), r2(n.z), round(max(0.0, n.hp) / n.max_hp, 2),
+                        r1(n.life)] for n in w.nests],                                   # v49: Monster-Nester
                 "vh": [[v.id, r2(v.x), r2(v.y), r2(v.z), r1(v.heading), r1(v.speed), r1(v.hp),
                         v.driver, r1(v.dead_t), r1(v.stall_t)] for v in w.vehicles],
                 "gm": [1 if w.phase == "over" else 0, r1(w.time_left), r1(w.over_t), 1 if w.lobby else 0],
@@ -20415,6 +20946,8 @@ class ClientSession:
                 g = self.grenades[gid] = Grenade(gid, x, y, z, vx, vy, vz, -1, fuse, gk)
             g.x, g.y, g.z, g.vx, g.vy, g.vz, g.fuse = x, y, z, vx, vy, vz, fuse
             g.active = bool(row[9]) if len(row) > 9 else False
+            if len(row) > 10 and isinstance(row[10], int):
+                g.owner = row[10]                       # v49: Werfer (Hacker-Visor markiert nur feindliche)
             seen.add(gid)
         for gid in [i for i in self.grenades if i not in seen]:
             del self.grenades[gid]
@@ -20432,6 +20965,13 @@ class ClientSession:
         for gid in [i for i in self.gadgets if i not in seen]:
             del self.gadgets[gid]
         w.gadgets = list(self.gadgets.values())
+        nests_ = []                                 # v49: Monster-Nester (nur Anzeige)
+        for row in m.get("ne", ()):
+            if isinstance(row, list) and len(row) >= 8 and 0 <= row[1] < len(NEST_KINDS):
+                n_ = Nest(row[0], row[2], row[1], row[3], row[4], row[5])
+                n_.hp, n_.life = n_.max_hp * float(row[6]), float(row[7])
+                nests_.append(n_)
+        w.nests = nests_
 
         seen = set()
         for row in m.get("dr", ()):
@@ -20597,6 +21137,7 @@ class ClientSession:
                "mv": 1 if pl.moving else 0, "cur": pl.cur, "ln": r2(pl.lean),
                "cr": r2(pl.crouch), "rn": 1 if getattr(pl, "running", False) else 0,
                "jt": 1 if getattr(pl, "jet_on", False) else (2 if getattr(pl, "cling", False) else 0),
+               "ds": getattr(pl, "dash_n", 0),                  # v49: Dash-Zähler (Host: Überschallknall)
                "mo": 1 if getattr(pl, "melee_out", False) else 0,
                "gd": pl.gadget if (pl.gad_out and pl.hp > 0) else -1,
                "gc": getattr(pl, "gren_hold", -1)}
@@ -20651,6 +21192,12 @@ class ClientSession:
 
     def send_shock(self):
         self.conn.send({"t": "shock"})
+
+    def send_scan(self):
+        self.conn.send({"t": "hscan"})            # v49: Hacker-Scan
+
+    def send_nest(self, ki):
+        self.conn.send({"t": "nest", "k": int(ki)})   # v49: Nekromanten-Nest
         self.conn.flush()
 
     def send_axe(self, d, power):
@@ -21572,6 +22119,29 @@ def synth_sounds():
                                                            for i in range(n)]), 1.2)), 0.85)
     n = int(0.12 * SR)                                              # Granate: Sicherungsstift (kleines Klicken)
     out["pin"] = norm(mix((mul(sweep(n, 2400, 1500, 40), env(n, 60)), 1.0), (mul(noise(n), env(n, 120)), 0.4)), 0.5)
+    # --- v49 (hinten angehängt: die Klänge oben bleiben gleich)
+    n = int(0.30 * SR)                                              # Minigun läuft an: Motorheulen + Ratschen der Läufe
+    mw_, ph_ = [], 0.0
+    for i in range(n):
+        t = i / SR
+        ph_ += tp * (210 + 90 * t / 0.30) / SR
+        mw_.append(0.55 * math.sin(ph_) + 0.30 * math.sin(2 * ph_ + 0.3) + 0.18 * math.sin(3 * ph_ + 1.1)
+                   + 0.10 * (1.0 if math.sin(5 * ph_) > 0 else -1.0))
+    rt_ = [0.0] * n
+    for k in range(9):                                              # Ratsch-Klicks im Takt der Laufdrehung
+        s0 = int(k * n / 9)
+        for i in range(min(n - s0, int(0.012 * SR))):
+            rt_[s0 + i] = rng.uniform(-1, 1) * math.exp(-i / (0.0025 * SR))
+    fade_ = [min(1.0, i / (0.02 * SR), (n - i) / (0.03 * SR)) for i in range(n)]
+    out["minispin"] = norm(mul(mix((mw_, 1.0), (lowpass(rt_, 0.6), 1.4), (lowpass(noise(n), 0.1), 0.25)), fade_), 0.7)
+    n = int(1.6 * SR)                                               # Hermes-Dash: Überschallknall (Doppelknall + Grollen)
+    bm_ = [0.0] * n
+    for t0 in (0.0, 0.11):
+        s0 = int(t0 * SR)
+        for i in range(int(0.03 * SR)):
+            bm_[s0 + i] += (1.0 - 2.0 * i / (0.03 * SR)) * (0.9 if t0 == 0 else 0.7)
+    out["sonic"] = norm(mix((lowpass(bm_, 0.5), 1.2), (mul(lowpass(noise(n), 0.03), env(n, 2.2)), 1.0),
+                            (mul(sweep(n, 70, 32, 3), env(n, 2.5)), 0.7)), 0.95)
     return out
 
 
@@ -116459,7 +117029,7 @@ class Sfx:
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
-            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4}
+            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4, "minispin": 3, "sonic": 2}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
@@ -116467,7 +117037,8 @@ class Sfx:
              "tap": 14.0, "squeak": 30.0, "hum": 22.0, "scan": 45.0, "charge": 40.0, "rumble": 70.0, "buildup": 110.0,
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
              "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0,
-             "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0, "silenced": 16.0}
+             "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0, "silenced": 16.0,
+             "minispin": 40.0, "sonic": 420.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
@@ -116475,7 +117046,8 @@ class Sfx:
            "tap": 2.0, "squeak": 4.0, "hum": 3.0, "scan": 6.0, "charge": 5.0, "rumble": 12.0, "buildup": 20.0,
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
            "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0,
-           "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0, "silenced": 2.0}
+           "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0, "silenced": 2.0,
+           "minispin": 3.0, "sonic": 40.0}
 
     def __init__(self, game):
         self.game = game
@@ -116567,17 +117139,23 @@ class Sfx:
         p = self.game.camera.getPos(self.game.render)
         return (p[0], p[1], p[2])
 
-    def play(self, name, pos=None, vol=1.0, rate=1.0):
+    def play(self, name, pos=None, vol=1.0, rate=1.0, far=1.0):
+        """far: Faktor auf die Hörweite (v49: Hermes-Boots - Schritte doppelt so weit zu hören)."""
         if not self.ok or self.muted or name not in self.pool:
             return
         try:
             cam = self.cam()
             pos = pos or cam
             d = math.dist(pos, cam)
-            if d > self.RANGE.get(name, 150.0):
+            rng_ = self.RANGE.get(name, 150.0) * far
+            if d > rng_:
                 return
             snd, node = self.pool[name][self.rr[name]]
             self.rr[name] = (self.rr[name] + 1) % len(self.pool[name])
+            if far != 1.0 and pos is not cam and d > 0.5:   # weiter hörbar: näher heranrücken statt lauter drehen
+                k_ = 1.0 / far
+                pos = (cam[0] + (pos[0] - cam[0]) * k_, cam[1] + (pos[1] - cam[1]) * k_, cam[2] + (pos[2] - cam[2]) * k_)
+                d *= k_
             if self.a3d is None:
                 m = self.MIN.get(name, 10.0)
                 vol *= 1.0 if d <= m else max(0.0, 1.0 - (d - m) / (self.RANGE.get(name, 150.0) - m)) ** 1.6
@@ -116733,6 +117311,8 @@ class Sfx:
         if key and key in self.pool:
             self.stop_reload()
             rate_ = clampf(WEAPONS[WEAPON_IDX[mdl(w.name)]].reload / max(0.1, w.reload), 0.5, 1.5)   # v48: neue Waffen
+            if wi == DUAL_WI:                                       # v49: je Pistole ein Magazin, nacheinander
+                rate_ = clampf(WEAPONS[WEAPON_IDX[mdl(w.name)]].reload / max(0.1, w.reload * 0.5), 0.5, 1.5)
             snd = self.play(key, None, 0.9, rate_)                  # Aufnahme auf die Nachladezeit der Waffe abgestimmt
             self.rl_snd = snd
             me = self.game.world.players.get(self.game.my_id)
@@ -116890,18 +117470,20 @@ class Sfx:
                     new -= period
                     hits += [nm for t_, nm in evs if t_ <= new]
                 st[6] = new
-                if hits and math.hypot(pl.x - cam[0], pl.y - cam[1]) <= 34.0:
+                far_ = HERMES_STEP_K if wears(pl, "dash") else (HACK_QUIET if wears(pl, "hack_quiet") else 1.0)   # v49
+                if hits and math.hypot(pl.x - cam[0], pl.y - cam[1]) <= 34.0 * far_:
                     vol = (0.55 if pid == g.my_id else 0.8) * (1.0 - 0.6 * getattr(pl, "crouch", 0.0))
                     pos = None if pid == g.my_id else (pl.x, pl.y, pl.z + 0.1)
                     for nm in hits:
-                        self.play(nm, pos, vol * lvol, g.prng.uniform(0.98, 1.02))
+                        self.play(nm, pos, vol * lvol, g.prng.uniform(0.98, 1.02), far_)
                 st[2] = STEP_READY
                 continue
             st[6] = None
             st[2] = st[2] if st[2] >= STEP_READY else st[2] + d
             stride = RUN_STRIDE if run else 1.9
+            far_ = HERMES_STEP_K if wears(pl, "dash") else (HACK_QUIET if wears(pl, "hack_quiet") else 1.0)   # v49
             if st[2] >= stride:
-                if math.hypot(pl.x - cam[0], pl.y - cam[1]) > 34.0:
+                if math.hypot(pl.x - cam[0], pl.y - cam[1]) > 34.0 * far_:
                     st[2] = 0.0 if st[2] >= STEP_READY else st[2] - stride
                     continue
                 kind = surface_kind(world, pl.x, pl.y, pl.z)
@@ -116918,9 +117500,9 @@ class Sfx:
                         k = (k + g.prng.randrange(max(1, len(names) - 1))) if len(names) > 1 else 0
                     k %= len(names)
                     st[5][(kind, run)] = k
-                    self.play(names[k], pos, vol * STEP_VOL[kind] * (1.15 if run else 1.0), g.prng.uniform(0.96, 1.04))
+                    self.play(names[k], pos, vol * STEP_VOL[kind] * (1.15 if run else 1.0), g.prng.uniform(0.96, 1.04), far_)
                 else:
-                    self.play("step_hard" if kind == "hard" else "step_soft", pos, vol, g.prng.uniform(0.9, 1.12))
+                    self.play("step_hard" if kind == "hard" else "step_soft", pos, vol, g.prng.uniform(0.9, 1.12), far_)
         for pid in [p for p in self.walk if p not in seen]:
             del self.walk[pid]
 
@@ -117493,7 +118075,8 @@ class Game(ShowBase):
         self.g_throw_charge = 0.0
         self.prev_swing, self.quick_melee, self.prev_run, self.prev_jump = 0.0, False, False, False
         self.spec_fp, self.shield_flash, self.bite_t = None, 0.0, 0.0
-        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Stromstoss)
+        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Schockwelle, Scan, Nest-Wählrad)
+        self.accept(KEYS["ability"] + "-up", self.on_ability_up)   # v49: Wählrad loslassen = Nest setzen
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
@@ -120123,6 +120706,9 @@ class Game(ShowBase):
                 fl2.setTwoSided(True)
                 fl2.hide()
                 self.dual_left, self.dual_flash = left_, fl2
+                for (si_, _v), lst_ in an.items():          # v49: Aufsatz-Sync - Lauf/Griff steckt auch an der linken
+                    if si_ in (0, 2) and lst_:              # (gleicher Knoten: ein-/ausblenden wirkt auf beide)
+                        lst_[0].instanceTo(left_)
             self.gun_models.append(model)
             self.gun_flash.append(fl)
             sn = {}
@@ -120352,8 +120938,8 @@ class Game(ShowBase):
             self.slot_labels.append(lab)
         # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
         self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
-                              "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Schuhe"]].col),
-                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Jetpack"]].col),
+                              "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Boots"]].col),
+                              "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Schweres Exo-Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
         self.drone_hud = DroneHud(self.a2dBottomRight)  # 13d: lila Drohne aktiv - Kästchen mit Uhrzeiger-Countdown
         # Nahkampf-Slot (Slot 5: Taste 5 oder F ohne etwas Benutzbares in der Nähe)
@@ -120851,6 +121437,14 @@ class Game(ShowBase):
             elif msg == 2:
                 self.toast(f"{nm} ins Aufsatz-Lager (T: Waffe ansehen, Klick auf die Markierung)", (0.75, 0.9, 1.0), 2.4)
             self.sfx.play("servo", None, 0.6, 1.3)
+        elif msg == 4:                                      # v49: Granatwerfer schon montiert -> nur Granaten
+            g_ = self.player.guns[wi] if 0 <= wi < len(WEAPONS) else None
+            self.toast(f"Granatwerfer: +{GL_START} Granaten" + (f"  ({g_.gl}/{GL_MAX})" if g_ is not None else ""),
+                       (0.55, 1.0, 0.55), 2.0)
+            self.sfx.play("click", None, 0.8, 0.9)
+        elif msg == 5:                                      # v49: Schalldämpfer verschlissen
+            wn = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
+            self.toast(f"Schalldämpfer abgebrochen - {wn} ist wieder laut!", (1.0, 0.55, 0.35), 2.6)
         if getattr(self, "att_panel", None) is not None:
             self.att_panel_key = None                       # Fenster neu aufbauen
 
@@ -121054,7 +121648,8 @@ class Game(ShowBase):
             return
         si = self.att_panel_tab
         cur = pscope(pl, wi) if si == ATT_SCOPE else (pl.att.get(wi) or ATT_NONE)[si]
-        key = (wi, si, cur, tuple(pl.att.get(wi) or ATT_NONE), pscope(pl, wi), tuple(sorted(pl.att_store)))
+        key = (wi, si, cur, tuple(pl.att.get(wi) or ATT_NONE), pscope(pl, wi), tuple(sorted(pl.att_store)),
+               round(getattr(pl, "sil", {}).get(wi, 0.0), 1), tuple(round(v, 1) for v in getattr(pl, "sil_store", ())))
         if key == self.att_panel_key:
             return
         self.att_panel_key = key
@@ -121114,6 +121709,10 @@ class Game(ShowBase):
             OnscreenText(text=lab, parent=root, pos=(cx + 0.015, ztop - 0.125), scale=0.036 if len(lab) < 18 else 0.029,
                          fg=(1, 0.88, 0.4, 1) if on else (1, 1, 1, 1), align=TextNode.ALeft, shadow=(0, 0, 0, 0.9))
             info = att_info(si, v)
+            if si != ATT_SCOPE and is_sil(si, v):            # v49: Rest-Haltbarkeit des Dämpfers (Magazine)
+                d_ = (getattr(pl, "sil", {}).get(wi, SIL_DUR[1]) if on
+                      else max(getattr(pl, "sil_store", ()) or (SIL_DUR[1],)))
+                info = f"Haltbarkeit noch {d_:.1f} Magazine".replace(".", ",")
             OnscreenText(text=(info[:44] + "…") if len(info) > 45 else info, parent=root, pos=(cx + 0.015, ztop - 0.165),
                          scale=0.025, fg=(0.75, 0.8, 0.88, 1), align=TextNode.ALeft)
             if not on:
@@ -121754,6 +122353,9 @@ class Game(ShowBase):
         10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
+        if getattr(self, "nest_wheel", None) is not None:      # v49: Nest-Wählrad offen - Rad blättert dort
+            self.nest_wheel_scroll(d)
+            return
         if self.g_hold_t >= 0:
             self.on_gren_next(d)
             return
@@ -121833,21 +122435,320 @@ class Game(ShowBase):
                                                                           for c in GREN_COL[k]), 1.2)
 
     def on_ability(self):
-        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Stromstoss. Der Host entscheidet."""
+        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Schockwelle. v49: Hacker-Weste = Quadranten-Scan,
+        Nekromanten-Set = Nest-Wählrad (Taste halten, Maus wählt, loslassen setzt). Der Host entscheidet."""
         pl = self.player
         if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
             return
+        if set_full(pl, "necro"):
+            self.open_nest_wheel()
+            return
+        if wears(pl, "hack_scan"):
+            if getattr(pl, "scan_cd", 0.0) > 0:
+                self.toast(f"Scan lädt noch {int(math.ceil(pl.scan_cd))} s", (0.6, 0.8, 1.0), 1.2)
+                return
+            if self.net_mode == "client":
+                if self.client is not None and not self.client.lost:
+                    self.client.send_scan()
+            else:
+                self.world.hack_scan(pl)
+            return
         if not set_full(pl, "shield"):
-            self.toast("Stromstoss nur mit komplettem Schild-Set (Helm, Schild, Stiefel)", (0.8, 0.85, 0.95), 1.8)
+            self.toast("Taste B: Schockwelle (komplettes Schild-Set), Scan (Hacker-Weste) oder Nest "
+                       "(komplettes Nekromanten-Set)", (0.8, 0.85, 0.95), 2.2)
             return
         if getattr(pl, "shock_cd", 0.0) > 0:
-            self.toast(f"Stromstoss lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
+            self.toast(f"Schockwelle lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
             return
         if self.net_mode == "client":
             if self.client is not None and not self.client.lost:
                 self.client.send_shock()
         else:
             self.world.shock(pl)
+
+    # ------------------------------------------------------------ v49: Nest-Wählrad, Scan-Anzeige, Hacker-Sicht, Nester
+    NEST_WHEEL_R = 0.30                      # Radius des Wählrads (aspect2d)
+
+    def open_nest_wheel(self):
+        """v49: Nekromanten-Set - Wählrad öffnen (Taste B gehalten). Mausbewegung wählt, Loslassen setzt das Nest."""
+        pl = self.player
+        if getattr(self, "nest_wheel", None) is not None:
+            return
+        if pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0:
+            self.toast("Kein Nest aus dem Fahrzeug", (0.7, 0.9, 0.6), 1.4)
+            return
+        if getattr(pl, "nest_cd", 0.0) > 0:
+            self.toast(f"Nächstes Nest in {int(math.ceil(pl.nest_cd))} s", (0.7, 0.9, 0.6), 1.4)
+            return
+        if any(n.owner == self.my_id for n in getattr(self.world, "nests", ())):
+            self.toast("Dein Nest lebt noch - nur eins zur Zeit", (0.7, 0.9, 0.6), 1.6)
+            return
+        root = self.aspect2d.attachNewNode("nestrad")
+        root.setBin("fixed", 90)
+        root.setDepthTest(False)
+        root.setDepthWrite(False)
+        root.setTransparency(TransparencyAttrib.MAlpha)
+        cm = CardMaker("nr")
+        cm.setFrame(-0.42, 0.42, -0.42, 0.42)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.0, 0.0, 0.0, 0.45)
+        segs = []
+        n = len(NEST_KINDS)
+        for i, (kind, cnt, _hp, _r) in enumerate(NEST_KINDS):
+            a = math.pi / 2 - i * math.tau / n                  # erstes Segment oben, dann im Uhrzeigersinn
+            x, z = math.cos(a) * self.NEST_WHEEL_R, math.sin(a) * self.NEST_WHEEL_R
+            cm.setFrame(-0.11, 0.11, -0.055, 0.055)
+            card = root.attachNewNode(cm.generate())
+            card.setPos(x, 0, z)
+            lab = OnscreenText(text=f"{MOB_NAMES.get(kind, kind)}\n~{cnt} in {NEST_LIFE / 60:.0f} min", parent=root,
+                               pos=(x, z + 0.012), scale=0.032, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1),
+                               align=TextNode.ACenter)
+            segs.append((card, lab, a))
+        hint = OnscreenText(text="Maus: Nest wählen\nB loslassen: setzen", parent=root, pos=(0, 0.01), scale=0.03,
+                            fg=(0.75, 1.0, 0.65, 1), shadow=(0, 0, 0, 1), align=TextNode.ACenter)
+        self.nest_wheel = {"root": root, "segs": segs, "sel": 0, "vec": [0.0, 0.0], "hint": hint}
+        self.nest_wheel_paint()
+        self.sfx.ui_click()
+
+    def nest_wheel_paint(self):
+        st = getattr(self, "nest_wheel", None)
+        if st is None:
+            return
+        for i, (card, lab, _a) in enumerate(st["segs"]):
+            on = i == st["sel"]
+            card.setColor(*((0.25, 0.55, 0.18, 0.95) if on else (0.08, 0.10, 0.08, 0.85)))
+            lab.setFg((1.0, 1.0, 0.7, 1) if on else (0.85, 0.9, 0.85, 1))
+
+    def nest_wheel_mouse(self, mdx, mdy):
+        """v49: Mausbewegung wählt das Segment (Richtung vom Mittelpunkt); die Kamera bleibt so lange stehen."""
+        st = getattr(self, "nest_wheel", None)
+        if st is None:
+            return
+        v = st["vec"]
+        v[0] += mdx
+        v[1] -= mdy                                            # Bildschirm-y zeigt nach unten
+        ln = math.hypot(*v)
+        if ln > 60.0:                                          # Ausschlag begrenzen (schnelles Umentscheiden)
+            v[0], v[1] = v[0] / ln * 60.0, v[1] / ln * 60.0
+        if ln > 6.0:
+            a = math.atan2(v[1], v[0])
+            n = len(NEST_KINDS)
+            best = min(range(n), key=lambda i: abs(math.atan2(math.sin(a - st["segs"][i][2]),
+                                                               math.cos(a - st["segs"][i][2]))))
+            if best != st["sel"]:
+                st["sel"] = best
+                self.nest_wheel_paint()
+                self.sfx.play("tap", None, 0.4, 1.6)
+
+    def nest_wheel_scroll(self, d):
+        st = getattr(self, "nest_wheel", None)
+        if st is not None:
+            st["sel"] = (st["sel"] - d) % len(NEST_KINDS)
+            self.nest_wheel_paint()
+
+    def close_nest_wheel(self, place=True):
+        """v49: B losgelassen -> gewähltes Nest setzen (der Host prüft Platz und Abklingzeit)."""
+        st = getattr(self, "nest_wheel", None)
+        if st is None:
+            return
+        self.nest_wheel = None
+        st["root"].removeNode()
+        pl = self.player
+        if not place or pl.hp <= 0 or self.mode != "play":
+            return
+        ki = st["sel"]
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_nest(ki)
+        else:
+            self.world.place_nest(pl, ki)
+
+    def on_ability_up(self):
+        if getattr(self, "nest_wheel", None) is not None:
+            self.close_nest_wheel(True)
+
+    def show_scan(self, g, cells, cd):
+        """v49: Ergebnis des Quadranten-Scans: Hinweis + Raster neben der Minimap und Felder auf der Karte (M)."""
+        self.scan_res = (g, set(cells), time.time() + HACK_SCAN_SHOW)
+        self.player.scan_cd = cd
+        names = {2: ("Südwest", "Südost", "Nordwest", "Nordost")}.get(g)
+        if not cells:
+            txt = "Scan: keine Gegner geortet"
+        elif names:
+            txt = "Scan: Gegner in " + ", ".join(names[c] for c in cells)
+        else:
+            txt = f"Scan: Gegner in {len(cells)} von {g * g} Sektoren (Raster / Karte M)"
+        self.toast(txt, (0.45, 0.8, 1.0), 3.0)
+        self.sfx.play("scan", None, 0.7, 1.1)
+
+    def update_scan_ui(self):
+        """v49: Scan-Raster (g x g Felder, Norden oben) über der Minimap; Felder mit Gegnern leuchten rot, das eigene
+        Feld ist umrandet. Auf der grossen Karte (M) liegen dieselben Felder halbtransparent über dem Gelände."""
+        res = getattr(self, "scan_res", None)
+        on = res is not None and time.time() < res[2] and self.player.hp > 0 and self.mode == "play"
+        ui = getattr(self, "scan_ui", None)
+        if not on:
+            if ui is not None:
+                ui["root"].hide()
+                if ui.get("bm") is not None:
+                    ui["bm"].removeNode()
+                    ui["bm"] = None
+            return
+        g, cells, _t = res
+        key = (g, tuple(sorted(cells)))
+        if ui is None or ui["key"] != key:
+            if ui is not None:
+                ui["root"].removeNode()
+                if ui.get("bm") is not None:
+                    ui["bm"].removeNode()
+            root = self.a2dBottomLeft.attachNewNode("scanraster")      # rechts neben der Minimap
+            root.setBin("fixed", 60)
+            root.setDepthTest(False)
+            root.setTransparency(TransparencyAttrib.MAlpha)
+            S = 0.2
+            x0, z0 = 0.11 + 2 * getattr(self, "mm_R", self.MM_S / 2), 0.26
+            cm = CardMaker("sc")
+            cells_np = {}
+            for cy in range(g):
+                for cx in range(g):
+                    c = cy * g + cx
+                    cm.setFrame(x0 + cx * S / g + 0.003, x0 + (cx + 1) * S / g - 0.003,
+                                z0 + cy * S / g + 0.003, z0 + (cy + 1) * S / g - 0.003)
+                    nd = root.attachNewNode(cm.generate())
+                    nd.setColor(*((1.0, 0.25, 0.2, 0.75) if c in cells else (0.1, 0.25, 0.45, 0.55)))
+                    cells_np[c] = nd
+            OnscreenText(text="SCAN", parent=root, pos=(x0 + S / 2, z0 + S + 0.015), scale=0.03,
+                         fg=(0.5, 0.85, 1.0, 1), shadow=(0, 0, 0, 1), align=TextNode.ACenter)
+            ui = self.scan_ui = {"root": root, "key": key, "cells": cells_np, "me": None, "bm": None,
+                                 "geo": (x0, z0, S)}
+        ui["root"].show()
+        pl = self.player
+        x0, z0, S = ui["geo"]
+        mx = int(clampf(pl.x / WORLD * g, 0, g - 1e-6))
+        my = int(clampf(pl.y / WORLD * g, 0, g - 1e-6))
+        if ui["me"] is None:
+            ls = LineSegs()
+            ls.setThickness(2.0)
+            ls.setColor(1, 1, 1, 1)
+            w_ = S / g
+            for a_, b_ in (((0, 0), (w_, 0)), ((w_, 0), (w_, w_)), ((w_, w_), (0, w_)), ((0, w_), (0, 0))):
+                ls.moveTo(a_[0], 0, a_[1])
+                ls.drawTo(b_[0], 0, b_[1])
+            ui["me"] = ui["root"].attachNewNode(ls.create())
+        ui["me"].setPos(x0 + mx * S / g, 0, z0 + my * S / g)
+        bm_on = getattr(self, "bm_open", False) and getattr(self, "bm_root", None) is not None
+        if bm_on and ui["bm"] is None:
+            H = self.BIGMAP_H
+            nd = self.bm_root.attachNewNode("scanfelder")
+            nd.setTransparency(TransparencyAttrib.MAlpha)
+            cm = CardMaker("scb")
+            for c in cells:
+                cx, cy = c % g, c // g
+                cm.setFrame(-H + 2 * H * cx / g, -H + 2 * H * (cx + 1) / g, -H + 2 * H * cy / g, -H + 2 * H * (cy + 1) / g)
+                q = nd.attachNewNode(cm.generate())
+                q.setColor(1.0, 0.2, 0.15, 0.28)
+            ui["bm"] = nd
+        elif not bm_on and ui["bm"] is not None:
+            ui["bm"].removeNode()
+            ui["bm"] = None
+
+    def update_hack_hud(self):
+        """v49: Hacker-Visor - bläuliche High-Tech-Sicht und Markierungen (auch durch Wände) auf feindlichen C4/Claymores
+        und Granaten in der Luft (HACK_MARK_R)."""
+        pl, w = self.player, self.world
+        on = pl.hp > 0 and self.mode == "play" and wears(pl, "hack_hud") and w.phase == "play"
+        tint = getattr(self, "hack_tint", None)
+        if tint is None:
+            cm = CardMaker("hacktint")
+            cm.setFrame(-4, 4, -1.2, 1.2)
+            tint = self.hack_tint = self.aspect2d.attachNewNode(cm.generate())
+            tint.setColor(0.15, 0.45, 1.0, 0.10)
+            tint.setTransparency(TransparencyAttrib.MAlpha)
+            tint.setBin("fixed", 5)
+            tint.setDepthTest(False)
+            tint.setDepthWrite(False)
+            self.hack_marks = []
+        (tint.show if on else tint.hide)()
+        marks = []
+        if on:
+            me = self.my_id
+            for g in w.gadgets:
+                if g.kind in (GAD_C4, GAD_CLAY) and not w.allied(me, g.owner):
+                    marks.append(((g.x, g.y, g.z + 0.15), "C4" if g.kind == GAD_C4 else "MINE", (1.0, 0.35, 0.2)))
+            for g in w.grenades:
+                ow_ = getattr(g, "owner", -1)
+                if (ow_ < 0 or not w.allied(me, ow_)) and not getattr(g, "active", False):
+                    marks.append(((g.x, g.y, g.z), "GRANATE", (1.0, 0.85, 0.2)))
+            marks = [mk for mk in marks if math.dist(mk[0], (pl.x, pl.y, pl.z + 1.0)) <= HACK_MARK_R][:24]
+        pool = self.hack_marks
+        while len(pool) < len(marks):
+            nd = self.aspect2d.attachNewNode("hackmark")
+            nd.setBin("fixed", 36)
+            nd.setDepthTest(False)
+            ls = LineSegs()
+            ls.setThickness(2.0)
+            ls.setColor(1, 1, 1, 1)
+            s_ = 0.028
+            for a_, b_ in (((0, s_), (s_, 0)), ((s_, 0), (0, -s_)), ((0, -s_), (-s_, 0)), ((-s_, 0), (0, s_))):
+                ls.moveTo(a_[0], 0, a_[1])
+                ls.drawTo(b_[0], 0, b_[1])
+            nd.attachNewNode(ls.create())
+            lab = OnscreenText(text="", parent=nd, pos=(0, -0.055), scale=0.026, fg=(1, 1, 1, 1),
+                               shadow=(0, 0, 0, 1), align=TextNode.ACenter)
+            pool.append((nd, lab))
+        ar = self.getAspectRatio()
+        for i, (nd, lab) in enumerate(pool):
+            if i >= len(marks):
+                nd.hide()
+                continue
+            pos, txt, col = marks[i]
+            p3 = self.cam.getRelativePoint(self.render, Point3(*pos))
+            p2 = Point2()
+            if p3[1] <= 0.1 or not self.camLens.project(p3, p2):
+                nd.hide()
+                continue
+            nd.setPos(p2[0] * ar, 0, p2[1])
+            nd.setColorScale(col[0], col[1], col[2], 0.75 + 0.25 * math.sin(time.time() * 8.0))
+            d_ = math.dist(pos, (pl.x, pl.y, pl.z + 1.0))
+            self.set_text(lab, f"{txt} {d_:.0f} m")
+            nd.show()
+
+    def update_nest_views(self, dt):
+        """v49: Nester darstellen: Erdloch bis Krater (Grösse je Art), dunkles Loch mit grünem Glimmen, Erdwall."""
+        views = getattr(self, "nest_views", None)
+        if views is None:
+            views = self.nest_views = {}
+        live = set()
+        for n in getattr(self.world, "nests", ()):
+            live.add(n.nid)
+            v = views.get(n.nid)
+            if v is None:
+                root = self.render.attachNewNode(nest_model(n.ki).node("nest"))
+                root.setPos(n.x, n.y, n.z + 0.02)
+                v = views[n.nid] = {"root": root, "t": 0.0}
+            v["t"] += dt
+            k = min(1.0, v["t"] / 1.2)                            # Krater öffnet sich
+            hpk = max(0.0, n.hp / max(1.0, n.max_hp))
+            v["root"].setScale(0.3 + 0.7 * k)
+            v["root"].setColorScale(0.75 + 0.25 * hpk, 0.75 + 0.25 * hpk, 0.75 + 0.25 * hpk, 1.0)
+        for nid in [i for i in views if i not in live]:
+            views.pop(nid)["root"].removeNode()
+
+    def update_gear_fx(self, dt):
+        """v49: alles Pro-Bild-Zeug der neuen Ausrüstung (Client und Host)."""
+        pl = self.player
+        if self.net_mode == "client":
+            pl.scan_cd = max(0.0, getattr(pl, "scan_cd", 0.0) - dt)
+            pl.nest_cd = max(0.0, getattr(pl, "nest_cd", 0.0) - dt)
+        if getattr(self, "nest_wheel", None) is not None and (pl.hp <= 0 or not set_full(pl, "necro")
+                                                                or self.mode != "play"):
+            self.close_nest_wheel(False)
+        try:
+            self.update_scan_ui()
+            self.update_hack_hud()
+            self.update_nest_views(dt)
+        except Exception as e_:                              # Anzeige darf das Spiel nie anhalten
+            print("v49-Anzeige:", e_)
 
     def on_melee_ability(self):
         """9c: T mit der Nahkampfwaffe in der Hand - Bratpfanne: die erreichte Stufe essen."""
@@ -122342,7 +123243,7 @@ class Game(ShowBase):
         dash, jet = self.ability_icons["dash"], self.ability_icons["jet"]
         if alive and wears(pl, "dash"):
             rdy = pl.dash_cd <= 0
-            dash.set(rdy, 1.0 if rdy else 1.0 - pl.dash_cd / DASH_CD, None,
+            dash.set(rdy, 1.0 if rdy else 1.0 - pl.dash_cd / HERMES_DASH_CD, None,
                      "Dash" if rdy else f"{int(math.ceil(pl.dash_cd))} s")
         else:
             dash.hide()
@@ -122385,8 +123286,22 @@ class Game(ShowBase):
         if shock is not None:
             if full == "shield":
                 rdy = pl.shock_cd <= 0
-                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, None,
-                          f"{SET_ICON_KEY.upper()}  Stromstoss" if rdy else f"{int(math.ceil(pl.shock_cd))} s")
+                shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, "S",
+                          f"{SET_ICON_KEY.upper()}  Schockwelle" if rdy else f"{int(math.ceil(pl.shock_cd))} s",
+                          SETS["shield"][1])
+            elif full == "necro":                            # v49: Nest-Wählrad
+                busy = any(n.owner == self.my_id for n in getattr(self.world, "nests", ()))
+                rdy = pl.nest_cd <= 0 and not busy
+                shock.set(rdy, 1.0 if rdy else (0.0 if busy else 1.0 - pl.nest_cd / NEST_CD), "N",
+                          f"{SET_ICON_KEY.upper()}  Nest" if rdy else ("Nest aktiv" if busy else
+                                                                       f"{int(math.ceil(pl.nest_cd))} s"),
+                          SETS["necro"][1])
+            elif alive and wears(pl, "hack_scan"):            # v49: Quadranten-Scan
+                cd_ = HACK_SCAN_CD_SET if full == "hacker" else HACK_SCAN_CD
+                rdy = pl.scan_cd <= 0
+                shock.set(rdy, 1.0 if rdy else 1.0 - pl.scan_cd / cd_, "H",
+                          f"{SET_ICON_KEY.upper()}  Scan" if rdy else f"{int(math.ceil(pl.scan_cd))} s",
+                          SETS["hacker"][1])
             else:
                 shock.hide()
         for sl, tl in self.gear_tiles.items():
@@ -122475,10 +123390,17 @@ class Game(ShowBase):
         if not quiet:
             self.sfx.ui_click()
 
-    def apply_att_state(self, atts, scopes, store, msg=0, code=-1, wi=-1):
-        """7b: Aufsätze/Visiere/Lager übernehmen (beim Host sind sie schon gesetzt) und kurz Bescheid geben."""
+    def apply_att_state(self, atts, scopes, store, msg=0, code=-1, wi=-1, sil=None, sil_store=None):
+        """7b: Aufsätze/Visiere/Lager übernehmen (beim Host sind sie schon gesetzt) und kurz Bescheid geben.
+        v49: + Schalldämpfer-Haltbarkeit; Meldung 4 = Granatwerfer-Granaten nachgefüllt, 5 = Schalldämpfer abgebrochen."""
         pl = self.player
         if self.net_mode == "client":
+            pl.sil = {int(k): float(v) for k, v in (sil or {}).items()
+                      if str(k).isdigit() and isinstance(v, (int, float))}
+            pl.sil_store = [float(v) for v in (sil_store or []) if isinstance(v, (int, float))]
+            if msg == 4 and 0 <= wi < len(pl.guns):      # Granatwerfer: Granaten wie beim Host auffüllen
+                g_ = pl.guns[wi]
+                g_.gl = min(GL_MAX, getattr(g_, "gl", 0) + GL_START)
             pl.att = {}
             for k, v in (atts or {}).items():
                 a = att_valid(v)
@@ -123245,7 +124167,7 @@ class Game(ShowBase):
             self.warp_ref = (x, y)                           # bis hierher ist alles gezählt
             self.warp_pending = True
             self.warp_frames = 0
-        if dx or dy:
+        if (dx or dy) and getattr(self, "nest_wheel", None) is None:   # v49: Wählrad offen - Kamera bleibt stehen
             pl = self.player
             sens = MOUSE_SENS * self.sens_mult * self.fov_cur / self.fov_base      # beim Zoomen feinfühliger
             pl.heading -= dx * sens
@@ -123763,6 +124685,10 @@ class Game(ShowBase):
         self.throw_req = False
         self.sel_req = None
         inp.mdx, inp.mdy = self.mouse_look()
+        if getattr(self, "nest_wheel", None) is not None:      # v49: Wählrad offen - die Maus wählt, Kamera steht
+            self.nest_wheel_mouse(inp.mdx, inp.mdy)
+            inp.mdx = inp.mdy = 0
+            inp.trigger = inp.edge = False
         self.tick(dt, inp)
         return task.cont
 
@@ -123899,6 +124825,7 @@ class Game(ShowBase):
                 self.host.send(dt)         # Snapshot an alle Mitspieler
         self.handle_events()
         self.update_views(dt, inp.mdx, inp.mdy)
+        self.update_gear_fx(dt)                    # v49: Scan-Raster, Hacker-Sicht, Nester, Nest-Wählrad
 
     def toggle_fire_mode(self):
         """V: Sturmgewehr zwischen Automatik und Einzelfeuer umschalten (kleine Wackelbewegung der Waffe)."""
@@ -124534,6 +125461,15 @@ class Game(ShowBase):
             elif kind == "attstate":           # 7b: Aufsätze, Visiere, Aufsatz-Lager (der Host entscheidet)
                 if e[1] == self.my_id:
                     self.apply_att_state(*e[2:])
+            elif kind == "silbreak":           # v49: Schalldämpfer fliegt ab (Klirren, ein paar Metallsplitter)
+                pos_ = (e[3], e[4], e[5])
+                own_ = e[1] == self.my_id
+                self.sfx.play("glass", None if own_ else pos_, 0.7, 1.6)
+                self.sfx.play("click", None if own_ else pos_, 0.9, 0.7)
+                for k_ in range(10):
+                    a_ = k_ * math.tau / 10
+                    self.add_particle(pos_, (math.cos(a_) * 2.5, math.sin(a_) * 2.5, 2.0 + (k_ % 3)),
+                                      (0.25, 0.25, 0.27), 0.03, 0.6)
             elif kind == "droplock":           # 7b: Beute gehört noch kurz dem Öffnenden
                 if e[1] == self.my_id:
                     self.toast(f"Gehört noch {int(math.ceil(e[3]))} s {self.pname(e[2])}", (0.95, 0.85, 0.6), 1.5)
@@ -124601,17 +125537,22 @@ class Game(ShowBase):
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (160 - d))
                     self.sp_cam.kick(10)
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.4)
-            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen
+            elif kind == "shock":              # 7c: Stromstoss - blauer Ring aus Blitzen (v49: Schockwelle, grösser)
                 cx_, cy_, cz_ = e[2], e[3], e[4] + 1.0
-                for k_ in range(12):
-                    a_ = k_ * math.tau / 12
-                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * SHOCK_R, cy_ + math.sin(a_) * SHOCK_R,
+                R_ = float(e[5]) if len(e) > 5 else SHOCK_R
+                for k_ in range(18):
+                    a_ = k_ * math.tau / 18
+                    self.zap_fx((cx_, cy_, cz_), (cx_ + math.cos(a_) * R_, cy_ + math.sin(a_) * R_,
                                                   cz_ - 0.6 + 0.4 * math.sin(k_ * 1.7)), True)
-                for k_ in range(36):
-                    a_ = k_ * math.tau / 36
-                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * SHOCK_R * 2.2, math.sin(a_) * SHOCK_R * 2.2, 0.6),
+                for k_ in range(48):
+                    a_ = k_ * math.tau / 48
+                    self.add_particle((cx_, cy_, cz_ - 0.7), (math.cos(a_) * R_ * 2.2, math.sin(a_) * R_ * 2.2, 0.6),
                                       (0.5, 0.85, 1.0), 0.05, 0.45, 0.0)
                 self.sfx.play("zap", (cx_, cy_, cz_), 1.0, 0.8)
+                self.sfx.play("thud", (cx_, cy_, cz_), 0.9, 0.7)
+                me_ = self.world.players.get(self.my_id)
+                if me_ is not None and e[1] != self.my_id and math.hypot(me_.x - cx_, me_.y - cy_) < R_ * 1.6:
+                    self.sp_cam.kick(6)
                 if e[1] == self.my_id:
                     self.player.shock_cd = SHOCK_CD
                     self.player.amp.discard("shock")          # 9c: verstärkter Einsatz verbraucht
@@ -124623,6 +125564,55 @@ class Game(ShowBase):
                 self.sfx.play("charge", (e[2], e[3], e[4] + 0.5), 0.6, 1.6)
                 if e[1] == self.my_id:
                     self.toast("Abwehrdrohne aktiv", (1.0, 0.65, 0.25), 1.5)
+            elif kind == "shockhit":           # v49: von einer Schockwelle getroffen: weggeschleudert, Tank leer, Dash neu laden
+                if e[1] == self.my_id:
+                    pl = self.player
+                    pl.kb_v, pl.kb_t = (float(e[2]), float(e[3])), SHOCK_KNOCK_T
+                    pl.vz = max(pl.vz, 3.0)
+                    pl.on_ground = False
+                    pl.jet_fuel = 0.0
+                    pl.dash_cd = max(pl.dash_cd, HERMES_DASH_CD)
+                    pl.dash_t = 0.0
+                    self.hurt_flash = min(0.6, self.hurt_flash + 0.25)
+                    self.toast("SCHOCKWELLE!" + ("  Schild zerstört" if len(e) > 4 and e[4] else "")
+                               + "  -  Jetpack leer, Dash lädt neu", (0.5, 0.8, 1.0), 2.2)
+            elif kind == "hscan":              # v49: Quadranten-Scan (nur der Scannende sieht das Ergebnis)
+                if e[1] == self.my_id:
+                    self.show_scan(int(e[2]), list(e[3]), float(e[4]))
+            elif kind == "nest":               # v49: Nest gesetzt - Erde bricht auf
+                pos_ = (e[4], e[5], e[6])
+                r_ = NEST_KINDS[e[3]][3] if 0 <= e[3] < len(NEST_KINDS) else 1.5
+                self.sfx.play("rumble", pos_, 1.0, 0.8)
+                for k_ in range(int(14 + 6 * r_)):
+                    a_ = self.prng.uniform(0, math.tau)
+                    sp_ = self.prng.uniform(1.0, 2.5) * r_
+                    self.add_particle((pos_[0], pos_[1], pos_[2] + 0.1), (math.cos(a_) * sp_, math.sin(a_) * sp_,
+                                      self.prng.uniform(3.0, 6.0)), (0.30, 0.22, 0.14), 0.06 + 0.02 * r_, 1.2)
+                if e[2] == self.my_id:
+                    kd_ = NEST_KINDS[e[3]][0] if 0 <= e[3] < len(NEST_KINDS) else ""
+                    self.toast(f"{MOB_NAMES.get(kd_, kd_)}-Nest gesetzt ({NEST_LIFE / 60:.0f} min)", _NECRO_GLOW, 2.0)
+            elif kind == "nesthit":            # v49: Nest getroffen
+                if e[3] == self.my_id:
+                    self.sfx.hitmark()
+            elif kind == "nestdown":           # v49: Nest vergangen / zerstört
+                if e[6]:
+                    self.sfx.play("explosion", (e[3], e[4], e[5]), 0.6, 1.3)
+                if e[2] == self.my_id:
+                    self.player.nest_cd = NEST_CD
+                    self.toast("Dein Nest wurde zerstört!" if e[6] else "Dein Nest ist erloschen",
+                               (0.85, 0.6, 0.4) if e[6] else (0.7, 0.85, 0.7), 2.2)
+            elif kind == "nestno":             # v49: Nest nicht möglich
+                if e[1] == self.my_id:
+                    self.toast("Kein Platz für ein Nest - auf freien Boden schauen" if e[2] < 0
+                               else f"Noch kein Nest möglich ({int(math.ceil(e[2]))} s)", (0.8, 0.8, 0.7), 1.8)
+            elif kind == "hboom":              # v49: Hermes-Dash - Überschallknall (weithin hörbar, verrät die Position)
+                own_ = e[1] == self.my_id
+                self.sfx.play("sonic", None if own_ else (e[2], e[3], e[4]), 0.8 if own_ else 1.0,
+                              self.prng.uniform(0.95, 1.05))
+                for k_ in range(16):
+                    a_ = k_ * math.tau / 16
+                    self.add_particle((e[2], e[3], e[4]), (math.cos(a_) * 7.0, math.sin(a_) * 7.0, 0.3),
+                                      (1.0, 0.92, 0.6), 0.04, 0.35, 0.0)
             elif kind == "stun":
                 if e[1] == self.my_id:
                     pl = self.player
@@ -124808,6 +125798,10 @@ class Game(ShowBase):
             elif kind == "hasgear":
                 if e[1] == self.my_id:
                     self.toast("Hast du schon", (0.9, 0.9, 0.95), 1.5)
+            elif kind == "gearblock":          # v49: Slot gesperrt (Schweres Exo-Jetpack)
+                if e[1] == self.my_id:
+                    self.toast(f"{GEAR[e[3]].name} sperrt den Slot {GEAR_SLOT_NAMES[GEAR[e[2]].slot]}",
+                               (1.0, 0.7, 0.4), 2.0)
             elif kind == "shieldhit":
                 if e[1] == self.my_id:
                     self.hurt_flash = max(0.0, self.hurt_flash - 0.2)
@@ -125062,6 +126056,30 @@ class Game(ShowBase):
                 if tt >= te and k_ > self.sg_ev:
                     self.sg_ev = k_
                     self.sfx.play("sg_open" if k_ == 0 else ("sg_close" if k_ == n + 1 else "sg_shell_%d" % k_), None, 0.9, 1.0)
+        elif pl.reload_t > 0 and pl.cur == DUAL_WI:
+            # v49: Dual Baretta lädt nacheinander - erst die linke Pistole (erste Hälfte), dann die rechte (zweite)
+            u = 1.0 - pl.reload_t / w.reload
+            if u < 0.5:
+                u1 = u * 2.0
+                k = smoothstep(0.0, 0.2, u1) * (1.0 - smoothstep(0.8, 1.0, u1))
+                jolt = math.sin(math.pi * (u1 - 0.84) / 0.08) if 0.84 <= u1 < 0.92 else 0.0
+                self.dual_rl = (k, jolt, 0.0)
+                pz -= 0.05 * k                  # die rechte senkt sich etwas, die linke kommt in die Mitte
+                self.dual_rl_half = False
+            else:
+                u2 = u * 2.0 - 1.0
+                dip = smoothstep(0.0, 0.15, u2) * (1.0 - smoothstep(0.85, 1.0, u2))
+                pz += 0.16 * dip
+                py += 0.08 * dip
+                pitch += 20 * dip
+                roll += 10 * dip
+                if magp is not None and 0.88 <= u2 < 0.95:
+                    pitch -= 5.0 * math.sin(math.pi * (u2 - 0.88) / 0.07)
+                self.hand_pos = self.reload_pose(u2, magp, mag_n, ej_n)
+                self.dual_rl = (0.0, 0.0, dip)  # die linke weicht nach unten aus
+                if not getattr(self, "dual_rl_half", True):
+                    self.dual_rl_half = True
+                    self.sfx.reload(DUAL_WI)    # zweites Magazin: eigenes Nachladegeräusch
         elif pl.reload_t > 0:
             u = 1.0 - pl.reload_t / w.reload
             dip = smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
@@ -125094,15 +126112,25 @@ class Game(ShowBase):
             rr_ = self.prng
             px += rr_.uniform(-1, 1) * 0.0025 * sp_
             pz += rr_.uniform(-1, 1) * 0.0025 * sp_
-            if sp_ < 1.0 and getattr(pl, "spin_idle", 99.0) <= 0.0 and getattr(self, "spin_snd_t", 0.0) <= 0:
-                self.sfx.play("servo", None, 0.55, 0.6 + 1.2 * sp_)
-                self.spin_snd_t = 0.22
+            # v49: Hochdrehen nur akustisch (kein HUD-Wert): mechanisches Rattern + Motorheulen, Tonhöhe und Takt
+            # steigen mit der Drehzahl; im Abkling-Fenster leiser und tiefer (die Läufe trudeln aus)
+            if sp_ < 1.0 and getattr(self, "spin_snd_t", 0.0) <= 0:
+                held_ = getattr(pl, "spin_idle", 99.0) <= 0.0
+                self.sfx.play("minispin", None, (0.75 if held_ else 0.35) * (0.6 + 0.4 * sp_),
+                              (0.55 + 1.15 * sp_) if held_ else (0.45 + 0.7 * sp_))
+                self.spin_snd_t = 0.24 - 0.12 * sp_
             self.spin_snd_t = max(0.0, getattr(self, "spin_snd_t", 0.0) - dt)
         dn_ = getattr(self, "dual_left", None)
         if dn_ is not None:                       # v48: Dual Baretta - linke Waffe ruckt nach ihrem Schuss
             self.dual_kick = max(0.0, getattr(self, "dual_kick", 0.0) - dt * 7.0)
-            dn_.setPos(DUAL_LEFT_POS[0], DUAL_LEFT_POS[1] - 0.05 * self.dual_kick, DUAL_LEFT_POS[2] + 0.01 * self.dual_kick)
-            dn_.setP(18.0 * self.dual_kick)
+            kl_, jo_, lo_ = getattr(self, "dual_rl", (0.0, 0.0, 0.0)) if pl.reload_t > 0 else (0.0, 0.0, 0.0)
+            self.dual_rl = (0.0, 0.0, 0.0)
+            dn_.setPos(DUAL_LEFT_POS[0] + 0.07 * kl_,                            # v49: Nachladen der linken: zur Mitte,
+                       DUAL_LEFT_POS[1] - 0.05 * self.dual_kick + 0.05 * kl_,   # angehoben und gekippt, Magazin rastet ein;
+                       DUAL_LEFT_POS[2] + 0.01 * self.dual_kick + 0.13 * kl_ - 0.20 * lo_)   # bei der rechten weicht sie aus
+            dn_.setP(18.0 * self.dual_kick + 22.0 * kl_ - 4.0 * jo_ - 30.0 * lo_)
+            dn_.setR(-16.0 * kl_)
+            (dn_.hide if getattr(self, "insp_on", False) else dn_.show)()   # v49: Inspektion zeigt nur die rechte
         if pl.switch_t > 0:                       # Wechsel: Waffe senken, tauschen, heben
             dip = math.sin(math.pi * (1 - pl.switch_t / SWITCH_T))
             pz -= 0.45 * dip
@@ -125612,9 +126640,7 @@ class Game(ShowBase):
             if getattr(g, "gl_mode", False) and att_has_gl(pl.cur, pl.att.get(pl.cur)):   # v48: Granatwerfer aktiv
                 self.set_text(self.ammo_text, f"40 mm  {g.gl}" + ("  ..." if g.gl_cd > 0 else ""))
                 mode_ = "   Granatwerfer"
-            elif w.spin > 0 and pl.spin < 1.0 and pl.spin > 0:     # v48: Minigun läuft an
-                self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}   Anlauf {int(pl.spin * 100)} %")
-            else:
+            else:                                                   # v49: kein "Anlauf %" mehr - die Minigun ist zu hören
                 self.set_text(self.ammo_text, f"{g.mag + ins} / {g.reserve - ins}")
             if w.zooms and len(w.zooms) > 1:                        # v48: VSS - eingestellte Vergrösserung
                 mode_ = f"   {w.zooms[self.zoom_index(pl.cur)]}x"
@@ -125658,7 +126684,7 @@ class Game(ShowBase):
             self.chg_root.hide()
             self.chg_full = self.chg_on = False
         if pl.amp and pl.hp > 0:                          # 9c: verstärkte Fähigkeiten (Erschöpfungsdolch)
-            nm = {"dash": "Dash", "jet": "Jetpack", "shock": "Stromstoss", "pan": "Pfanne"}
+            nm = {"dash": "Dash", "jet": "Jetpack", "shock": "Schockwelle", "pan": "Pfanne"}
             self.set_text(self.amp_text, f"x{DAGGER_AMP:g} bereit: " + ", ".join(nm[a] for a in ("dash", "jet", "shock", "pan")
                                                                               if a in pl.amp) + f"  ({int(math.ceil(pl.amp_t))} s)")
         else:
@@ -125721,8 +126747,11 @@ class Game(ShowBase):
         self.update_heli_sight(hc if pl.hp > 0 else None)
         spin = min(1.0, (abs(self.sw_h.x) + abs(self.sw_p.x)) / 5.0 + (0.6 if self.key_turn else 0.0))
         mv = 1.0 if pl.moving and pl.on_ground else 0.0
+        air_ = 0.0 if pl.on_ground else 1.0
+        if (air_ or getattr(pl, "cling", False)) and set_full(pl, "spring"):   # v49: Springfeder-Set - Fadenkreuz eng
+            mv, air_ = 0.0, -1.2
         self.cross.update(dt, walk=mv, run=mv if self.run_now and pl.crouch < 0.5 else 0.0, turn=spin,
-                          air=0.0 if pl.on_ground else 1.0, bloom=min(2.0, pl.bloom), crouch=pl.crouch,
+                          air=air_, bloom=min(2.0, pl.bloom), crouch=pl.crouch,
                           hip=(0.022 if w.name == "DSR" else max(0.0, (w.spread - 1.2) * 0.008) if w.model else 0.0))
         self.hurt_flash = max(0.0, self.hurt_flash - 1.5 * dt)
         low = 0.35 * max(0.0, 1 - pl.hp / 40.0) if pl.hp > 0 else 0.5
@@ -125770,13 +126799,18 @@ class Game(ShowBase):
                 elif kind == "drop" and o.att >= 0:          # 7b: Aufsatz
                     si_, v_ = divmod(o.att, ATT_CODE)
                     nm_ = att_name(si_, v_)
-                    if pl.melee_out or pl.gad_out or pl.cur not in pl.slots or not att_fits(pl.cur, si_):
+                    if (si_, v_) == ATT_GL and M4_WI in pl.slots and att_has_gl(M4_WI, pl.att.get(M4_WI)):
+                        prompt = f"F   Aufheben: {nm_}   (+{GL_START} Granaten für den Werfer)"     # v49
+                    elif (pl.melee_out or pl.gad_out or pl.cur not in pl.slots
+                          or not att_fits(pl.cur, si_, v_)):
                         prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - T: Waffe ansehen)"
                     else:
                         old_ = pscope(pl, pl.cur) if si_ == ATT_SCOPE else (pl.att.get(pl.cur) or ATT_NONE)[si_]
-                        prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
-                        if old_:
-                            prompt += f"   ({att_name(si_, old_)} ins Lager)"
+                        if old_:                         # v49: Platz belegt - der neue kommt ins Lager, der alte bleibt
+                            prompt = (f"F   Aufheben: {nm_}   ({att_name(si_, old_)} bleibt dran - "
+                                      f"T: im Lager wechseln)")
+                        else:
+                            prompt = f"F   {nm_} an {WEAPONS[pl.cur].name} stecken"
                 elif kind == "drop":
                     if o.gren > 0 and o.gk.startswith("gad:"):
                         k_ = int(o.gk[4:])

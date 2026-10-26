@@ -42,3 +42,5 @@ docs/WORKFLOW.md                    Zusammenarbeit: eigene Branches, Merge von m
 
 - Tasten (in allen Modi gleich): 1 / 2 Primär- und Sekundärwaffe, 3 Gadget bzw. Spezialwaffe, 4 Nahkampf, G Granate.
   Mausrad wechselt in dieser Reihenfolge. F schlägt ohne etwas Benutzbares mit der Nahkampfwaffe (Messer).
+- B: Ausrüstungs-Fähigkeit - Schockwelle (Schild-Set), Quadranten-Scan (Hacker-Weste) oder Nest-Wählrad (Nekromanten-Set,
+  halten). T: Waffen-Inspektion, dort Aufsätze aus dem Aufsatz-Lager wechseln.
