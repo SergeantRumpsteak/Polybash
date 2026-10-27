@@ -2,6 +2,29 @@
 
 Neueste Änderungen oben.
 
+## Drohnen-Obergrenze, Granaten und Gadgets im Vorbeilaufen, F nimmt, was man anschaut (Robin, 2026-10-27)
+Gilt für alle Modi. **NET_VERSION 54**: die Nachricht `use` trägt jetzt das angeschaute Ziel mit, der Host wählt anders aus - alle müssen aktualisieren.
+
+Drohnen (Monster):
+- **Höchstens 4 Drohnen** gleichzeitig auf einer Polytown-grossen Karte (300 m), egal welche Monsterdichte. Kleinere Karten anteilig nach Fläche (200 m: 2), mindestens 1 (`DRONE_COUNT`, `DRONE_REF_WORLD`, `World.drone_cap`).
+- Die Grenze sitzt jetzt direkt in `spawn_mob` und zählt nur lebende Drohnen - kein Weg (Rundenstart, Respawn-Warteschlange, Dichte umstellen) kann mehr darüber hinaus spawnen.
+- Eigene Spieler-Drohnen (Drohnen-Granate) zählen nicht mit.
+
+Aufheben im Vorbeilaufen:
+- **Granaten und Gadgets (C4, Claymore, Funkbake), die du in diesem Leben schon einmal im Inventar hattest**, nimmst du automatisch auf, sobald du darüberläufst (1,2 m, `AUTO_PICK_R`) - auch wenn du sie inzwischen verbraucht hast. Kein F nötig.
+- Neue Arten (noch nie gehabt in diesem Leben) bleiben liegen und gehen wie bisher mit F. Nach dem Tod beginnt das Gedächtnis neu.
+- Gesperrte Kistenbeute eines anderen und volle Gadget-Vorräte bleiben liegen (ohne Meldung). Nicht im Fahrzeug, Heli oder Geschütz.
+- Gadget-Stapel, für die nur teilweise Platz ist, werden nicht mehr ganz verbraucht: der Rest bleibt liegen (gilt auch mit F).
+
+F: was man anschaut, wird genommen:
+- F nimmt nicht mehr das nächste Ding unter den Füssen, sondern das, **worauf du schaust** (kleinster Winkel zum Blick inkl. Neigung; bei fast gleichem Winkel das nähere). Wer nach unten schaut, nimmt das unter den Füssen.
+- Der Hinweis unten zeigt genau dieses Ding, und **das angeschaute Teil leuchtet auf** (Modell heller, Lichtstrahl kräftiger; Kisten werden heller).
+- Mitspieler schicken beim Drücken mit, was ihr Hinweis gerade zeigt - der Host nimmt genau das, solange es noch in Reichweite ist. Hinweis und Aktion stimmen also immer überein.
+- Fahrzeug, Heli, Geschütz und Tomahawk-Knopf gehen auch ohne Hinschauen, wenn sonst nichts angeschaut wird und man direkt davorsteht. Reichweite für Drops leicht erhöht (2,6 -> 3,0 m).
+- Zum Nachjustieren: `USE_LOOK_CONE` (22 Grad), `USE_NEAR_W`, `USE_RANGE`, `USE_AIM`, `USE_HL_SCALE`.
+
+Technik: `use_candidates`, `nearest_use(pl, want)`, `use_object(pl, alt, want)`, `use_oid`, `stack_key`, `Player.life_had`, `World.note_had`, `World.auto_pickup`, `World.drones_alive`, `Game.use_tgt`.
+
 ## Spielerfarben mit Farbpalette, Figur-Details, eine Drohne, Set-Fähigkeiten auf MMB, Nekromanten-Rework (Robin, 2026-10-27)
 Gilt für alle Modi. **NET_VERSION 53**: neuer Look-Code (ein Zeichen je Eintrag, 16 Einträge), neues Ereignis `nestmob`, `nestdown` mit Abklingzeit - alle müssen aktualisieren. Gespeicherte Charaktere aus v52 werden übernommen (Handschuhe "Keine" -> Handschuh-Art "Keine", alte Teamfarbe -> passende Palettenfarbe).
 

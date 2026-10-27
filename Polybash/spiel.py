@@ -322,7 +322,8 @@ TITAN_BEAM_H = 60.0      # m: goldene Lichtsäule über der Kiste, die der Titan
 
 N_DRONE = 4              # Elektro-Drohnen (9b: nicht mehr verwendet - siehe DRONE_COUNT)
 
-DRONE_COUNT = 4          # 9b: feste Zahl Drohnen gleichzeitig auf der Karte (jede Monsterdichte ausser "Aus")
+DRONE_COUNT = 4          # 9b: Drohnen gleichzeitig auf der Karte (jede Monsterdichte ausser "Aus") - v54: HÖCHSTENS so viele
+DRONE_REF_WORLD = 300.0  # v54: ... auf einer Karte dieser Grösse (Polytown); kleinere Karten anteilig nach Fläche, mind. 1
 
 DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; sinnvoll 1,25-1,5)
 
@@ -373,7 +374,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 53         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 54         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 214               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -398,6 +399,17 @@ CTF_TEAM_NAMES = ("Blau", "Rot")
 CTF_TEAM_COLS = ((0.18, 0.40, 0.95), (0.92, 0.20, 0.18))     # Teamfarben (Armbinde, Fahne, HUD, Minimap)
 CTF_PICK_R = 1.4         # m: wer so nah (waagerecht) an der Flagge ist, nimmt sie (einfach darüberlaufen)
 CTF_PICK_DZ = 1.9        # m: ... bei höchstens diesem Höhenunterschied
+# v54: F nimmt, was man ANSCHAUT (nicht, worauf man steht) - siehe World.nearest_use / use_candidates
+USE_RANGE = {"crate": 3.2, "drop": 3.0, "vehicle": 3.6, "heli": 6.0, "turret": 2.3, "button": 2.4}   # m waagerecht
+USE_AIM = {"crate": (0.4, 0.45), "drop": (0.65, 0.3), "vehicle": (1.0, 1.6), "heli": (1.6, 2.6),     # Zielpunkt über
+           "turret": (0.9, 0.7), "button": (1.0, 0.4)}   # dem Boden (m) und halbe Grösse (m, grosse Dinge: mehr Spiel)
+USE_LOOK_CONE = 22.0     # Grad: höchstens so weit neben dem Blick (nach Abzug der Grösse) zählt ein Ding als angeschaut
+USE_NEAR_W = 6.0         # Grad je volle Reichweite: bei fast gleichem Blickwinkel gewinnt das nähere Ding
+USE_BIG = ("vehicle", "heli", "turret", "button")   # ... diese gehen auch ohne Hinschauen, wenn man direkt davor steht
+USE_WANT_SLACK = 1.25    # Host: das vom Mitspieler angezeigte Ziel gilt bis zu dieser Reichweite (Verzögerung im Netz)
+USE_HL_SCALE = (1.55, 1.55, 1.4, 1.0)   # v54: Farbverstärkung des angeschauten Drops / der angeschauten Kiste
+AUTO_PICK_R = 1.2        # v54: m - Granaten/Gadgets, die man in diesem Leben schon hatte, nimmt man im Vorbeilaufen auf
+AUTO_PICK_DZ = 1.3       # m: ... bei höchstens diesem Höhenunterschied
 CTF_CAP_R = 4.0          # m um den eigenen Flaggenständer: Flagge abgeben = 1 Punkt
 CTF_NEED_HOME = True     # Punkt nur, wenn die eigene Flagge gerade in der Basis steht
 CTF_DROP_T = 20.0        # s: so lange bleibt eine gefallene Flagge liegen, dann kehrt sie zurück
@@ -6333,16 +6345,26 @@ class World:
                         ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER if self.bonus_hares else 0),
                         ("titan", N_TITAN)):
             cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
-            if kind == "drone":                          # 9b: feste Zahl, unabhängig von Kartengrösse und Dichte
-                cnt = DRONE_COUNT if k > 0 else 0
+            if kind == "drone":                          # 9b: unabhängig von der Dichte; v54: nach Kartengrösse, max. 4
+                cnt = self.drone_cap() if k > 0 else 0
             if kind in BOSS_KINDS:
                 self.boss_n[kind] = cnt                  # 13f: so viele kommen pro Zyklus wieder
             for _ in range(cnt):
                 self.spawn_mob(kind, [], 0.0)
 
+    def drone_cap(self):
+        """v54: So viele Drohnen (Monster) dürfen gleichzeitig leben: DRONE_COUNT auf einer Polytown-grossen Karte,
+        auf kleineren Karten anteilig zur Fläche (mind. 1), nie mehr als DRONE_COUNT."""
+        return max(1, min(DRONE_COUNT, int(DRONE_COUNT * (WORLD / DRONE_REF_WORLD) ** 2 + 0.5)))
+
+    def drones_alive(self):
+        return sum(1 for o in self.mobs if o.kind == "drone" and o.state != "dead")
+
     def spawn_mob(self, kind, avoid, min_dist, edge=False):
         """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll. 13f: edge = am Kartenrand
         (BOSS_EDGE_BAND), buddelt sich aus dem Boden (dig_t, Ereignis 'bossdig')."""
+        if kind == "drone" and self.drones_alive() >= self.drone_cap():
+            return False                                 # v54: harte Obergrenze, egal woher der Spawn kommt
         rng = self.mrng
         home, home_i, area = None, -1, None
         if kind == "critter" and getattr(self, "forest_areas", None):
@@ -6960,9 +6982,50 @@ class World:
         if c in self.crates:
             self.open_crate_triple(pl, c)
 
-    def nearest_use(self, pl):
+    def use_candidates(self, pl, slack=1.0):
+        """v54: Alles in Reichweite, was F benutzen könnte -> [(Art, Objekt, Nähe 0..1, Blickwinkel in Grad)].
+        Nähe = waagerechter Abstand / Reichweite der Art; Blickwinkel = Winkel zwischen Blickrichtung (Kopf, Neigung)
+        und dem Objekt, abzüglich seiner Grösse (grosse Dinge muss man nicht genau treffen). slack: Reichweiten-
+        Zuschlag (Host prüft damit das vom Mitspieler gewählte Ziel)."""
+        vehs = []
+        for v in self.vehicles:
+            if v.hp > 0:
+                t = self.car_turret(v)
+                if v.driver < 0 or (t is not None and t.op < 0):
+                    vehs.append(v)
+        eye = (pl.x, pl.y, pl.z + eye_h(pl))
+        h, p = math.radians(pl.heading), math.radians(pl.pitch)
+        fd = (-math.sin(h) * math.cos(p), math.cos(h) * math.cos(p), math.sin(p))
+        out = []
+        groups = [("crate", self.crates, USE_RANGE["crate"]), ("drop", self.drops, USE_RANGE["drop"]),
+                  ("vehicle", vehs, USE_RANGE["vehicle"]),
+                  ("heli", [q for q in self.helis if q.hp > 0 and q.driver < 0 and q.ground], USE_RANGE["heli"]),
+                  ("turret", [t for t in self.turrets if t.kind != "car" and t.op < 0], USE_RANGE["turret"])]
+        if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
+            groups.append(("button", [self.button], USE_RANGE["button"]))
+        for kind, objs, rng in groups:
+            rng *= slack
+            lift, size = USE_AIM[kind]
+            for o in objs:
+                d = math.hypot(pl.x - o.x, pl.y - o.y) / rng
+                oz = o.z - o.seat if kind == "turret" else o.z
+                if d >= 1.0 or abs(pl.z - oz) >= 2.5:
+                    continue
+                if kind in ("crate", "drop") and not self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4)):
+                    continue                             # 10a: nicht durch Decken/Wände (Kisten, Drops)
+                tx, ty, tz = o.x - eye[0], o.y - eye[1], oz + lift - eye[2]
+                dist = math.sqrt(tx * tx + ty * ty + tz * tz) or 1e-3
+                c = clampf((tx * fd[0] + ty * fd[1] + tz * fd[2]) / dist, -1.0, 1.0)
+                ang = math.degrees(math.acos(c)) - math.degrees(math.atan2(size, dist))
+                out.append((kind, o, d, max(0.0, ang)))
+        return out
+
+    def nearest_use(self, pl, want=None):
         """Was würde F jetzt tun? -> (Art, Objekt) oder None.
-        Art: crate | drop | vehicle | turret | heli | exit | exit_turret | exit_heli | button | timer."""
+        Art: crate | drop | vehicle | turret | heli | exit | exit_turret | exit_heli | button.
+        v54: Es zählt, was man ANSCHAUT (kleinster Blickwinkel, bei gleichem Winkel das nähere), nicht mehr das, worauf
+        man steht. Schaut man auf nichts, nimmt F nur noch grosse Dinge (Fahrzeug, Heli, Geschütz, Knopf) in der Nähe.
+        want = (Art, ID): vom Mitspieler angezeigtes Ziel - gilt, wenn es noch in Reichweite ist (Host)."""
         if pl.mount >= 0:
             return ("exit_turret", self.turrets[pl.mount]) if pl.mount < len(self.turrets) else None
         if pl.heli >= 0:
@@ -6971,29 +7034,23 @@ class World:
         if pl.vehicle >= 0:
             v = self.vehicle_by_id(pl.vehicle)
             return ("exit", v) if v is not None else None
-        best, bs = None, 1.0
-        vehs = []
-        for v in self.vehicles:
-            if v.hp > 0:
-                t = self.car_turret(v)
-                if v.driver < 0 or (t is not None and t.op < 0):
-                    vehs.append(v)
-        for kind, objs, rng in (("crate", self.crates, 3.2),
-                                ("drop", self.drops, 2.6),
-                                ("vehicle", vehs, 3.6),
-                                ("heli", [q for q in self.helis if q.hp > 0 and q.driver < 0 and q.ground], 6.0),
-                                ("turret", [t for t in self.turrets if t.kind != "car" and t.op < 0], 2.3)):
-            for o in objs:
-                d = math.hypot(pl.x - o.x, pl.y - o.y) / rng
-                oz = o.z - o.seat if kind == "turret" else o.z
-                if d < bs and abs(pl.z - oz) < 2.5 and (kind not in ("crate", "drop") or
-                                                        self.los((pl.x, pl.y, pl.z + 1.0), (o.x, o.y, oz + 0.4))):
-                    best, bs = (kind, o), d                   # 10a: nicht durch Decken/Wände (Kisten, Drops)
-        if self.strike != 1 and self.phase == "play" and self.tomahawk_on:
-            b = self.button
-            d = math.hypot(pl.x - b.x, pl.y - b.y) / 2.4
-            if d < bs and abs(pl.z - b.z) < 2.5:
-                best, bs = ("button", b), d
+        if want is not None:
+            for kind, o, _d, _a in self.use_candidates(pl, USE_WANT_SLACK):
+                if kind == want[0] and use_oid(kind, o) == want[1]:
+                    return kind, o
+        cands = self.use_candidates(pl)
+        best, bs = None, None
+        for kind, o, d, ang in cands:
+            if ang > USE_LOOK_CONE:
+                continue
+            sc = ang + USE_NEAR_W * d
+            if bs is None or sc < bs:
+                best, bs = (kind, o), sc
+        if best is not None:
+            return best
+        for kind, o, d, ang in cands:                    # nichts angeschaut: nur grosse Dinge in der Nähe
+            if kind in USE_BIG and (bs is None or d < bs):
+                best, bs = (kind, o), d
         return best
 
     def alt_seat(self, pl):
@@ -7007,12 +7064,13 @@ class World:
                 return t
         return None
 
-    def use_object(self, pl, alt=False):
-        """F gedrückt (alt = V): Kiste, Waffe, Fahrzeug (Fahrer/Schütze), Geschütz, Helikopter, Knöpfe."""
+    def use_object(self, pl, alt=False, want=None):
+        """F gedrückt (alt = V): Kiste, Waffe, Fahrzeug (Fahrer/Schütze), Geschütz, Helikopter, Knöpfe.
+        v54: want = (Art, ID), was der Spieler beim Drücken angeschaut hat (siehe nearest_use)."""
         if pl.hp <= 0 or self.phase != "play":
             return
         if CTF_NO_VEHICLES and self.mode == "ctf" and self.ctf_carried(pl.pid) is not None:
-            r_ = None if alt else self.nearest_use(pl)       # 11: mit Flagge kein Fahrzeug, Heli, Schützensitz
+            r_ = None if alt else self.nearest_use(pl, want)   # 11: mit Flagge kein Fahrzeug, Heli, Schützensitz
             if (alt and self.alt_seat(pl) is not None) or (r_ is not None and r_[0] in ("vehicle", "heli")):
                 self.events.append(("ctf", "noveh", pl.pid, -1, -1))
                 return
@@ -7027,7 +7085,7 @@ class World:
                     self.mount_turret(pl, t)
                     return
             return
-        r = self.nearest_use(pl)
+        r = self.nearest_use(pl, want)
         if r is None:
             return
         kind, o = r
@@ -7077,6 +7135,41 @@ class World:
         self.drops.append(d)
         return d
 
+    def note_had(self, pl):
+        """v54: Merkt sich, welche Granaten- und Gadget-Arten der Spieler in diesem Leben schon im Inventar hatte."""
+        had = getattr(pl, "life_had", None)
+        if had is None:
+            had = pl.life_had = set()
+        for k, n in pl.gren.items():
+            if n > 0:
+                had.add(k)
+        for k, n in enumerate(pl.gad_stock):
+            if n > 0:
+                had.add("gad:%d" % k)
+        return had
+
+    def auto_pickup(self, players):
+        """v54 (Host): Granaten und Gadgets (C4, Claymore, Funkbake), die man in diesem Leben schon einmal hatte, nimmt
+        man auf, sobald man darüberläuft (AUTO_PICK_R) - kein F nötig. Gesperrte Kistenbeute anderer und volle
+        Gadget-Vorräte bleiben liegen (ohne Meldung)."""
+        for pl in players:
+            if pl.hp <= 0:
+                continue
+            had = self.note_had(pl)                      # jedes Bild: auch was schon verbraucht ist, bleibt gemerkt
+            if not had or not self.drops or pl.vehicle >= 0 or pl.heli >= 0 or pl.mount >= 0:
+                continue
+            for d in self.drops[:]:
+                k = stack_key(d)
+                if k is None or k not in had:
+                    continue
+                if math.hypot(pl.x - d.x, pl.y - d.y) > AUTO_PICK_R or abs(pl.z - d.z) > AUTO_PICK_DZ:
+                    continue
+                if d.lock > 0 and d.owner >= 0 and d.owner != pl.pid and d.owner in self.players:
+                    continue
+                if k.startswith("gad:") and pl.gad_stock[int(k[4:])] >= GAD_MAX:
+                    continue
+                self.pickup_drop(pl, d)
+
     def pickup_drop(self, pl, d):
         """Waffe/Teil vom Boden aufheben (gleiche Slot-Regeln wie bei Kisten, siehe take_weapon). Kistenbeute
         gehört LOOT_OWNER_T s lang nur dem Öffnenden, danach jedem."""
@@ -7092,12 +7185,20 @@ class World:
                 self.give_attachment(pl, si, v)
             return
         if d.gren > 0 and d.gk.startswith("gad:"):       # Experimental: Gadget-Stücke
-            if self.give_gadget(pl, int(d.gk[4:]), d.gren):
-                self.drops.remove(d)
+            k_ = int(d.gk[4:])
+            before = pl.gad_stock[k_]
+            if self.give_gadget(pl, k_, d.gren):
+                rest = d.gren - (pl.gad_stock[k_] - before)
+                if rest > 0:                             # v54: kein Platz für alle - der Rest bleibt liegen
+                    d.gren = rest
+                else:
+                    self.drops.remove(d)
+                self.note_had(pl)
             return
         if d.gren > 0:                                   # 10b: Granaten (10e: je Art)
             self.drops.remove(d)
             self.add_grenades(pl, d.gk, d.gren, d.gq)
+            self.note_had(pl)
             return
         if d.gear >= 0:                                  # Ausrüstung: identisches Teil -> bleibt liegen
             if self.give_gear(pl, d.gear):
@@ -10268,6 +10369,7 @@ class World:
             d.life -= dt
             if d.lock > 0:
                 d.lock = max(0.0, d.lock - dt)
+        self.auto_pickup(players)                        # v54: bekannte Granaten/Gadgets im Vorbeilaufen
         self.update_noise(dt, players)
         self.nav_clock += dt                             # 13f: Wegsuche: Uhr und Rechenzeit je Bild
         self.nav_ms = NAV_MS
@@ -10295,8 +10397,8 @@ class World:
         for e in self.pending[:]:
             e[0] -= dt
             if e[0] <= 0:
-                if e[1] == "drone" and sum(1 for o in self.mobs if o.kind == "drone") >= DRONE_COUNT:
-                    self.pending.remove(e)                       # 9b: nie mehr als DRONE_COUNT Drohnen
+                if e[1] == "drone" and self.drones_alive() >= self.drone_cap():
+                    self.pending.remove(e)                       # 9b/v54: nie mehr als drone_cap() Drohnen
                 elif self.spawn_mob(e[1], avoid, 45.0):
                     self.pending.remove(e)
                 else:
@@ -10794,6 +10896,7 @@ class Player:
         self.melee_cd = self.swing_t = 0.0                 # Abklingzeit, laufender Schlag (Animation)
         self.gren = gren_new_inv()        # 10e: Granaten je Art (GREN_KINDS)
         self.gad_stock = [0, 0, 0]        # Experimental: Gadget-Vorrat aus Beute (C4, Claymore, Funkbake)
+        self.life_had = set()             # v54: Granatenarten / "gad:<Art>", die man in diesem Leben schon hatte (nur Host)
         self.gren_sel = "frag"            # 10e: gewählte Art (H / Mausrad bei gehaltenem G)
         self.flare_q = []                 # 10e: Airdrop-Fackeln: Kistenart jeder Fackel (nur Host)
         self.cat_mul = {c: 1.0 for c in LOOT_CATS + ("gadget",)}   # 10b: Kategorie-Gedächtnis der Monster-Beute (pro Leben)
@@ -10989,6 +11092,16 @@ def take_weapon(pl, wi):
     if WEAPONS[pl.cur].kind != "special" and pl.cur in pl.slots[:N_FREE_SLOTS]:
         note_hand(pl)
     return out, False
+
+
+def use_oid(kind, o):
+    """v54: ID eines Dings, das F benutzen kann (fürs Netz: Mitspieler schickt mit, was er anschaut)."""
+    return int(getattr(o, {"crate": "cid", "drop": "did"}.get(kind, "id"), 0) or 0)
+
+
+def stack_key(d):
+    """v54: Schlüssel eines Stapel-Drops (Granatenart oder "gad:<Art>") - sonst None."""
+    return d.gk if getattr(d, "gren", 0) > 0 else None
 
 
 def eye_h(pl):
@@ -21919,7 +22032,9 @@ class HostSession:
         elif t == "gdet":                         # C4 zünden
             w.detonate_c4(pl.pid)
         elif t == "use":                          # F (alt: V) gedrückt: Kiste, Waffe, Fahrzeug, Geschütz, Flugzeug
-            w.use_object(pl, bool(m.get("alt")))
+            k_, i_ = m.get("k"), m.get("i")         # v54: angeschautes Ziel des Mitspielers
+            want = (k_, i_) if isinstance(k_, str) and isinstance(i_, int) else None
+            w.use_object(pl, bool(m.get("alt")), want)
         elif t == "strikego":                     # Tomahawk mit gewähltem Einschlagpunkt abfeuern
             b = w.button
             if (finite(m.get("x", float("nan")), m.get("y", float("nan"))) and pl.hp > 0
@@ -22647,8 +22762,11 @@ class ClientSession:
         self.conn.send({"t": "atteq", "w": wi, "s": si, "v": v})
         self.conn.flush()
 
-    def send_use(self, alt=False):
-        self.conn.send({"t": "use", "alt": 1} if alt else {"t": "use"})
+    def send_use(self, alt=False, want=None):
+        msg = {"t": "use", "alt": 1} if alt else {"t": "use"}
+        if want is not None:                      # v54: was der Spieler gerade anschaut (Host prüft die Reichweite)
+            msg["k"], msg["i"] = want
+        self.conn.send(msg)
 
     def send_rocket(self):
         self.conn.send({"t": "hr"})
@@ -123590,6 +123708,11 @@ class Game(ShowBase):
                 v = (root, mark)
             live[c.cid] = v
             root, mark = v
+            tg_ = getattr(self, "use_tgt", None)               # v54: angeschaute Kiste leuchtet leicht auf
+            if tg_ is not None and tg_[0] == "crate" and tg_[1] is c:
+                root.setColorScale(*USE_HL_SCALE)
+            else:
+                root.clearColorScale()
             if not mark.isEmpty():
                 hz, spin = {"rare": (1.9, 160.0), "gold": (2.3, 120.0), "att": (1.5, 140.0)}.get(c.kind, (1.45, 90.0))
                 mark.setPos(0, 0, hz + 0.2 * math.sin(t * 2.0 + c.cid))
@@ -125191,8 +125314,11 @@ class Game(ShowBase):
         """F: Kiste öffnen, Waffe aufheben, Fahrzeug/Geschütz/Flugzeug benutzen; V: Schützensitz am Wagen
         (der Host entscheidet)."""
         pl, world = self.player, self.world
+        want = None
         if not alt and pl.hp > 0 and world.phase == "play" and world.strike == 0:
             r = world.nearest_use(pl)
+            if r is not None and r[0] in ("crate", "drop", "vehicle", "heli", "turret", "button"):
+                want = (r[0], use_oid(r[0], r[1]))      # v54: genau das, was der Hinweis gerade zeigt
             if r is not None and r[0] == "button" and (
                     world.toma_ready() and world.toma_lock.get(self.my_id, 0.0) <= 0):   # Tomahawk: erst Ziel auf der Karte wählen
                 self.open_strike_map()
@@ -125202,9 +125328,9 @@ class Game(ShowBase):
                 return
         if self.net_mode == "client":
             if self.client is not None and not self.client.lost:
-                self.client.send_use(alt)
+                self.client.send_use(alt, want)
         else:
-            self.world.use_object(self.player, alt)
+            self.world.use_object(self.player, alt, want)
 
     def strike_pick_dur(self, sec, quiet=False):
         """Countdown-Länge auf der Zielkarte wählen (die gewählte steht in Klammern)."""
@@ -128516,6 +128642,12 @@ class Game(ShowBase):
                     v.setPos(sx_ + (d.x - sx_) * u, sy_ + (d.y - sy_) * u,
                              sz_ + (d.z - sz_) * u + LOOT_POP_H * 4.0 * u * (1.0 - u) - 0.6 * (1.0 - u))
             mdl = v.getPythonTag("model")
+            tg_ = getattr(self, "use_tgt", None)               # v54: was F jetzt nimmt, leuchtet auf (heller, Strahl kräftig)
+            hl_ = tg_ is not None and tg_[0] == "drop" and tg_[1] is d
+            if hl_ != v.getPythonTag("hl"):
+                v.setPythonTag("hl", hl_)
+                (mdl.setColorScale(*USE_HL_SCALE) if hl_ else mdl.clearColorScale())
+                v.getPythonTag("beam").setColorScale(1, 1, 1, 0.9 if hl_ else 0.45)
             mdl.setPos(0, 0, 0.6 + 0.1 * math.sin(now * 2.2 + d.did))
             mdl.setH(now * 80.0)
             if d.life < 8.0:                                   # läuft gleich ab: blinkt
@@ -128761,12 +128893,14 @@ class Game(ShowBase):
 
         # Hinweis: Spawnschutz oder etwas in Reichweite, das F benutzen kann
         prompt = ""
+        self.use_tgt = None
         if pl.hp > 0 and world.phase == "play":
             if pl.protect > 0:
                 prompt = "Spawnschutz"
             if world.in_tunnel(pl.x, pl.y) and pl.z < -1.0:
                 prompt = "Tunnel"
             use = world.nearest_use(pl)
+            self.use_tgt = use                               # v54: angeschautes Ding (Hervorhebung in der Welt)
             if use is not None:
                 kind, o = use
                 if kind == "crate" and getattr(o, "air", False):
