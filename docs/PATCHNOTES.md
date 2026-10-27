@@ -2,6 +2,33 @@
 
 Neueste Änderungen oben.
 
+## Aufsatz-Kompatibilität, Nachladen von Abgesägter und 98k, Spielfigur mit Gelenken (Robin, 2026-10-27)
+Gilt für alle Modi. **NET_VERSION 52**: geänderte Regeln, welche Aufsätze an welche Waffe passen (Host und Mitspieler müssen gleich rechnen) - alle müssen aktualisieren.
+
+Aufsatz-Kompatibilität (jede Waffe hat jetzt eine Klasse, `WEAPON_CLASS`):
+- **Visiere**: Red Dot passt an jede Waffe mit Schiene. **ACOG** nur an Sturmgewehre (Colt M4 Carbine, SCAR-L, AK) und die DSR - nicht mehr an die Schrotflinte. **Sniper-Visier** nur noch an der DSR (vorher auch Sturmgewehre und Schrotflinte).
+- **Erweitertes Magazin**: nur Sturmgewehre, MP9 und Pistolen (Colt ACP, Baretta, Dual Baretta). Nicht mehr: Revolver, Schrotflinte, Abgesägte, DSR, VSS.
+- Gilt überall gleich: automatisches Aufheben (passt es nicht, kommt das Teil ins Aufsatz-Lager), Waffen-Inspektion (T zeigt nur Passendes), Loadout-Menü (unpassende Visiere nicht wählbar, alte Kombis werden auf Kimme und Korn / Standard gesetzt), Host-Prüfung.
+- Hinweis beim Aufheben und Meldung nennen den Grund, z. B. "ACOG passt nicht an Schrotflinte (nicht auf Schrotflinten) - ins Aufsatz-Lager".
+- Zum Nachjustieren: `SCOPE_CLASSES` (Visier -> Klassen) und `EXT_MAG_CLASSES`.
+
+Nachladen:
+- **Abgesägte Schrotflinte**: Lauf klappt auf, die zwei leeren Hülsen fliegen nach hinten oben heraus, zwei Patronen nacheinander rein, Lauf schnappt mit einem Ruck zu (0,07 s statt 0,2 s, Waffe ruckt hoch). Nachladezeit unverändert. Mitspieler sehen die Waffe beim Aufklappen kippen und den Ruck.
+- **Karabiner 98k**: Repetier-Nachladen statt Magazinwechsel - Kammerstängel hoch und zurück (nach leergeschossenem Magazin fliegt die Hülse heraus), Patronen einzeln von oben ins Magazin drücken (so viele wie fehlen), Kammer vor und verriegeln. Klicks im Takt jedes Handgriffs. Nachladezeit unverändert.
+- Der Kammerstängel des 98k ist jetzt ein eigenes Teil und bewegt sich auch beim Repetieren nach jedem Schuss mit (hoch, zurück, vor, zu - Hülse fliegt).
+- Mitspieler sehen beim 98k die linke Hand am Stängel, zwischen Tasche und Kammer, dann wieder am Stängel.
+
+Spielfigur (was andere Spieler sehen):
+- **Arme mit Gelenken**: Ober- und Unterarm sind getrennte Glieder, Schulter fest am Rumpf, Ellbogen beugt sich (Zwei-Knochen-IK, `arm_ik`). Die Hände liegen jetzt genau an ihrem Ziel (Handschutz, Magazinschacht, Weste, Kammerstängel); vorher drehte sich ein starrer Arm nur in die Richtung - beim Griff zur Weste hing die Hand an der Hüfte, bei nahen Zielen versank sie im Rumpf.
+- **Geschlossene Gelenke**: Kugelgelenke an Schulter (dazu Schulterkappe am Rumpf), Ellbogen, Handgelenk, Hüfte und Knie überlappen, damit beim Beugen keine Lücken oder Kanten aufgehen.
+- **Knie**: Ober- und Unterschenkel getrennt, das Knie beugt beim Vorschwingen des Beins. Stiefel und Schuh-Ausrüstung hängen am Unterschenkel.
+- **Weiche Übergänge**: Wechsel zwischen Ruhe, Nachladen, Wurf und Schlag gleiten (`SOLDIER_POSE_RATE`), Anlaufen und Stehenbleiben ebenso.
+- Ruhehaltung, Waffenlage und Aussehen bleiben wie bisher.
+
+Grenzen: Die Figur ist weiter aus Einzelteilen gebaut, die an den Gelenken überlappen - kein gewichtetes Skinning (Vertex-Weights) über ein durchgehendes Mesh. Eine Ziel-Haltung beim Zielen (ADS) gibt es für Mitspieler weiterhin nicht. Eine "Hunter Rifle" gibt es im Spiel nicht; der Repetierer ist der Karabiner 98k.
+
+Technik: `WEAPON_CLASS`, `SCOPE_CLASSES`, `EXT_MAG_CLASSES`, `ATT_EXT_MAG`, `weapon_class`, `att_why`, `scope_clean`; `sawed_hulls`, `SAWED_*`, `k98_reload_pose`, `k98_bolt`, `k98_knob`, `k98_case`, `k98_events`, `K98_*`, `sg_pose(..., snap)`; `rot_quat`, `arm_ik`, `arm_hand`, `SOLDIER_ELBOW`, `SOLDIER_KNEE_*`, `SOLDIER_RELOAD_BOLT`; Ego-Ansicht `vm_bolts`, `vm_hulls`, `vm_round`, `vm_case`; `PlayerView.rl_kind`, `tl_s/tr_s`, `mv_s`, `gun_tip`.
+
 ## Einzelteile ablegen, Heli-Flares, Testgelände: Flugmodus und zwei Ausrüstungsgebäude (Robin, 2026-10-26)
 Gilt für alle Modi. **NET_VERSION 51**: neue Nachrichten `flare` und `goff`, Ereignisse `hflare`, `hflareno`, `gearoff`, Heli-Zeile im Snapshot mit Flares - alle müssen aktualisieren.
 

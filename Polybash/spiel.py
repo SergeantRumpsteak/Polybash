@@ -371,7 +371,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 51         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 52         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 214               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -1668,18 +1668,50 @@ ATT_BY_NAME.update({ATT_SCOPE_NAMES[v]: (ATT_SCOPE, v) for v in range(1, len(ATT
 
 ATT_SLOT_NAMES = tuple(ATT_SLOTS) + ("Visier",)
 
+# --- v52: logische Aufsatz-Kompatibilität (Robin). Jede Waffe hat eine Klasse; Visiere und das erweiterte Magazin
+#     passen nur an bestimmte Klassen. Gilt beim Aufheben (Szenario A), in der Waffen-Inspektion (T), im Loadout und
+#     beim Host (alles läuft über att_fits). Was nicht passt, bleibt im Aufsatz-Lager.
+WEAPON_CLASS = {"Colt ACP": "pistol", "Baretta": "pistol", "Dual Baretta": "pistol", "Revolver": "revolver",
+                "MP9": "smg", "Colt M4 Carbine": "ar", "SCAR-L": "ar", "AK": "ar",
+                "Schrotflinte": "shotgun", "Abgesägte Schrotflinte": "sawed",
+                "DSR": "sniper", "VSS": "dmr", "Karabiner 98k": "bolt"}      # Spezialwaffen: "special"
+WEAPON_CLASS_NAMES = {"pistol": "Pistolen", "revolver": "Revolver", "smg": "Maschinenpistolen", "ar": "Sturmgewehre",
+                      "shotgun": "Schrotflinten", "sawed": "abgesägte Schrotflinten", "sniper": "Scharfschützengewehre",
+                      "dmr": "Präzisionsgewehre", "bolt": "Repetierer", "special": "Spezialwaffen"}
+# Visier (Index wie SCOPES) -> Klassen, an die es passt. Kimme und Korn passt immer. Eine Schiene braucht die Waffe
+# trotzdem (SCOPE_MOUNT) - ein Eintrag hier allein montiert nichts an Waffen ohne Schiene.
+SCOPE_CLASSES = {1: {"ar", "smg", "pistol", "shotgun", "sawed", "sniper", "dmr"},   # Red Dot: klein, fast überall sinnvoll
+                 2: {"ar", "sniper", "dmr"},                                         # ACOG: nicht auf Schrot/MP/Pistole
+                 3: {"sniper"}}                                                      # Sniper-Visier: nur schwere Scharfschützengewehre
+ATT_EXT_MAG = (1, 1)                                   # (Platz, Index) des erweiterten Magazins
+EXT_MAG_CLASSES = {"ar", "smg", "pistol"}              # nicht: Revolver, Schrotflinten, Repetierer/Präzisionsgewehre
+assert all(_w.kind == "special" or _w.name in WEAPON_CLASS for _w in WEAPONS), "v52: neue Waffe braucht WEAPON_CLASS"
+
+
+def weapon_class(wi):
+    """v52: Klasse der Waffe wi (siehe WEAPON_CLASS)."""
+    if not (isinstance(wi, int) and 0 <= wi < len(WEAPONS)):
+        return ""
+    w = WEAPONS[wi]
+    return "special" if w.kind == "special" else WEAPON_CLASS.get(w.name, "")
+
+
 def att_fits(wi, si=0, v=None):
     """Passt an diese Waffe ein Aufsatz des Platzes si (v: genau dieser Aufsatz; None = irgendeiner des Platzes)?
     Lauf/Magazin/Griff: Haupt- und Kleinwaffen; Visier: nur Waffen mit Schiene (Colt M4 Carbine, SCAR-L, AK,
     Schrotflinte, DSR). Spezialwaffen: nie. v48: Karabiner 98k gar keine, VSS/98k kein Wechselvisier (fest verbaut),
-    Colt M4 Carbine kein Schalldämpfer, Granatwerfer nur am Colt M4 Carbine."""
+    Colt M4 Carbine kein Schalldämpfer, Granatwerfer nur am Colt M4 Carbine.
+    v52: Visiere nach SCOPE_CLASSES (kein ACOG/Sniper-Visier auf Schrotflinten, Sniper-Visier nur DSR), erweitertes
+    Magazin nach EXT_MAG_CLASSES."""
     if not (isinstance(wi, int) and 0 <= wi < len(WEAPONS)) or WEAPONS[wi].kind == "special":
         return False
     w = WEAPONS[wi]
     if w.no_att:
         return False
     if si == ATT_SCOPE:
-        return w.name in SCOPE_MOUNT and not w.zooms
+        if w.name not in SCOPE_MOUNT or w.zooms:
+            return False
+        return v is None or not v or weapon_class(wi) in SCOPE_CLASSES.get(v, ())
     if w.name not in GRIP_AT:
         return False
     if v is None or not v:
@@ -1688,7 +1720,45 @@ def att_fits(wi, si=0, v=None):
         return False
     if (si, v) == ATT_GL and wi != M4_WI:
         return False
+    if (si, v) == ATT_EXT_MAG and weapon_class(wi) not in EXT_MAG_CLASSES:
+        return False
     return True
+
+
+def att_why(wi, si, v):
+    """v52: kurzer Grund, warum der Aufsatz (si, v) nicht an die Waffe wi passt ("" = passt)."""
+    if att_fits(wi, si, v):
+        return ""
+    if not (isinstance(wi, int) and 0 <= wi < len(WEAPONS)):
+        return "keine Waffe in der Hand"
+    w, cl = WEAPONS[wi], weapon_class(wi)
+    cn = WEAPON_CLASS_NAMES.get(cl, w.name)
+    if w.kind == "special":
+        return "Spezialwaffen nehmen keine Aufsätze"
+    if w.no_att:
+        return f"{w.name} nimmt keine Aufsätze"
+    if si == ATT_SCOPE:
+        if w.zooms:
+            return f"{w.name} hat ein fest verbautes Zielfernrohr"
+        if w.name not in SCOPE_MOUNT:
+            return f"{w.name} hat keine Visierschiene"
+        if v == SC_SNIPER:
+            return "nur auf schweren Scharfschützengewehren"
+        return f"nicht auf {cn}"
+    if (si, v) == ATT_EXT_MAG:
+        return f"nicht für {cn}"
+    if (si, v) == ATT_GL:
+        return "nur am Colt M4 Carbine"
+    if (si, v) == ATT_SILENCER:
+        return f"{w.name} nimmt keinen Schalldämpfer"
+    return f"passt nicht an {w.name}"
+
+
+def scope_clean(wi, sc):
+    """v52: Visier sc auf das beschränken, was an die Waffe wi passt (Unpassendes -> Kimme und Korn)."""
+    if not isinstance(sc, int) or sc <= 0:
+        return SC_IRON
+    return sc if att_fits(wi, ATT_SCOPE, sc) else SC_IRON
 
 
 def att_clean(wi, a):
@@ -8891,7 +8961,9 @@ class World:
                 g_.reserve = min(pl.wp(wi).max_reserve, g_.reserve + extra_res)
             pl.dual_reserve = 0
             if isinstance(scope, int) and scope >= 0 and att_fits(wi, ATT_SCOPE):
-                pl.scopes[wi] = scope
+                pl.scopes[wi] = scope_clean(wi, scope)
+                if scope > 0 and pl.scopes[wi] != scope and scope < len(ATT_SCOPE_NAMES):   # v52: passt nicht -> Lager
+                    pl.att_store.append(ATT_SCOPE * ATT_CODE + scope)
             elif att_fits(wi, ATT_SCOPE):
                 pl.scopes[wi] = SC_IRON                  # v49: blank aufgehoben - auch die DSR ohne Zielfernrohr
             else:
@@ -9159,7 +9231,7 @@ class World:
                 self.add_grenades(pl, kind, n - pl.gren.get(kind, 0))
         for gname, si, v in (ent[5] if len(ent) > 5 else ()):
             wi = wis.get(gname)
-            if wi is not None and wi in pl.slots and si == ATT_SCOPE and att_fits(wi, ATT_SCOPE):
+            if wi is not None and wi in pl.slots and si == ATT_SCOPE and att_fits(wi, ATT_SCOPE, v):
                 pl.scopes[wi] = v
         self.att_state_event(pl)
 
@@ -10632,7 +10704,8 @@ class Player:
         self.crouch = 0.0                 # 0 = stehend .. 1 = geduckt (weich)
         self.fall_dmg = 0.0               # Fallschaden, der noch gemeldet/verrechnet werden muss
         self.fall_h = 0.0                 # Höhe des letzten schmerzhaften Sturzes (Anzeige)
-        self.scopes = {pri: self.scope} if isinstance(pri, int) and att_fits(pri, ATT_SCOPE) else {}   # 7b: Visier je Waffe
+        self.scopes = ({pri: scope_clean(pri, self.scope)} if isinstance(pri, int) and att_fits(pri, ATT_SCOPE)
+                       else {})            # 7b: Visier je Waffe (v52: nur was an die Waffe passt)
         self.spin = 0.0                   # v48: Minigun-Anlauf 0..1 (1 = dreht voll, schiesst)
         self.spin_idle = 99.0             # v48: s seit dem letzten Feuern der Minigun (Abkling-Fenster)
         self.lock_t = 0.0                 # v48: Stinger - so lange liegt das Ziel schon im Erfassungskegel
@@ -11384,13 +11457,13 @@ def sg_events(n):
     return [SG_OPEN_T] + [SG_FIRST + SG_STEP * k for k in range(n)] + [sg_times(n)[0]]
 
 
-def sg_pose(t, n):
+def sg_pose(t, n, snap=0.20):
     """Pose zum Zeitpunkt t (s seit Beginn): (Laufwinkel, Anheben 0..1, Handposition, Patrone oder None).
-    Patrone = (Position, Neigung in Grad)."""
+    Patrone = (Position, Neigung in Grad). snap = s, in denen der Lauf zuklappt (v52: Abgesägte schnappt per Ruck zu)."""
     def lp(a, b, k):
         return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
     close_t, end_t = sg_times(n)
-    ang = SG_ANGLE * smoothstep(SG_OPEN_T - 0.16, SG_OPEN_T, t) * (1.0 - smoothstep(close_t - 0.20, close_t, t))
+    ang = SG_ANGLE * smoothstep(SG_OPEN_T - 0.16, SG_OPEN_T, t) * (1.0 - smoothstep(close_t - snap, close_t, t))
     lift = smoothstep(0.0, 0.35, t) * (1.0 - smoothstep(end_t - 0.30, end_t, t))
     rest = (-0.30, 0.10, -0.40)
     forend = (0.0, 0.33, -0.085)
@@ -11426,6 +11499,114 @@ def sg_pose(t, n):
     else:
         hand = lp(forend, rest, smoothstep(close_t, end_t, t))
     return ang, lift, hand, shell
+
+
+# ---- v52: Abgesägte Schrotflinte - leere Hülsen fliegen beim Aufklappen heraus, der Lauf schnappt per Ruck zu
+SAWED_HULL_V = ((0.38, -1.00, 1.10), (0.52, -0.90, 0.90))   # Startgeschwindigkeit je Hülse (Ego-Raum, m/s): nach hinten oben
+SAWED_HULL_G = 4.2              # Schwerkraft der Hülsen (Ego-Raum, gedämpft, damit man sie fliegen sieht)
+SAWED_HULL_T = 0.55             # s Flugzeit, dann sind sie aus dem Bild
+SAWED_SNAP_T = 0.07             # s: so schnell klappt der Lauf beim Zuschnappen (normaler Kipplauf: 0,20)
+SAWED_FLICK = 17.0              # Grad: Ruck nach oben beim Zuschnappen
+
+
+def sawed_hulls(t, n, ang):
+    """v52: leere Hülsen der Abgesägten zum Zeitpunkt t (s seit Nachladebeginn) bei n verschossenen Patronen
+    (höchstens 2, je Lauf eine). -> [(Position, Neigung)] der gerade fliegenden Hülsen."""
+    out = []
+    t0 = SG_OPEN_T - 0.03                                  # Auszieher wirft aus, sobald der Lauf offen ist
+    for k in range(min(2, max(0, n))):
+        te = t - t0 - 0.03 * k
+        if te < 0.0 or te >= SAWED_HULL_T:
+            continue
+        p0 = sg_hinge_pt((0.0, 0.17, 0.03 - 0.045 * k), ang if te < 0.02 else SG_ANGLE)
+        v = SAWED_HULL_V[k]
+        out.append(((p0[0] + v[0] * te, p0[1] + v[1] * te, p0[2] + v[2] * te - 0.5 * SAWED_HULL_G * te * te),
+                    -520.0 * te - 30.0 * k))
+    return out
+
+
+# ---- v52: Karabiner 98k - Repetier-Nachladen: Kammerstängel hoch und zurück (Hülse fliegt), Patronen einzeln von oben
+#      ins Magazin drücken, Kammer vor und verriegeln. Anteile der Nachladezeit:
+K98_RL = {"grab": 0.06, "lift": 0.13, "pull": 0.21, "load0": 0.27, "load1": 0.80, "push": 0.86, "lock": 0.91}
+K98_BOLT_AX = (0.0, 0.005)      # Kammerachse (y beliebig, x = 0, z) im Waffenraum der Ego-Ansicht
+K98_KNOB = (0.05, 0.0, 0.03)    # Kugelknopf des Kammerstängels (Ruhe)
+K98_LIFT = -70.0                # Grad (Rollen um die Kammerachse): Stängel nach oben
+K98_BACK = 0.09                 # m: so weit fährt die Kammer zurück
+K98_PORT = (0.0, 0.03, 0.045)   # Patronenlager offen (oben): hier wird die Patrone ins Magazin gedrückt
+K98_POUCH = (-0.20, 0.07, -0.28)
+K98_REST = (-0.30, 0.10, -0.40)
+
+
+def k98_knob(lift, back):
+    """Lage des Kugelknopfs bei angehobenem (0..1) und zurückgezogenem (0..1) Kammerstängel."""
+    a = math.radians(K98_LIFT * lift)
+    dx, dz = K98_KNOB[0] - K98_BOLT_AX[0], K98_KNOB[2] - K98_BOLT_AX[1]
+    return (K98_BOLT_AX[0] + dx * math.cos(a) + dz * math.sin(a), K98_KNOB[1] - K98_BACK * back,   # wie Panda-Roll R
+            K98_BOLT_AX[1] - dx * math.sin(a) + dz * math.cos(a))
+
+
+def k98_bolt(u, R=K98_RL):
+    """(Anheben 0..1, Zurückziehen 0..1) des Kammerstängels beim Nachladen (u = 0..1)."""
+    lift = smoothstep(R["grab"], R["lift"], u) * (1.0 - smoothstep(R["push"], R["lock"], u))
+    back = smoothstep(R["lift"], R["pull"], u) * (1.0 - smoothstep(R["load1"], R["push"], u))
+    return lift, back
+
+
+def k98_reload_pose(u, n, spent):
+    """v52: Pose des Repetier-Nachladens bei Fortschritt u = 0..1, n Patronen einzulegen, spent = leere Hülse im Lauf.
+    -> (Anheben, Zurück, Handposition, Patrone in der Hand (Position) oder None, Hülse (Position, Neigung) oder None)"""
+    def lp(a, b, k):
+        return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
+    R = K98_RL
+    n = max(1, n)
+    lift, back = k98_bolt(u)
+    knob = k98_knob(lift, back)
+    grip = (knob[0] - 0.03, knob[1] - 0.02, knob[2] + 0.035)             # Hand umfasst den Knopf von oben
+    port = (K98_PORT[0] - 0.02, K98_PORT[1], K98_PORT[2] + 0.05)          # Daumen drückt von oben in die offene Kammer
+    rnd = case = None
+    if u < R["grab"]:
+        hand = lp(K98_REST, grip, smoothstep(0.0, R["grab"], u))
+    elif u < R["pull"]:
+        hand = grip
+    elif u < R["load0"]:
+        hand = lp(grip, K98_POUCH, smoothstep(R["pull"], R["load0"], u))
+    elif u < R["load1"]:
+        c = (R["load1"] - R["load0"]) / n
+        i = min(n - 1, int((u - R["load0"]) / c))
+        f = (u - R["load0"] - i * c) / c                                  # 0..1 innerhalb einer Patrone
+        last = i == n - 1
+        if f < 0.40:                                                      # aus der Tasche zur Kammer
+            hand = lp(K98_POUCH, port, smoothstep(0.0, 0.40, f))
+            rnd = (hand[0] + 0.02, hand[1] + 0.03, hand[2] - 0.045)
+        elif f < 0.70:                                                    # hineindrücken
+            k = smoothstep(0.40, 0.65, f)
+            hand = (port[0], port[1], port[2] - 0.04 * k)
+            rnd = (K98_PORT[0], K98_PORT[1], K98_PORT[2] + 0.005 - 0.045 * k) if f < 0.62 else None
+        else:                                                             # zurück zur Tasche bzw. zum Knopf
+            hand = lp((port[0], port[1], port[2] - 0.04), grip if last else K98_POUCH, smoothstep(0.70, 1.0, f))
+    elif u < R["lock"]:
+        hand = grip
+    else:
+        hand = lp(grip, K98_REST, smoothstep(R["lock"], 1.0, u))
+    if spent and R["pull"] - 0.02 <= u < R["pull"] + 0.18:                # Hülse fliegt nach rechts oben heraus
+        case = k98_case((u - R["pull"] + 0.02) * 7.0)
+    return lift, back, hand, rnd, case
+
+
+def k98_case(te):
+    """v52: ausgeworfene Hülse te s nach dem Auswerfen: (Position, Neigung) im Waffenraum, oder None (aus dem Bild)."""
+    if te < 0.0 or te > 1.2:
+        return None
+    return ((0.03 + 0.55 * te, K98_PORT[1] - 0.02 - 0.25 * te, K98_PORT[2] + 0.70 * te - 1.6 * te * te), -700.0 * te)
+
+
+def k98_events(n):
+    """v52: Zeitpunkte (Anteil u) der Klänge: Stängel hoch, zurück, je Patrone, vor, verriegeln."""
+    R = K98_RL
+    c = (R["load1"] - R["load0"]) / max(1, n)
+    return ([("click", R["lift"], 1.3), ("click", R["pull"], 0.8)]
+            + [("shell", R["load0"] + c * (k + 0.62), 1.0) for k in range(max(1, n))]
+            + [("click", R["push"], 1.1), ("click", R["lock"], 1.5)])
 
 
 def note_set_pick(pl, gi):
@@ -15721,6 +15902,10 @@ _CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) 
 _SOLDIER_CACHE = {}
 SOLDIER_SH = ((-0.245, 0.0, 0.55), (0.245, 0.0, 0.55))        # Schultergelenke links / rechts (Torso-Raum)
 SOLDIER_HAND = ((0.10, 0.36, 0.40), (0.10, 0.14, 0.375))      # Hände am Gewehr: links Handschutz, rechts Griff
+SOLDIER_ELBOW = ((-0.10, 0.14, 0.34), (0.285, -0.02, 0.31))   # v52: Ellbogen in Ruhe (Biegeebene der IK)
+SOLDIER_KNEE_Z = -0.37                                          # v52: Kniegelenk unter dem Hüftgelenk
+SOLDIER_KNEE_WALK = 42.0                                        # Grad: Kniebeuge beim Vorschwingen des Beins
+SOLDIER_POSE_RATE = 16.0                                        # 1/s: so schnell gleiten die Hände zur neuen Haltung
 
 
 def _camo_col(p, f=11.0, off=0.0, pal=None):
@@ -15919,28 +16104,40 @@ def _soldier_meshes(L):
         box(vm, 0, -0.18, 0.45, 0.22, 0.07, 0.23, OLV, rng, mat=None)
         box(vm, 0, -0.22, 0.42, 0.14, 0.02, 0.12, POUCH, rng, mat=None)
 
-    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe); eigene Teile mit Schulter als
-    #      Ursprung, damit sie beim Nachladen, Werfen und Schlagen beweglich sind
+    # ---- Arme: Schulter - Ellbogen - Hand am Gewehr (Armbinde in der Teamfarbe). v52: drei Glieder statt eines starren
+    #      Stocks - Oberarm (Ursprung Schulter), Unterarm (Ursprung Ellbogen) und Hand (Handschuh; Raum wie der alte
+    #      Arm, daran hängen Waffe/Magazin/Granate). Kugelgelenke an Schulter, Ellbogen und Handgelenk überlappen, so
+    #      bleibt die Form beim Beugen geschlossen. Die Haltung rechnet arm_ik (Zwei-Knochen-IK) je Bild.
+    for sx in (-1, 1):                                             # Schulterkappe am Rumpf (Deltamuskel): deckt den
+        ell(tm, (sx * 0.215, 0.0, 0.565), 0.062, 0.070, 0.058, None, rng, None,    # Übergang Rumpf - Oberarm
+            lambda p, o=sx * 0.3: camo(p, 11.0, o))
+
     def arm(S, E, H, s):
-        am = Mesh()
         E, H = sub(E, S), sub(H, S)
         S = (0.0, 0.0, 0.0)
+        um, fm, hm_ = Mesh(), Mesh(), Mesh()
+        col = lambda p: camo(p, 11.0, s * 0.3)                     # noqa: E731
         mid = _lerp3(S, E, 0.5)
-        up = [(S[0], S[1], S[2] + 0.035), S, mid, E]
-        loft(am, up, [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045], None, rng, None, lambda p: camo(p, 11.0, s * 0.3))
-        loft(am, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
-        ell(am, E, 0.047, 0.047, 0.047, pal[1], rng, None)
+        ell(um, S, 0.062, 0.066, 0.064, None, rng, None, col)                  # Schulterkugel (dreht im Rumpf mit)
+        loft(um, [(S[0], S[1], S[2] + 0.035), S, mid, E], [0.050, 0.064, 0.056, 0.045], [0.050, 0.064, 0.056, 0.045],
+             None, rng, None, col)
+        loft(um, [_lerp3(S, E, 0.34), _lerp3(S, E, 0.58)], [0.071, 0.067], [0.071, 0.067], acc, None, None, None, (False, False))
+        ell(um, E, 0.049, 0.049, 0.049, pal[1], rng, None)                     # Ellbogen
         d = norm(sub(H, E))
         wr = (H[0] - d[0] * 0.065, H[1] - d[1] * 0.065, H[2] - d[2] * 0.065)
-        loft(am, [E, _lerp3(E, wr, 0.5), wr], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
-             lambda p: camo(p, 11.0, s * 0.3), (False, False))
-        loft(am, [_lerp3(E, wr, 0.9), wr], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
-             (False, False), 0.02)                                 # Manschette
-        glove(am, wr, d, s, GL, rng, 1.0)
-        return am
+        e0 = (0.0, 0.0, 0.0)                                                    # Unterarm im Ellbogenraum
+        wl = sub(wr, E)
+        ell(fm, e0, 0.047, 0.047, 0.047, pal[1], rng, None)
+        loft(fm, [e0, _lerp3(e0, wl, 0.5), wl], [0.046, 0.043, 0.034], [0.046, 0.043, 0.034], None, rng, None,
+             lambda p: camo(add(p, E), 11.0, s * 0.3), (False, False))
+        loft(fm, [_lerp3(e0, wl, 0.9), _lerp3(e0, wl, 1.06)], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
+             (False, False), 0.02)                                              # Manschette (reicht über das Handgelenk)
+        glove(hm_, wr, d, s, GL, rng, 1.0)
+        ell(hm_, wr, 0.032, 0.032, 0.030, DK, rng, None)                       # Handgelenk
+        return um, fm, hm_, E, wr, H
 
-    arms = [arm(SOLDIER_SH[0], (-0.10, 0.14, 0.34), SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
-            arm(SOLDIER_SH[1], (0.285, -0.02, 0.31), SOLDIER_HAND[1], 1)]     # rechte Hand am Griff
+    arms = [arm(SOLDIER_SH[0], SOLDIER_ELBOW[0], SOLDIER_HAND[0], -1),     # linke Hand am Handschutz
+            arm(SOLDIER_SH[1], SOLDIER_ELBOW[1], SOLDIER_HAND[1], 1)]      # rechte Hand am Griff
 
     # ---- Kopf: Kiefer, Wangen, Stirn aus 9 Querschnitten, dazu Nase, Ohren, Augen, Brauen, Mund
     hz = [0.775, 0.790, 0.820, 0.860, 0.900, 0.940, 0.980, 1.010, 1.035]
@@ -16064,25 +16261,30 @@ def _soldier_meshes(L):
 
     legs = []
     for sx in (-1, 1):
-        lm, bm = Mesh(), Mesh()
+        lm, sm, bm = Mesh(), Mesh(), Mesh()       # v52: Oberschenkel (Hüfte = Ursprung) und Unterschenkel (Knie = Ursprung)
         off = sx * 0.4
-        # Hose: Oberschenkel, Knie, Wade, Knöchel
-        lz = [0.05, -0.06, -0.18, -0.30, -0.40, -0.46, -0.56, -0.64]
-        lrx = [0.108, 0.108, 0.100, 0.088, 0.072, 0.074, 0.060, 0.050]
-        lry = [0.120, 0.122, 0.108, 0.095, 0.078, 0.088, 0.065, 0.055]
-        lcy = [0.0, -0.005, 0.0, 0.005, 0.010, -0.012, -0.005, 0.0]
-        loft(lm, [(0, cy, z) for cy, z in zip(lcy, lz)], lrx, lry, None, rng, None, lambda p, o=off: camo(p, 11.0, o))
+        kz = SOLDIER_KNEE_Z
+        lc = lambda p, o=off: camo(p, 11.0, o)                                  # noqa: E731
+        lcs = lambda p, o=off: camo((p[0], p[1], p[2] + kz), 11.0, o)          # noqa: E731
+        # Hose: Oberschenkel bis zum Knie, Kugelgelenk an der Hüfte (deckt den Spalt zum Becken beim Schwingen)
+        ell(lm, (0.0, 0.0, 0.0), 0.104, 0.118, 0.085, None, rng, None, lc)
+        loft(lm, [(0, 0.0, 0.05), (0, -0.005, -0.06), (0, 0.0, -0.18), (0, 0.005, -0.30), (0, 0.008, kz)],
+             [0.108, 0.108, 0.100, 0.088, 0.075], [0.120, 0.122, 0.108, 0.095, 0.082], None, rng, None, lc, (True, False))
+        ell(lm, (0.0, 0.004, kz), 0.074, 0.080, 0.070, None, rng, None, lc)    # Knie
         box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
         box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
-        box(lm, 0, 0.088, -0.40, 0.100, 0.040, 0.125, POUCH, rng, mat=None)                  # Knieschoner
-        # Stiefel: Schaft, Fuss, Sohle, Schnürung
-        loft(bm, [(0, 0, -0.50), (0, 0, -0.58), (0, 0.004, -0.665)], [0.068, 0.064, 0.062], [0.072, 0.068, 0.066],
-             LEATH, rng, None, None, (False, False), 0.03)
-        loft(bm, [(0, -0.055, -0.695), (0, 0.075, -0.700), (0, 0.18, -0.707), (0, 0.235, -0.710)],
+        # Unterschenkel: Knie, Wade, Knöchel (Raum: Knie = Ursprung)
+        loft(sm, [(0, 0.008, 0.0), (0, -0.012, -0.09), (0, -0.005, -0.19), (0, 0.0, -0.27)],
+             [0.073, 0.074, 0.060, 0.050], [0.080, 0.088, 0.065, 0.055], None, rng, None, lcs, (False, True))
+        box(sm, 0, 0.088, -0.40 - kz, 0.100, 0.040, 0.125, POUCH, rng, mat=None)             # Knieschoner
+        # Stiefel: Schaft, Fuss, Sohle, Schnürung (am Unterschenkel, Knie = Ursprung)
+        loft(bm, [(0, 0, -0.50 - kz), (0, 0, -0.58 - kz), (0, 0.004, -0.665 - kz)], [0.068, 0.064, 0.062],
+             [0.072, 0.068, 0.066], LEATH, rng, None, None, (False, False), 0.03)
+        loft(bm, [(0, -0.055, -0.695 - kz), (0, 0.075, -0.700 - kz), (0, 0.18, -0.707 - kz), (0, 0.235, -0.710 - kz)],
              [0.052, 0.064, 0.056, 0.030], [0.040, 0.036, 0.030, 0.020], LEATH, rng, None, None, (True, True), 0.03)
-        box(bm, 0, 0.082, -0.742, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)                 # Sohle
-        box(bm, 0, 0.12, -0.676, 0.050, 0.150, 0.010, DK)                                       # Schnürung
-        legs.append(lm)
+        box(bm, 0, 0.082, -0.742 - kz, 0.130, 0.320, 0.018, (0.07, 0.07, 0.07), rng)            # Sohle
+        box(bm, 0, 0.12, -0.676 - kz, 0.050, 0.150, 0.010, DK)                                  # Schnürung
+        legs.append((lm, sm))
         boots.append(bm)
     return tm, legs, arms, hm, vm, boots
 
@@ -16094,7 +16296,9 @@ def build_soldier(look):
     parts = _SOLDIER_CACHE.get(key)
     if parts is None:
         tm, lms, ams, hm, vm, bms = _soldier_meshes(look)
-        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [lm.node("l") for lm in lms], [am.node("a") for am in ams],
+        parts = _SOLDIER_CACHE[key] = (tm.node("t"), [(lm.node("l"), sm.node("s")) for lm, sm in lms],
+                                       [(um.node("oberarm"), fm.node("unterarm"), hm_.node("hand"), E, W, H)
+                                        for um, fm, hm_, E, W, H in ams],
                                        hm.node("kopfbedeckung"), vm.node("weste"), [bm.node("stiefel") for bm in bms])
     root = NodePath("soldier")
     torso = root.attachNewNode("torso")
@@ -16102,17 +16306,28 @@ def build_soldier(look):
     torso.attachNewNode(parts[0])
     cos = {"head": torso.attachNewNode(parts[3]), "torso": torso.attachNewNode(parts[4]), "feet": []}   # 10f
     legs = []
-    for sx, gn, bn in zip((-1, 1), parts[1], parts[5]):
+    for sx, (gn, sn), bn in zip((-1, 1), parts[1], parts[5]):
         leg = root.attachNewNode("leg")
         leg.setPos(sx * 0.115, 0, 0.75)
         leg.attachNewNode(gn)
-        cos["feet"].append(leg.attachNewNode(bn))
+        knee = leg.attachNewNode("knee")                 # v52: Unterschenkel beugt im Knie
+        knee.setZ(SOLDIER_KNEE_Z)
+        knee.attachNewNode(sn)
+        cos["feet"].append(knee.attachNewNode(bn))
+        leg.setPythonTag("knee", knee)
         legs.append(leg)
     arms = []
-    for sh, gn in zip(SOLDIER_SH, parts[2]):
-        an = torso.attachNewNode("arm")
+    for sh, (un, fn, hn, E, W, H) in zip(SOLDIER_SH, parts[2]):
+        an = torso.attachNewNode("arm")                  # Schultergelenk: sitzt fest am Rumpf
         an.setPos(*sh)
-        an.attachNewNode(gn)
+        up = an.attachNewNode("oberarm")
+        up.attachNewNode(un)
+        fo = an.attachNewNode("unterarm")
+        fo.setPos(*E)
+        fo.attachNewNode(fn)
+        hd = an.attachNewNode("hand")                    # Raum wie der alte starre Arm: Waffe, Magazin, Granate hängen hier
+        hd.attachNewNode(hn)
+        an.setPythonTag("ik", (up, fo, hd, E, W, H))
         arms.append(an)
     bar = root.attachNewNode("bar")
     bar.setPos(0, 0, 2.2)
@@ -19385,14 +19600,18 @@ class LoadoutScreen:
 
     def build(self):
         g = self.g
+        g.loadout[3] = scope_clean(g.loadout[0], g.loadout[3])          # v52: gespeicherte, nicht mehr erlaubte Kombis
+        for idx_, wi_ in ((4, g.loadout[0]), (5, g.loadout[1])):        # (z. B. ACOG auf der Schrotflinte) bereinigen
+            g.loadout[idx_] = att_clean(wi_, g.loadout[idx_]) or ATT_NONE
         self.card(0, 0, 6.0, 2.0, (0.02, 0.03, 0.05, 0.95), 15)
         self.text("Loadout konfigurieren", 0, 0.88, 0.075, (1.0, 0.78, 0.3, 1))
         self.weapon_block(g.loadout[0], -0.2, 0.5, f"Hauptwaffe:  {WEAPONS[g.loadout[0]].name}", True)
         self.weapon_block(g.loadout[1], -0.2, -0.12, f"Kleinwaffe:  {WEAPONS[g.loadout[1]].name}", False)
         if self.open_slot == "scope":            # Auswahl der Visiere
             self.text("Visier wählen", 0, -0.43, 0.045, (0.85, 0.9, 0.95, 1))
-            for i, s in enumerate(range(4)):
-                x = (i - 1.5) * 0.5
+            scs_ = [s for s in range(4) if s == SC_IRON or att_fits(g.loadout[0], ATT_SCOPE, s)]   # v52: nur Passendes
+            for i, s in enumerate(scs_):
+                x = (i - (len(scs_) - 1) / 2) * 0.5
                 sel = g.loadout[3] == s
                 base = (1.0, 0.85, 0.2, 1.0) if sel else (0.4, 0.4, 0.45, 0.8)
                 frame = self.card(x, -0.65, 0.46, 0.3, base, 19)
@@ -22047,6 +22266,64 @@ def kf_pos(kf, u):
     return kf[-1][1]
 
 
+def rot_quat(a, b):
+    """v52: kleinste Drehung, die Richtung a auf Richtung b dreht (Quat)."""
+    a, b = norm(a), norm(b)
+    c = clampf(dot(a, b), -1.0, 1.0)
+    ax = cross(a, b)
+    q = Quat()
+    if dot(ax, ax) < 1e-12:
+        if c > 0:
+            return Quat.identQuat()
+        ax = (1.0, 0.0, 0.0) if abs(a[0]) < 0.9 else (0.0, 0.0, 1.0)
+        ax = cross(a, ax)
+    q.setFromAxisAngle(math.degrees(math.acos(c)), Vec3(*norm(ax)))
+    return q
+
+
+def arm_ik(arm, tgt):
+    """v52: Arm (Knoten aus build_soldier, Ursprung = Schulter) per Zwei-Knochen-IK so stellen, dass die Hand bei tgt
+    (Schulterraum) liegt. Die Hand dreht wie früher der starre Arm (Waffe bleibt gleich ausgerichtet), Ober- und
+    Unterarm behalten ihre Länge; der Ellbogen liegt in der Biegeebene der Ruhehaltung (zeigt nach aussen unten).
+    Ist das Ziel weiter als der Arm reicht, bleibt die Hand am gestreckten Arm (sie löst sich nie vom Arm)."""
+    ik = arm.getPythonTag("ik")
+    if ik is None:
+        return
+    up, fo, hd, E0, W0, H0 = ik
+    q = rot_quat(H0, tgt)
+    rH, rW, rE = q.xform(Vec3(*H0)), q.xform(Vec3(*W0)), q.xform(Vec3(*E0))
+    T = Vec3(*tgt) - rH
+    Wp = T + rW                                         # Handgelenk = Endpunkt der Kette
+    l1 = math.sqrt(dot(E0, E0))
+    l2 = math.sqrt(dot(sub(W0, E0), sub(W0, E0)))
+    d = Wp.length()
+    lo, hi = abs(l1 - l2) + 1e-3, (l1 + l2) * 0.999
+    if d > 1e-6 and not lo <= d <= hi:                  # ausser Reichweite: Hand rückt an den Arm heran
+        k = (hi if d > hi else lo) / d
+        T += Wp * k - Wp
+        Wp = Wp * k
+        d = Wp.length()
+    dv = Wp / max(d, 1e-6)
+    a = (l1 * l1 - l2 * l2 + d * d) / (2.0 * max(d, 1e-6))
+    h = math.sqrt(max(0.0, l1 * l1 - a * a))
+    pole = rE - dv * rE.dot(dv)                         # Ellbogen-Richtung: Ruhe-Ellbogen, mitgedreht
+    if pole.lengthSquared() < 1e-8:
+        pole = Vec3(0, 0, -1) - dv * (-dv[2])
+    pole.normalize()
+    E = dv * a + pole * h
+    hd.setQuat(q)
+    hd.setPos(T)
+    up.setQuat(rot_quat(E0, (E[0], E[1], E[2])))
+    fo.setPos(E)
+    fo.setQuat(rot_quat(sub(W0, E0), (Wp[0] - E[0], Wp[1] - E[1], Wp[2] - E[2])))
+
+
+def arm_hand(arm):
+    """v52: Knoten der Hand (trägt Waffe, Magazin, Granate); ohne IK-Teile der Arm selbst."""
+    ik = arm.getPythonTag("ik")
+    return ik[2] if ik is not None else arm
+
+
 def aim_arm(node, v0, tgt):
     """Dreht einen Arm um die Schulter (Ursprung des Knotens) so, dass der Vektor zur Hand von v0 nach tgt zeigt
     (kleinste Drehung, Armlänge bleibt gleich). So lassen sich Hände einfach an Zielpunkte führen."""
@@ -22072,6 +22349,15 @@ def rot_x(v, deg):
 _MAG_SLOT = (0.10, 0.30, 0.27)           # Magazinschacht unter der Waffe
 SOLDIER_RELOAD_L = ((0.00, SOLDIER_HAND[0]), (0.18, _MAG_SLOT), (0.38, (0.08, 0.28, 0.10)), (0.58, (0.0, 0.20, 0.36)),
                     (0.66, (0.0, 0.20, 0.36)), (0.88, _MAG_SLOT), (1.00, SOLDIER_HAND[0]))   # Magazin raus, aus der Weste, rein
+_BOLT_KNOB = (0.16, 0.20, 0.42)          # v52: Kammerstängel rechts am Verschluss (Torso-Raum)
+_BOLT_PORT = (0.08, 0.24, 0.45)          # offene Kammer oben: hier werden die Patronen hineingedrückt
+_VEST = (0.0, 0.20, 0.36)                # Patronentasche an der Weste
+_SAWED_BREECH = (0.06, 0.24, 0.42)       # Patronenlager der aufgeklappten Abgesägten
+SOLDIER_RELOAD_BOLT = ((0.00, SOLDIER_HAND[0]), (0.06, _BOLT_KNOB), (0.13, add(_BOLT_KNOB, (0.0, 0.0, 0.035))),
+                       (0.21, add(_BOLT_KNOB, (0.0, -0.08, 0.035))), (0.27, _VEST),
+                       (0.37, _BOLT_PORT), (0.45, _VEST), (0.55, _BOLT_PORT), (0.63, _VEST), (0.72, _BOLT_PORT),
+                       (0.80, add(_BOLT_KNOB, (0.0, -0.08, 0.035))), (0.86, add(_BOLT_KNOB, (0.0, 0.0, 0.035))),
+                       (0.91, _BOLT_KNOB), (1.00, SOLDIER_HAND[0]))   # Stängel hoch/zurück, 3x laden, vor/zu
 SOLDIER_THROW_R = ((0.00, SOLDIER_HAND[1]), (0.15, (0.32, -0.30, 0.80)), (0.32, (0.20, 0.45, 0.75)),
                    (0.48, (0.15, 0.30, 0.12)), (1.00, SOLDIER_HAND[1]))                      # ausholen, werfen, ausschwingen
 SOLDIER_THROW_L = ((0.00, SOLDIER_HAND[0]), (0.20, (-0.30, 0.10, 0.28)), (0.80, (-0.30, 0.10, 0.28)),
@@ -22169,7 +22455,8 @@ class PlayerView:
          self.armL, self.armR) = build_soldier(look)
         gc = (0.13, 0.13, 0.15)
         sr = SOLDIER_SH[1]
-        self.gun_node = self.gun = self.armR.attachNewNode("gun")        # Halter am rechten Arm; darin die gehaltene Waffe
+        self.handL, self.handR = arm_hand(self.armL), arm_hand(self.armR)   # v52: Hände der IK-Arme
+        self.gun_node = self.gun = self.handR.attachNewNode("gun")       # Halter an der rechten Hand; darin die gehaltene Waffe
         self.gun.setPos(-sr[0], -sr[1], -sr[2])
         self.held, self.held_cur = {}, -1
         self.flash, self.flash_t, self.kick = {}, 0.0, 0.0                 # Mündungsfeuer und Rückstoss der anderen
@@ -22178,10 +22465,10 @@ class PlayerView:
         self.hl = SOLDIER_HAND[0]                                         # Ruheposition der linken Hand (je Waffe)
         mm = Mesh()
         box(mm, 0, 0.0, -0.03, 0.04, 0.07, 0.12, gc)                       # Magazin in der linken Hand
-        self.mag_nd = self.armL.attachNewNode(mm.node("hand_mag"))
+        self.mag_nd = self.handL.attachNewNode(mm.node("hand_mag"))
         self.mag_nd.setPos(*sub(SOLDIER_HAND[0], SOLDIER_SH[0]))
         self.mag_nd.hide()
-        self.gren_nd = self.armR.attachNewNode("hand_gren")         # 10e: Granate in der Hand (Modell je Art)
+        self.gren_nd = self.handR.attachNewNode("hand_gren")        # 10e: Granate in der Hand (Modell je Art)
         self.gren_nd.setPos(*sub(SOLDIER_HAND[1], sr))
         self.gren_nd.setZ(self.gren_nd.getZ() + 0.03)
         self.gren_nd.hide()
@@ -22191,6 +22478,10 @@ class PlayerView:
         self.melee_out = False
         self.rl_t = self.rl_tot = 0.0                                 # Nachladen (von "wreload"): Restzeit / Gesamtdauer
         self.rl_sg = False
+        self.rl_kind = "mag"                                          # v52: mag | sg (Kipplauf) | sawed | bolt (98k)
+        self.tl_s = self.tr_s = None                                  # v52: geglättete Handziele (weiche Übergänge)
+        self.mv_s = 0.0                                               # v52: geglättete Laufbewegung (Beine)
+        self.gun_tip = 0.0                                            # v52: Waffe kippt (Kipplauf auf / Ruck zu)
         self.th_t = 0.0                                               # Granatwurf (von "throw")
         self.melee_hand = self.torso.attachNewNode("melee_hand")       # Nahkampfwaffe (gezogen)
         self.melee_hand.setPos(0.24, 0.22, 0.42)
@@ -22270,7 +22561,9 @@ class PlayerView:
             return
         w = WEAPONS[wi]
         self.rl_sg = mdl(w.name) == SG_NAME
-        self.rl_tot = sg_times(5)[1] if self.rl_sg else max(0.5, w.reload)
+        self.rl_kind = "sawed" if wi == SAWED_WI else ("sg" if self.rl_sg else ("bolt" if w.bolt else "mag"))
+        self.rl_n = min(w.mag, 5) if self.rl_sg else 5               # Patronen (Abgesägte: 2 - je Lauf eine)
+        self.rl_tot = sg_times(self.rl_n)[1] if self.rl_sg else max(0.5, w.reload)
         self.rl_t = self.rl_tot
 
     def start_throw(self, kind="frag"):
@@ -22316,8 +22609,9 @@ class PlayerView:
                 n.setScale(GEAR_FIG_SCALE["torso"])
             else:                                        # je ein Schuh an jedem Bein (läuft mit)
                 for leg in (self.legL, self.legR):
-                    n = leg.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
-                    n.setPos(0, 0.04, -0.72)
+                    kn_ = leg.getPythonTag("knee") or leg       # v52: am Unterschenkel (beugt im Knie mit)
+                    n = kn_.attachNewNode(gear_model(gi, sides=(0,)).node("gear"))
+                    n.setPos(0, 0.04, -0.72 - (SOLDIER_KNEE_Z if kn_ is not leg else 0.0))
                     n.setScale(GEAR_FIG_SCALE["feet"])
                     self.gear_nodes.append(n)
                 continue
@@ -22328,7 +22622,7 @@ class PlayerView:
         (rechter Arm holt aus, Waffe hängt am Gurt) und Schlag (Waffe mit beiden Armen)."""
         SL, SR = SOLDIER_SH
         HL, HR = self.hl, SOLDIER_HAND[1]
-        v0L, v0R = sub(HL, SL), sub(HR, SR)
+        v0R = sub(HR, SR)
         tl, tr = HL, HR
         tilt = 0.0
         mag = gren = slung = False
@@ -22350,7 +22644,25 @@ class PlayerView:
             tt = self.rl_tot - self.rl_t
             u = tt / self.rl_tot
             tilt = 8.0 * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
-            if self.rl_sg:                                            # Patronen: Hand pendelt zwischen Weste und Lauf
+            if self.rl_kind != "sawed":
+                self.gun_tip = 0.0
+            if self.rl_kind == "sawed":                               # v52: Kipplauf auf, 2 Patronen, Ruck - zu
+                n_ = getattr(self, "rl_n", 2)
+                ang_, _l, _h, _s = sg_pose(tt, n_, SAWED_SNAP_T)
+                ct_ = sg_times(n_)[0]
+                ins_ = SG_FIRST - 0.16 <= tt < SG_FIRST + SG_STEP * (n_ - 1) + 0.16
+                k = (0.5 - 0.5 * math.cos(2 * math.pi * (tt - SG_FIRST + 0.16) / SG_STEP)) if ins_ else 0.0
+                tl = _lerp3(_SAWED_BREECH, _VEST, k) if ins_ else (_SAWED_BREECH if SG_OPEN_T - 0.1 <= tt < ct_ else HL)
+                self.gun_tip = ang_ / SG_ANGLE * -22.0                # Mündung kippt beim Aufklappen nach unten
+                if ct_ - 0.02 <= tt < ct_ + 0.12:                     # ... und schnappt mit einem Ruck nach oben zu
+                    self.gun_tip += SAWED_FLICK * 0.8 * math.sin(math.pi * (tt - ct_ + 0.02) / 0.14)
+                tilt = 10.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
+            elif self.rl_kind == "bolt":                              # v52: Repetierer - Stängel, Patronen, Stängel
+                tl = kf_pos(SOLDIER_RELOAD_BOLT, u)
+                away = smoothstep(0.0, 0.06, u) * (1.0 - smoothstep(0.92, 1.0, u))
+                tl = add(tl, tuple(c * (1.0 - away) for c in sub(HL, SOLDIER_HAND[0])))
+                tilt = 6.0 * smoothstep(0.0, 0.1, u) * (1.0 - smoothstep(0.9, 1.0, u))
+            elif self.rl_sg:                                          # Patronen: Hand pendelt zwischen Weste und Lauf
                 k = 0.5 - 0.5 * math.cos(2 * math.pi * tt / 0.6)
                 tl = _lerp3((0.0, 0.20, 0.36), _MAG_SLOT, k)
                 tilt = 12.0 * smoothstep(0.0, 0.2, u) * (1.0 - smoothstep(0.85, 1.0, u))
@@ -22373,7 +22685,7 @@ class PlayerView:
                 self.gun.setPos(0, 0, -0.10)
                 self.gun.setP(-35)
             else:
-                self.gun.reparentTo(self.armR)
+                self.gun.reparentTo(self.handR)
                 self.gun.setPos(-SR[0], -SR[1], -SR[2])
                 self.gun.setP(0)
         (self.mag_nd.show if mag else self.mag_nd.hide)()
@@ -22381,8 +22693,15 @@ class PlayerView:
         if self.gren_flame is not None and gren:
             flame_flicker(self.gren_flame)
         self.armR.setPos(SR[0], SR[1] + py, SR[2])
-        aim_arm(self.armR, v0R, sub(tr, SR))
-        aim_arm(self.armL, v0L, sub(tl, SL))
+        # v52: Haltungswechsel (Ruhe, Nachladen, Wurf, Schlag) gleiten statt zu springen; dann Zwei-Knochen-IK:
+        # Schulter fest am Rumpf, Hand genau am Ziel, Ellbogen beugt sich
+        kk = 1.0 - math.exp(-SOLDIER_POSE_RATE * dt) if dt > 0 else 1.0
+        self.tl_s = tl if self.tl_s is None else _lerp3(self.tl_s, tl, kk)
+        self.tr_s = tr if self.tr_s is None else _lerp3(self.tr_s, tr, kk)
+        if self.rl_t <= 0:
+            self.gun_tip *= (1.0 - kk)
+        arm_ik(self.armR, sub(self.tr_s, SR))
+        arm_ik(self.armL, sub(self.tl_s, SL))
 
     def update(self, p, dt):
         gh = getattr(p, "gren_hold", -1)                                 # 10e: hält G (Granate in der Hand)
@@ -22484,17 +22803,23 @@ class PlayerView:
         self.bar.show()
         self.fg.setSx(max(min(1.0, p.hp / getattr(p, "max_hp", PLAYER_HP)), 0.001))
         mv = 1.0 if p.moving else 0.0
-        self.phase += mv * 14.0 * dt
-        sw = math.sin(self.phase) * mv
+        self.mv_s += (mv - self.mv_s) * min(1.0, 8.0 * dt)               # v52: Anlaufen/Stehenbleiben gleitet
+        self.phase += self.mv_s * 14.0 * dt
+        sw = math.sin(self.phase) * self.mv_s
+        cw = math.cos(self.phase) * self.mv_s
         self.legL.setP(sw * 40)
         self.legR.setP(-sw * 40)
-        self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * mv)
+        for leg_, c_ in ((self.legL, cw), (self.legR, -cw)):              # v52: Knie beugt beim Vorschwingen
+            kn_ = leg_.getPythonTag("knee")
+            if kn_ is not None:
+                kn_.setP(-SOLDIER_KNEE_WALK * max(0.0, c_) - 6.0 * self.mv_s)
+        self.torso.setZ(0.75 + abs(math.sin(self.phase)) * 0.05 * self.mv_s)
         self.torso.setR(p.lean / LEAN_MAX * 14.0)          # Lehnen: Oberkörper kippt zur Seite
         self.pose_arms(dt)
         if not self.slung:                                  # Rückstoss: Waffe ruckt nach hinten und kippt hoch
             sr_ = SOLDIER_SH[1]
             self.gun.setPos(-sr_[0], -sr_[1] - 0.07 * self.kick, -sr_[2])
-            self.gun.setP(7.0 * self.kick)
+            self.gun.setP(7.0 * self.kick + self.gun_tip)
 
 
 # --------------------------------------------------------------- Ton
@@ -118066,6 +118391,8 @@ class Sfx:
         w = WEAPONS[wi] if 0 <= wi < len(WEAPONS) else None
         if w and mdl(w.name) == SG_NAME and "sg_open" in self.pool:
             return                                              # die Klänge kommen im Takt der Animation (Game.update_views)
+        if w and w.bolt and wi == getattr(self.game.player, "cur", -1) and "click" in self.pool:
+            return                                              # v52: Repetierer (98k) ebenso - Klicks je Handgriff
         key = {"DSR": "reload_sniper", "Colt M4 Carbine": "reload_rifle", "Colt ACP": "reload_pistol",
                                                   "Revolver": "reload_revolver", "MP9": "reload_smg"}.get(mdl(w.name)) if w else None
         if key and key in self.pool:
@@ -119309,9 +119636,10 @@ class Game(ShowBase):
 
     def set_primary(self, wi):
         self.loadout[0] = wi
-        self.loadout[3] = self.scopes.get(wi, DEFAULT_SCOPE.get(wi, SC_IRON))
+        self.loadout[3] = scope_clean(wi, self.scopes.get(wi, DEFAULT_SCOPE.get(wi, SC_IRON)))   # v52
 
     def set_scope(self, sc):
+        sc = scope_clean(self.loadout[0], sc)            # v52: nur Visiere, die an die Hauptwaffe passen
         self.loadout[3] = sc
         self.scopes[self.loadout[0]] = sc
 
@@ -121423,12 +121751,24 @@ class Game(ShowBase):
             gm = Mesh()
             magp = MAG_PARTS.get(w.name)
             sg_h = sg_a = None
-            build_shapes(gm, sh["body"], rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
+            body_sh, bolt_sh = sh["body"], None
+            if w.name == "Karabiner 98k":                   # v52: Kammerstängel + Knopf (die letzten zwei Formen) beweglich
+                body_sh, bolt_sh = sh["body"][:-2], sh["body"][-2:]
+            build_shapes(gm, body_sh, rng)               # Kimme/Korn des Sturmgewehrs: eigener Knoten (nur mit Visier "Kimme und Korn")
             if mdl(w.name) == SG_NAME:                           # Kipplauf: Lauf, Röhre und Vorderschaft hängen am Scharnier
                 gb = Mesh()
                 build_shapes(gb, sh["barrel"], rng)
             model = self.gun_pivot.attachNewNode(w.name)
             model.attachNewNode(gm.node("g"))
+            if bolt_sh is not None:                         # v52: Drehpunkt auf der Kammerachse
+                bm_ = Mesh()
+                build_shapes(bm_, bolt_sh, rng, off=(-K98_BOLT_AX[0], 0.0, -K98_BOLT_AX[1]))
+                bn_ = model.attachNewNode("bolt")
+                bn_.setPos(K98_BOLT_AX[0], 0.0, K98_BOLT_AX[1])
+                bn_.attachNewNode(bm_.node("b"))
+                if not hasattr(self, "vm_bolts"):
+                    self.vm_bolts = {}
+                self.vm_bolts[WEAPON_IDX[w.name]] = bn_
             if mdl(w.name) == SG_NAME:
                 sg_h = model.attachNewNode("sg_hinge")
                 sg_h.setPos(*SG_PIV)
@@ -121549,6 +121889,27 @@ class Game(ShowBase):
         self.vm_shell = self.gun_pivot.attachNewNode(shm.node("shell"))
         self.vm_shell.hide()
         self.sg_ev = -1
+        self.vm_hulls = []                                   # v52: leere Hülsen der Abgesägten (fliegen beim Aufklappen)
+        for _k in range(2):
+            hm_ = Mesh()
+            box(hm_, 0, 0, 0, 0.03, 0.07, 0.03, (0.55, 0.10, 0.06), rng)
+            box(hm_, 0, -0.04, 0, 0.032, 0.016, 0.032, (0.70, 0.56, 0.22), rng)
+            nd_ = self.gun_pivot.attachNewNode(hm_.node("hull"))
+            nd_.hide()
+            self.vm_hulls.append(nd_)
+        BRASS, COPPER = (0.80, 0.62, 0.25), (0.72, 0.42, 0.22)
+        rm_ = Mesh()                                         # v52: Gewehrpatrone (98k) in der Hand
+        loft(rm_, [(0, -0.035, 0), (0, 0.012, 0), (0, 0.022, 0)], [0.0065, 0.0065, 0.0045], [0.0065, 0.0065, 0.0045],
+             BRASS, rng, None, None, (True, False), 0.01, 8)
+        loft(rm_, [(0, 0.022, 0), (0, 0.040, 0), (0, 0.047, 0)], [0.0042, 0.0032, 0.001], [0.0042, 0.0032, 0.001],
+             COPPER, rng, None, None, (False, True), 0.01, 8)
+        self.vm_round = self.gun_pivot.attachNewNode(rm_.node("round"))
+        self.vm_round.hide()
+        cm_ = Mesh()                                         # v52: leere Hülse (98k)
+        loft(cm_, [(0, -0.035, 0), (0, 0.012, 0), (0, 0.022, 0)], [0.0065, 0.0065, 0.0045], [0.0065, 0.0065, 0.0045],
+             (0.70, 0.54, 0.22), rng, None, None, (True, True), 0.01, 8)
+        self.vm_case = self.gun_pivot.attachNewNode(cm_.node("case"))
+        self.vm_case.hide()
         # Gadget in der Hand (Taste 4): zwei Arme, rechts mit dem Gadget auf der Hand
         self.gad_arms = []
         for _side in (0, 1):
@@ -122219,7 +122580,11 @@ class Game(ShowBase):
             if msg == 1:
                 self.toast(f"{nm} an {wn} angebracht", (0.55, 1.0, 0.55), 2.0)
             elif msg == 2:
-                self.toast(f"{nm} ins Aufsatz-Lager (T: Waffe ansehen, Klick auf die Markierung)", (0.75, 0.9, 1.0), 2.4)
+                why_ = att_why(wi, si, v) if (0 <= wi < len(WEAPONS) and att_fits(wi, si)) else ""
+                if why_:                                    # v52: passt logisch nicht an die Waffe in der Hand
+                    self.toast(f"{nm} passt nicht an {wn} ({why_}) - ins Aufsatz-Lager", (1.0, 0.8, 0.45), 2.8)
+                else:
+                    self.toast(f"{nm} ins Aufsatz-Lager (T: Waffe ansehen, Klick auf die Markierung)", (0.75, 0.9, 1.0), 2.4)
             self.sfx.play("servo", None, 0.6, 1.3)
         elif msg == 4:                                      # v49: Granatwerfer schon montiert -> nur Granaten
             g_ = self.player.guns[wi] if 0 <= wi < len(WEAPONS) else None
@@ -122548,7 +122913,7 @@ class Game(ShowBase):
         counts = {}
         for c in pl.att_store:
             s_, v_ = divmod(c, ATT_CODE)
-            if s_ == si and 0 < v_ < nmax and (si == ATT_SCOPE or att_fits(wi, si, v_)):   # v48: nur was passt
+            if s_ == si and 0 < v_ < nmax and att_fits(wi, si, v_):   # v48/v52: nur was passt (auch Visiere)
                 counts[v_] = counts.get(v_, 0) + 1
         items = [0] + sorted(set(counts) | ({cur} if cur else set()))
         cw, ch, gap = 0.37, 0.19, 0.035
@@ -126947,6 +127312,16 @@ class Game(ShowBase):
             if e_ is not None:
                 e_.hide()
         self.vm_shell.hide()
+        for nd_ in getattr(self, "vm_hulls", ()):              # v52
+            nd_.hide()
+        for nd_ in (getattr(self, "vm_round", None), getattr(self, "vm_case", None)):
+            if nd_ is not None:
+                nd_.hide()
+        if not (pl.reload_t > 0 and w.bolt):
+            self.k98_ev = -1
+        for bn_ in getattr(self, "vm_bolts", {}).values():    # v52: Kammerstängel in Ruhe (geschlossen)
+            bn_.setR(0.0)
+            bn_.setY(0.0)
         sg_on = mdl(w.name) == SG_NAME and pl.reload_t > 0
         for h_ in getattr(self, "sg_hinges", {}).values():
             h_.setP(0.0)
@@ -126955,7 +127330,8 @@ class Game(ShowBase):
         if sg_on:                                 # Schrotflinte: Lauf aufklappen, Patronen einlegen, zuklappen
             tt = max(0.0, pl.reload_tot - pl.reload_t)
             n = sg_count(pl.reload_tot)
-            ang, lift, hp_, shell = sg_pose(tt, n)
+            sawed_ = pl.cur == SAWED_WI
+            ang, lift, hp_, shell = sg_pose(tt, n, SAWED_SNAP_T if sawed_ else 0.20)
             h_ = getattr(self, "sg_hinges", {}).get(pl.cur)
             if h_ is not None:
                 h_.setP(ang)
@@ -126963,6 +127339,14 @@ class Game(ShowBase):
             py += 0.07 * lift
             pitch += 16 * lift
             roll += 8 * lift
+            if sawed_:                            # v52: leere Hülsen fliegen heraus, Lauf schnappt mit einem Ruck zu
+                for nd_, (hp2_, hr_) in zip(getattr(self, "vm_hulls", ()), sawed_hulls(tt, n, ang)):
+                    nd_.setPos(*hp2_)
+                    nd_.setHpr(0, hr_, 0)
+                    nd_.show()
+                ct_ = sg_times(n)[0]
+                if ct_ - SAWED_SNAP_T - 0.04 <= tt < ct_ + 0.10:
+                    pitch += SAWED_FLICK * math.sin(math.pi * (tt - ct_ + SAWED_SNAP_T + 0.04) / (SAWED_SNAP_T + 0.14))
             self.hand_pos = hp_
             if shell is not None:
                 self.vm_shell.setPos(*shell[0])
@@ -126996,6 +127380,39 @@ class Game(ShowBase):
                 if not getattr(self, "dual_rl_half", True):
                     self.dual_rl_half = True
                     self.sfx.reload(DUAL_WI)    # zweites Magazin: eigenes Nachladegeräusch
+        elif pl.reload_t > 0 and w.bolt:
+            # v52: Repetierer (98k) - Stängel hoch und zurück, Hülse fliegt, Patronen einzeln von oben ins Magazin,
+            # Kammer vor und verriegeln. Das Magazin bleibt in der Waffe.
+            u = 1.0 - pl.reload_t / w.reload
+            n_ = max(1, min(w.mag - g.mag, g.reserve))
+            lift_, back_, hp_, rnd_, case_ = k98_reload_pose(u, n_, g.mag == 0)
+            dip = smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.92, 1.0, u))
+            roll += 24 * dip                    # Waffe kippt nach links: man sieht in die offene Kammer
+            pitch += 10 * dip
+            pz += 0.06 * dip
+            px -= 0.03 * dip
+            py -= 0.02 * back_
+            bn_ = getattr(self, "vm_bolts", {}).get(pl.cur)
+            if bn_ is not None:
+                bn_.setR(K98_LIFT * lift_)
+                bn_.setY(-K98_BACK * back_)
+            self.hand_pos = hp_
+            if rnd_ is not None:
+                self.vm_round.setPos(*rnd_)
+                self.vm_round.setHpr(0, 0, 0)
+                self.vm_round.show()
+            if case_ is not None:
+                self.vm_case.setPos(*case_[0])
+                self.vm_case.setHpr(25, case_[1], 0)
+                self.vm_case.show()
+            evs_ = k98_events(n_)
+            for k_, (snd_, te_, pt_) in enumerate(evs_):
+                if u >= te_ and k_ > getattr(self, "k98_ev", -1):
+                    self.k98_ev = k_
+                    if snd_ == "shell":
+                        self.sfx.play("sg_shell_1", None, 0.55, 1.6)
+                    else:
+                        self.sfx.play("click", None, 0.8, pt_)
         elif pl.reload_t > 0:
             u = 1.0 - pl.reload_t / w.reload
             dip = smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.85, 1.0, u))
@@ -127017,6 +127434,18 @@ class Game(ShowBase):
             pull = smoothstep(BOLT_PHASES[1], BOLT_PHASES[2], u) * (1.0 - smoothstep(BOLT_PHASES[3], BOLT_PHASES[4], u))
             py -= 0.035 * pull                  # Kammer zurückziehen: die Waffe ruckt mit
             hdg_add += 4 * pull
+            bn_ = getattr(self, "vm_bolts", {}).get(pl.cur)
+            if bn_ is not None:                 # v52: Stängel hoch, zurück, vor, zu - die Hülse fliegt heraus
+                lift_ = (smoothstep(BOLT_PHASES[0], BOLT_PHASES[1], u)
+                         * (1.0 - smoothstep(BOLT_PHASES[3], BOLT_PHASES[4], u)))
+                back_ = smoothstep(BOLT_PHASES[1], BOLT_PHASES[2], u) * (1.0 - smoothstep(BOLT_PHASES[2], BOLT_PHASES[3], u))
+                bn_.setR(K98_LIFT * lift_)
+                bn_.setY(-K98_BACK * back_)
+                case_ = k98_case((u - BOLT_PHASES[2] + 0.02) * w.interval)
+                if case_ is not None:
+                    self.vm_case.setPos(*case_[0])
+                    self.vm_case.setHpr(25, case_[1], 0)
+                    self.vm_case.show()
             ev_ = sum(1 for t_ in (BOLT_PHASES[1], BOLT_PHASES[2], BOLT_PHASES[3], BOLT_PHASES[4]) if u >= t_)
             if ev_ > getattr(self, "bolt_ev", 0):
                 self.bolt_ev = ev_
@@ -127719,6 +128148,10 @@ class Game(ShowBase):
                     nm_ = att_name(si_, v_)
                     if (si_, v_) == ATT_GL and M4_WI in pl.slots and att_has_gl(M4_WI, pl.att.get(M4_WI)):
                         prompt = f"F   Aufheben: {nm_}   (+{GL_START} Granaten für den Werfer)"     # v49
+                    elif (not pl.melee_out and not pl.gad_out and pl.cur in pl.slots
+                          and not att_fits(pl.cur, si_, v_) and att_fits(pl.cur, si_)):   # v52: Platz da, Teil passt nicht
+                        prompt = (f"F   Aufheben: {nm_}   (passt nicht an {WEAPONS[pl.cur].name}: "
+                                  f"{att_why(pl.cur, si_, v_)} - kommt ins Lager)")
                     elif (pl.melee_out or pl.gad_out or pl.cur not in pl.slots
                           or not att_fits(pl.cur, si_, v_)):
                         prompt = f"F   Aufheben: {nm_}   (kommt ins Aufsatz-Lager - T: Waffe ansehen)"
