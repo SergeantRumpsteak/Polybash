@@ -2,6 +2,44 @@
 
 Neueste Änderungen oben.
 
+## Spielerfarben mit Farbpalette, Figur-Details, eine Drohne, Set-Fähigkeiten auf MMB, Nekromanten-Rework (Robin, 2026-10-27)
+Gilt für alle Modi. **NET_VERSION 53**: neuer Look-Code (ein Zeichen je Eintrag, 16 Einträge), neues Ereignis `nestmob`, `nestdown` mit Abklingzeit - alle müssen aktualisieren. Gespeicherte Charaktere aus v52 werden übernommen (Handschuhe "Keine" -> Handschuh-Art "Keine", alte Teamfarbe -> passende Palettenfarbe).
+
+Spielerfarben:
+- **Palette 10 x 3**: Rot, Grün, Gelb, Blau, Orange, Schwarz, Weiß, Braun, Lila, Pink - je Standard, Hell, Dunkel (z. B. Blau / Himmelblau / Marineblau), `PCOL`, `PCOL_NAMES`.
+- **Farbfeld statt Pfeilen**: Im Charakter-Menü zeigt "Spielerfarbe" ein Farbmuster mit Namen; Klick klappt die Palette nach unten auf (Reihen Hell / Standard / Dunkel), Klick auf eine Farbe wählt sie, Klick daneben oder Esc klappt zu.
+- Die Spielerfarbe färbt Armbinde, Helmband, Halstuch, Headset-Mikro, Beintaschen-Klappen, auf Wunsch Handschuhe und NVG-Glas - und die **eigene Drohne** (genau dieser Ton; im CTF die Teamfarbe).
+
+Figur (Charakter-Menü, neu angeordnet in zwei Spalten):
+- **Beintaschen**: Klappe und Verschluss in Spielerfarbe.
+- **Halstuch** in Spielerfarbe, **Headset**: Mikrofon und Ring an den Muscheln in Spielerfarbe.
+- **Nachtsichtgerät**: Häkchen "NVG in Spielerfarbe" rechts über dem Feld "Zubehör" - bei Ja leuchtet das Glas in Spielerfarbe statt grün.
+- **Weste**: neu "Taktisch: Granaten" und "Taktisch: Funk+Fackel" - leichte Weste mit zwei Magazintaschen rechts und links zwei Granaten bzw. Funkgerät und Signalfackel. Plattenträger und "Keine" bleiben.
+- **Frisuren**: "Kurz" liegt jetzt als dünne Haarschale eng am Kopf mit Haarlinie (vorher kastenartige Kappe und Haarblock im Nacken), neu **Dutt** (Top-Knot; unter Helm/Hut/Barett/Mütze tief im Nacken) und **Afro** (unter einer Kopfbedeckung quillt er darunter hervor). Glatze und Lang bleiben.
+- **Handschuhe**: eigene Felder "Handschuh-Art" (Voll, Fingerlos, Keine) und "Handschuh-Farbe" (Schwarz, Braun, Oliv, Spielerfarbe). Fingerlos: Fingerspitzen und Daumenspitze frei - auch an den eigenen Händen in der Ego-Ansicht.
+
+Drohne:
+- **Eine Drohne statt zwei**: Die Abwehrdrohnen-Granate gibt es nicht mehr. Wer noch eine aufhebt (alte Drops, Kisten), bekommt eine Drohnen-Granate. Dev-Loadout "Nahkampf" und die Waffenkammer wurden angepasst.
+- **G = sofort**: Kein Aufladen und kein Wurf mehr - beim Druck auf G steigt die Drohne direkt neben dir auf (0,8 m vor dir, auf Schulterhöhe; steht eine Wand direkt davor, an dir selbst). Laufzeit wie bisher (5 min, `PDRONE_LIFE`).
+- **Farbe**: Rumpf, Ring, Linse und Spulen in der Spielerfarbe des Besitzers (im CTF Teamfarbe) - auch das Drohnen-Kästchen im HUD.
+
+Tasten:
+- **Mittlere Maustaste (MMB)** für alle Set-Fähigkeiten: Schockwelle (Schild-Set), Scan (Hacker-Weste), Nest (Nekromanten-Set). Vorher B. Sprint/Dash bleibt Shift, Jetpack Leertaste/Strg.
+- **B** bleibt nur noch für die Heli-Flares (im Cockpit geht auch MMB).
+
+Nekromanten-Set:
+- **Wählrad**: MMB öffnet es (Kamera steht, Mauszeiger erscheint), Linksklick auf ein Monster wählt es und schliesst das Rad, erneut MMB setzt das Nest auf den Boden. MMB oder Esc bei offenem Rad bricht ab. Die Wahl verfällt mit dem Tod. HUD-Symbol zeigt "MMB  <Monster> setzen".
+- **300 HP** für jedes Nest (vorher 160-700 je Art), `NEST_HP`.
+- **Jede Waffe** beschädigt Nester - jetzt auch Nahkampfwaffen und der Beschwörer selbst samt Team (eigenes Nest abschiessen, um das Chaos zu beenden).
+- **Kein Loot** von Nest-Monstern und Nestern (wie bisher).
+- **Abklingzeit = Lebensdauer**: Das Nest lebt höchstens 5 min; danach wartet man genau so lange, wie es gelebt hat (früh zerstört = kurze Pause).
+- **Hinweis oben links** (nur für den Beschwörer): "Dein Nest wurde zerstört! (nächstes in x s)" bzw. "Dein Nest ist erloschen".
+- **Keine Wiederholung**: Dieselbe Monsterart nie zweimal hintereinander - im Rad ausgegraut ("zuletzt gesetzt"), der Host lehnt es ebenfalls ab.
+- **Tarnung**: Die eigenen Nest-Monster ignorieren dich, bis du sie angreifst (wie bisher).
+- **Leise Spawns**: Keine Meldung "Ein Koloss/Titan bricht aus dem Boden" und kein Felseinschlag mehr, wenn ein Monster aus einem Nest steigt - nur etwas Erde und ein arttypischer Laut: Zombie röchelt, Jägerin kichert/summt, Brute und Koloss knurren tief, Titan brüllt (`NEST_CUE`, neue Töne `rasp`, `giggle`, `roar`). Kolosse und Titanen, die am Kartenrand von selbst auftauchen, melden sich weiterhin.
+
+Technik: `PCOL`, `PCOL_BASE`, `PCOL_NAMES`, `PCOL_DEFAULT`, `PCOL_OLD`, `LOOK_CHARS`, `LOOK_KEYS`, `look_get`, `look_set`, `look_migrate`, `pcol_of`, `CharPage.pal_*`, `_PalHit`; `glove(..., tip)`, `scalp`; `GREN_RETIRED`, `GREN_MERGE`, `DRONE_SPAWN_OFF`, `DRONE_SPAWN_Z`, `drone_pal`, `build_drone(kind, col)`, `MobView(mob, col)`, `Game.player_pcol`; `SET_ICON_KEY = "mouse2"`, `SET_ICON_LABEL`, `HELI_FLARE_KEY`, `on_heli_flare`; `NEST_HP`, `Player.nest_last`, `nest_cd_max`, `nest_wheel_at`, `nest_wheel_click`, `place_nest_pick`, `nest_pick`, `NEST_CUE`.
+
 ## Aufsatz-Kompatibilität, Red Dot für Pistolen und MP9, Nachladen von Abgesägter und 98k, Spielfigur mit Gelenken (Robin, 2026-10-27)
 Gilt für alle Modi. **NET_VERSION 52**: geänderte Regeln, welche Aufsätze an welche Waffe passen (Host und Mitspieler müssen gleich rechnen) - alle müssen aktualisieren.
 

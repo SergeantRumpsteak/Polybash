@@ -8,7 +8,7 @@ Steuerung:
   Linke Maus     schiessen       Rechte Maus          zielen (Zoom)
   R              nachladen       1-2 / Mausrad        Waffe wechseln, 3 = Gadget
   Q / E          nach links / rechts um die Ecke lehnen
-  G              Granate werfen (2 zum Start, 2,5 s Zündzeit)
+  G              Granate werfen (2 zum Start, 2,5 s Zündzeit); v53: die Drohne steigt bei G sofort am Spieler auf
   F              benutzen: Lootkiste öffnen, am Boden liegende Waffe aufheben,
                  Fahrzeug ein-/aussteigen
   Esc            Menü (gibt die Maus frei; Klick ins Fenster fängt sie wieder ein)
@@ -21,6 +21,8 @@ Steuerung:
   X / Y          Minimap heraus- / hineinzoomen
   U              Einzelteile ablegen (Ausrüstung ohne Set: Schweres Exo-Jetpack, Hermes-Boots). Wer ein Teil für einen
                  Slot aufhebt, den ein Einzelteil sperrt, tauscht automatisch (das Einzelteil fällt ab).
+  Mittlere Maus  Set-Fähigkeit (v53, für alle Sets gleich): Schockwelle (Schild-Set), Scan (Hacker-Weste), Nest-Wählrad
+                 (Nekromanten-Set: MMB öffnet das Rad, Linksklick wählt das Monster, MMB setzt das Nest)
   B (Helikopter) Flares: 3 s keine Stinger-Erfassung, anfliegende Stinger jagen der Wärmequelle nach. So viele Ladungen
                  wie eine volle Stinger Munition hat (5); auf dem Helipad sofort wieder voll.
   R (tot)        respawnen - vorher mit 1-6 Haupt- und Kleinwaffe, 7-9 Gadget wählen
@@ -371,7 +373,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 52         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 53         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 214               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -457,6 +459,9 @@ GREN_ANIM_T = 0.6         # Dauer der Wurfanimation (Arm)
 GREN_KINDS = ("frag", "decoy", "flash", "smoke", "drone", "molotov", "flare", "guard",   # 10h: + Abwehrdrohne
               "jet")                                                                          # 13c: + Jet-Strike
 
+GREN_RETIRED = ("guard",)   # v53: Abwehrdrohne ist mit der Drohnen-Granate zu EINER Drohne verschmolzen (Index bleibt fürs Netz)
+GREN_MERGE = {"guard": "drone"}   # v53: alte Art -> neue Art (Aufheben, Beute, Dev-Loadouts)
+
 DROP_GK = GREN_KINDS + ("gad:0", "gad:1", "gad:2")     # Art eines Stapel-Drops: Granatenart oder Gadget (Experimental)
 
 GREN_NAMES = {"frag": "Splittergranate", "decoy": "Decoy", "flash": "Blendgranate", "smoke": "Rauchgranate",
@@ -475,7 +480,7 @@ GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
              "decoy": "Landet und macht dort Schusslärm - Monster laufen hin. Kein Schaden",
              "flash": "Blendet bis 10 m (je näher und je mehr man hinschaut, desto stärker)",
              "smoke": "Rauchwolke, blockiert die Sicht (bleibt in Räumen und Tunneln)",
-             "drone": "Setzt eine eigene lila Drohne frei, die Gegner betäubt",
+             "drone": "G: Drohne steigt sofort neben dir auf (in deiner Spielerfarbe) und betäubt Gegner",
              "molotov": "Brennende Fläche beim Aufprall (nicht im Wasser)",
              "flare": "Rote Fackel: ein Frachtflugzeug wirft dort eine Kiste ab",
              "guard": "Orange Abwehrdrohne: umkreist dich und zerstört Drohnen in 15 m (auch die, die dein Fahrzeug lahmlegen)",
@@ -558,6 +563,8 @@ PDRONE_HUD_X, PDRONE_HUD_Z = -0.15, 0.62   # 13d: Mitte des Drohnen-Kästchens u
 PDRONE_HUD_S = 0.2        # 13d: Kantenlänge des Kästchens
 PDRONE_HUD_GHOST = 0.32   # 13d: Deckkraft des Drohnen-Modells im Hintergrund
 
+DRONE_SPAWN_OFF = 0.8      # v53: Drohne steigt so weit vor dem Spieler auf (m) ...
+DRONE_SPAWN_Z = 1.7        # ... in so viel m über seinen Füssen
 GDRONE_R = 15.0           # 10h: Abwehrdrohne - zerstört Drohnen so nah am Besitzer (m; 10-20)
 
 GDRONE_LIFE = 60.0        # 10h: ... lebt so lange (s) ...
@@ -1514,7 +1521,7 @@ HERMES_BOOM_NOISE = 110.0      # ... und der Dash knallt (Überschall): Lärmrad
 
 SPRING_AIR_SPREAD = 0.35       # v49: Springfeder-Set komplett: Hüftstreuung in der Luft / an der Wand x so viel (statt mehr)
 
-HACK_SCAN_CD = 45.0            # v49: Hacker-Weste: Quadranten-Scan (Taste B), Abklingzeit ...
+HACK_SCAN_CD = 45.0            # v49: Hacker-Weste: Quadranten-Scan (v53: mittlere Maustaste), Abklingzeit ...
 HACK_SCAN_CD_SET = 30.0        # ... mit komplettem Hacker-Set
 HACK_GRID = 2                  # ... Karte in GRID x GRID Felder (Polytown: 4 Quadranten) ...
 HACK_GRID_SET = 3              # ... mit komplettem Set feiner (9 Sektoren)
@@ -1524,10 +1531,16 @@ HACK_QUIET = 0.5               # v49: Hacker-Stiefel: Lärmradius der Schritte x
 
 NECRO_SENSE = 0.5              # v49: Nekromanten-Maske: Monster bemerken dich erst aus so viel ihrer Entfernung
 NECRO_DMG_K = 0.75             # v49: Nekromanten-Robe: Monster-Schaden an dir x so viel
-NEST_LIFE = 300.0              # v49: Nekromanten-Set: Nest lebt so lange (s) ...
-NEST_CD = 30.0                 # ... höchstens ein Nest je Spieler; nach seinem Ende so lange (s) bis zum nächsten
+NEST_LIFE = 300.0              # v49: Nekromanten-Set: Nest lebt höchstens so lange (s) ...
+NEST_CD = 30.0                 # (bis v52: feste Pause nach dem Ende; v53: Abklingzeit = wie lange das Nest gelebt hat)
+NEST_HP = 300.0                # v53: jedes Nest hat so viele HP (vorher je Art 160-700); jede Waffe beschädigt es
 NEST_KINDS = (("grunt", 20, 160.0, 1.2), ("huntress", 14, 200.0, 1.6), ("brute", 10, 300.0, 2.2),
-              ("colossus", 5, 450.0, 3.2), ("titan", 2, 700.0, 4.5))   # Art, Monster je Lebensdauer, Nest-HP, Radius (m)
+              ("colossus", 5, 450.0, 3.2), ("titan", 2, 700.0, 4.5))   # Art, Monster je Lebensdauer, (alte HP, v53: NEST_HP), Radius
+NEST_CUE = {"grunt": ("rasp", 0.75, (0.9, 1.1)),           # v53: Laut, wenn ein Monster aus dem Nest steigt:
+            "huntress": ("giggle", 0.6, (0.95, 1.1)),     # Zombie röchelt, Jägerin kichert/summt,
+            "brute": ("growl_deep", 0.85, (0.85, 1.0)),   # Brute und Koloss knurren tief,
+            "colossus": ("growl_deep", 1.0, (0.55, 0.65)),
+            "titan": ("roar", 1.0, (0.8, 0.95))}          # Titan brüllt (statt Felseinschlag und Meldung)
 NEST_RANGE = 12.0              # m: so weit vor dem Spieler wird das Nest platziert (auf dem Boden)
 NEST_PROVOKE_T = 6.0           # s: wer ein Monster angreift, ist für dieses Monster so lange nicht getarnt
 
@@ -1553,7 +1566,9 @@ NOISE_CLING = 18.0             # 10c: ... das Kratzen ist so laut (Lärmradius, 
 
 SPRING_SET_NOFALL = True       # 10c: Springfeder-Set komplett: kein Fallschaden
 
-SET_ICON_KEY = "b"             # Taste der Set-Fähigkeit (Stromstoss); X/Y sind die Minimap
+SET_ICON_KEY = "mouse2"        # Taste der Set-Fähigkeit (v53: mittlere Maustaste für alle: Schockwelle, Scan, Nest)
+SET_ICON_LABEL = "MMB"         # v53: so heisst sie in Texten und am HUD-Symbol
+HELI_FLARE_KEY = "b"           # v53: Heli-Flares bleiben auf B (vorher teilten sie sich die Taste mit der Set-Fähigkeit)
 
 GEAR_IDX = {g.name: i for i, g in enumerate(GEAR)}
 
@@ -2411,7 +2426,7 @@ DEV_LOADOUTS = (                          # Dev-Menü: fertige Ausrüstungs-Sets
     ("Anti-Fz", ("Stinger", "Railgun"), "Messer", ("Schild-Helm", "Schild", "Schild-Stiefel"),
      (("flare", 3), ("jet", 2), ("drone", 2))),
     ("Nahkampf", ("Abgesägte Schrotflinte", "Baretta"), "Katana", ("Krallenhelm", "Sprungweste", "Hermes-Boots"),
-     (("flash", 3), ("guard", 1))),
+     (("flash", 3), ("drone", 1))),
 )
 
 
@@ -2649,7 +2664,8 @@ def dev_layout():
     melee = [("m", mi) for mi in range(len(MELEE))]
     atts = ([("a", si * ATT_CODE + v) for si in range(len(ATTACHMENTS)) for v in range(1, len(ATTACHMENTS[si]))]
             + [("a", ATT_SCOPE * ATT_CODE + v) for v in range(1, len(ATT_SCOPE_NAMES))])
-    grens = [("g", (k, GREN_LOOT_N.get(k, 1) + 1)) for k in GREN_KINDS] + [("d", (k, 2)) for k in range(len(GADGETS))]
+    grens = ([("g", (k, GREN_LOOT_N.get(k, 1) + 1)) for k in GREN_KINDS if k not in GREN_RETIRED]
+             + [("d", (k, 2)) for k in range(len(GADGETS))])
     square(32.0, 30.0, 3.6, guns, DEV_O)                                   # Waffen (Haupt-, Sekundär-, Spezialwaffen)
     square(50.0, 30.0, 2.4, melee, DEV_O)                                  # Nahkampf
     row(18.0, 11.2, 66.0, 12.4, atts, DEV_G, True)                         # Aufsätze und Visiere (Südwand)
@@ -3229,11 +3245,11 @@ class Nest:
     Mitspieler bekommen es im Snapshot ("ne")."""
 
     def __init__(self, nid, owner, ki, x, y, z):
-        kind, n, hp, r = NEST_KINDS[ki]
+        kind, n, _hp, r = NEST_KINDS[ki]
         self.nid, self.owner, self.ki = nid, owner, ki
         self.kind, self.total, self.r = kind, n, r
         self.x, self.y, self.z = x, y, z
-        self.hp = self.max_hp = hp
+        self.hp = self.max_hp = NEST_HP                # v53: fest 300 HP (NEST_KINDS-HP nicht mehr benutzt)
         self.life = NEST_LIFE
         self.spawned = 0
         self.next_t = 2.5                    # das erste Monster kommt nach ein paar Sekunden
@@ -3249,6 +3265,7 @@ class Drop:
                  gk="frag"):
         self.did, self.x, self.y, self.z, self.wi = did, x, y, z, wi
         self.gren = gren if isinstance(gren, int) else 0          # 10b: Granaten (Anzahl), sonst 0
+        gk = GREN_MERGE.get(gk, gk)                               # v53: Abwehrdrohne -> Drohne
         self.gk = gk if gk in DROP_GK else "frag"                 # 10e: Granatenart (oder "gad:<Art>")
         self.gq = None                                            # 10e: Airdrop-Fackeln - ihre Kistenarten (nur Host)
         self.scope = scope if isinstance(scope, int) else -1   # Visier einer Waffe (-1 = ab Werk)
@@ -4161,7 +4178,7 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("4", "Gadget"), ("5", "Nahkampfwaffe"),
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
               ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
-              ("B", "Set-Fähigkeit"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
+              ("Mittlere M.", "Set-Fähigkeit"), ("B (Heli)", "Flares"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
 
 
 INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Karte zu, Fensterwechsel; dazu muss die
@@ -4342,7 +4359,7 @@ def pan_food_count(pts):
 
 SET_BONUS_TEXT = {
     "armor": f"+{ARMOR_SET_BONUS:.0f} max. HP (zusammen +{3 * GEAR_HP_PART + ARMOR_SET_BONUS:.0f})",
-    "shield": f"Schockwelle (Taste {SET_ICON_KEY.upper()}, alle {SHOCK_CD:.0f} s): {SHOCK_R:.0f} m Radius, betäubt "
+    "shield": f"Schockwelle (Taste {SET_ICON_LABEL}, alle {SHOCK_CD:.0f} s): {SHOCK_R:.0f} m Radius, betäubt "
               f"{SHOCK_STUN_MIN:.0f}-{SHOCK_STUN_MAX:.0f} s und schleudert bis an den Rand;\n"
               f"fremde Schilde auf 0 ({SHOCK_SHIELD_BLOCK:.0f} s keine Aufladung), Jetpack-Tank leer, Dash lädt neu",
     "second": f"Tödlicher Tomahawk-Treffer: du überlebst mit {SAVE_HP:.0f} HP - dafür zerbricht die ganze Ausrüstung",
@@ -4350,8 +4367,9 @@ SET_BONUS_TEXT = {
     "hacker": f"Scan alle {HACK_SCAN_CD_SET:.0f} s statt {HACK_SCAN_CD:.0f} s und feiner "
               f"({HACK_GRID_SET * HACK_GRID_SET} statt {HACK_GRID * HACK_GRID} Sektoren)",
     "necro": f"Monster-Tarnung (Monster halten dich für ihresgleichen, bis du sie angreifst);\n"
-             f"Nest-Wählrad (Taste {SET_ICON_KEY.upper()} halten): Nest für {NEST_LIFE / 60:.0f} min "
-             f"(Zombies, Jägerinnen, Brutes, Kolosse oder Titanen)",
+             f"Nest-Wählrad ({SET_ICON_LABEL}: Rad öffnen, Linksklick wählt, {SET_ICON_LABEL} setzt): Nest mit "
+             f"{NEST_HP:.0f} HP, lebt bis {NEST_LIFE / 60:.0f} min\n(Zombies, Jägerinnen, Brutes, Kolosse oder Titanen; "
+             f"nie zweimal dieselbe Art hintereinander; Abklingzeit = Lebensdauer des Nests)",
 }
 
 def gear_info(gi, pl=None):
@@ -4380,7 +4398,7 @@ def gear_info(gi, pl=None):
         "spring": f"Springt {SPRING_JUMP ** 2:.1f}-mal so hoch.",
         "hack_hud": f"Blaue High-Tech-Sicht: feindliche C4, Claymores und fliegende Granaten\nin {HACK_MARK_R:.0f} m "
                     f"werden markiert (auch durch Wände).",
-        "hack_scan": f"Quadranten-Scan (Taste {SET_ICON_KEY.upper()}, alle {HACK_SCAN_CD:.0f} s): zeigt grob, in welchen "
+        "hack_scan": f"Quadranten-Scan (Taste {SET_ICON_LABEL}, alle {HACK_SCAN_CD:.0f} s): zeigt grob, in welchen "
                      f"Kartenfeldern Gegner sind\n({HACK_GRID * HACK_GRID} Felder, {HACK_SCAN_SHOW:.0f} s auf Karte und Raster).",
         "hack_quiet": f"Gedämpfte Sohlen: Schritte nur x{HACK_QUIET:g} so laut (Monster hören dich später).",
         "necro_mask": f"Monster bemerken dich erst aus {int(NECRO_SENSE * 100)} % ihrer normalen Entfernung.",
@@ -8038,6 +8056,9 @@ class World:
         if getattr(pl, "nest_cd", 0.0) > 0 or any(n.owner == pl.pid for n in self.nests):
             self.events.append(("nestno", pl.pid, round(getattr(pl, "nest_cd", 0.0), 1)))
             return False
+        if ki == getattr(pl, "nest_last", -1):           # v53: nie zweimal hintereinander dieselbe Monsterart
+            self.events.append(("nestno", pl.pid, -2))
+            return False
         spot = self.nest_spot(pl)
         if spot is None:
             self.events.append(("nestno", pl.pid, -1))
@@ -8045,6 +8066,7 @@ class World:
         n = Nest(self.next_nest, pl.pid, ki, *spot)
         self.next_nest += 1
         self.nests.append(n)
+        pl.nest_last = ki
         self.make_noise(n.x, n.y, NOISE_EXPLOSION * 0.4, n.z + 1.0)
         self.events.append(("nest", n.nid, pl.pid, ki, round(n.x, 2), round(n.y, 2), round(n.z, 2)))
         return True
@@ -8079,20 +8101,23 @@ class World:
         m.dig_t = BOSS_DIG_T
         m.z = m.gz - m.height
         m.heading = rng.uniform(0, 360)
-        self.events.append(("bossdig", m.id, round(m.x, 2), round(m.y, 2), round(m.gz, 2), m.kind))
+        # v53: leiser Spawn - kein Felseinschlag, keine Meldung für alle; nur ein arttypischer Laut am Nest
+        self.events.append(("nestmob", m.id, round(m.x, 2), round(m.y, 2), round(m.gz, 2), m.kind))
         self.mobs.append(m)
 
     def end_nest(self, n, destroyed):
-        """v49: Nest vergeht (Lebensdauer um) oder wurde zerstört; der Besitzer wartet NEST_CD s auf das nächste."""
+        """v49: Nest vergeht (Lebensdauer um) oder wurde zerstört. v53: der Besitzer wartet so lange auf das nächste,
+        wie das Nest gelebt hat (höchstens NEST_LIFE)."""
+        cd = round(clampf(NEST_LIFE - max(0.0, n.life), 0.0, NEST_LIFE), 1)
         own = self.players.get(n.owner)
         if own is not None:
-            own.nest_cd = NEST_CD
+            own.nest_cd = own.nest_cd_max = cd
         self.events.append(("nestdown", n.nid, n.owner, round(n.x, 2), round(n.y, 2), round(n.z, 2),
-                            1 if destroyed else 0, n.ki))
+                            1 if destroyed else 0, n.ki, cd))
 
     def damage_nest(self, n, dmg, owner):
-        """v49: Schaden am Nest - der Beschwörer (und sein Team) kann es nicht selbst zerstören."""
-        if n.hp <= 0 or (isinstance(owner, int) and owner >= 0 and self.allied(owner, n.owner)):
+        """v49: Schaden am Nest. v53: jede Waffe, auch vom Beschwörer selbst (um das Chaos zu beenden) und seinem Team."""
+        if n.hp <= 0:
             return
         n.hp -= dmg
         self.events.append(("nesthit", n.nid, round(max(0.0, n.hp) / n.max_hp, 2), owner))
@@ -8247,6 +8272,7 @@ class World:
         cands = [(mob, mob.radius, mob.z, mob.z + mob.height) for mob in self.mobs if mob.state != "dead"]
         cands += [(q, PLAYER_R, q.z, q.z + body_h(q)) for q in self.players.values()
                   if q is not pl and q.hp > 0 and q.protect <= 0 and q.vehicle < 0 and q.heli < 0]
+        cands += [(n_, n_.r, n_.z - 0.6, n_.z + 0.5) for n_ in self.nests if n_.hp > 0]   # v53: Nester auch im Nahkampf
         for t, rad, z0, z1 in cands:
             dx, dy = t.x - pl.x, t.y - pl.y
             dist = math.hypot(dx, dy)
@@ -8269,6 +8295,9 @@ class World:
         wi = MELEE_WI0 + mi
         snd = m.sound if (m.sound != "bong" or head) else "slash"
         self.events.append(("mhit", tuple(round(c, 2) for c in pos), snd, pl.pid))
+        if isinstance(t, Nest):                           # v53: Schlag aufs Nest
+            self.damage_nest(t, dmg, pl.pid)
+            return
         before = t.hp + getattr(t, "shield_hp", 0.0)
         if isinstance(t, Mob):
             if t.aggressive() and t.state == "idle" and t.noise_at is None:
@@ -8577,6 +8606,7 @@ class World:
     def add_grenades(self, pl, kind, n, tiers=None):
         """10e: Granaten aufnehmen. Airdrop-Fackeln: je Satz von drei eine braune, eine blaue, eine goldene Kiste in
         zufälliger Reihenfolge (tiers: schon festgelegte Kistenarten, z. B. aus einem Drop beim Tod)."""
+        kind = GREN_MERGE.get(kind, kind)                # v53: Abwehrdrohne -> Drohne
         kind = kind if kind in GREN_KINDS else "frag"
         pl.gren[kind] = pl.gren.get(kind, 0) + n
         if kind == "flare":
@@ -8661,7 +8691,7 @@ class World:
             sm.age += dt
         self.smokes = [sm for sm in self.smokes if sm.age < SMOKE_T]
 
-    def spawn_pdrone(self, g):
+    def spawn_pdrone(self, g, z=None):
         """10e: Drohnen-Granate - eine eigene, lila Drohne steigt auf (Mob "pdrone", Besitzer = Werfer). 13f: Es gibt
         höchstens eine aktive lila Drohne (PDRONE_ONE_PER: im ganzen Spiel bzw. je Spieler); eine weitere Drohnen-Granate
         setzt nur deren Restzeit wieder auf PDRONE_LIFE (Ereignis 'pdrefresh')."""
@@ -8677,7 +8707,7 @@ class World:
         self.next_mid += 1
         m.owner, m.life = g.owner, PDRONE_LIFE
         m.hover = 0.5
-        m.z = m.gz + m.hover
+        m.z = m.gz + m.hover if z is None else max(m.gz + m.hover, z)    # v53: direkt am Spieler (Schulterhöhe)
         self.mobs.append(m)
         self.events.append(("pdrone", g.owner, round(g.x, 2), round(g.y, 2), round(g.z, 2)))
 
@@ -9593,6 +9623,16 @@ class World:
         return True
 
     def spawn_grenade(self, owner, eye, d, kind="frag", speed=None, tier=None):
+        if kind == "drone":                              # v53: Drohne wird nicht geworfen - sie steigt sofort am
+            hx, hy = d[0], d[1]                          # Spieler auf (etwas vor ihm, auf Schulterhöhe)
+            hl = math.hypot(hx, hy) or 1.0
+            pl_ = self.players.get(owner)
+            bz = pl_.z if pl_ is not None else eye[2] - 1.5
+            x, y = eye[0] + hx / hl * DRONE_SPAWN_OFF, eye[1] + hy / hl * DRONE_SPAWN_OFF
+            if not self.los(eye, (x, y, eye[2])):        # Wand direkt vor einem: am Spieler selbst
+                x, y = eye[0], eye[1]
+            self.spawn_pdrone(SimpleNamespace(x=x, y=y, z=bz, owner=owner), z=bz + DRONE_SPAWN_Z)
+            return
         sp = speed if speed is not None else GREN_SPEED
         g = Grenade(self.next_gid, eye[0], eye[1], eye[2],
                     d[0] * sp, d[1] * sp, d[2] * sp + 2.0, owner, GREN_FUSE_K.get(kind, GREN_FUSE), kind)
@@ -10738,6 +10778,8 @@ class Player:
         self.shock_lock = 0.0             # v49: Schild-Aufladung durch fremde Schockwelle gesperrt (s, nur Host)
         self.scan_cd = 0.0                # v49: Hacker-Weste: Abklingzeit des Quadranten-Scans
         self.nest_cd = 0.0                # v49: Nekromanten-Set: Abklingzeit bis zum nächsten Nest
+        self.nest_cd_max = 0.0            # v53: ... und wie lang sie insgesamt war (= Lebensdauer des letzten Nests)
+        self.nest_last = -1               # v53: zuletzt gesetzte Nest-Art (dieselbe nicht direkt noch einmal)
         self.air_jump = False             # Doppelsprung in diesem Sprung schon benutzt
         self.jump_edge = self.run_edge = False   # Taste in diesem Bild neu gedrückt (für Doppelsprung/Dash)
         self.loot_history = {}            # Kisten-Gedächtnis (nur beim Host benutzt): Name -> in diesem Leben gezogen
@@ -15686,14 +15728,23 @@ DRONE_PALS = {"drone": {}, "pdrone": {"hull": (0.46, 0.20, 0.66), "dk": (0.20, 0
               "gdrone": {"hull": (0.86, 0.46, 0.08), "dk": (0.22, 0.20, 0.18), "lens": (1.0, 0.9, 0.35),
                          "coil": (1.0, 0.72, 0.2), "stripe": (1.0, 0.95, 0.75), "shield": True}}   # 10h: Abwehr (orange)
 
-def build_drone(kind="drone"):
+def drone_pal(col):
+    """v53: Farben der eigenen Drohne aus der Spielerfarbe (Rumpf = Farbe, Rest abgeleitet)."""
+    lum = 0.3 * col[0] + 0.59 * col[1] + 0.11 * col[2]
+    hi = tuple(min(1.0, c * 0.6 + 0.45) for c in col)
+    return {"hull": tuple(max(0.03, c) for c in col), "dk": tuple(c * 0.4 + (0.10 if lum < 0.12 else 0.0) for c in col),
+            "lens": hi, "coil": tuple(min(1.0, c * 0.8 + 0.25) for c in col),
+            "stripe": hi if lum < 0.85 else (0.75, 0.80, 0.88)}
+
+
+def build_drone(kind="drone", col=None):
     """9d: Elektro-Drohne, technisch: gerundeter Rumpf mit Panelfugen, vier Ausleger mit Rotorschutz-Ringen,
     Kamera-Auge (Linse, Ring, rote LED), Elektro-Spulen mit zwei Polen unten, Antenne. Rückgabe wie build_mob;
     'Beine' sind die Rotoren (drehen sich). 10e: kind "pdrone" = eigene Spieler-Drohne in Lila mit hellem Ring."""
     rng = random.Random(77)
     root = NodePath(kind)
     body, glow = Mesh(), Mesh(lit=False)
-    pal = DRONE_PALS.get(kind, {})
+    pal = DRONE_PALS.get(kind, {}) if col is None else drone_pal(col)     # v53: eigene Drohne in Spielerfarbe
     hull, dk, alu = pal.get("hull", (0.24, 0.26, 0.31)), pal.get("dk", (0.12, 0.13, 0.16)), (0.62, 0.64, 0.68)
     lens_c, coil_c = pal.get("lens", (0.35, 0.85, 1.0)), pal.get("coil", (0.4, 0.85, 1.0))
     if "stripe" in pal:                                                  # Spieler-Drohne: leuchtender Ring um den Rumpf
@@ -15846,11 +15897,12 @@ def prewarm_mob_models():
             pass
 
 
-def build_mob(kind, look=None):
+def build_mob(kind, look=None, col=None):
     """9d: (root, torso, legL, legR, bar, bar_fg[, Rotoren]) - Hüfte bei z = 0,75, Füsse bei z = 0, Blick +y.
     Humanoide Monster: detailliertes Modell nah, das alte einfache Modell ab MOB_LOD_DIST (LODNode je Teil)."""
     if kind in DRONE_KINDS:                                    # 12: Vorlage einmal bauen, danach nur kopieren
-        root, torso, bar, fg, *legs = _mob_tpl((kind,), lambda: _with_bar(build_drone(kind)))
+        col = tuple(col) if col is not None and kind == "pdrone" else None     # v53: je Spielerfarbe eine Vorlage
+        root, torso, bar, fg, *legs = _mob_tpl((kind, col), lambda: _with_bar(build_drone(kind, col)))
         return root, torso, legs[0], legs[1], bar, fg, legs
     if kind == "critter":
         fur = (look or {}).get("fur", CRITTER_COLORS["standard"])
@@ -15896,45 +15948,120 @@ CAMO_SETS = [CAMO_PAL,
              [(0.18, 0.19, 0.21), (0.30, 0.32, 0.35), (0.46, 0.48, 0.51), (0.24, 0.26, 0.30)],        # Stadt
              [(0.05, 0.05, 0.06), (0.09, 0.10, 0.11), (0.15, 0.16, 0.17), (0.07, 0.08, 0.10)],        # Nacht
              [(0.12, 0.26, 0.10), (0.22, 0.42, 0.16), (0.38, 0.55, 0.24), (0.30, 0.24, 0.12)]]        # Dschungel
-SOLDIER_GLOVES = [(0.11, 0.11, 0.10), (0.30, 0.20, 0.12), (0.22, 0.26, 0.15), None]
+SOLDIER_GLOVES = [(0.11, 0.11, 0.10), (0.30, 0.20, 0.12), (0.22, 0.26, 0.15), None]   # None = Spielerfarbe (v53)
 SOLDIER_BOOTS = [(0.16, 0.12, 0.08), (0.07, 0.07, 0.08), (0.52, 0.44, 0.30)]
-# Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Ziffernfolge
-# (eine Ziffer je Eintrag) - klein genug, um ihn im Netzwerk mitzuschicken.
+# v53: Spielerfarben - 10 Farben in je drei Tönen (Standard, Hell, Dunkel). Index = Farbe * 3 + Ton. Die gewählte Farbe
+# (Look-Eintrag "akzent") färbt Armbinde, Helmband, Halstuch, Headset-Mikro, Beintaschen-Klappen, auf Wunsch Handschuhe
+# und Nachtsicht-Glas - und die eigene Drohne.
+PCOL_TONES = ("Standard", "Hell", "Dunkel")
+PCOL_BASE = (                                # (Name Standard, Hell, Dunkel), (RGB Standard, Hell, Dunkel)
+    (("Rot", "Hellrot", "Dunkelrot"), ((0.80, 0.12, 0.12), (0.98, 0.45, 0.42), (0.45, 0.04, 0.05))),
+    (("Grün", "Hellgrün", "Dunkelgrün"), ((0.18, 0.62, 0.22), (0.50, 0.88, 0.45), (0.06, 0.32, 0.10))),
+    (("Gelb", "Hellgelb", "Dunkelgelb"), ((0.95, 0.82, 0.10), (1.00, 0.95, 0.50), (0.72, 0.56, 0.04))),
+    (("Blau", "Himmelblau", "Marineblau"), ((0.15, 0.35, 0.85), (0.45, 0.72, 0.98), (0.05, 0.10, 0.38))),
+    (("Orange", "Hellorange", "Dunkelorange"), ((0.95, 0.48, 0.08), (1.00, 0.72, 0.42), (0.62, 0.26, 0.03))),
+    (("Schwarz", "Anthrazit", "Tiefschwarz"), ((0.07, 0.07, 0.08), (0.30, 0.30, 0.32), (0.02, 0.02, 0.02))),
+    (("Weiß", "Reinweiß", "Grauweiß"), ((0.90, 0.90, 0.88), (1.00, 1.00, 1.00), (0.72, 0.72, 0.70))),
+    (("Braun", "Hellbraun", "Dunkelbraun"), ((0.48, 0.28, 0.12), (0.72, 0.52, 0.32), (0.26, 0.14, 0.06))),
+    (("Lila", "Flieder", "Dunkellila"), ((0.52, 0.22, 0.75), (0.76, 0.58, 0.95), (0.28, 0.08, 0.42))),
+    (("Pink", "Rosa", "Magenta"), ((0.95, 0.35, 0.65), (1.00, 0.66, 0.82), (0.68, 0.10, 0.40))),
+)
+PCOL_NAMES = tuple(n for names, _c in PCOL_BASE for n in names)
+PCOL = tuple(c for _n, cols in PCOL_BASE for c in cols)
+PCOL_DEFAULT = (9, 0, 3, 6, 24, 10, 12, 18)  # v53: Standardfarbe je Spieler-Nummer (Blau, Rot, Grün, Gelb, Lila, ...)
+PCOL_OLD = (9, 9, 0, 3, 6, 24, 10, 12, 18)   # v53: alter Look-Code (bis v52) "Teamfarbe" -> neuer Palettenindex
+LOOK_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"   # v53: ein Zeichen je Eintrag (bis zu 36 Auswahlen)
+# Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Zeichenfolge
+# (ein Zeichen je Eintrag, LOOK_CHARS) - klein genug, um ihn im Netzwerk mitzuschicken. Neue Einträge nur hinten anhängen.
 LOOK_OPTS = (
     ("tarn", "Tarnmuster", ("Wald", "Wüste", "Schnee", "Stadt", "Nacht", "Dschungel")),
     ("haut", "Hautton", ("Hell", "Mittel", "Gebräunt", "Dunkel", "Sehr hell")),
     ("augen", "Augenfarbe", ("Blau", "Braun", "Grün", "Dunkel")),
     ("haar", "Haarfarbe", ("Schwarz", "Braun", "Blond", "Rot", "Grau", "Weiß")),
-    ("frisur", "Frisur", ("Kurz", "Glatze", "Lang")),
+    ("frisur", "Frisur", ("Kurz", "Glatze", "Lang", "Dutt", "Afro")),                 # v53: + Dutt, Afro
     ("kopf", "Kopfbedeckung", ("Gefechtshelm", "Buschhut", "Barett", "Mütze", "Keine")),
     ("brille", "Brille", ("Keine", "Schutzbrille", "Sonnenbrille")),
     ("gesicht", "Gesicht", ("Normal", "Bart", "Tarnbemalung", "Sturmhaube")),
     ("extra", "Zubehör", ("Keins", "Halstuch", "Headset", "Nachtsichtgerät")),
-    ("weste", "Weste", ("Plattenträger", "Keine")),
+    ("weste", "Weste", ("Plattenträger", "Keine", "Taktisch: Granaten", "Taktisch: Funk+Fackel")),   # v53: + taktisch
     ("pack", "Rucksack", ("Groß", "Klein", "Keiner")),
-    ("handschuh", "Handschuhe", ("Schwarz", "Braun", "Oliv", "Keine")),
+    ("handschuh", "Handschuh-Farbe", ("Schwarz", "Braun", "Oliv", "Spielerfarbe")),  # v53: "Keine" -> Handschuh-Art
     ("stiefel", "Stiefel", ("Dunkelbraun", "Schwarz", "Sand")),
-    ("akzent", "Teamfarbe", ("Spielerfarbe", "Blau", "Rot", "Grün", "Gelb", "Violett", "Türkis", "Orange", "Weiß")),
+    ("akzent", "Spielerfarbe", PCOL_NAMES),                                           # v53: Palette 10 x 3
+    ("handart", "Handschuh-Art", ("Voll", "Fingerlos", "Keine")),                         # v53
+    ("nvgfarbe", "NVG in Spielerfarbe", ("Nein", "Ja")),                               # v53: Häkchen neben "Zubehör"
 )
+LOOK_KEYS = {o[0]: k for k, o in enumerate(LOOK_OPTS)}
+LOOK_COLOR_OPTS = ("akzent",)                # v53: diese Einträge wählt man im Menü über die ausklappbare Farbpalette
+LOOK_CHECK_OPTS = ("nvgfarbe",)              # v53: ... diese über ein Ankreuzfeld
+
+
+def look_vals(code):
+    """v53: Look-Code -> Liste der Auswahl-Indizes (ohne Prüfung; ungültige Zeichen = 0)."""
+    return [max(0, LOOK_CHARS.find(c)) for c in code]
+
+
+def look_code_of(vals):
+    return "".join(LOOK_CHARS[v] for v in vals)
+
+
+def look_set(code, k, v):
+    """v53: Eintrag k (Index oder Schlüssel) im Look-Code auf v setzen."""
+    k = LOOK_KEYS[k] if isinstance(k, str) else k
+    return code[:k] + LOOK_CHARS[v] + code[k + 1:]
+
+
+def look_get(code, k):
+    k = LOOK_KEYS[k] if isinstance(k, str) else k
+    return max(0, LOOK_CHARS.find(code[k]))
 
 
 def look_valid(code):
     return (isinstance(code, str) and len(code) == len(LOOK_OPTS)
-            and all(c.isdigit() and int(c) < len(o[2]) for c, o in zip(code, LOOK_OPTS)))
+            and all(0 <= LOOK_CHARS.find(c) < len(o[2]) for c, o in zip(code, LOOK_OPTS)))
+
+
+def look_migrate(code):
+    """v53: Look-Code aus älteren Versionen (14 Ziffern, bis v52) übernehmen; gültige Codes bleiben, sonst ''."""
+    if look_valid(code):
+        return code
+    if isinstance(code, str) and len(code) == 14 and code.isdigit():
+        v = [int(c) for c in code]
+        hand = 0
+        if v[11] == 3:                          # alte Handschuh-Wahl "Keine" -> Handschuh-Art "Keine"
+            v[11], hand = 0, 2
+        v[13] = PCOL_OLD[v[13]] if v[13] < len(PCOL_OLD) else PCOL_DEFAULT[0]
+        new = look_code_of(v + [hand, 0])
+        if look_valid(new):
+            return new
+    return ""
 
 
 def look_default(seed=0):
-    """Ein zufälliger, aber stabiler Standard-Charakter (Hautton, Augen, Haare nach seed)."""
+    """Ein zufälliger, aber stabiler Standard-Charakter (Hautton, Augen, Haare nach seed; Spielerfarbe nach Nummer)."""
     r = random.Random(seed * 7919 + 13)
     v = [0] * len(LOOK_OPTS)
     for k, (key, _l, vals) in enumerate(LOOK_OPTS):
         if key in ("haut", "augen", "haar"):
             v[k] = r.randrange(len(vals))
-    return "".join(str(i) for i in v)
+    v[LOOK_KEYS["akzent"]] = PCOL_DEFAULT[seed % len(PCOL_DEFAULT)]
+    return look_code_of(v)
 
 
 def look_random(rng):
-    return "".join(str(rng.randrange(len(o[2]))) for o in LOOK_OPTS)
+    v = [rng.randrange(len(o[2])) for o in LOOK_OPTS]
+    if v[LOOK_KEYS["handart"]] == 2 and rng.random() < 0.5:    # meist mit Handschuhen
+        v[LOOK_KEYS["handart"]] = 0
+    return look_code_of(v)
+
+
+def pcol_of(code, pid=0, team=None):
+    """v53: Spielerfarbe eines Look-Codes (CTF: Teamfarbe) - für Figur und eigene Drohne."""
+    if team in (0, 1):
+        return CTF_TEAM_COLS[team]
+    if not look_valid(code):
+        code = look_default(pid)
+    return PCOL[look_get(code, "akzent")]
 
 
 def soldier_look(code, pid=0, team=None):
@@ -15942,16 +16069,16 @@ def soldier_look(code, pid=0, team=None):
     11: team (CTF) färbt die Armbinde/Akzentfarbe in der Teamfarbe."""
     if not look_valid(code):
         code = look_default(pid)
-    v = {o[0]: int(c) for c, o in zip(code, LOOK_OPTS)}
-    ak = v["akzent"]
-    acc = PLAYER_COLORS[(pid if ak == 0 else ak - 1) % len(PLAYER_COLORS)]
-    if team in (0, 1):
-        acc = CTF_TEAM_COLS[team]
+    v = {o[0]: look_get(code, k) for k, o in enumerate(LOOK_OPTS)}
+    acc = pcol_of(code, pid, team)
     skin = SOLDIER_SKINS[v["haut"]]
-    glove = SOLDIER_GLOVES[v["handschuh"]] or skin
+    gcol = SOLDIER_GLOVES[v["handschuh"]] or acc
+    hand = v["handart"]
+    glove = skin if hand == 2 else gcol
     return dict(skin=skin, hair=SOLDIER_HAIR[v["haar"]], eye=SOLDIER_EYES[v["augen"]], acc=acc,
                 pal=CAMO_SETS[v["tarn"]], kopf=v["kopf"], brille=v["brille"], gesicht=v["gesicht"], extra=v["extra"],
                 frisur=v["frisur"], weste=v["weste"], pack=v["pack"], glove=glove, boots=SOLDIER_BOOTS[v["stiefel"]],
+                gtip=skin if hand == 1 else None, nvg_acc=v["nvgfarbe"] == 1,     # v53: fingerlos / NVG-Glas
                 key=(code, acc))
 _SIDES = 16
 _CS = [(math.cos(2 * math.pi * i / _SIDES), math.sin(2 * math.pi * i / _SIDES)) for i in range(_SIDES)]
@@ -16036,9 +16163,10 @@ def ell(m, c, rx, ry, rz, col, rng=None, mat=None, colfn=None, rings=6):
     loft(m, cs, rxs, rys, col, rng, mat, colfn, (False, False), 0.02)
 
 
-def glove(m, wr, d, s, col, rng, curl=1.0, dn=None):
+def glove(m, wr, d, s, col, rng, curl=1.0, dn=None, tip=None):
     """Handschuh: Handteller, vier gebogene Finger und Daumen. wr = Handgelenk, d = Richtung zu den Fingern,
-    s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu)."""
+    s = +1 rechte / -1 linke Hand, curl 0 (flach) .. 1 (greift zu). v53: tip = Hautfarbe der Fingerspitzen
+    (fingerlose Handschuhe: der Handschuh endet nach dem ersten Fingerglied)."""
     if dn is not None:                                             # Krümmrichtung vorgegeben (z. B. quer um einen Griff)
         k = dot(dn, d)
         v = norm((dn[0] - d[0] * k, dn[1] - d[1] * k, dn[2] - d[2] * k))
@@ -16063,22 +16191,33 @@ def glove(m, wr, d, s, col, rng, curl=1.0, dn=None):
         p1 = at(b0, 0.028 * ln, 0, 0.012 * curl)
         p2 = at(p1, 0.022 * ln * (1 - 0.55 * curl), 0, 0.026 * curl * ln)
         p3 = at(p2, 0.010 * (1 - 0.8 * curl), 0, 0.020 * curl)
-        loft(m, [b0, p1, p2, p3], [0.0105, 0.0095, 0.0085, 0.0070], [0.0105, 0.0095, 0.0085, 0.0070], col, rng,
-             None, None, (False, True), 0.03, 6)                   # Finger
+        if tip is None:
+            loft(m, [b0, p1, p2, p3], [0.0105, 0.0095, 0.0085, 0.0070], [0.0105, 0.0095, 0.0085, 0.0070], col, rng,
+                 None, None, (False, True), 0.03, 6)               # Finger
+        else:                                                      # v53: fingerlos - Stulpe bis zum ersten Glied
+            pm = _lerp3(b0, p1, 0.75)
+            loft(m, [b0, pm], [0.0112, 0.0108], [0.0112, 0.0108], col, rng, None, None, (False, False), 0.03, 6)
+            loft(m, [b0, p1, p2, p3], [0.0098, 0.0090, 0.0082, 0.0068], [0.0098, 0.0090, 0.0082, 0.0068], tip, rng,
+                 None, None, (False, True), 0.03, 6)
     t0 = at(wr, 0.03, -s * 0.034, -0.004)
     t1 = at(t0, 0.030, -s * 0.010, 0.005 * curl)
     t2 = at(t1, 0.025, s * 0.004, 0.011 * curl)
-    loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
-         (False, True), 0.03, 6)                                   # Daumen
+    if tip is None:
+        loft(m, [t0, t1, t2], [0.0135, 0.0115, 0.0095], [0.0135, 0.0115, 0.0095], col, rng, None, None,
+             (False, True), 0.03, 6)                               # Daumen
+    else:
+        loft(m, [t0, _lerp3(t0, t1, 0.8)], [0.0142, 0.0124], [0.0142, 0.0124], col, rng, None, None, (False, False), 0.03, 6)
+        loft(m, [t0, t1, t2], [0.0128, 0.0110, 0.0092], [0.0128, 0.0110, 0.0092], tip, rng, None, None,
+             (False, True), 0.03, 6)
 
 
-def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10)):
+def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10), tip=None):
     """Rechte Hand, die einen senkrechten Pistolengriff umfasst (Ego-Ansicht). Ursprung: Mitte des Griffs, 0.033 hinter
     seiner Vorderseite. Handballen liegt seitlich am Griff, die vier Finger laufen quer um die Vorderseite, der Daumen
     liegt oben an der Seite, der Unterarm läuft nach hinten."""
     xc, kn_y = 0.038 * s, 0.015
     wr = (xc, kn_y - 0.085, 0.0)
-    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.35, dn=(-s, 0.0, 0.0))      # Finger greifen weit um den Griff
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, 1.35, dn=(-s, 0.0, 0.0), tip=tip)   # Finger greifen weit um den Griff
     cs = [(xc, wr[1] - 0.005, 0.0), (xc + 0.030 * s, wr[1] - 0.12, -0.07), (xc + 0.070 * s, wr[1] - 0.25, -0.17),
           (xc + 0.120 * s, wr[1] - 0.50, -0.36)]
     loft(m, cs, [0.037, 0.043, 0.051, 0.058], [0.037, 0.043, 0.051, 0.058], None, rng, None,
@@ -16087,11 +16226,11 @@ def fp_grip_arm_mesh(m, rng, s, pal=None, gl=(0.11, 0.11, 0.10)):
          rng, None, None, (False, False), 0.02)                    # Manschette
 
 
-def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10)):
+def fp_arm_mesh(m, rng, length, endz, xoff, curl, s, pal=None, gl=(0.11, 0.11, 0.10), tip=None):
     """Arm in der Ego-Ansicht (Hand im Ursprung, Unterarm läuft nach hinten -y und etwas nach unten):
     Handschuh mit Fingern, Manschette und Tarnärmel wie beim Soldaten."""
     wr = (0.0, -0.09, -0.012)
-    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, curl)
+    glove(m, wr, (0.0, 1.0, 0.0), s, gl, rng, curl, tip=tip)
     y1 = -(length + 0.07)
     cs = [(0.0, -0.085, -0.014), (xoff * 0.25, -0.22, -0.014 + (endz + 0.014) * 0.22),
           (xoff * 0.6, -0.42, -0.014 + (endz + 0.014) * 0.6), (xoff, y1, endz)]
@@ -16105,7 +16244,7 @@ def _soldier_meshes(L):
     """Baut die Teile des Soldaten: Oberkörper samt Kopf (Mesh in torso-Koordinaten, Hüfte = Ursprung, Blick +y),
     je ein Bein (Hüftgelenk = Ursprung, Füsse bei z = -0.75) und je einen Arm (Schulter = Ursprung).
     L = Aussehen aus soldier_look(): Tarnmuster, Hautton, Kopfbedeckung, Brille, Gesicht, Ausrüstung ..."""
-    rng = random.Random(1234 + int(L["key"][0]))
+    rng = random.Random(1234 + int(L["key"][0], 36))     # v53: Look-Code mit Buchstaben
     skin, hair, eye, acc, pal = L["skin"], L["hair"], L["eye"], L["acc"], L["pal"]
     skin_d = tuple(c * 0.84 for c in skin)
     camo = lambda p, f=11.0, off=0.0: _camo_col(p, f, off, pal)          # noqa: E731
@@ -16151,6 +16290,36 @@ def _soldier_meshes(L):
         box(vm, -0.135, 0.175, 0.525, 0.06, 0.03, 0.085, DK, rng)                            # Funkgerät
         box(vm, -0.135, 0.19, 0.58, 0.01, 0.01, 0.12, DK)                                    # Antenne
         box(vm, 0.12, 0.178, 0.53, 0.085, 0.03, 0.07, POUCH, rng, mat=None)               # Brusttasche
+    elif L["weste"] in (2, 3):
+        # v53: klassische taktische Weste (offener, leichter als der Plattenträger): rechte Brustseite (+x) zwei
+        # Magazintaschen, linke zwei Granaten (2) oder Funkgerät + Signalfackel (3)
+        vz = [0.31, 0.40, 0.48, 0.56]
+        loft(vm, [(0.0, c, z) for c, z in zip((0.004, 0.011, 0.016, 0.006), vz)], [0.199, 0.217, 0.232, 0.232],
+             [0.126, 0.141, 0.150, 0.136], OLV, rng, None, None, (False, False), 0.04)
+        for sx in (-1, 1):
+            box(vm, sx * 0.118, 0.0, 0.600, 0.055, 0.19, 0.020, OLV, rng, mat=None)       # Schulterriemen
+            box(vm, sx * 0.10, 0.155, 0.335, 0.05, 0.012, 0.022, DK)                       # Schnalle unten
+        box(vm, 0, 0.162, 0.395, 0.012, 0.010, 0.17, DK)                                   # Reissverschluss
+        for x in (0.065, 0.135):                                                            # Magazintaschen rechts
+            box(vm, x, 0.170, 0.44, 0.060, 0.040, 0.110, POUCH, rng, mat=None)
+            box(vm, x, 0.189, 0.488, 0.062, 0.012, 0.030, FLAP, rng, mat=None)
+            box(vm, x, 0.170, 0.506, 0.040, 0.026, 0.020, (0.18, 0.17, 0.14))              # Magazin schaut heraus
+        if L["weste"] == 2:                                                                 # Granaten links
+            for x in (-0.07, -0.145):
+                box(vm, x, 0.163, 0.415, 0.050, 0.030, 0.040, POUCH, rng, mat=None)        # Halteschlaufe
+                ell(vm, (x, 0.183, 0.452), 0.031, 0.031, 0.036, (0.27, 0.33, 0.19), rng, None)
+                box(vm, x + 0.020, 0.205, 0.462, 0.010, 0.006, 0.046, METAL)                 # Bügel
+                loft(vm, [(x - 0.004, 0.188, 0.494), (x + 0.004, 0.188, 0.494)], [0.010, 0.010], [0.010, 0.010],
+                     METAL, None, None, None, (False, False), 0.0, 8)                       # Sicherungsring
+        else:                                                                               # Funkgerät + Fackel
+            box(vm, -0.060, 0.172, 0.45, 0.050, 0.032, 0.090, DK, rng)
+            box(vm, -0.072, 0.180, 0.53, 0.008, 0.008, 0.10, DK)                             # Antenne
+            box(vm, -0.050, 0.190, 0.47, 0.022, 0.004, 0.018, (0.25, 0.85, 0.35))            # Display
+            loft(vm, [(-0.125, 0.168, 0.40), (-0.125, 0.168, 0.53)], [0.020, 0.020], [0.020, 0.020],
+                 (0.80, 0.14, 0.10), rng, None, None, (True, False), 0.03, 10)              # Signalfackel
+            loft(vm, [(-0.125, 0.168, 0.53), (-0.125, 0.168, 0.552)], [0.022, 0.022], [0.022, 0.022],
+                 (0.92, 0.88, 0.80), rng, None, None, (False, True), 0.03, 10)              # Kappe
+            box(vm, -0.125, 0.170, 0.44, 0.048, 0.026, 0.026, POUCH, rng, mat=None)       # Halteschlaufe
     # ---- Rucksack
     if L["pack"] == 0:                                                                       # gross mit Schlafrolle
         box(vm, 0, -0.195, 0.43, 0.29, 0.10, 0.33, OLV, rng, mat=None)
@@ -16188,7 +16357,7 @@ def _soldier_meshes(L):
              lambda p: camo(add(p, E), 11.0, s * 0.3), (False, False))
         loft(fm, [_lerp3(e0, wl, 0.9), _lerp3(e0, wl, 1.06)], [0.040, 0.038], [0.040, 0.038], DK, rng, None, None,
              (False, False), 0.02)                                              # Manschette (reicht über das Handgelenk)
-        glove(hm_, wr, d, s, GL, rng, 1.0)
+        glove(hm_, wr, d, s, GL, rng, 1.0, tip=L["gtip"])          # v53: fingerlos = Fingerspitzen frei
         ell(hm_, wr, 0.032, 0.032, 0.030, DK, rng, None)                       # Handgelenk
         return um, fm, hm_, E, wr, H
 
@@ -16245,12 +16414,70 @@ def _soldier_meshes(L):
                 box(tm, sx * 0.058, 0.1285 - 0.001 * k, zz, 0.052, 0.006, 0.011, g1 if k % 2 == 0 else g2)
         box(tm, 0, 0.1235, 0.953, 0.10, 0.006, 0.012, g1)
         box(tm, 0, 0.157, 0.9, 0.02, 0.004, 0.034, g1)
-    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare
+    # ---- Haare: Nacken, Kappe (nur ohne Helm/Hut), lange Haare. v53: Kappe folgt eng der Kopfform (vorher ein
+    #      kastenartiger Helm), dazu Dutt (Top-Knot) und Afro
+    def head_at(z):
+        """Kopfquerschnitt (cy, rx, ry) auf Höhe z (linear zwischen den 9 Querschnitten)."""
+        if z <= hz[0]:
+            return hcy[0], hrx[0], hry[0]
+        for i in range(len(hz) - 1):
+            if z <= hz[i + 1]:
+                t = (z - hz[i]) / (hz[i + 1] - hz[i])
+                return (hcy[i] + (hcy[i + 1] - hcy[i]) * t, hrx[i] + (hrx[i + 1] - hrx[i]) * t,
+                        hry[i] + (hry[i + 1] - hry[i]) * t)
+        return hcy[-1], hrx[-1], hry[-1]
+
+    def scalp(top=True, th=0.008):
+        """Haarschale eng über dem Schädel (th m dick), mit Haarlinie: vorn ab der Stirn, an den Schläfen schräg
+        nach hinten, im Nacken bis zum Haaransatz. top=False: nur der untere Teil (unter Helm/Hut)."""
+        zs = (0.858, 0.885, 0.912, 0.938, 0.962, 0.985, 1.005, 1.021, 1.032, 1.040)
+        if not top:
+            zs = zs[:5]
+        S = 24
+        ring = []
+        for z in zs:
+            cy, rx, ry = head_at(min(z, hz[-1] - 0.002))
+            k = 1.0 if z <= hz[-1] else 0.5
+            row = []
+            for i in range(S + 1):
+                a_ = 2 * math.pi * i / S
+                dy = math.sin(a_)                                     # +1 = Gesicht, -1 = Hinterkopf
+                lim = -0.30 + (z - 0.858) / (0.962 - 0.858) * 1.25    # Haarlinie: je höher, desto weiter nach vorn
+                row.append(((math.cos(a_) * (rx + th) * k, cy + dy * (ry + th) * k - 0.002, z), dy <= lim))
+            ring.append(row)
+        last = len(zs) - 1
+        for r in range(last):
+            for i in range(S):
+                q = (ring[r][i], ring[r][i + 1], ring[r + 1][i + 1], ring[r + 1][i])
+                if not all(h for _p, h in q):
+                    continue
+                c0 = (0.0, head_at(zs[r])[0], 0.93)
+                tm.tri(q[0][0], q[1][0], q[2][0], jc(hair, rng, 0.04), c0)
+                tm.tri(q[0][0], q[2][0], q[3][0], jc(hair, rng, 0.04), c0)
+        if top:                                                       # Scheitel schliessen
+            cz = (0.0, head_at(hz[-1])[0], zs[-1] + 0.004)
+            for i in range(S):
+                tm.tri(ring[last][i][0], ring[last][i + 1][0], cz, jc(hair, rng, 0.04), (0.0, 0.0, 0.93))
+
     if frisur != 1:
-        box(tm, 0, -0.085, 0.905, 0.16, 0.05, 0.08, hair, rng)                                   # Haar im Nacken
-        if kopf in (2, 3, 4):
-            loft(tm, [(0, cy, z) for cy, z in zip((0.003, 0.002, 0.0, 0.0), (0.955, 0.985, 1.015, 1.04))],
-                 [0.090, 0.092, 0.075, 0.030], [0.117, 0.118, 0.098, 0.045], hair, rng, None, None, (False, True), 0.04)
+        scalp(kopf in (2, 3, 4) and frisur != 4)                       # Kurz/Lang/Dutt: anliegende Haarschale
+    if frisur == 3:                                                                             # Dutt (Top-Knot)
+        if kopf == 4:
+            ell(tm, (0, -0.030, 1.050), 0.034, 0.034, 0.030, hair, rng)                        # Ansatz
+            ell(tm, (0, -0.040, 1.085), 0.046, 0.046, 0.040, hair, rng)                        # Knoten
+            loft(tm, [(0, -0.034, 1.058), (0, -0.036, 1.068)], [0.030, 0.030], [0.030, 0.030], DK, None, None, None,
+                 (False, False), 0.0, 10)                                                       # Haargummi
+        else:                                                                                   # unter Helm/Hut: tief
+            ell(tm, (0, -0.100, 0.872), 0.038, 0.034, 0.034, hair, rng)
+    if frisur == 4:                                                                             # Afro
+        if kopf == 4:
+            ell(tm, (0, -0.032, 1.004), 0.142, 0.152, 0.126, hair, rng, None, None, 8)
+            for sx in (-1, 1):
+                ell(tm, (sx * 0.085, -0.035, 0.925), 0.070, 0.085, 0.070, hair, rng)          # über den Ohren
+            ell(tm, (0, -0.090, 0.925), 0.100, 0.070, 0.075, hair, rng)                        # Hinterkopf
+        else:                                                                                   # quillt unter der Kopfbedeckung hervor
+            ell(tm, (0, -0.040, 0.940), 0.118, 0.120, 0.060, hair, rng)
+            ell(tm, (0, -0.095, 0.915), 0.100, 0.060, 0.065, hair, rng)
     if frisur == 2:
         loft(tm, [(0, -0.100, 0.96), (0, -0.118, 0.90), (0, -0.128, 0.80), (0, -0.120, 0.69)],
              [0.090, 0.098, 0.095, 0.075], [0.034, 0.040, 0.040, 0.035], hair, rng, None, None, (False, True), 0.05)
@@ -16305,7 +16532,10 @@ def _soldier_meshes(L):
             ell(hm, (sx * 0.098, 0.0, 0.90), 0.025, 0.03, 0.04, DK, rng)
         box(hm, 0.098, 0.045, 0.872, 0.010, 0.09, 0.010, DK)
         box(hm, 0.074, 0.098, 0.855, 0.050, 0.012, 0.012, DK)
-        ell(hm, (0.050, 0.104, 0.852), 0.012, 0.012, 0.012, (0.5, 0.5, 0.5))
+        ell(hm, (0.050, 0.104, 0.852), 0.014, 0.014, 0.014, acc)                             # v53: Mikro in Spielerfarbe
+        for sx in (-1, 1):                                                                    # v53: Akzentring an der Muschel
+            loft(hm, [(sx * 0.116, 0.0, 0.90), (sx * 0.125, 0.0, 0.90)], [0.019, 0.019], [0.019, 0.019], acc,
+                 None, None, None, (True, True), 0.0, 10)
         if kopf != 0:
             loft(hm, [(0, 0.0, 0.975), (0, 0.0, 0.985)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
     elif extra == 3:                                                                            # Nachtsichtgerät
@@ -16313,7 +16543,7 @@ def _soldier_meshes(L):
             loft(hm, [(0, 0.0, 0.978), (0, 0.0, 0.99)], [0.099, 0.099], [0.123, 0.123], DK, rng, None, None, (False, False), 0.02)
         box(hm, 0, 0.125, 1.0, 0.05, 0.04, 0.05, DK)
         box(hm, 0, 0.158, 1.0, 0.034, 0.05, 0.034, DK)
-        box(hm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, (0.25, 0.9, 0.35))
+        box(hm, 0, 0.186, 1.0, 0.024, 0.006, 0.024, acc if L.get("nvg_acc") else (0.25, 0.9, 0.35))   # v53: Glas
 
     legs = []
     for sx in (-1, 1):
@@ -16328,7 +16558,8 @@ def _soldier_meshes(L):
              [0.108, 0.108, 0.100, 0.088, 0.075], [0.120, 0.122, 0.108, 0.095, 0.082], None, rng, None, lc, (True, False))
         ell(lm, (0.0, 0.004, kz), 0.074, 0.080, 0.070, None, rng, None, lc)    # Knie
         box(lm, sx * 0.106, 0.0, -0.20, 0.034, 0.105, 0.135, pal[0], rng, mat=None)          # Beintasche
-        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, pal[3], rng, mat=None)           # Klappe
+        box(lm, sx * 0.108, 0.0, -0.13, 0.036, 0.108, 0.03, acc, None, mat=None)             # Klappe (v53: Spielerfarbe)
+        box(lm, sx * 0.1265, 0.0, -0.152, 0.004, 0.026, 0.026, tuple(c * 0.7 for c in acc))   # Verschluss
         # Unterschenkel: Knie, Wade, Knöchel (Raum: Knie = Ursprung)
         loft(sm, [(0, 0.008, 0.0), (0, -0.012, -0.09), (0, -0.005, -0.19), (0, 0.0, -0.27)],
              [0.073, 0.074, 0.060, 0.050], [0.080, 0.088, 0.065, 0.055], None, rng, None, lcs, (False, True))
@@ -18885,7 +19116,7 @@ class DroneHud:
     darüber eine weisse Kreislinie (Uhr), die ab 12 Uhr im Uhrzeigersinn abläuft, mit Zeiger an der Kante; darunter
     die Restzeit. Kreis leer = Drohne erlischt."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, col=None):
         S = PDRONE_HUD_S
         self.root = parent.attachNewNode("drone_hud")
         self.root.setPos(PDRONE_HUD_X, 0, PDRONE_HUD_Z)
@@ -18908,7 +19139,7 @@ class DroneHud:
             e.setColor(0.85, 0.55, 1.0, 0.55)
         # Drohnen-Modell als halbtransparenter Hintergrund (von schräg oben)
         ghost = self.root.attachNewNode("ghost")
-        mdl = build_drone("pdrone")
+        mdl = build_drone("pdrone", col)                # v53: in der eigenen Spielerfarbe
         model, bar = mdl[0], mdl[3]
         bar.removeNode()
         model.reparentTo(ghost)
@@ -20485,12 +20716,27 @@ class CharPreview:
         self.root.removeNode()
 
 
+class _PalHit(HitRect):
+    """v53: Anklickbereich der ausklappbaren Farbpalette - nur aktiv, solange sie offen ist."""
+
+    def __init__(self, page, *a, **kw):
+        HitRect.__init__(self, *a, **kw)
+        self.page = page
+
+    def hit(self, ax, az):
+        return self.page.pal_open is not None and HitRect.hit(self, ax, az)
+
+
 class CharPage(SetupPage):
     """Hauptmenü 'Charakter personalisieren': links die sich drehende Figur, rechts je Eigenschaft ein Auswahlfeld
     mit Pfeilen. Das Aussehen wird gespeichert, ist im Spiel für dich sichtbar (Hände, Ärmel) und wird an alle
-    Mitspieler geschickt."""
+    Mitspieler geschickt. v53: die Spielerfarbe wählt man über ein Farbfeld, das eine Palette (10 Farben x 3 Töne)
+    nach unten ausklappt; rechts neben "Zubehör" das Ankreuzfeld "NVG in Spielerfarbe"."""
     COLS = ((-0.17, 0.47), (0.53, 1.17))
-    PER_COL = 7
+    ROWS = (("tarn", "haut", "augen", "haar", "frisur", "kopf", "brille", "gesicht"),        # v53: feste Anordnung
+            ("akzent", "extra", "weste", "pack", "handart", "handschuh", "stiefel"))
+    ROW_H = 0.13
+    PAL_CW, PAL_CH = 0.064, 0.064             # Zellengrösse der Palette
 
     def __init__(self, game):
         self.g = game
@@ -20498,6 +20744,8 @@ class CharPage(SetupPage):
         self.key = None
         self.nodes = {}
         self.txts = set()
+        self.pal_open = None                  # v53: Index des Eintrags, dessen Palette offen ist
+        self.pal_nodes = []
         self.prev = CharPreview(game, -1.17, -0.27, -0.80, 0.72)
         self.layout()
         self.update(True)
@@ -20512,7 +20760,17 @@ class CharPage(SetupPage):
         return LOOK_OPTS[k][2]
 
     def cur(self, k):
-        return int(self.g.look_code[k])
+        return look_get(self.g.look_code, k)
+
+    def field(self, key):
+        """(x0, x1, zl, z0, z1) des Feldes für den Look-Eintrag key."""
+        for c, keys in enumerate(self.ROWS):
+            if key in keys:
+                r = keys.index(key)
+                x0, x1 = self.COLS[c]
+                zl = 0.64 - self.ROW_H * r
+                return x0, x1, zl, zl - 0.092, zl - 0.018
+        return None
 
     def style(self, i):
         hov = self.hover
@@ -20525,6 +20783,25 @@ class CharPage(SetupPage):
             return Hot.ON if hov == ("L" if tag == "lt" else "R") + num else Hot.BASE
         if tag == "vt":
             return self.YELLOW if hov == "V" + num else self.WHITE
+        if tag == "sw":                                         # v53: Farbmuster im Farbfeld
+            return PCOL[self.cur(int(num))] + (1.0,)
+        if tag == "pc":                                         # v53: Zelle der Palette
+            return PCOL[int(num)] + (1.0,)
+        if tag == "pf":                                         # v53: Rahmen der Zelle (Hover / gewählt)
+            k = self.pal_open
+            sel = k is not None and self.cur(k) == int(num)
+            return (1.0, 0.95, 0.6, 1.0) if hov == "P" + num else (self.YELLOW if sel else (0.0, 0.0, 0.0, 0.0))
+        if tag == "pn":
+            return self.WHITE
+        if tag in ("cbx", "cbk", "cbt"):                        # v53: Ankreuzfeld NVG
+            k = LOOK_KEYS["nvgfarbe"]
+            on, h = self.cur(k) == 1, hov == "C" + num
+            act = self.cur(LOOK_KEYS["extra"]) == 3             # nur sichtbar am Nachtsichtgerät
+            if tag == "cbx":
+                return (0.62, 0.68, 0.75, 1.0) if h else (0.40, 0.46, 0.53, 1.0)
+            if tag == "cbk":
+                return self.YELLOW if on else (0.05, 0.07, 0.10, 1.0)
+            return (Hot.ON if h else (self.WHITE if act else self.DIM))
         if i.startswith(("b_", "t_")):
             h = hov == "btn_" + i[2:]
             return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
@@ -20532,16 +20809,23 @@ class CharPage(SetupPage):
 
     def layout(self):
         g = self.g
+        pal_hits = []
         self.text("title", "Charakter personalisieren", 0, 0.84, 0.075, (1.0, 0.78, 0.3, 1.0))
         self.rect(None, -1.20, -0.24, -0.83, 0.75, (0.05, 0.08, 0.12, 0.92))               # Hintergrund der Vorschau
         self.rect(None, -1.20, -0.24, 0.744, 0.75, (1.0, 0.62, 0.14, 1.0))
         self.text(None, "Mit gedrückter Maustaste drehen", -0.72, -0.80, 0.034, self.GREY)
-        for k, (key, label, vals) in enumerate(LOOK_OPTS):
-            c, r = divmod(k, self.PER_COL)
-            x0, x1 = self.COLS[c]
-            zl = 0.64 - 0.145 * r
-            z1, z0 = zl - 0.018, zl - 0.092
+        for key in self.ROWS[0] + self.ROWS[1]:
+            k = LOOK_KEYS[key]
+            _key, label, vals = LOOK_OPTS[k]
+            x0, x1, zl, z0, z1 = self.field(key)
             self.text(None, label.upper(), x0, zl, 0.032, self.GREY, "l")
+            if key in LOOK_COLOR_OPTS:                          # v53: Farbfeld (Klick klappt die Palette auf)
+                self.rect(f"vb{k}", x0, x1, z0, z1)
+                self.rect(f"sw{k}", x0 + 0.018, x0 + 0.094, z0 + 0.012, z1 - 0.012)
+                self.text(f"vt{k}", vals[self.cur(k)], (x0 + 0.11 + x1) / 2, z0 + 0.02, 0.048)
+                self.text(None, "v", x1 - 0.035, z0 + 0.024, 0.04, self.GREY)
+                self.hit(f"V{k}", x0, x1, z0, z1, lambda k=k: self.pal_toggle(k))
+                continue
             self.rect(f"lb{k}", x0, x0 + 0.09, z0, z1)
             self.rect(f"rb{k}", x1 - 0.09, x1, z0, z1)
             self.rect(f"vb{k}", x0 + 0.1, x1 - 0.1, z0, z1)
@@ -20551,15 +20835,79 @@ class CharPage(SetupPage):
             self.hit(f"L{k}", x0, x0 + 0.09, z0, z1, lambda k=k: g.look_step(k, -1))
             self.hit(f"R{k}", x1 - 0.09, x1, z0, z1, lambda k=k: g.look_step(k, 1))
             self.hit(f"V{k}", x0 + 0.1, x1 - 0.1, z0, z1, lambda k=k: g.look_step(k, 1))
+            if key == "extra":                                  # v53: Ankreuzfeld rechts neben "Zubehör"
+                kc = LOOK_KEYS["nvgfarbe"]
+                bx1, bz0 = x1, zl - 0.006
+                self.rect(f"cbx{kc}", bx1 - 0.036, bx1, bz0, bz0 + 0.036)
+                self.rect(f"cbk{kc}", bx1 - 0.028, bx1 - 0.008, bz0 + 0.008, bz0 + 0.028)
+                self.text(f"cbt{kc}", "NVG IN SPIELERFARBE", bx1 - 0.048, zl + 0.002, 0.03, None, "r")
+                self.hit(f"C{kc}", bx1 - 0.36, bx1, bz0 - 0.004, bz0 + 0.04, lambda kc=kc: g.look_step(kc, 1))
         a, b = self.COLS[0][0], self.COLS[1][1]
         mid = (a + b) / 2
-        self.button("rand", a, mid - 0.02, -0.455, -0.37, "Zufällig", 0.05, g.look_randomize)
-        self.button("reset", mid + 0.02, b, -0.455, -0.37, "Zurücksetzen", 0.05, g.look_reset)
-        self.button("done", a, b, -0.575, -0.49, "Fertig   (Esc)", 0.052, g.on_escape)
-        self.text(None, "Dein Aussehen wird gespeichert und im Spiel allen Mitspielern angezeigt", mid, -0.70, 0.03, self.GREY)
+        self.button("rand", a, mid - 0.02, -0.50, -0.415, "Zufällig", 0.05, g.look_randomize)
+        self.button("reset", mid + 0.02, b, -0.50, -0.415, "Zurücksetzen", 0.05, g.look_reset)
+        self.button("done", a, b, -0.615, -0.53, "Fertig   (Esc)", 0.052, g.on_escape)
+        self.text(None, "Dein Aussehen wird gespeichert und im Spiel allen Mitspielern angezeigt", mid, -0.72, 0.03, self.GREY)
+        # v53: Farbpaletten (als letzte Knoten: liegen über den Feldern darunter). Die Klickbereiche kommen nach
+        # vorn in die Liste, damit sie bei offener Palette vor allen anderen Feldern greifen; dahinter eine Sperre,
+        # die einen Klick daneben abfängt und die Palette schliesst.
+        for key in LOOK_COLOR_OPTS:
+            k = LOOK_KEYS[key]
+            x0, x1, _zl, z0, _z1 = self.field(key)
+            cw, ch = self.PAL_CW, self.PAL_CH
+            ncol = len(PCOL_BASE)
+            w = ncol * cw
+            px0 = (x0 + x1) / 2 - w / 2
+            top = z0 - 0.012
+            bot = top - 3 * ch - 0.075
+            nodes = [self.rect(None, px0 - 0.014, px0 + w + 0.014, bot, top + 0.006, (0.17, 0.20, 0.25, 0.98)),
+                     self.rect(None, px0 - 0.014, px0 + w + 0.014, top + 0.002, top + 0.006, (1.0, 0.62, 0.14, 1.0))]
+            for tone in range(3):                               # Reihen: Hell, Standard, Dunkel
+                row = (1, 0, 2)[tone]
+                cz1 = top - 0.008 - tone * ch
+                for c in range(ncol):
+                    i = c * 3 + row
+                    cx0 = px0 + c * cw
+                    nodes.append(self.rect(f"pf{i}", cx0 + 0.002, cx0 + cw - 0.002, cz1 - ch + 0.002, cz1 - 0.002))
+                    nodes.append(self.rect(f"pc{i}", cx0 + 0.008, cx0 + cw - 0.008, cz1 - ch + 0.008, cz1 - 0.008))
+                    pal_hits.append(_PalHit(self, cx0, cx0 + cw, cz1 - ch, cz1, lambda k=k, i=i: self.pal_pick(k, i),
+                                            lambda on, i=i: self.set_hover("P%d" % i, on)))
+            nodes.append(self.text("pn0", "", (x0 + x1) / 2, bot + 0.024, 0.036))
+            self.pal_nodes.extend(nodes)
+            pal_hits.append(_PalHit(self, px0 - 0.014, px0 + w + 0.014, bot, top + 0.006, lambda: None, None))
+        pal_hits.append(_PalHit(self, -3.0, 3.0, -2.0, 2.0, self.pal_close, None))    # Klick daneben: zu
+        g.menu_lines[0:0] = pal_hits
+        for nd in self.pal_nodes:
+            nd.hide()
+
+    # ---- v53: Farbpalette
+    def pal_toggle(self, k):
+        if self.pal_open == k:
+            self.pal_close()
+            return
+        self.pal_open = k
+        for nd in self.pal_nodes:
+            nd.show()
+        self.update(True)
+
+    def pal_close(self):
+        if self.pal_open is None:
+            return
+        self.pal_open = None
+        for nd in self.pal_nodes:
+            nd.hide()
+        if self.hover is not None and self.hover.startswith("P"):
+            self.hover = None
+        self.update(True)
+
+    def pal_pick(self, k, i):
+        self.g.look_code = look_set(self.g.look_code, k, i)
+        self.g.save_prefs()
+        self.pal_close()
+        self.g.menu_refresh()
 
     def update(self, force=False):
-        key = (self.g.look_code, self.hover)
+        key = (self.g.look_code, self.hover, self.pal_open)
         if force or key != self.key:
             self.key = key
             self.sync()
@@ -20572,6 +20920,10 @@ class CharPage(SetupPage):
             if i.startswith("vt"):
                 k = int(i[2:])
                 nd.setText(self.vals(k)[self.cur(k)])
+            if i == "pn0":
+                h = self.hover if self.hover and self.hover.startswith("P") else None
+                k = self.pal_open
+                nd.setText(PCOL_NAMES[int(h[1:])] if h else (PCOL_NAMES[self.cur(k)] if k is not None else ""))
             col = self.style(i)
             if i in self.txts:
                 nd.setFg(col)
@@ -23220,6 +23572,37 @@ def synth_sounds():
     out["hiss"] = norm(mix((growl(0.6, 260, 200, 0.4, 0.35), 0.8),   # Jägerin: Fauchen in höherer Stimmlage
                            (mul([a - b for a, b in zip(noise(int(0.6 * SR)), lowpass(noise(int(0.6 * SR)), 0.3))],
                                 [math.sin(math.pi * i / int(0.6 * SR)) for i in range(int(0.6 * SR))]), 0.6)), 0.8)
+    # v53: Laute beim leisen Nest-Spawn (Zombie röchelt, Jägerin kichert, Titan brüllt)
+    n = int(1.1 * SR)                                               # Zombie: schmerzverzerrtes Röcheln
+    ph, w = 0.0, []
+    for i in range(n):
+        t = i / n
+        f = 85 + 18 * math.sin(tp * 1.3 * i / SR) + 10 * math.sin(tp * 5.7 * i / SR)
+        ph += f / SR
+        saw = 2.0 * (ph - math.floor(ph)) - 1.0
+        rattle = 0.5 + 0.5 * math.sin(tp * 13.0 * i / SR + 2.0 * math.sin(tp * 2.3 * i / SR))   # Rasseln im Hals
+        w.append(saw * (0.35 + 0.65 * rattle ** 3) * min(1.0, t / 0.08) * min(1.0, (1.0 - t) / 0.35))
+    gurg = mul(lowpass(noise(n), 0.25), [(0.5 + 0.5 * math.sin(tp * 17.0 * i / SR)) ** 4 * min(1.0, i / (0.1 * n))
+                                         * min(1.0, (n - i) / (0.3 * n)) for i in range(n)])
+    out["rasp"] = norm(mix((lowpass(w, 0.18), 1.0), (gurg, 0.8)), 0.8)
+    parts_ = []                                                     # Jägerin: hinterlistiges Kichern + Summen
+    for k in range(6):
+        m_ = int(0.085 * SR)
+        f0 = 520 - 35 * k
+        v_ = [math.sin(tp * f0 * i / SR) + 0.5 * math.sin(tp * f0 * 2 * i / SR) + 0.25 * math.sin(tp * f0 * 3 * i / SR)
+              for i in range(m_)]
+        e_ = [math.sin(math.pi * i / m_) ** 2 for i in range(m_)]
+        br = lowpass(noise(m_), 0.4)
+        parts_ += [a * b * 0.7 + c * b * 0.35 for a, b, c in zip(v_, e_, br)] + [0.0] * int(0.045 * SR)
+    m_ = int(0.7 * SR)
+    hum = [math.sin(tp * (230 + 6 * math.sin(tp * 5.5 * i / SR)) * i / SR) * math.sin(math.pi * i / m_) ** 1.5
+           for i in range(m_)]
+    out["giggle"] = norm(lowpass(parts_ + [0.0] * int(0.08 * SR) + [v * 0.6 for v in hum], 0.45), 0.75)
+    n = int(1.9 * SR)                                               # Titan: monströses Brüllen
+    low = growl(1.9, 58, 40, 0.8, 0.10)
+    scream = mul(sweep(n, 320, 170, 1.2), [min(1.0, i / (0.25 * n)) * min(1.0, (n - i) / (0.45 * n)) for i in range(n)])
+    roarn = mul(lowpass(noise(n), 0.2), [min(1.0, i / (0.15 * n)) * min(1.0, (n - i) / (0.4 * n)) for i in range(n)])
+    out["roar"] = norm(delay(mix((low, 1.0), (lowpass(scream, 0.3), 0.35), (roarn, 0.6)), 0.12, 0.3), 0.9)
     n = int(0.22 * SR)                                              # Monsterschritt: dumpfer Tritt
     thud = norm(mix((mul(lowpass(noise(n), 0.08), env(n, 22)), 1.0), (mul(sweep(n, 70, 38, 18), env(n, 16)), 1.2)), 0.85)
     out["mstep"] = thud
@@ -118220,7 +118603,8 @@ class Sfx:
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
-            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4, "minispin": 3, "sonic": 2}
+            "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4, "minispin": 3, "sonic": 2,
+            "rasp": 2, "giggle": 2, "roar": 1}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
@@ -118229,7 +118613,7 @@ class Sfx:
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
              "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0,
              "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0, "silenced": 16.0,
-             "minispin": 40.0, "sonic": 420.0}
+             "minispin": 40.0, "sonic": 420.0, "rasp": 34.0, "giggle": 30.0, "roar": 160.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
@@ -118238,7 +118622,7 @@ class Sfx:
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
            "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0,
            "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0, "silenced": 2.0,
-           "minispin": 3.0, "sonic": 40.0}
+           "minispin": 3.0, "sonic": 40.0, "rasp": 4.0, "giggle": 3.0, "roar": 25.0}
 
     def __init__(self, game):
         self.game = game
@@ -119118,7 +119502,7 @@ class Game(ShowBase):
         vs_ = st.get("vs")
         self.vol_sfx = int(vs_) if isinstance(vs_, (int, float)) and not isinstance(vs_, bool) and 0 <= vs_ <= 100 else 100        # Soundeffekte in %
         self.fps_limit = st.get("fps") if st.get("fps") in FPS_CHOICES else 144
-        lk = st.get("look")
+        lk = look_migrate(st.get("look"))                  # v53: alte Codes (bis v52) werden übernommen
         self.look_code = lk if look_valid(lk) else look_default(random.randrange(100000))     # Aussehen des Charakters
         self.apply_fps()
         self.overlay_kind = self.overlay_yes = None
@@ -119270,8 +119654,8 @@ class Game(ShowBase):
         self.g_throw_charge = 0.0
         self.prev_swing, self.quick_melee, self.prev_run, self.prev_jump = 0.0, False, False, False
         self.spec_fp, self.shield_flash, self.bite_t = None, 0.0, 0.0
-        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Schockwelle, Scan, Nest-Wählrad)
-        self.accept(KEYS["ability"] + "-up", self.on_ability_up)   # v49: Wählrad loslassen = Nest setzen
+        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Schockwelle, Scan, Nest-Wählrad; v53: MMB)
+        self.accept(HELI_FLARE_KEY, self.on_heli_flare)        # v53: Heli-Flares auf eigener Taste (B)
         self.accept("j", self.on_confirm, [True])
         self.accept("y", self.on_y)
         self.accept("x", self.on_mm_zoom, [1])
@@ -119691,6 +120075,9 @@ class Game(ShowBase):
             return
         if self.mode == "play" and self.quit_box is None and self.dead_screen_now():
             self.dead_click(self.mouse_2d())
+            return
+        if self.mode == "play" and self.quit_box is None and getattr(self, "nest_wheel", None) is not None:
+            self.nest_wheel_click(self.mouse_2d())           # v53: Nest-Wählrad - Monster anklicken
             return
         if self.mode == "play" and self.quit_box is None and getattr(self, "insp_on", False):
             self.insp_click(self.mouse_2d())                 # 9b: Inspektion - Markierung/Aufsatz anklicken
@@ -120578,6 +120965,13 @@ class Game(ShowBase):
         self.back_btn_text.hide()
 
     def on_escape(self):
+        sp_ = getattr(self, "setup_page", None)
+        if isinstance(sp_, CharPage) and sp_.pal_open is not None and self.mode == "menu":
+            sp_.pal_close()                                  # v53: Esc klappt zuerst die Farbpalette zu
+            return
+        if getattr(self, "nest_wheel", None) is not None and self.quit_box is None:
+            self.close_nest_wheel()                          # v53: Esc schliesst das Nest-Wählrad
+            return
         if getattr(self, "insp_on", False) and self.quit_box is None:
             self.close_inspect()                             # 9b: Esc schliesst die Inspektion
             return
@@ -121081,10 +121475,20 @@ class Game(ShowBase):
     def look_step(self, k, d):
         """Eigenschaft k des Charakters eine Auswahl weiter (d = +1) oder zurück (d = -1)."""
         n = len(LOOK_OPTS[k][2])
-        v = (int(self.look_code[k]) + d) % n
-        self.look_code = self.look_code[:k] + str(v) + self.look_code[k + 1:]
+        v = (look_get(self.look_code, k) + d) % n
+        self.look_code = look_set(self.look_code, k, v)
         self.save_prefs()
         self.menu_refresh()
+
+    def player_pcol(self, pid):
+        """v53: Spielerfarbe (Look-Code, im CTF die Teamfarbe) eines Spielers - z. B. für seine Drohne."""
+        w = getattr(self, "world", None)
+        pl = w.players.get(pid) if w is not None and isinstance(pid, int) else None
+        look = getattr(pl, "look", "") if pl is not None else ""
+        if pid == getattr(self, "my_id", None):
+            look = getattr(self, "look_code", "") or look
+        team = w.team_of.get(pid) if w is not None and getattr(w, "mode", "") == "ctf" else None
+        return pcol_of(look, pid if isinstance(pid, int) and pid >= 0 else 0, team)
 
     def look_randomize(self):
         self.look_code = look_random(self.prng)
@@ -121112,9 +121516,9 @@ class Game(ShowBase):
                                                  (self.gren_arm, 0.5, -0.06, 0.0, 0.5, 1)):
             m = Mesh()
             if nd is self.vm_rhand:
-                fp_grip_arm_mesh(m, rng, 1, L["pal"], L["glove"])
+                fp_grip_arm_mesh(m, rng, 1, L["pal"], L["glove"], L["gtip"])
             else:
-                fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"])
+                fp_arm_mesh(m, rng, length, endz, xoff, curl, s_, L["pal"], L["glove"], L["gtip"])
             gn, new = nd.node(), m.node("arm")
             gn.removeAllGeoms()
             for gi in range(new.getNumGeoms()):
@@ -122206,7 +122610,7 @@ class Game(ShowBase):
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Boots"]].col),
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Schweres Exo-Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
-        self.drone_hud = DroneHud(self.a2dBottomRight)  # 13d: lila Drohne aktiv - Kästchen mit Uhrzeiger-Countdown
+        self.drone_hud = DroneHud(self.a2dBottomRight, pcol_of(getattr(self, "look_code", "")))  # 13d: lila Drohne aktiv - Kästchen mit Uhrzeiger-Countdown
         # Nahkampf-Slot (Slot 5: Taste 5 oder F ohne etwas Benutzbares in der Nähe)
         mx_ = (HUD_CARDS - 1 - HUD_CARDS / 2) * 0.34 + 0.31  # rechts neben der letzten Waffenkarte (Breite 0.32 / Nahkampf 0.26), ohne Überlappung
         self.melee_frame = hud_card(mx_, 0.26, 0.17, (0.4, 0.4, 0.4, 0.6), 19)
@@ -123767,7 +124171,7 @@ class Game(ShowBase):
             return
         if gren_total(pl) <= 0:
             self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
-        elif pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0:
+        elif pl.vehicle < 0 and pl.heli < 0 and pl.mount < 0 and gren_fix_sel(pl) != "drone":   # v53: Drohne ohne Stift
             self.sfx.play("pin", None, 0.6, self.prng.uniform(0.95, 1.05))
 
     def on_gren_next(self, step=1):
@@ -123784,21 +124188,34 @@ class Game(ShowBase):
             self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}", tuple(min(1.0, c * 1.4 + 0.25)
                                                                           for c in GREN_COL[k]), 1.2)
 
+    def on_heli_flare(self):
+        """v51/v53: Taste B im Cockpit - Flares gegen Stinger."""
+        pl = self.player
+        if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0 or pl.heli < 0:
+            return
+        if self.net_mode == "client":
+            if self.client is not None and not self.client.lost:
+                self.client.send_flare()
+        else:
+            self.world.heli_flare(pl)
+
     def on_ability(self):
-        """7c: Set-Fähigkeit (Taste KEYS["ability"]): Schild-Set = Schockwelle. v49: Hacker-Weste = Quadranten-Scan,
-        Nekromanten-Set = Nest-Wählrad (Taste halten, Maus wählt, loslassen setzt). Der Host entscheidet."""
+        """7c: Set-Fähigkeit (Taste KEYS["ability"], v53: mittlere Maustaste): Schild-Set = Schockwelle. v49: Hacker-Weste
+        = Quadranten-Scan, Nekromanten-Set = Nest-Wählrad (v53: MMB öffnet, Linksklick wählt, MMB setzt). Der Host
+        entscheidet."""
         pl = self.player
         if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
             return
-        if pl.heli >= 0:                                       # v51: im Cockpit wirft B Flares (gegen Stinger)
-            if self.net_mode == "client":
-                if self.client is not None and not self.client.lost:
-                    self.client.send_flare()
-            else:
-                self.world.heli_flare(pl)
+        if pl.heli >= 0:                                       # v51: im Cockpit: Flares (v53: B oder mittlere Maustaste)
+            self.on_heli_flare()
             return
-        if set_full(pl, "necro"):
-            self.open_nest_wheel()
+        if set_full(pl, "necro"):                              # v53: MMB öffnet das Rad / setzt das gewählte Nest
+            if getattr(self, "nest_wheel", None) is not None:
+                self.close_nest_wheel()                        # nochmal MMB bei offenem Rad: abbrechen
+            elif getattr(self, "nest_pick", None) is not None:
+                self.place_nest_pick()
+            else:
+                self.open_nest_wheel()
             return
         if wears(pl, "hack_scan"):
             if getattr(pl, "scan_cd", 0.0) > 0:
@@ -123811,8 +124228,8 @@ class Game(ShowBase):
                 self.world.hack_scan(pl)
             return
         if not set_full(pl, "shield"):
-            self.toast("Taste B: Schockwelle (komplettes Schild-Set), Scan (Hacker-Weste) oder Nest "
-                       "(komplettes Nekromanten-Set)", (0.8, 0.85, 0.95), 2.2)
+            self.toast(f"{SET_ICON_LABEL} (mittlere Maustaste): Schockwelle (komplettes Schild-Set), Scan (Hacker-Weste) "
+                       "oder Nest (komplettes Nekromanten-Set)", (0.8, 0.85, 0.95), 2.2)
             return
         if getattr(pl, "shock_cd", 0.0) > 0:
             self.toast(f"Schockwelle lädt noch {int(math.ceil(pl.shock_cd))} s", (0.8, 0.85, 0.95), 1.2)
@@ -123827,7 +124244,9 @@ class Game(ShowBase):
     NEST_WHEEL_R = 0.30                      # Radius des Wählrads (aspect2d)
 
     def open_nest_wheel(self):
-        """v49: Nekromanten-Set - Wählrad öffnen (Taste B gehalten). Mausbewegung wählt, Loslassen setzt das Nest."""
+        """v49: Nekromanten-Set - Wählrad öffnen. v53: MMB öffnet es, die Kamera steht, der Mauszeiger erscheint;
+        Linksklick auf ein Monster wählt es (das Rad schliesst), erneut MMB setzt das Nest am Boden. Die zuletzt
+        gesetzte Art ist gesperrt (nie zweimal hintereinander dieselbe)."""
         pl = self.player
         if getattr(self, "nest_wheel", None) is not None:
             return
@@ -123840,80 +124259,117 @@ class Game(ShowBase):
         if any(n.owner == self.my_id for n in getattr(self.world, "nests", ())):
             self.toast("Dein Nest lebt noch - nur eins zur Zeit", (0.7, 0.9, 0.6), 1.6)
             return
+        if getattr(self, "insp_on", False):
+            self.close_inspect(False)
         root = self.aspect2d.attachNewNode("nestrad")
         root.setBin("fixed", 90)
         root.setDepthTest(False)
         root.setDepthWrite(False)
         root.setTransparency(TransparencyAttrib.MAlpha)
         cm = CardMaker("nr")
-        cm.setFrame(-0.42, 0.42, -0.42, 0.42)
+        cm.setFrame(-0.46, 0.46, -0.46, 0.46)
         bg = root.attachNewNode(cm.generate())
-        bg.setColor(0.0, 0.0, 0.0, 0.45)
+        bg.setColor(0.0, 0.0, 0.0, 0.5)
         segs = []
         n = len(NEST_KINDS)
+        last = getattr(pl, "nest_last", -1)
         for i, (kind, cnt, _hp, _r) in enumerate(NEST_KINDS):
             a = math.pi / 2 - i * math.tau / n                  # erstes Segment oben, dann im Uhrzeigersinn
             x, z = math.cos(a) * self.NEST_WHEEL_R, math.sin(a) * self.NEST_WHEEL_R
-            cm.setFrame(-0.11, 0.11, -0.055, 0.055)
+            cm.setFrame(-0.12, 0.12, -0.06, 0.06)
             card = root.attachNewNode(cm.generate())
             card.setPos(x, 0, z)
-            lab = OnscreenText(text=f"{MOB_NAMES.get(kind, kind)}\n~{cnt} in {NEST_LIFE / 60:.0f} min", parent=root,
+            sub_ = "zuletzt gesetzt" if i == last else f"~{cnt} in {NEST_LIFE / 60:.0f} min"
+            lab = OnscreenText(text=f"{MOB_NAMES.get(kind, kind)}\n{sub_}", parent=root,
                                pos=(x, z + 0.012), scale=0.032, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1),
                                align=TextNode.ACenter)
-            segs.append((card, lab, a))
-        hint = OnscreenText(text="Maus: Nest wählen\nB loslassen: setzen", parent=root, pos=(0, 0.01), scale=0.03,
-                            fg=(0.75, 1.0, 0.65, 1), shadow=(0, 0, 0, 1), align=TextNode.ACenter)
-        self.nest_wheel = {"root": root, "segs": segs, "sel": 0, "vec": [0.0, 0.0], "hint": hint}
+            segs.append((card, lab, a, x, z))
+        hint = OnscreenText(text=f"Linksklick: Monster wählen\n{SET_ICON_LABEL}/Esc: abbrechen", parent=root,
+                            pos=(0, 0.01), scale=0.03, fg=(0.75, 1.0, 0.65, 1), shadow=(0, 0, 0, 1),
+                            align=TextNode.ACenter)
+        self.nest_wheel = {"root": root, "segs": segs, "sel": -1, "hint": hint, "last": last}
+        self.nest_pick = None
         self.nest_wheel_paint()
+        if self.captured:                                      # Mauszeiger frei, Kamera steht
+            self.set_capture(False)
         self.sfx.ui_click()
 
     def nest_wheel_paint(self):
         st = getattr(self, "nest_wheel", None)
         if st is None:
             return
-        for i, (card, lab, _a) in enumerate(st["segs"]):
-            on = i == st["sel"]
-            card.setColor(*((0.25, 0.55, 0.18, 0.95) if on else (0.08, 0.10, 0.08, 0.85)))
-            lab.setFg((1.0, 1.0, 0.7, 1) if on else (0.85, 0.9, 0.85, 1))
+        for i, (card, lab, *_r) in enumerate(st["segs"]):
+            on, off = i == st["sel"], i == st["last"]
+            card.setColor(*((0.12, 0.12, 0.12, 0.7) if off else
+                            ((0.25, 0.55, 0.18, 0.95) if on else (0.08, 0.10, 0.08, 0.85))))
+            lab.setFg((0.5, 0.5, 0.5, 1) if off else ((1.0, 1.0, 0.7, 1) if on else (0.85, 0.9, 0.85, 1)))
 
-    def nest_wheel_mouse(self, mdx, mdy):
-        """v49: Mausbewegung wählt das Segment (Richtung vom Mittelpunkt); die Kamera bleibt so lange stehen."""
+    def nest_wheel_at(self, m):
+        """v53: Segment unter dem Mauszeiger m (aspect2d) -> Index oder -1 (Mitte / zu weit weg)."""
+        st = getattr(self, "nest_wheel", None)
+        if st is None or m is None:
+            return -1
+        if math.hypot(m[0], m[1]) < 0.09 or math.hypot(m[0], m[1]) > 0.62:
+            return -1
+        a = math.atan2(m[1], m[0])
+        return min(range(len(st["segs"])), key=lambda i: abs(math.atan2(math.sin(a - st["segs"][i][2]),
+                                                                       math.cos(a - st["segs"][i][2]))))
+
+    def nest_wheel_mouse(self, mdx=0, mdy=0):
+        """v53: Hover folgt dem Mauszeiger (die Kamera bleibt stehen)."""
         st = getattr(self, "nest_wheel", None)
         if st is None:
             return
-        v = st["vec"]
-        v[0] += mdx
-        v[1] -= mdy                                            # Bildschirm-y zeigt nach unten
-        ln = math.hypot(*v)
-        if ln > 60.0:                                          # Ausschlag begrenzen (schnelles Umentscheiden)
-            v[0], v[1] = v[0] / ln * 60.0, v[1] / ln * 60.0
-        if ln > 6.0:
-            a = math.atan2(v[1], v[0])
-            n = len(NEST_KINDS)
-            best = min(range(n), key=lambda i: abs(math.atan2(math.sin(a - st["segs"][i][2]),
-                                                               math.cos(a - st["segs"][i][2]))))
-            if best != st["sel"]:
-                st["sel"] = best
-                self.nest_wheel_paint()
+        best = self.nest_wheel_at(self.mouse_2d())
+        if best != st["sel"]:
+            st["sel"] = best
+            self.nest_wheel_paint()
+            if best >= 0:
                 self.sfx.play("tap", None, 0.4, 1.6)
 
     def nest_wheel_scroll(self, d):
         st = getattr(self, "nest_wheel", None)
         if st is not None:
-            st["sel"] = (st["sel"] - d) % len(NEST_KINDS)
+            st["sel"] = (max(0, st["sel"]) - d) % len(NEST_KINDS)
             self.nest_wheel_paint()
 
-    def close_nest_wheel(self, place=True):
-        """v49: B losgelassen -> gewähltes Nest setzen (der Host prüft Platz und Abklingzeit)."""
+    def nest_wheel_click(self, m):
+        """v53: Linksklick im Rad - Monster wählen (gesperrte Art nicht); das Rad schliesst, MMB setzt dann das Nest."""
+        st = getattr(self, "nest_wheel", None)
+        if st is None:
+            return
+        i = self.nest_wheel_at(m)
+        if i < 0:
+            return
+        if i == st["last"]:
+            self.toast("Nicht zweimal hintereinander dasselbe Monster", (0.85, 0.7, 0.5), 1.6)
+            self.sfx.play("click", None, 0.5, 0.7)
+            return
+        self.close_nest_wheel()
+        self.nest_pick = i
+        kd_ = NEST_KINDS[i][0]
+        self.toast(f"{MOB_NAMES.get(kd_, kd_)}-Nest gewählt - {SET_ICON_LABEL} setzt es auf den Boden", _NECRO_GLOW, 2.2)
+        self.sfx.ui_click()
+
+    def close_nest_wheel(self, place=False):
+        """v49: Rad schliessen (v53: setzt nichts mehr - das macht place_nest_pick mit MMB). Maus wieder einfangen."""
         st = getattr(self, "nest_wheel", None)
         if st is None:
             return
         self.nest_wheel = None
         st["root"].removeNode()
         pl = self.player
-        if not place or pl.hp <= 0 or self.mode != "play":
+        if (self.mode == "play" and self.quit_box is None and pl is not None and pl.hp > 0
+                and getattr(self, "end", None) is None and not getattr(self, "insp_on", False)):
+            self.lock_trigger()                                 # der Klick ins Rad schiesst nicht
+            self.set_capture(True)
+
+    def place_nest_pick(self):
+        """v53: gewähltes Nest setzen (der Host prüft Platz, Abklingzeit und die Wiederholungs-Sperre)."""
+        ki, self.nest_pick = self.nest_pick, None
+        pl = self.player
+        if ki is None or pl is None or pl.hp <= 0 or self.mode != "play":
             return
-        ki = st["sel"]
         if self.net_mode == "client":
             if self.client is not None and not self.client.lost:
                 self.client.send_nest(ki)
@@ -123921,8 +124377,7 @@ class Game(ShowBase):
             self.world.place_nest(pl, ki)
 
     def on_ability_up(self):
-        if getattr(self, "nest_wheel", None) is not None:
-            self.close_nest_wheel(True)
+        pass
 
     def show_scan(self, g, cells, cd):
         """v49: Ergebnis des Quadranten-Scans: Hinweis + Raster neben der Minimap und Felder auf der Karte (M)."""
@@ -124100,6 +124555,8 @@ class Game(ShowBase):
         if getattr(self, "nest_wheel", None) is not None and (pl.hp <= 0 or not set_full(pl, "necro")
                                                                 or self.mode != "play"):
             self.close_nest_wheel(False)
+        if getattr(self, "nest_pick", None) is not None and (pl.hp <= 0 or not set_full(pl, "necro")):
+            self.nest_pick = None                               # v53: Wahl verfällt mit dem Tod / ohne Set
         try:
             self.update_scan_ui()
             self.update_hack_hud()
@@ -124150,9 +124607,18 @@ class Game(ShowBase):
               and not getattr(self, "insp_on", False) and self.world is not None and self.world.phase == "play")
         if not ok:
             self.g_hold_t = -1.0
+            self.g_drone_latch = held
             if pl is not None:
                 pl.gren_hold = -1
             return False
+        if gren_fix_sel(pl) == "drone" and self.g_hold_t < 0:   # v53: Drohne - kein Aufladen, Druck auf G startet
+            fire = held and not getattr(self, "g_drone_latch", False)   # sie sofort (einmal je Tastendruck)
+            self.g_drone_latch = held
+            pl.gren_hold = -1
+            if fire:
+                self.g_throw_charge = 0.0
+            return fire
+        self.g_drone_latch = held
         if held:
             self.g_hold_t = 0.0 if self.g_hold_t < 0 else self.g_hold_t + dt
             pl.gren_hold = GREN_KINDS.index(gren_fix_sel(pl))
@@ -124644,20 +125110,23 @@ class Game(ShowBase):
             if full == "shield":
                 rdy = pl.shock_cd <= 0
                 shock.set(rdy, 1.0 if rdy else 1.0 - pl.shock_cd / SHOCK_CD, "S",
-                          f"{SET_ICON_KEY.upper()}  Schockwelle" if rdy else f"{int(math.ceil(pl.shock_cd))} s",
+                          f"{SET_ICON_LABEL}  Schockwelle" if rdy else f"{int(math.ceil(pl.shock_cd))} s",
                           SETS["shield"][1])
             elif full == "necro":                            # v49: Nest-Wählrad
                 busy = any(n.owner == self.my_id for n in getattr(self.world, "nests", ()))
                 rdy = pl.nest_cd <= 0 and not busy
-                shock.set(rdy, 1.0 if rdy else (0.0 if busy else 1.0 - pl.nest_cd / NEST_CD), "N",
-                          f"{SET_ICON_KEY.upper()}  Nest" if rdy else ("Nest aktiv" if busy else
-                                                                       f"{int(math.ceil(pl.nest_cd))} s"),
+                pk_ = getattr(self, "nest_pick", None)
+                lbl_ = (f"{SET_ICON_LABEL}  {MOB_NAMES.get(NEST_KINDS[pk_][0], '')} setzen" if pk_ is not None
+                        else f"{SET_ICON_LABEL}  Nest")
+                cdm_ = max(1.0, getattr(pl, "nest_cd_max", 0.0) or NEST_CD)      # v53: Abklingzeit je nach Nest
+                shock.set(rdy, 1.0 if rdy else (0.0 if busy else 1.0 - min(1.0, pl.nest_cd / cdm_)), "N",
+                          lbl_ if rdy else ("Nest aktiv" if busy else f"{int(math.ceil(pl.nest_cd))} s"),
                           SETS["necro"][1])
             elif alive and wears(pl, "hack_scan"):            # v49: Quadranten-Scan
                 cd_ = HACK_SCAN_CD_SET if full == "hacker" else HACK_SCAN_CD
                 rdy = pl.scan_cd <= 0
                 shock.set(rdy, 1.0 if rdy else 1.0 - pl.scan_cd / cd_, "H",
-                          f"{SET_ICON_KEY.upper()}  Scan" if rdy else f"{int(math.ceil(pl.scan_cd))} s",
+                          f"{SET_ICON_LABEL}  Scan" if rdy else f"{int(math.ceil(pl.scan_cd))} s",
                           SETS["hacker"][1])
             else:
                 shock.hide()
@@ -125433,6 +125902,10 @@ class Game(ShowBase):
         if self.world.throw_grenade(pl, eye, d, kind, speed):
             self.thrown_kind = kind
             pl.gren_cd = GREN_COOLDOWN
+            if kind == "drone":                                 # v53: Drohne steigt direkt auf - kein Wurf
+                gren_fix_sel(pl)
+                self.sfx.play("servo", None, 0.7, 1.3)
+                return
             self.gren_anim_t = GREN_ANIM_T * 0.85          # 10e: der Arm war schon ausgeholt (G gehalten)
             gren_fix_sel(pl)
             self.sfx.play("gren_throw", None, 0.8, 1.0)         # sofort beim Klick (nicht erst über das Netz-Ereignis)
@@ -126017,7 +126490,8 @@ class Game(ShowBase):
                 self.trig_need_up = False
             trig = edge = False
         if (self.quit_box is not None or getattr(self, "tab_held", False) or getattr(self, "insp_on", False)
-                or getattr(self, "end", None) is not None):       # Abfrage/Tab/Inspektion/Endbildschirm: kein Schuss
+                or getattr(self, "end", None) is not None
+                or getattr(self, "nest_wheel", None) is not None):   # Abfrage/Tab/Inspektion/Endbildschirm/Nest-Rad: kein Schuss
             trig = edge = False
         elif not self.captured and edge and not self.dead_free:      # Klick fängt die Maus wieder ein
             self.set_capture(True)
@@ -126952,21 +127426,24 @@ class Game(ShowBase):
                                       self.prng.uniform(3.0, 6.0)), (0.30, 0.22, 0.14), 0.06 + 0.02 * r_, 1.2)
                 if e[2] == self.my_id:
                     kd_ = NEST_KINDS[e[3]][0] if 0 <= e[3] < len(NEST_KINDS) else ""
-                    self.toast(f"{MOB_NAMES.get(kd_, kd_)}-Nest gesetzt ({NEST_LIFE / 60:.0f} min)", _NECRO_GLOW, 2.0)
+                    self.player.nest_last = e[3]                 # v53: diese Art ist beim nächsten Mal gesperrt
+                    self.toast(f"{MOB_NAMES.get(kd_, kd_)}-Nest gesetzt (bis {NEST_LIFE / 60:.0f} min)", _NECRO_GLOW, 2.0)
             elif kind == "nesthit":            # v49: Nest getroffen
                 if e[3] == self.my_id:
                     self.sfx.hitmark()
             elif kind == "nestdown":           # v49: Nest vergangen / zerstört
                 if e[6]:
                     self.sfx.play("explosion", (e[3], e[4], e[5]), 0.6, 1.3)
-                if e[2] == self.my_id:
-                    self.player.nest_cd = NEST_CD
-                    self.toast("Dein Nest wurde zerstört!" if e[6] else "Dein Nest ist erloschen",
-                               (0.85, 0.6, 0.4) if e[6] else (0.7, 0.85, 0.7), 2.2)
+                if e[2] == self.my_id:                         # v53: Abklingzeit = Lebensdauer des Nests;
+                    cd_ = float(e[8]) if len(e) > 8 and finite(e[8]) else NEST_CD   # Hinweis oben links (nur für dich)
+                    self.player.nest_cd = self.player.nest_cd_max = cd_
+                    self.feed_add(("Dein Nest wurde zerstört!" if e[6] else "Dein Nest ist erloschen")
+                                  + f"  (nächstes in {int(math.ceil(cd_))} s)")
             elif kind == "nestno":             # v49: Nest nicht möglich
                 if e[1] == self.my_id:
-                    self.toast("Kein Platz für ein Nest - auf freien Boden schauen" if e[2] < 0
-                               else f"Noch kein Nest möglich ({int(math.ceil(e[2]))} s)", (0.8, 0.8, 0.7), 1.8)
+                    self.toast("Nicht zweimal hintereinander dasselbe Monster" if e[2] == -2 else
+                               ("Kein Platz für ein Nest - auf freien Boden schauen" if e[2] < 0
+                                else f"Noch kein Nest möglich ({int(math.ceil(e[2]))} s)"), (0.8, 0.8, 0.7), 1.8)
             elif kind == "hboom":              # v49: Hermes-Dash - Überschallknall (weithin hörbar, verrät die Position)
                 own_ = e[1] == self.my_id
                 self.sfx.play("sonic", None if own_ else (e[2], e[3], e[4]), 0.8 if own_ else 1.0,
@@ -126993,6 +127470,14 @@ class Game(ShowBase):
                     self.hurt_flash = max(self.hurt_flash, 0.5)
             elif kind == "slam":               # Koloss-Bodenschlag: Staubwelle, Beben, dumpfer Knall
                 self.slam_fx(e[1], e[2])
+            elif kind == "nestmob":            # v53: Monster steigt leise aus einem Nest - nur Erde und sein Laut
+                x, y, z = e[2], e[3], e[4]
+                big = {"titan": 2.0, "colossus": 1.5, "brute": 1.2}.get(e[5], 1.0)
+                for _ in range(int(8 * big)):
+                    self.add_particle((x, y, z + 0.2), (self.prng.uniform(-1.5, 1.5), self.prng.uniform(-1.5, 1.5),
+                                                        self.prng.uniform(1.5, 3.5)), (0.30, 0.22, 0.14), 0.07, 1.0, 0.4)
+                snd_, vol_, rate_ = NEST_CUE.get(e[5], ("growl", 0.6, (0.9, 1.1)))
+                self.sfx.play(snd_, (x, y, z + 1.0), vol_, self.prng.uniform(*rate_))
             elif kind == "bossdig":            # 13f: Koloss/Titan bricht am Kartenrand aus dem Boden
                 x, y, z = e[2], e[3], e[4]
                 big = 1.6 if e[5] == "titan" else 1.0
@@ -127833,8 +128318,12 @@ class Game(ShowBase):
         current = set(world.mobs)
         for m in world.mobs:
             v = self.mob_views.get(m)
+            if v is not None and m.kind == "pdrone" and v.col != self.player_pcol(getattr(m, "owner", -1)):
+                v.root.removeNode()                        # v53: Besitzer/Farbe bekannt geworden -> neu einfärben
+                v = self.mob_views[m] = None
             if v is None:
-                v = self.mob_views[m] = MobView(m)
+                v = self.mob_views[m] = MobView(m, self.player_pcol(getattr(m, "owner", -1))
+                                                if m.kind == "pdrone" else None)
                 v.root.reparentTo(self.render)
             v.update_bar(m, dt)                            # 13c: Balken-Fade jedes Bild
             if m.kind == "titan":
@@ -129653,11 +130142,12 @@ class HeliView:
 class MobView:
     """Darstellung eines Mobs: Modell, Lauf-/Angriffsanimation, Trefferblitz, Lebensbalken."""
 
-    def __init__(self, mob):
+    def __init__(self, mob, col=None):
         look = None
         if mob.kind == "critter":                            # Fellfarbe passend zur Karte (alle gleich)
             look = {"fur": CRITTER_COLORS["karte"]}
-        parts = build_mob(mob.kind, look)
+        parts = build_mob(mob.kind, look, col)               # v53: col = Spielerfarbe des Drohnen-Besitzers
+        self.col = col
         self.root, self.torso, self.legL, self.legR, self.bar, self.fg = parts[:6]
         self.rotors = parts[6] if len(parts) > 6 else []
         self.root.setScale(mob.scale)
