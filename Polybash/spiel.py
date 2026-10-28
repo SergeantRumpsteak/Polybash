@@ -250,6 +250,7 @@ RESPAWN_CHOICES = (0, 3, 5, 10, 15, 20)       # Wartezeit bis zum Respawn eines 
 RESPAWN_DEFAULT = 5
 SWITCH_T = 0.38          # Dauer des Waffenwechsels
 N_GRUNT, N_BRUTE, N_HUNT = 8, 3, 5
+N_HARPY = 3              # v55: Harpien (Luft-Scout) - Grundzahl auf Polytown, skaliert mit Dichte und Kartenfläche
 
 
 N_COLOSSUS = 1           # Koloss: fest 1 (v55: unabhängig von Kartengrösse und Dichte, ausser "Aus")
@@ -328,7 +329,7 @@ DRONE_REF_WORLD = 300.0  # v54: ... auf einer Karte dieser Grösse (Polytown); k
 DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; sinnvoll 1,25-1,5)
 
 N_CRITTER = 5            # Fluchttiere (spawnen wie alle Monster nach RESPAWN_T wieder nach)
-MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.6), ("Mäßig", 1.5), ("Viel", 3.0), ("Gottlos", 5.0))   # Monsterdichte
+MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.8), ("Mäßig", 1.35), ("Viel", 2.2), ("Gottlos", 4.5))   # Monsterdichte (v55: Mäßig 1,35)
 MOB_DEFAULT = 2
 
 # v55: Universelle Flächen-Skalierung der Monster-Spawns. Referenz ist Polytown (300 x 300 m = 90.000 m²): dort gelten die
@@ -341,7 +342,7 @@ DRONE_MIN, DRONE_MAX = 2, 8
 # v55: Spawn-Ringe um die Kartenmitte (m, auf Polytown; andere Karten anteilig zur Kartengrösse). Ringe, die über den
 # Kartenrand hinausreichen, werden je Richtung auf SPAWN_RING_PAD m innerhalb des Randes zurückgezogen (Polytown: der
 # Rand liegt 150 m von der Mitte, in den Ecken bis 212 m).
-DRONE_RING = (150.0, 200.0)      # Drohnen: gleichmässig auf Sektoren verteilt
+DRONE_RING = (75.0, 120.0)       # Drohnen: gleichmässig auf Sektoren verteilt (v55: im Kampf-Korridor statt am Rand)
 TITAN_RING = (150.0, 250.0)      # Titanen beim Rundenstart: je einer pro Hälfte (gegenüberliegende Sektoren)
 SPAWN_RING_PAD = 12.0
 # v55: Organische Koloss-Patrouille. Ohne Aggro läuft der Koloss im Korridor COLOSSUS_CORRIDOR (m um die Kartenmitte,
@@ -374,12 +375,12 @@ def calculate_map_spawns(map_width, map_height, density_setting, bonus_hares=Tru
         k = density_setting
     else:
         k = MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, int(density_setting)))][1]
-    kinds = ("grunt", "huntress", "brute", "critter", "drone", "colossus", "titan")
+    kinds = ("grunt", "huntress", "brute", "critter", "harpy", "drone", "colossus", "titan")
     if not override_spawns or k <= 0:
         return {kind: 0 for kind in kinds}
     fa = spawn_area_factor(map_width, map_height)
     out = {}
-    for kind, base in (("grunt", N_GRUNT), ("huntress", N_HUNT), ("brute", N_BRUTE),
+    for kind, base in (("grunt", N_GRUNT), ("huntress", N_HUNT), ("brute", N_BRUTE), ("harpy", N_HARPY),
                        ("critter", N_CRITTER if bonus_hares else 0)):
         out[kind] = max(1, int(base * k * fa + 0.5)) if base > 0 else 0   # kaufmännisch runden (4,5 -> 5)
     out["drone"] = max(DRONE_MIN, min(DRONE_MAX, int(DRONE_COUNT * fa + 0.5)))
@@ -447,7 +448,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 54         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 55         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 220               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -597,6 +598,10 @@ GREN_ARC_T = 3.0          # s Flugbahn in der Bogen-Vorschau
 GREN_ARC_DT = 0.04        # s Schrittweite der Vorschau
 
 GREN_KEY_NEXT = "h"       # Taste: Granatenart wechseln (dazu Mausrad bei gehaltenem G)
+# v55: Granaten-Steuerung (Spieleinstellungen, gespeichert als "gm"): 0 = Halten & Laden (G / 6 halten lädt, Loslassen
+# wirft), 1 = Taktischer Slot (G / 6 nehmen die Granate als Slot 6 in die Hand: Linksklick wirft - halten lädt -, Rechtsklick
+# wechselt die Art). Per Mausrad kommt man in beiden Modi linear in Slot 6.
+GREN_MODES = ("Halten & Laden (G)", "Taktischer Slot (6)")
 
 DECOY_T = 6.0             # s macht der Decoy Lärm ...
 
@@ -1089,7 +1094,8 @@ WEAPONS = (
     Weapon("DSR", 44, 1.3, 5, 25, 650, 1.8, 2.8, kick=4.0, kick_yaw=0.5,                 # v48: vorher Scharfschütze
            kick_back=6.0, ads_fov=16, ads_spread=0.03, pickup=5, head_mult=6.0, loud=1.25, weapon_type=WT_PRIMARY),
     Weapon("Revolver", 55, 0.55, 6, 48, 320, 0.7, 2.2, kick=3.0, kick_yaw=0.5,
-           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9, weapon_type=WT_SECONDARY),
+           kick_back=5.0, ads_fov=59, bloom=0.3, pickup=6, loud=0.9, weapon_type=WT_SECONDARY,
+           no_silencer=True),     # v55: Gas tritt an der Trommel aus - ein Dämpfer brächte nichts
     Weapon("MP9", 8, 0.065, 32, 224, 290, 2.2, 1.8, auto=True, kick=0.75,              # v48: vorher Maschinenpistole;
            kick_yaw=1.5, kick_back=1.6, ads_fov=59, bloom=0.34, pickup=32, loud=0.85,    # 11 -> 8 Schaden, wildes Spray
            weapon_type=WT_SECONDARY),
@@ -1273,7 +1279,8 @@ SWORD_SLAM_MULT = 2.0     # ... mit so viel-fachem Schaden
 
 PAN_NAME = "Bratpfanne"
 
-PAN_POINTS = {"grunt": 1, "critter": 1, "brute": 2, "huntress": 2, "drone": 2, "colossus": 5, "titan": 10, "player": 3}
+PAN_POINTS = {"grunt": 1, "critter": 1, "brute": 2, "huntress": 2, "drone": 2, "harpy": 2, "colossus": 5, "titan": 10,
+              "player": 3}
 
 PAN_STAGES = ((3, 2.0, 15.0), (6, 3.0, 20.0), (10, 5.0, 20.0))   # (ab Punkten, Dauer s, HP je s; Stufe 3: je Bissen)
 
@@ -1445,7 +1452,7 @@ LOOT_ATT_TABLES = {
 
 # --- 10b: Kisten pausiert, Beute kommt von Monstern
 MOB_LOOT = {"grunt": ("common", 3), "huntress": ("common", 3), "brute": ("rare", 3), "drone": ("rare", 2),
-            "colossus": ("gold", 4), "titan": ("gold", 6),
+            "colossus": ("gold", 4), "titan": ("gold", 6), "harpy": ("rare", 2),   # v55: Harpie
             "critter": ("gold", 1)}   # Art -> (Qualitätsstufe = Kisten-Spalte, Anzahl); 10g: Hase 1 Teil gold + Buff
 
 # 13a: gestaffelte Granaten-Pools je Monsterart (Gewichte; ersetzt für Monster-Beute GREN_LOOT_W[Stufe], fehlt die Art,
@@ -1850,6 +1857,8 @@ def att_why(wi, si, v):
     if (si, v) == ATT_GL:
         return "nur am Colt M4 Carbine"
     if (si, v) == ATT_SILENCER:
+        if weapon_class(wi) == "revolver":               # v55
+            return f"{w.name} nimmt keinen Schalldämpfer (Gas tritt an der Trommel aus)"
         return f"{w.name} nimmt keinen Schalldämpfer"
     return f"passt nicht an {w.name}"
 
@@ -2042,6 +2051,24 @@ DRONE_CLIMB = 4.5          # m/s: so schnell steigt/sinkt sie
 
 PLAYER_Z_MAX = 95.0        # m: Host nimmt Spielerhöhen bis hierher an (Heli-Pilot bis HELI_CEIL + 20)
 
+# v55: Harpie (Luft-Scout). Kreist ohne Ziel hoch oben (HARPY_ALT m über Grund) um einen Mittelpunkt, der langsam über die
+# Karte wandert. Sie greift NUR Spieler in der Luft an: 2D-Abstand <= HARPY_TRIG_R UND mehr als HARPY_TRIG_H m über dem
+# Boden darunter (Jetpack, Sprungfeder, Helikopter, Fallschirm ...). Dann Sturzflug (HARPY_DIVE_SPEED), ein Treffer
+# (halber Zombie-Schaden), sofort wieder hoch (HARPY_CLIMB_*). Sinkt das Ziel unter HARPY_TRIG_H m oder landet es, bricht
+# sie den Sturzflug ab und steigt zurück. Bodenspieler lässt sie völlig in Ruhe (auch Lärm und Schüsse).
+HARPY_ALT = (30.0, 40.0)        # m über Grund: Kreishöhe (je Harpie zufällig)
+HARPY_CIRCLE_R = (14.0, 26.0)   # m: Radius des Kreises
+HARPY_CRUISE = 7.0              # m/s beim Kreisen
+HARPY_DIVE_SPEED = 21.0         # m/s im Sturzflug
+HARPY_CLIMB_SPEED = 8.0         # m/s nach oben beim Rückzug
+HARPY_CLIMB_FWD = 6.0           # m/s ... und so schnell weiter geradeaus (Hit-and-Run)
+HARPY_TRIG_R = 30.0             # m (2D): Auslöse-Umkreis
+HARPY_TRIG_H = 5.0              # m: das Ziel muss höher als das über dem Boden sein
+HARPY_LEASH = 1.6               # Sturzflug bricht ab, wenn das Ziel weiter als HARPY_TRIG_R x das weg ist
+HARPY_DIVE_MAX = 6.0            # s: länger dauert kein Sturzflug (dann Rückzug)
+HARPY_DRIFT_T = (25.0, 45.0)    # s: so oft wandert der Kreismittelpunkt ...
+HARPY_DRIFT = 40.0              # m: ... höchstens so weit
+
 MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     "grunt": dict(hp=60.0, speed=MOB_SPEED_GRUNT, wander=1.1, dmg=9.0, cooldown=0.9, windup=0.35,
                   aggro=24.0, scale=1.0, hear=1.0, hit_h=1.78),     # 9d: gebeugter Zombie (Kopf oben 22 %)
@@ -2083,6 +2110,9 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
     "gdrone": dict(hp=30.0, speed=GDRONE_SPEED, wander=1.4, dmg=0.0, cooldown=GDRONE_ZAP_CD, windup=0.2, recover=0.2,
                    aggro=0.0, scale=DRONE_SIZE * 0.7, hear=0.0, fly=GDRONE_ORBIT_H, hit_r=0.42 * DRONE_SIZE * 0.7,
                    hit_h=0.5 * DRONE_SIZE * 0.7, temp=True),
+    # v55: Harpie - fliegt (eigene KI: Mob.harpy_update), halber Zombie-Schaden, cooldown = Pause zwischen zwei Sturzflügen
+    "harpy": dict(hp=40.0, speed=HARPY_CRUISE, wander=HARPY_CRUISE, dmg=4.5,           # Zombie: 9
+                  cooldown=2.5, windup=0.0, recover=0.0, aggro=HARPY_TRIG_R, scale=1.0, hear=0.0, hit_r=0.55, hit_h=0.6),
 }
 
 
@@ -2164,6 +2194,7 @@ MOB_SND = {
     "pdrone":   dict(range=40),                                         # 10e: eigene Drohne surrt etwas höher
     "gdrone":   dict(range=35),                                         # 10h: Abwehrdrohne
     "critter":  dict(range=18, step="tap", stride=0.7, step_vol=0.35, step_rate=(0.9, 1.2)),
+    "harpy":    dict(range=70, voice="hiss", voice_gap=(6.0, 14.0), voice_vol=0.6, voice_rate=(1.45, 1.7)),   # v55: Kreischen
 }
 
 MOB_VOL = {"drone_hum": 0.35, "drone_scan": 0.7, "drone_charge": 0.75, "colossus_rumble": 0.85,
@@ -2492,9 +2523,9 @@ DEV_STORY = 3.6                           # Geschosshöhe
 DEV_VEHICLES = tuple((28.0 + 13.0 * k, 172.0, 0.0) for k in range(6))      # Fahrzeug-Pool (Parkplatz)
 DEV_PADS = ((140.0, 206.0, 0.0), (165.0, 206.0, 0.0), (190.0, 206.0, 0.0), (215.0, 206.0, 0.0))  # Helikopter-Pool
 DEV_SPAWNS = tuple((92.0 + 13.0 * i, 55.0 + 8.0 * j) for j in range(2) for i in range(6))   # Weg vor den Gebäuden
-DEV_MOBS = ("grunt", "huntress", "brute", "colossus", "titan", "drone")   # Dev-Menü: wählbare Monster
+DEV_MOBS = ("grunt", "huntress", "brute", "colossus", "titan", "drone", "harpy")   # Dev-Menü: wählbare Monster
 DEV_MOB_NAMES = {"grunt": "Zombie", "huntress": "Jägerin", "brute": "Brute", "colossus": "Koloss", "titan": "Titan",
-                 "drone": "Drohne"}
+                 "drone": "Drohne", "harpy": "Harpie"}
 DEV_AI = ("aggr", "passive", "static")    # aggressiv | passiv (greift nie an) | Zielscheibe (steht, heilt sich)
 DEV_AI_NAMES = {"aggr": "Aggressiv", "passive": "Passiv", "static": "Zielscheibe"}
 DEV_STATIC_HEAL_T = 3.0                   # s ohne Treffer, dann ist eine Zielscheibe wieder voll
@@ -3478,6 +3509,17 @@ class Mob:
             self.patrol_dir = rng.choice((-1, 1))          # +1 = gegen den Uhrzeigersinn, -1 = im Uhrzeigersinn
             self.patrol_tick = rng.uniform(COLOSSUS_TICK[0] * 0.25, COLOSSUS_TICK[1])   # versetzt beim Spawn
             self.patrol_wp, self.patrol_wp_t, self.patrol_idle, self.patrol_n = None, 0.0, 0.0, -9
+        if kind == "harpy":       # v55: Luft-Scout (harpy_update) - startet gleich oben in ihrer Kreishöhe
+            self.harpy_alt = rng.uniform(*HARPY_ALT)
+            self.harpy_r = rng.uniform(*HARPY_CIRCLE_R)
+            self.harpy_dir = rng.choice((-1.0, 1.0))
+            self.harpy_home = (x, y)
+            self.harpy_drift = rng.uniform(*HARPY_DRIFT_T)
+            self.harpy_mode = "circle"                     # circle | dive | climb
+            self.harpy_tgt, self.harpy_t, self.harpy_vz = -1, 0.0, 0.0
+            self.harpy_fwd = (0.0, 1.0)
+            self.hover = self.harpy_alt
+            self.z = self.gz + self.hover
 
     def aggressive(self):
         return not MOB_KINDS[self.kind].get("calm", False)
@@ -3801,6 +3843,132 @@ class Mob:
         self.turn_toward(tdx, tdy, dt, 120.0)
         return COLOSSUS_PATROL_SPEED, tdx / td, tdy / td
 
+    def harpy_target_ok(self, world, pl):
+        """v55: Ist pl ein gültiges Ziel für die Harpie? -> (Ziel-x, Ziel-y, Ziel-z (Brust), 2D-Abstand) oder None.
+        Bedingungen: lebt, kein Verbündeter/Nekro-Tarnung, im 2D-Umkreis HARPY_TRIG_R (im Sturzflug HARPY_LEASH-fach) und
+        mehr als HARPY_TRIG_H m über dem Boden darunter (im Helikopter zählt dessen Höhe)."""
+        if pl is None or pl.hp <= 0:
+            return None
+        if pl.pid not in getattr(self, "provoked", ()) and necro_camo(pl):
+            return None
+        pz = pl.z
+        if pl.heli >= 0:
+            hc = world.heli_by_id(pl.heli)
+            if hc is not None:
+                pz = hc.z
+        d2 = math.hypot(pl.x - self.x, pl.y - self.y)
+        lim = HARPY_TRIG_R * (HARPY_LEASH if self.harpy_mode == "dive" else 1.0)
+        if d2 > lim:
+            return None
+        if pz - world.floor_at(pl.x, pl.y, pz) <= HARPY_TRIG_H:
+            return None                                    # am Boden / unter 5 m: lässt sie in Ruhe
+        return pl.x, pl.y, pz + 1.2, d2
+
+    def harpy_update(self, dt, world, players):
+        """v55: Harpie (Luft-Scout). circle: kreist in harpy_alt m über Grund um harpy_home (wandert alle HARPY_DRIFT_T s);
+        dive: Sturzflug auf einen Spieler in der Luft (harpy_target_ok), ein Treffer, dann climb: zurück nach oben und dabei
+        weiter geradeaus (Hit-and-Run). Bodenspieler, Lärm und Schüsse ignoriert sie."""
+        k = MOB_KINDS["harpy"]
+        if self.state == "dead":                           # stürzt ab (Schwerkraft) und bleibt liegen
+            self.dead_t += dt
+            self.harpy_vz -= 9.81 * dt
+            self.z += self.harpy_vz * dt
+            self.gz = world.floor_at(self.x, self.y, max(self.z, self.gz))
+            if self.z <= self.gz:
+                self.z, self.harpy_vz = self.gz, 0.0
+            self.hover = self.z - self.gz
+            return
+        rng = world.mrng
+        self.hurt_t = max(0.0, self.hurt_t - dt)
+        self.alert_t = 0.0
+        self.atk_cd = max(0.0, self.atk_cd - dt)
+        self.noise_at = self.noise_src = self.fear = None   # hört nicht auf Geräusche / Schüsse
+        self.searching = False
+        lo = edge_margin(world) + 2.0
+        ox, oy, oz = self.x, self.y, self.z
+        self.harpy_t += dt
+        tgt = None
+        if self.harpy_mode == "dive":
+            pl = world.players.get(self.harpy_tgt)
+            tgt = self.harpy_target_ok(world, pl)
+            if tgt is None or self.harpy_t > HARPY_DIVE_MAX:
+                self.harpy_mode, self.harpy_t = "climb", 0.0   # Ziel gelandet / unter 5 m / weg: abbrechen
+        elif self.atk_cd <= 0:                             # kreist oder steigt: neues Ziel in der Luft?
+            best = None
+            for pl in players:
+                t_ = self.harpy_target_ok(world, pl)
+                if t_ is not None and (best is None or t_[3] < best[1][3]):
+                    best = (pl, t_)
+            if best is not None:
+                self.harpy_mode, self.harpy_t, self.harpy_tgt = "dive", 0.0, best[0].pid
+                tgt = best[1]
+        terr = world.height(self.x, self.y)
+        cruise_z = terr + self.harpy_alt + 1.2 * math.sin(self.phase * 0.35)
+        if self.harpy_mode == "dive":
+            self.state = "chase"
+            gx, gy, gz = tgt[0], tgt[1], tgt[2]
+            dx, dy, dz = gx - self.x, gy - self.y, gz - self.z
+            d = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
+            step = min(d, HARPY_DIVE_SPEED * dt)
+            self.x += dx / d * step
+            self.y += dy / d * step
+            self.z += dz / d * step
+            if dx * dx + dy * dy > 1e-4:
+                self.turn_toward(dx, dy, dt, 600.0)
+                h = math.hypot(dx, dy)
+                self.harpy_fwd = (dx / h, dy / h)
+            if d - step <= self.radius + PLAYER_R + 0.6:   # Treffer im Vorbeiflug, dann sofort wieder hoch
+                pl = world.players.get(self.harpy_tgt)
+                if pl is not None:
+                    world.mob_damage(pl, k["dmg"])
+                self.harpy_mode, self.harpy_t = "climb", 0.0
+                self.atk_cd = k["cooldown"]
+        elif self.harpy_mode == "climb":
+            self.state = "idle"
+            fx, fy = self.harpy_fwd
+            self.x += fx * HARPY_CLIMB_FWD * dt
+            self.y += fy * HARPY_CLIMB_FWD * dt
+            self.z += HARPY_CLIMB_SPEED * dt
+            if self.z >= cruise_z - 1.0:                   # wieder oben: weiterkreisen (um die aktuelle Stelle)
+                self.harpy_mode = "circle"
+                self.harpy_home = (self.x - fy * self.harpy_dir * self.harpy_r,
+                                   self.y + fx * self.harpy_dir * self.harpy_r)
+                self.atk_cd = max(self.atk_cd, k["cooldown"] * 0.5)
+        else:                                              # circle
+            self.state = "idle"
+            self.harpy_drift -= dt
+            hx, hy = self.harpy_home
+            if self.harpy_drift <= 0:                      # Kreismittelpunkt wandert langsam über die Karte
+                self.harpy_drift = rng.uniform(*HARPY_DRIFT_T)
+                a = rng.uniform(0, 2 * math.pi)
+                r_ = rng.uniform(0.3, 1.0) * HARPY_DRIFT
+                hx, hy = hx + math.cos(a) * r_, hy + math.sin(a) * r_
+            m_ = lo + self.harpy_r
+            hx, hy = clampf(hx, m_, WORLD - m_), clampf(hy, m_, WORLD - m_)
+            self.harpy_home = (hx, hy)
+            a = math.atan2(self.y - hy, self.x - hx) + self.harpy_dir * 0.45   # Punkt etwas voraus auf dem Kreis
+            gx, gy = hx + math.cos(a) * self.harpy_r, hy + math.sin(a) * self.harpy_r
+            dx, dy = gx - self.x, gy - self.y
+            d = math.hypot(dx, dy) or 1e-6
+            step = min(d, HARPY_CRUISE * dt)
+            self.x += dx / d * step
+            self.y += dy / d * step
+            self.turn_toward(dx, dy, dt, 140.0)
+            self.harpy_fwd = (dx / d, dy / d)
+            self.z += clampf(cruise_z - self.z, -HARPY_CLIMB_SPEED * dt, HARPY_CLIMB_SPEED * dt)
+        self.x, self.y = push_out(self.x, self.y, self.radius, world, self.z, air=True)   # nicht durch Wände
+        self.x = clampf(self.x, lo, WORLD - lo)
+        self.y = clampf(self.y, lo, WORLD - lo)
+        self.gz = world.floor_at(self.x, self.y, self.z)
+        if self.z < self.gz + 0.4:                         # nie in den Boden / ins Dach
+            self.z = self.gz + 0.4
+            if self.harpy_mode == "dive":
+                self.harpy_mode, self.harpy_t = "climb", 0.0
+        self.hover = self.z - self.gz
+        moved = math.sqrt((self.x - ox) ** 2 + (self.y - oy) ** 2 + (self.z - oz) ** 2)
+        self.speed_now = moved / dt if dt > 0 else 0.0
+        self.phase += dt * (9.0 if self.harpy_mode == "climb" else 4.0)
+
     def turn_toward(self, dx, dy, dt, rate=420.0):
         target = math.degrees(math.atan2(-dx, dy))   # Blick = (-sin h, cos h)
         diff = (target - self.heading + 180.0) % 360.0 - 180.0
@@ -3849,6 +4017,9 @@ class Mob:
             return
         if dai == "passive":
             players = ()                                   # sieht niemanden: wandert, geht Geräuschen nach, greift nie an
+        if self.kind == "harpy":
+            self.harpy_update(dt, world, players)          # v55: Harpie hat ihr eigenes Flugverhalten
+            return
         k = MOB_KINDS[self.kind]
         decay = math.exp(-7.0 * dt)
         if self.state == "dead":
@@ -4367,7 +4538,7 @@ INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Kar
                          # Maustaste erst losgelassen und neu gedrückt werden (der Klick auf "Spiel starten" schiesst nicht)
 QUICK_MELEE_STAY = True  # 7a: nach F (Schnellschlag) bleibt die Nahkampfwaffe in der Hand, bis man mit 1-3/Mausrad wechselt
 MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "colossus": "Koloss", "drone": "Drohne",
-             "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne"}
+             "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne", "harpy": "Harpie"}
 
 
 def end_tabs(koth, ctf=False):
@@ -6516,7 +6687,7 @@ class World:
         cnt = calculate_map_spawns(WORLD, WORLD, lvl, bonus_hares=self.bonus_hares, override_spawns=ok)
         made = dict.fromkeys(cnt, 0)
         ta = self.mrng.uniform(0, 2 * math.pi)                       # Titanen: gegenüberliegende Hälften
-        for kind in ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan"):
+        for kind in ("grunt", "brute", "huntress", "colossus", "drone", "harpy", "critter", "titan"):
             n = cnt[kind]
             if kind in BOSS_KINDS:
                 self.boss_n[kind] = n                    # 13f: so viele kommen pro Zyklus wieder
@@ -6529,7 +6700,7 @@ class World:
                     made[kind] += 1
         name = MOB_LEVELS[lvl][0].upper()
         txt = (f"{made['grunt']} Zombies, {made['huntress']} Jägerinnen, {made['brute']} Brutes, {made['drone']} Drohnen, "
-               f"{made['colossus']} Koloss, {made['titan']} Titanen")
+               f"{made['harpy']} Harpien, {made['colossus']} Koloss, {made['titan']} Titanen")
         if self.bonus_hares:
             txt += f", {made['critter']} Hasen"
         print(f"[SpawnManager] Map: {WORLD:.0f}x{WORLD:.0f}m | Dichte: {name} | Spawns: {txt}", flush=True)
@@ -16165,6 +16336,66 @@ def build_critter(col):
     bar.setPos(0, 0, 1.6)
     return root, torso, legs, bar
 
+HARPY_LOOK = dict(feather=(0.32, 0.27, 0.36), dark=(0.18, 0.15, 0.22), tip=(0.58, 0.26, 0.46),
+                  skin=(0.62, 0.66, 0.60), hair=(0.06, 0.05, 0.08), eye=(1.0, 0.25, 0.15), horn=(0.82, 0.76, 0.62))
+
+
+def _harpy_wing(side, L, rng):
+    """v55: ein Flügel der Harpie (Low-Poly-Federlagen), Gelenk im Ursprung, zeigt nach side (+-1) in x."""
+    m = Mesh()
+    box(m, side * 0.30, 0.02, 0.0, 0.62, 0.30, 0.06, L["feather"], rng)                 # Armknochen + Deckfedern
+    box(m, side * 0.28, -0.20, -0.01, 0.56, 0.18, 0.035, L["dark"], rng)               # Armschwingen
+    for i in range(5):                                                                   # Handschwingen, gestaffelt
+        x = side * (0.62 + 0.085 * i)
+        ln = 0.46 - 0.05 * i
+        box(m, x, 0.02 - ln / 2 + 0.12, -0.012 * i, 0.075, ln, 0.03,
+            L["tip"] if i >= 3 else L["dark"], rng)
+    box(m, side * 0.60, 0.13, 0.03, 0.06, 0.06, 0.06, L["horn"], rng)                  # Daumenkralle
+    return m
+
+
+def build_harpy():
+    """v55: Harpie - gefiederter Rumpf, fahles Gesicht mit Hakenschnabel, glühende Augen, wildes Haar, zwei Hörnchen,
+    Fänge unten, Schwanzfächer. 'Beine' sind die Flügel (MobView lässt sie schlagen). Rückgabe wie build_drone."""
+    rng = random.Random(56)
+    L = HARPY_LOOK
+    root = NodePath("harpy")
+    body, glow = Mesh(), Mesh(lit=False)
+    ell(body, (0, 0, 0), 0.19, 0.36, 0.18, L["feather"], rng, rings=6)                   # Rumpf
+    ell(body, (0, 0.12, -0.04), 0.15, 0.22, 0.13, L["skin"], rng, rings=5)               # nackte Brust
+    ell(body, (0, 0.40, 0.10), 0.13, 0.14, 0.14, L["skin"], rng, rings=6)                # Kopf
+    blob(body, 0, 0.33, 0.17, 0.17, 0.16, 0.14, L["hair"], rng, jitter=0.18)             # Haar
+    for k_ in range(4):                                                                  # Strähnen im Flugwind
+        sx = (k_ - 1.5) * 0.07
+        _tube(body, [(sx, 0.30, 0.18), (sx * 1.3, 0.10, 0.20), (sx * 1.6, -0.12, 0.14)], [0.04, 0.03, 0.01],
+              L["hair"], rng, 5)
+    _tube(body, [(0, 0.52, 0.10), (0, 0.60, 0.07), (0, 0.62, 0.01)], [0.035, 0.022, 0.004], L["horn"], rng, 6)   # Schnabel
+    for sx in (-1, 1):
+        box(glow, sx * 0.055, 0.525, 0.14, 0.04, 0.02, 0.022, L["eye"])                  # Augen
+        cone(body, sx * 0.07, 0.36, 0.22, 0.025, 0.12, 5, L["horn"], rng)                 # Hörnchen
+        _tube(body, [(sx * 0.07, -0.02, -0.14), (sx * 0.08, -0.04, -0.28)], [0.035, 0.025], L["skin"], rng, 5)   # Beine
+        for c in (-1, 0, 1):                                                             # Fänge
+            _tube(body, [(sx * 0.08, -0.04, -0.28), (sx * 0.08 + c * 0.03, 0.04, -0.33)], [0.012, 0.004],
+                  L["horn"], None, 4)
+    for c in (-2, -1, 0, 1, 2):                                                          # Schwanzfächer
+        box(body, c * 0.055, -0.50 - 0.02 * (2 - abs(c)), -0.01, 0.06, 0.30, 0.025,
+            L["tip"] if abs(c) == 2 else L["dark"], rng)
+    torso = root.attachNewNode("torso")
+    torso.setZ(0.35)
+    torso.attachNewNode(body.node("b"))
+    g = torso.attachNewNode(glow.node("g"))
+    g.setFogOff()
+    legs = []
+    for side in (-1, 1):
+        w = torso.attachNewNode("wing")
+        w.setPos(side * 0.16, 0.06, 0.06)
+        w.attachNewNode(_harpy_wing(side, L, rng).node("w"))
+        legs.append(w)
+    bar = root.attachNewNode("bar")
+    bar.setPos(0, 0, 1.0)
+    return root, torso, legs, bar
+
+
 _MOB_HI = {"grunt": _mob_hi_grunt, "brute": _mob_hi_brute, "huntress": _mob_hi_huntress, "colossus": _mob_hi_colossus,
            "titan": _mob_hi_titan}
 
@@ -16226,6 +16457,9 @@ def build_mob(kind, look=None, col=None):
     if kind == "critter":
         fur = (look or {}).get("fur", CRITTER_COLORS["standard"])
         root, torso, bar, fg, *legs = _mob_tpl(("critter", tuple(fur)), lambda: _with_bar(build_critter(fur)))
+        return root, torso, legs[0], legs[1], bar, fg
+    if kind == "harpy":                                        # v55: Flügel statt Beine
+        root, torso, bar, fg, *legs = _mob_tpl(("harpy",), lambda: _with_bar(build_harpy()))
         return root, torso, legs[0], legs[1], bar, fg
     if look is None:                                           # 12: Standard-Aussehen -> aus der Vorlage
         return _mob_tpl(("hum", kind), lambda: _build_mob_humanoid(kind, None))
@@ -19905,6 +20139,24 @@ def mod_lines(mods):
     return out or [("keine Änderung", (0.7, 0.75, 0.8, 1))]
 
 
+# v55: UI-Ebenen. Alles HUD liegt im Bin "fixed" unter UI_LAYER_WINDOW. Offene Fenster (T-Fenster / Aufsatz-Lager,
+# Ausrüstungsbildschirm) liegen ab UI_LAYER_WINDOW, Menüs (Esc, Einstellungen, Abfragen, Zielkarte) ab UI_LAYER_MENU,
+# Maus-Hinweisfelder ganz oben (UI_LAYER_TIP) - so schiebt sich nie ein HUD-Text über ein Fenster.
+UI_LAYER_WINDOW = 300
+UI_LAYER_MENU = 400
+UI_LAYER_TIP = 480
+
+
+def ui_raise(parent, first, base):
+    """v55: Kinder von parent ab Index first (gerade gebaut) samt Unterknoten in die Ebene base heben: jeder Knoten mit
+    eigenem "fixed"-Bin bekommt base + seine bisherige Sortierung (Reihenfolge im Fenster bleibt), nur einmal."""
+    for i in range(first, parent.getNumChildren()):
+        top = parent.getChild(i)
+        for n in [top] + list(top.findAllMatches("**")):
+            if n.getBinName() == "fixed" and n.getBinDrawOrder() < UI_LAYER_WINDOW:
+                n.setBin("fixed", base + n.getBinDrawOrder())
+
+
 class Tooltip:
     """Hinweisfeld neben der Maus. Inhalt wird mit title()/sub()/bar()/para() beschrieben und beim Wechsel neu gebaut."""
     W = 0.88
@@ -19968,6 +20220,9 @@ class Tooltip:
         W = self.W
         H = 0.05 + sum(it[3] for it in self.items)
         self.root = self.parent.attachNewNode("tooltip")
+        self.root.setBin("fixed", UI_LAYER_TIP)          # v55: immer über Fenstern und Menüs (Inhalt in Bau-Reihenfolge)
+        self.root.setDepthTest(False)
+        self.root.setDepthWrite(False)
         self._card(-0.006, 0.006, W + 0.012, H + 0.012, (0.75, 0.8, 0.88, 1.0))
         self._card(0, 0, W, H, (0.05, 0.06, 0.09, 1.0))
         y = -0.025
@@ -20073,6 +20328,9 @@ class LoadoutScreen:
     def __init__(self, game, on_close):
         self.g, self.on_close = game, on_close
         self.root = game.aspect2d.attachNewNode("loadscreen")
+        self.root.setBin("fixed", UI_LAYER_WINDOW)       # v55: Fenster über dem HUD (Inhalt in Bau-Reihenfolge)
+        self.root.setDepthTest(False)
+        self.root.setDepthWrite(False)
         self.rects = []                    # (x0, x1, z0, z1, Aktion, Rahmenknoten, Normalfarbe)
         self.texts = []
         self.open_slot = None              # None | "scope" | ("att", Primärwaffe?, Platz)
@@ -21534,7 +21792,7 @@ class CtfPage(SetupPage):
 # Alles nur mit der Standardbibliothek (socket, json, threading), nicht blockierend,
 # damit das Spiel nie auf das Netz warten muss.
 KINDS = ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan", "pdrone",
-         "gdrone")   # Index in den Snapshots (neue hinten!)
+         "gdrone", "harpy")   # Index in den Snapshots (neue hinten!) - v55: Harpie
 STATES = ("idle", "chase", "attack", "dead")
 PLAYER_COLORS = [(0.20, 0.35, 0.80), (0.80, 0.25, 0.25), (0.25, 0.70, 0.35), (0.85, 0.70, 0.15),
                  (0.60, 0.30, 0.75), (0.15, 0.70, 0.75), (0.90, 0.50, 0.15), (0.85, 0.85, 0.85)]
@@ -119493,6 +119751,9 @@ class Sfx:
                                    (1.3 / max(w, 0.4)) * (0.75 if big else 1.0), force=True)
                     else:                                  # Titan-Tritt: Ausholen wie leichter Schlag, tiefer
                         self.voice("rumble", pos, MOB_VOL["titan_rumble"], 0.6, force=True)
+            elif m.kind == "harpy":                       # v55: kreischt zu Beginn des Sturzflugs
+                if st["state"] != "chase" and m.state == "chase":
+                    self.voice("hiss", pos, 0.9, rng.uniform(1.75, 1.95), force=True)
             elif m.kind == "critter":
                 fast = getattr(m, "speed_now", 0.0) > MOB_KINDS["critter"]["wander"] * 2.5
                 st["fear_t"] = max(0.0, st["fear_t"] - dt)
@@ -119821,6 +120082,7 @@ class Game(ShowBase):
         fv = st.get("fov")
         self.fov_base = float(fv) if isinstance(fv, (int, float)) and not isinstance(fv, bool) and 60 <= fv <= 110 else FOV   # Sichtfeld
         self.invert_y = bool(st.get("inv"))      # Maus hoch/runter invertiert
+        self.gren_mode = 1 if st.get("gm") == 1 else 0   # v55: Granaten-Steuerung (GREN_MODES)
         vm = st.get("vm")
         self.vol_music = int(vm) if isinstance(vm, (int, float)) and not isinstance(vm, bool) and 0 <= vm <= 100 else 100      # Hintergrundmusik in %
         vs_ = st.get("vs")
@@ -119975,6 +120237,9 @@ class Game(ShowBase):
         self.accept("g", self.on_grenade)
         self.accept(GREN_KEY_NEXT, self.on_gren_next, [1])      # Granatenart wechseln
         self.g_hold_t = -1.0                                   # so lange wird G schon gehalten (-1 = nicht)
+        self.gren_slot = False                                 # v55: Granate als Slot 6 in der Hand (taktischer Slot)
+        self.gren_slot_t = 0.0                                 # v55: s seit dem Nehmen von Slot 6
+        self.gren_rmb_prev = False
         self.g_throw_charge = 0.0
         self.prev_swing, self.quick_melee, self.prev_run, self.prev_jump = 0.0, False, False, False
         self.spec_fp, self.shield_flash, self.bite_t = None, 0.0, 0.0
@@ -120207,6 +120472,7 @@ class Game(ShowBase):
         elif st == "settings":
             spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
                     (self.invert_label(), dig(2)),
+                    (self.gren_mode_label(), dig(3)),
                     ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),
                     ("", None), ("", None), ("", None), ("", None),     # Platz für 6 Regler
                     ("Zurück   (Esc)", back)]
@@ -120501,6 +120767,13 @@ class Game(ShowBase):
         if self.loadscreen is None:
             self.loadscreen = LoadoutScreen(self, self.close_loadscreen)
 
+    def ui_menu_open(self):
+        """v55: Ist gerade ein Fenster oder Menü offen (Esc-Menü/Einstellungen/Abfragen/Zielkarte, T-Fenster mit
+        Aufsatz-Lager, Ausrüstungsbildschirm, Endbildschirm)? Dann blendet das HUD die Welt-Hinweise aus."""
+        return (self.quit_box is not None or getattr(self, "insp_on", False)
+                or getattr(self, "att_panel", None) is not None or self.loadscreen is not None
+                or getattr(self, "end", None) is not None)
+
     def close_loadscreen(self):
         if self.loadscreen is not None:
             self.loadscreen.destroy()
@@ -120775,6 +121048,9 @@ class Game(ShowBase):
                 elif d == 2:
                     self.toggle_invert()
                     self.menu_refresh()
+                elif d == 3:
+                    self.toggle_gren_mode()
+                    self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
             elif st == "setup2":
@@ -120792,11 +121068,13 @@ class Game(ShowBase):
                 else:
                     self.toast("Keine Spezialwaffe - gibt es in Kisten", (0.9, 0.85, 0.7), 1.5)
             elif d == 4:
+                self.set_gren_slot(False)
                 self.toggle_gadget()                   # 4 = Gadget
             elif d == 5:
+                self.set_gren_slot(False)
                 self.sel_req = MELEE_SEL               # 5 = Nahkampfwaffe
             elif d == 6:
-                self.on_grenade()                      # 6 = Granate (wie G: halten = weiter werfen)
+                self.on_grenade()                      # 6 = Granate (wie G: halten = weiter werfen / v55: Slot 6)
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -121349,6 +121627,7 @@ class Game(ShowBase):
                 self.quit_back = self.menu_state
                 self.show_menu("quit")
             return
+        mark = self.aspect2d.getNumChildren()            # v55: alles ab hier in die Menü-Ebene (ui_raise)
         cm = CardMaker("quitbg")
         cm.setFrame(-1.05, 1.05, -0.3, 0.3)
         bg = self.aspect2d.attachNewNode(cm.generate())
@@ -121370,6 +121649,7 @@ class Game(ShowBase):
                             fg=(0.8, 0.8, 0.8, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
         hint.setBin("fixed", 95)
         hots.append(Hot(hint, 0.0, -0.2, 0.045, None, "J / Enter   Ja        N / Esc   Nein"))
+        ui_raise(self.aspect2d, mark, UI_LAYER_MENU)
         self.quit_box = (bg, txt, hots)
         self.overlay_kind = "quit"
         if self.mode == "play":
@@ -121428,6 +121708,7 @@ class Game(ShowBase):
         """Senkrechte Liste (Pause-Menü, Einstellungen, Abfragen) über dem laufenden Spiel.
         items: (Text, Aktion oder None). Das Spiel läuft weiter, die Eingaben ruhen, die Maus ist frei."""
         self.close_quit_box(recapture=False)
+        mark = self.aspect2d.getNumChildren()            # v55: alles ab hier in die Menü-Ebene (ui_raise)
         n = len(items)
         hs = [0.19 if isinstance(it, SliderSpec) else (0.25 if isinstance(it, RowSpec) else 0.13) for it in items]     # Reglerzeilen sind höher
         zs = []
@@ -121503,6 +121784,7 @@ class Game(ShowBase):
                              shadow=(0, 0, 0, 0.9), mayChange=False)
             h.setBin("fixed", 95)
             hots.append(Hot(h, 0.0, bottom + 0.06, 0.042, None, hint))
+        ui_raise(self.aspect2d, mark, UI_LAYER_MENU)
         self.quit_box = (bg, txt, hots)
         self.overlay_kind = kind
         if self.mode == "play":
@@ -121515,6 +121797,7 @@ class Game(ShowBase):
     def open_strike_map(self):
         """Tomahawk-Kommandoraum: grosse Karte, auf der man den Einschlagpunkt anklickt. Das Spiel läuft weiter."""
         self.close_quit_box(recapture=False)
+        mark = self.aspect2d.getNumChildren()            # v55: Menü-Ebene (ui_raise)
         H, cz = self.STRIKE_MAP_HALF, self.STRIKE_MAP_Z
         root = self.aspect2d.attachNewNode("strikemap")
         root.setBin("fixed", 90)
@@ -121618,6 +121901,7 @@ class Game(ShowBase):
         hots = [Hot(fire_t, -0.45, cz - H - 0.2, 0.065, self.strike_fire, "[ Abfeuern ]"),
                 Hot(canc_t, 0.45, cz - H - 0.2, 0.065, self.close_quit_box, "[ Abbrechen ]"),
                 Hot(hint, 0.0, cz - H - 0.08, 0.042, None, "")] + dur_hots
+        ui_raise(self.aspect2d, mark, UI_LAYER_MENU)
         self.quit_box = (root, title, hots)
         self.overlay_kind = "strike"
         if self.mode == "play":
@@ -121730,7 +122014,8 @@ class Game(ShowBase):
                     ("Zurück   (Esc)", lambda: self.show_pause("settings"))], "", width=1.45)
                 return
             if kind == "settings_game":                 # persönliche Spieleinstellungen: Maus
-                items = list(self.personal_sliders()[:1]) + [self.fov_slider(), (self.invert_label(), do(self.toggle_invert))]
+                items = list(self.personal_sliders()[:1]) + [self.fov_slider(), (self.invert_label(), do(self.toggle_invert)),
+                                                             (self.gren_mode_label(), do(self.toggle_gren_mode))]
                 items.append(("Zurück   (Esc)", lambda: self.show_pause("settings")))
                 self.open_overlay("settings_game", "Spieleinstellungen", items, "", width=1.45)
                 return
@@ -121863,7 +122148,7 @@ class Game(ShowBase):
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
                        "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code,
-                       "fov": self.fov_base, "inv": 1 if self.invert_y else 0,
+                       "fov": self.fov_base, "inv": 1 if self.invert_y else 0, "gm": self.gren_mode,
                        "fs": is_fullscreen(self)})
 
     def apply_volume(self):
@@ -121924,6 +122209,15 @@ class Game(ShowBase):
 
     def invert_label(self):
         return f"Maus invertieren (hoch/runter):  {'an' if self.invert_y else 'aus'}"
+
+    def gren_mode_label(self):
+        return f"Granaten-Steuerung:  {GREN_MODES[self.gren_mode]}"
+
+    def toggle_gren_mode(self):
+        """v55: Granaten-Steuerung umschalten (Halten & Laden <-> Taktischer Slot)."""
+        self.gren_mode = 1 - self.gren_mode
+        self.set_gren_slot(False)
+        self.save_prefs()
 
     def personal_sliders(self):
         """Regler, die nur dich betreffen (Hauptmenü- und Spiel-Einstellungen)."""
@@ -123566,7 +123860,7 @@ class Game(ShowBase):
             self.tab_up()
         self.insp_on, self.insp_wi, self.insp_t = True, wi, getattr(self, "insp_t", 0.0)
         self.insp_root = self.aspect2d.attachNewNode("inspektion")
-        self.insp_root.setBin("fixed", 84)
+        self.insp_root.setBin("fixed", UI_LAYER_WINDOW + 84)   # v55: T-Fenster über dem HUD
         self.insp_root.setDepthTest(False)
         self.insp_root.setDepthWrite(False)
         self.insp_marks = {}
@@ -123703,7 +123997,7 @@ class Game(ShowBase):
         self.att_panel_key = None
         if getattr(self, "att_panel", None) is None:
             self.att_panel = self.aspect2d.attachNewNode("aufsatzfenster")
-            self.att_panel.setBin("fixed", 85)
+            self.att_panel.setBin("fixed", UI_LAYER_WINDOW + 85)   # v55: über dem HUD
             self.att_panel.setDepthTest(False)
             self.att_panel.setDepthWrite(False)
 
@@ -124188,7 +124482,8 @@ class Game(ShowBase):
 
     def update_gren_arm(self, pl, driving):
         ch = self.gren_charge()
-        holding = ch >= 0 and self.gren_anim_t <= 0                   # 10e: G gehalten - Arm bleibt ausgeholt
+        holding = (ch >= 0 or (self.gren_slot and gren_total(pl) > 0)) and self.gren_anim_t <= 0   # 10e/v55: + Slot 6
+        ch = max(ch, 0.0)
         if (self.gren_anim_t <= 0 and not holding) or pl.hp <= 0 or driving:
             self.gren_arm.hide()
             return
@@ -124213,7 +124508,7 @@ class Game(ShowBase):
         else:
             v = list(kf[-1][1])
         if holding:                                                   # 10e: gut sichtbar rechts unten halten,
-            e_ = smoothstep(0.0, 0.18, self.g_hold_t)                 # je länger gehalten, desto weiter ausgeholt
+            e_ = smoothstep(0.0, 0.18, self.g_hold_t if self.g_hold_t >= 0 else 1.0)   # je länger gehalten, desto weiter
             hold = (0.21 + 0.04 * ch, 0.58 - 0.10 * ch, -0.21 + 0.08 * ch, -14.0, 24.0 + 16.0 * ch, -10.0)
             v = [a + (b - a) * e_ for a, b in zip(kf[0][1], hold)]
         self.gren_arm.setPos(v[0], v[1], v[2])
@@ -124428,11 +124723,41 @@ class Game(ShowBase):
         """Slot 0 = Hauptwaffe, 1 = Kleinwaffe, 2 = Kistenwaffe (falls vorhanden)."""
         wi = self.player.slots[slot]
         if wi is not None:
+            self.set_gren_slot(False)
             self.sel_req = wi
 
+    def set_gren_slot(self, on):
+        """v55: Granate als Slot 6 in die Hand nehmen (on=True) bzw. wegstecken. Beim Nehmen kommen Gadget und
+        Nahkampfwaffe weg (die Schusswaffe bleibt gesenkt in der Hand). Ohne Granaten geht es nicht."""
+        pl = getattr(self, "player", None)
+        if not on or pl is None:
+            if self.gren_slot:
+                self.g_hold_t = -1.0
+                if pl is not None:
+                    pl.gren_hold = -1
+            self.gren_slot = False
+            return False
+        if (pl.hp <= 0 or pl.vehicle >= 0 or pl.mount >= 0 or pl.heli >= 0 or self.world is None
+                or self.world.phase != "play"):
+            return False
+        if gren_total(pl) <= 0:
+            self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
+            return False
+        if pl.melee_out:                                     # Nahkampfwaffe weg: zurück zur letzten Schusswaffe
+            last = pl.slots[pl.last_slot] if 0 <= pl.last_slot < N_SLOTS else None
+            self.sel_req = last if last is not None else next((w_ for w_ in pl.slots if w_ is not None), None)
+        pl.gad_out, pl.ads = False, False
+        if not self.gren_slot:
+            self.gren_slot_t = 0.0
+            k = gren_fix_sel(pl)
+            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}   (Linksklick werfen, Rechtsklick Art)",
+                       tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k]), 1.6)
+        self.gren_slot = True
+        return True
+
     def cycle_weapon(self, d):
-        """Mausrad: Slot 1 (Hauptwaffe) -> Slot 2 (Sekundärwaffe) -> Nahkampfwaffe (Slot 5) -> wieder Slot 1; Kistenwaffe
-        und Gadget nur über 3/4. Hält man gerade eines davon, geht es zurück zur zuletzt benutzten Waffe aus Slot 1/2.
+        """v55: Mausrad streng linear: Slot 1 <-> 2 <-> 3 (Spezialwaffe) <-> 4 (Gadget) <-> 5 (Nahkampf) <-> 6 (Granate) <-> 1.
+        Leere Slots (keine Spezialwaffe, kein Gadget, keine Granate) werden übergangen, sonst wird nichts übersprungen.
         10e: bei gehaltenem G stattdessen die Granatenart wechseln."""
         if self.mode != "play" or self.player.hp <= 0 or self.quit_box is not None:
             return
@@ -124449,19 +124774,35 @@ class Game(ShowBase):
                 and len(WEAPONS[pl.cur].zooms) > 1):         # v48: VSS - Mausrad verstellt beim Zielen die Vergrösserung
             self.step_zoom(d)
             return
-        order = [wi for wi in pl.slots[:N_FREE_SLOTS] if wi is not None] + [MELEE_SEL]   # Slot 1, Slot 2, Nahkampf
-        if pl.gad_out:
+        order = [wi for wi in pl.slots[:N_SLOTS] if wi is not None]          # Slot 1, 2, 3 (Waffen)
+        if self.gadgets_held():
+            order.append("gad")                                                # Slot 4
+        order.append(MELEE_SEL)                                                # Slot 5
+        if gren_total(pl) > 0:
+            order.append("gren")                                               # Slot 6
+        if self.gren_slot:
+            cur = "gren"
+        elif pl.gad_out:
             cur = "gad"
         else:
             cur = self.sel_req if self.sel_req is not None else (
                 pl.switch_to if pl.switch_t > 0 else (MELEE_SEL if pl.melee_out else pl.cur))
         if cur in order:
             nxt = order[(order.index(cur) + d) % len(order)]
-        else:                                       # Spezialwaffe/Gadget in der Hand: zurück zu Slot 1/2
-            last = pl.slots[pl.last_slot] if 0 <= pl.last_slot < N_FREE_SLOTS else None
+        else:                                       # nicht (mehr) in der Liste: zur letzten Schusswaffe
+            last = pl.slots[pl.last_slot] if 0 <= pl.last_slot < N_SLOTS else None
             nxt = last if last in order else order[0]
-        if nxt != cur:
-            self.sel_req = nxt                      # eine Waffenwahl steckt auch Gadget/Nahkampfwaffe weg
+        if nxt == cur:
+            return
+        if nxt == "gren":
+            self.set_gren_slot(True)
+            return
+        self.set_gren_slot(False)
+        if nxt == "gad":
+            if not pl.gad_out:
+                self.toggle_gadget()                 # nimmt das erste Gadget in die Hand
+            return
+        self.sel_req = nxt                          # eine Waffenwahl steckt auch Gadget/Nahkampfwaffe weg
 
     def on_r(self):
         if self.mode != "play" or self.quit_box is not None:
@@ -124494,9 +124835,13 @@ class Game(ShowBase):
             self.alt_req = True
 
     def on_grenade(self):
-        """10e: G gedrückt - der Wurf kommt beim Loslassen (update_task); hier nur der Hinweis bzw. der Stift."""
+        """10e: G gedrückt - der Wurf kommt beim Loslassen (update_task); hier nur der Hinweis bzw. der Stift.
+        v55: Granaten-Steuerung "Taktischer Slot": G / 6 nehmen stattdessen die Granate als Slot 6 in die Hand."""
         pl = self.player
         if self.mode != "play" or self.quit_box is not None or pl is None or pl.hp <= 0:
+            return
+        if self.gren_mode == 1:
+            self.set_gren_slot(True)
             return
         if gren_total(pl) <= 0:
             self.toast("Keine Granaten", (1.0, 0.6, 0.4), 1.0)
@@ -125087,7 +125432,7 @@ class Game(ShowBase):
         more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
         self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
         ch = self.gren_charge() if pl.hp > 0 else -1.0
-        if ch >= 0:
+        if ch >= 0 or (self.gren_slot and pl.hp > 0):    # v55: Slot 6 aktiv = hervorgehoben
             self.gren_frame.setColor(1.0, 0.85, 0.2, 1.0)
         else:
             self.gren_frame.setColor(*((0.4, 0.4, 0.4, 0.6) if gren_total(pl) > 0 else (0.7, 0.15, 0.1, 0.6)))
@@ -126830,6 +127175,23 @@ class Game(ShowBase):
             trig = edge = False
         elif not self.captured:
             trig = edge = False
+        pl_ = self.player                              # v55: Granate als Slot 6 in der Hand (taktischer Slot)
+        if self.gren_slot and (pl_ is None or pl_.hp <= 0 or pl_.vehicle >= 0 or pl_.heli >= 0 or pl_.mount >= 0
+                               or self.world.phase != "play"
+                               or (gren_total(pl_) <= 0 and self.g_hold_t < 0
+                                   and getattr(self, "gren_anim_t", 0.0) <= 0)
+                               or pl_.gad_out or (pl_.melee_out and self.gren_slot_t > 0.3)):
+            self.set_gren_slot(False)                  # tot, eingestiegen, Runde vorbei, keine Granaten, Gadget/Nahkampf
+        self.gren_slot_t = self.gren_slot_t + dt if self.gren_slot else 0.0
+        slot_trig = False
+        rmb_ = down(MouseButton.three())
+        if self.gren_slot:
+            slot_trig = trig                           # Linksklick wirft (halten lädt wie G)
+            if (rmb_ and not self.gren_rmb_prev and self.captured and self.quit_box is None
+                    and not getattr(self, "insp_on", False)):
+                self.on_gren_next(1)                   # Rechtsklick: nächste Granatenart
+            trig = edge = False
+        self.gren_rmb_prev = rmb_
         inp = SimpleNamespace(
             forward=key("forward") - key("back"), strafe=key("right") - key("left"),
             run=key("sprint"), jump=key("jump"),
@@ -126837,10 +127199,14 @@ class Game(ShowBase):
             look=down(KeyboardButton.up()) - down(KeyboardButton.down()),
             lean=key("lean_right") - key("lean_left"),
             duck=key("duck") or self.duck_lock,
-            trigger=trig, edge=edge, ads=down(MouseButton.three()) and not getattr(self, "tab_held", False) and self.captured,
+            trigger=trig, edge=edge, ads=(down(MouseButton.three()) and not getattr(self, "tab_held", False) and self.captured
+                                          and not self.gren_slot),
             reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
             throw=self.throw_req, mdx=0, mdy=0)
-        inp.throw = self.gren_hold_input(dt, down(k(KEYS["grenade"])) or down(k("6")))   # 10e: G halten = weiter werfen
+        g_held = self.gren_mode == 0 and (down(k(KEYS["grenade"])) or down(k("6")))   # 10e: G halten = weiter werfen
+        inp.throw = self.gren_hold_input(dt, g_held or slot_trig)        # v55: im Slot 6 lädt/wirft die linke Maustaste
+        if self.gren_slot and pl_ is not None and pl_.hp > 0 and getattr(pl_, "gren_hold", -1) < 0 and gren_total(pl_) > 0:
+            pl_.gren_hold = GREN_KINDS.index(gren_fix_sel(pl_))         # Mitspieler sehen die Granate in der Hand
         if self.quit_box is not None:
             inp = SimpleNamespace(forward=0, strafe=0, run=False, jump=False, turn=0, look=0, lean=0,
                                   duck=False, trigger=False, edge=False, ads=False, reload=False, select=None,
@@ -128509,9 +128875,10 @@ class Game(ShowBase):
             if n_ != getattr(self, "pan_food_n", -1):
                 show_food(self.pan_food_fp, n_)
                 self.pan_food_n = n_
-        if self.gren_anim_t > 0 or self.g_hold_t >= 0:   # Granate werfen: Waffe senken, rechter Arm holt aus und wirft
-            self.gren_anim_t = max(0.0, self.gren_anim_t - dt)
-            ug = 1.0 - self.gren_anim_t / GREN_ANIM_T if self.gren_anim_t > 0 else 0.15 * smoothstep(0.0, 0.18, self.g_hold_t)
+        if self.gren_anim_t > 0 or self.g_hold_t >= 0 or self.gren_slot:   # Granate werfen: Waffe senken, Arm holt aus und wirft
+            self.gren_anim_t = max(0.0, self.gren_anim_t - dt)             # (v55: im Slot 6 bleibt die Waffe gesenkt)
+            ug = (1.0 - self.gren_anim_t / GREN_ANIM_T if self.gren_anim_t > 0
+                  else 0.15 * smoothstep(0.0, 0.18, self.g_hold_t if self.g_hold_t >= 0 else 1.0))
             dipg = smoothstep(0.0, 0.15, ug) * (1.0 - smoothstep(0.7, 1.0, ug))
             pz -= 0.30 * dipg
             pitch -= 25 * dipg
@@ -129011,7 +129378,7 @@ class Game(ShowBase):
                 wi = pl.slots[i]
                 self.set_slot_icon(i, wi, pl.att.get(wi) if wi is not None else None,
                                    pscope(pl, wi) if isinstance(wi, int) and WEAPONS[wi].name in SCOPE_MOUNT else 0)
-                active = wi is not None and wi == want and on_foot and not pl.gad_out
+                active = wi is not None and wi == want and on_foot and not pl.gad_out and not self.gren_slot
             else:
                 self.set_slot_icon(i, ("g", pl.gadget) if gad_ok else None)
                 active = pl.gad_out and on_foot and gad_ok
@@ -129199,8 +129566,13 @@ class Game(ShowBase):
             prompt = self.gad_msg[0]
         if getattr(self, "att_panel", None) is not None:
             prompt = ""                                       # Aufsatz-Fenster offen: kein Hinweis darüber
-        self.set_text(self.prompt_text, prompt)
-        self.set_text(self.look_text, self.look_info() if pl.hp > 0 and world.phase == "play" else "")
+        menu_ = self.ui_menu_open()                      # v55: offenes Fenster/Menü -> keine schwebenden Welt-Hinweise
+        qb_ = self.quit_box is not None                  # v55: Esc-Menü über dem T-Fenster: T-Fenster solange ausblenden
+        for nd_ in (getattr(self, "insp_root", None), getattr(self, "att_panel", None)):
+            if nd_ is not None and not nd_.isEmpty() and nd_.isHidden() != qb_:
+                (nd_.hide if qb_ else nd_.show)()
+        self.set_text(self.prompt_text, "" if menu_ else prompt)
+        self.set_text(self.look_text, self.look_info() if pl.hp > 0 and world.phase == "play" and not menu_ else "")
         if world.strike == 1 and world.phase == "play":
             left = int(math.ceil(max(0.0, world.strike_t)))
             self.set_text(self.strike_text, f"ACHTUNG: TOMAHAWK-ANGRIFF IN {left} s")      # Ziel bleibt unbekannt
@@ -130536,7 +130908,20 @@ class MobView:
             self.bar.hide()
             return
         r.setHpr(m.heading, 0, 0)
-        if self.rotors:                                    # Drohne: Rotoren drehen, leicht nach vorn geneigt
+        if m.kind == "harpy":                              # v55: Flügelschlag; Sturzflug = Flügel angelegt, Nase unten
+            t_ = time.time() * (11.0 if m.speed_now > HARPY_CRUISE * 1.4 else 5.5) + m.id
+            if m.state == "chase":
+                self.torso.setP(-38.0)
+                self.legL.setHpr(62.0, 0.0, 12.0)          # Flügel nach hinten angelegt
+                self.legR.setHpr(-62.0, 0.0, -12.0)
+            else:
+                glide = 1.0 if math.sin(time.time() * 0.5 + m.id) > -0.4 else 0.15   # ab und zu gleiten
+                f_ = 38.0 * math.sin(t_) * glide
+                self.torso.setP(8.0 if m.speed_now > HARPY_CRUISE * 1.4 else 0.0)
+                self.legL.setHpr(0.0, 0.0, f_)
+                self.legR.setHpr(0.0, 0.0, -f_)
+                r.setR(18.0 if m.speed_now > 0.5 else 0.0)  # legt sich in die Kurve
+        elif self.rotors:                                  # Drohne: Rotoren drehen, leicht nach vorn geneigt
             for i, rn in enumerate(self.rotors):
                 rn.setH(m.phase * 400.0 * (1 if i % 2 else -1))
             tilt = 12.0 if m.speed_now > 0 else 0.0

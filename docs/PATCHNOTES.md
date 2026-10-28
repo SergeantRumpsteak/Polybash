@@ -2,6 +2,39 @@
 
 Neueste Änderungen oben.
 
+## Monsterdichte neu, Harpie, Mausrad linear, Granaten-Steuerung, Fenster immer oben (Robin, 2026-10-28)
+Gilt für alle Modi. **NET_VERSION 55**: neue Monsterart Harpie in den Snapshots - alle müssen aktualisieren.
+
+Monsterdichte und Spawns:
+- **Neue Dichten**: Aus 0 / Wenig 0,8 / **Mäßig 1,35** (Standard) / Viel 2,2 / Gottlos 4,5. Formel unverändert (Grundzahl x Dichte x Flächenfaktor, bei Dichte > 0 mindestens 1).
+- Polytown, Mäßig: 11 Zombies, 7 Jägerinnen, 4 Brutes, 7 Hasen, 4 Harpien (vorher 12 / 8 / 5 / 8).
+- **Drohnen** spawnen jetzt im Kampf-Korridor **75-120 m** um die Kartenmitte (vorher 150-200 m am Rand). Anzahl weiter dichteunabhängig 2-8 (Polytown 4).
+
+Neues Monster: Harpie (Luft-Scout):
+- Kreist in **30-40 m Höhe** um einen Punkt, der alle 25-45 s langsam über die Karte wandert. Grundzahl 3, skaliert mit Dichte und Fläche wie Zombies (`N_HARPY`).
+- Greift **nur Spieler in der Luft** an: im 2D-Umkreis von **30 m** UND **mehr als 5 m über dem Boden** darunter (Jetpack, Sprungfeder, Helikopter). Bodenspieler, Lärm und Schüsse ignoriert sie.
+- Sturzflug (21 m/s, kreischt beim Abtauchen), ein Treffer mit **4,5 Schaden** (halber Zombie), dann sofort wieder hoch und weiter geradeaus (Hit-and-Run); 2,5 s Pause bis zum nächsten Sturzflug. Im Helikopter trifft sie den Heli.
+- Sinkt das Ziel unter 5 m oder landet, bricht sie den Sturzflug sofort ab und steigt zurück.
+- 40 HP, Beute: 2 Teile (selten). Abgeschossen stürzt sie ab. Im Testgelände über F1 spawnbar (erscheint 30-40 m über dem Fadenkreuz; mit Flugmodus testen).
+- Zum Nachjustieren: `HARPY_ALT`, `HARPY_CIRCLE_R`, `HARPY_CRUISE`, `HARPY_DIVE_SPEED`, `HARPY_CLIMB_*`, `HARPY_TRIG_R`, `HARPY_TRIG_H`, `HARPY_LEASH`, `HARPY_DIVE_MAX`, `HARPY_DRIFT*`.
+
+Waffenslots und Granaten:
+- **Mausrad streng linear**: 1 <-> 2 <-> 3 (Spezialwaffe) <-> 4 (Gadget) <-> 5 (Nahkampf) <-> 6 (Granate) <-> 1. Leere Slots werden übergangen, sonst nichts.
+- **Neue Einstellung "Granaten-Steuerung"** (Einstellungen im Hauptmenü und Esc > Spieleinstellungen, wird gespeichert):
+  - **Halten & Laden (G)** - wie bisher: G (oder 6) halten lädt die Wurfweite, Loslassen wirft.
+  - **Taktischer Slot (6)**: G / 6 nehmen die Granate als Slot 6 in die Hand (Waffe gesenkt, Kachel 6 leuchtet). **Linksklick wirft** (halten lädt wie G), **Rechtsklick wechselt die Granatenart**. Jede andere Waffenwahl, Gadget, Nahkampf, Einsteigen oder keine Granaten mehr stecken sie weg.
+  - Per Mausrad kommt man in beiden Modi in Slot 6.
+- **Revolver nimmt keinen Schalldämpfer mehr** (Gas tritt an der Trommel aus) - der Hinweis beim Aufheben sagt das.
+- Schalldämpfer-Verschleiß: abgenommene Dämpfer behalten ihren Rest exakt im Aufsatz-Lager (geprüft, war schon so).
+
+Fenster und Menüs:
+- Offene Fenster liegen immer über dem HUD: T-Fenster mit Aufsatz-Lager und Ausrüstungsbildschirm in eigener Ebene, Esc-Menü, Einstellungen, Abfragen und Zielkarte darüber, Maus-Hinweisfelder ganz oben (`UI_LAYER_*`, `ui_raise`).
+- Ist ein Fenster oder Menü offen, verschwinden die schwebenden Welt-Hinweise (F-Hinweis, Name des angeschauten Drops). Das Esc-Menü blendet das T-Fenster aus, solange es offen ist.
+
+Nicht umgesetzt: neues Mesh für den Tomahawk-Reiter (Teil 4) - der Cowboy bleibt vorerst.
+
+Technik: `Mob.harpy_update`, `Mob.harpy_target_ok`, `build_harpy`, `_harpy_wing`, `HARPY_LOOK`, `KINDS` + "harpy", `Game.set_gren_slot`, `Game.gren_slot`, `Game.gren_mode` (Einstellung "gm"), `GREN_MODES`, `Game.ui_menu_open`, `ui_raise`, `UI_LAYER_WINDOW/MENU/TIP`.
+
 ## Monster-Spawns skalieren mit der Kartenfläche, Koloss patrouilliert im Zickzack (Robin, 2026-10-28)
 Gilt für alle Modi. NET_VERSION bleibt 54 (nur Host-Logik, keine neue Nachricht).
 
