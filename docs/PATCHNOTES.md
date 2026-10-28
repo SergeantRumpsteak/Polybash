@@ -2,6 +2,25 @@
 
 Neueste Änderungen oben.
 
+## Einstellungen mit Kategorien und frei belegbare Tasten (Robin, 2026-10-28)
+Nur dieser Rechner (Einstellungen), NET_VERSION bleibt 55.
+
+Einstellungen im Hauptmenü:
+- Übersicht mit **Name**, **Steuerung**, **Grafik**, **Audio**; Esc geht jeweils eine Ebene zurück.
+- **Steuerung**: Tastenbelegung, Maus invertieren, Granaten-Steuerung, Mausempfindlichkeit.
+- **Grafik**: Vollbild, Bildrate, Sichtweite, Sichtfeld (FOV).
+- **Audio**: Musik- und Effekt-Lautstärke.
+
+Tastenbelegung (Einstellungen > Steuerung > Tastenbelegung):
+- Alle 33 Spielaktionen in Gruppen (Bewegung, Kampf, Waffen, Ausrüstung, Anzeige), auch Schiessen, Zielen, Set-Fähigkeit und die Slots 1-6.
+- Taste anklicken, dann die neue Taste oder Maustaste drücken (auch Maustaste 4/5). Esc bricht ab, Entf setzt die Standardtaste.
+- Ist die Taste schon belegt, tauschen beide Aktionen ihre Tasten (Hinweis unten). Geänderte Tasten stehen in Blau. "Alle auf Standard" setzt alles zurück.
+- Fest bleiben: Esc, Enter, Mausrad (Waffenwechsel) und F1 (Dev-Menü). Die Menü-Kürzel (Ziffern, J/N/Y, Pfeile) und Klicks in Menüs funktionieren weiter wie bisher.
+- Gespeichert in spiel_einstellungen.json (nur Abweichungen vom Standard).
+- Die Tastenübersicht (Tab), die Granaten-Hinweise und die Granaten-Steuerung zeigen die aktuelle Belegung.
+
+Technik: `KEY_ACTIONS`, `KEY_DEFAULTS`, `KEYS`, `key_label`, `key_handle`, `keys_from_settings`, `Game.bind_keys` / `on_key_event` (ein Handler je Taste), `Game.key_down`, `Game.on_slot`, `Game.on_btn_down` (Ereignis "btn-down"), `KeyBindPage`, `SETTINGS_PAGES`, Menüseiten `set_ctrl` / `set_gfx` / `set_audio` / `set_keys`.
+
 ## Monsterdichte neu, Harpie, Mausrad linear, Granaten-Steuerung, Fenster immer oben (Robin, 2026-10-28)
 Gilt für alle Modi. **NET_VERSION 55**: neue Monsterart Harpie in den Snapshots - alle müssen aktualisieren.
 

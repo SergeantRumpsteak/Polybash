@@ -602,6 +602,7 @@ GREN_KEY_NEXT = "h"       # Taste: Granatenart wechseln (dazu Mausrad bei gehalt
 # wirft), 1 = Taktischer Slot (G / 6 nehmen die Granate als Slot 6 in die Hand: Linksklick wirft - halten lädt -, Rechtsklick
 # wechselt die Art). Per Mausrad kommt man in beiden Modi linear in Slot 6.
 GREN_MODES = ("Halten & Laden (G)", "Taktischer Slot (6)")
+SETTINGS_PAGES = ("settings", "set_ctrl", "set_gfx", "set_audio")   # v55: Einstellungs-Menüseiten (Hauptmenü)
 
 DECOY_T = 6.0             # s macht der Decoy Lärm ...
 
@@ -1705,9 +1706,102 @@ INSPECT_BLEND = 8.0      # 9b: Tempo der Überblendung in die Inspektions-Haltun
 
 INSPECT_SWAY = 5.0       # 9b: Grad, um die die präsentierte Waffe langsam hin und her dreht
 
-KEYS = {"forward": "w", "back": "s", "left": "a", "right": "d", "sprint": "shift", "jump": "space",
-        "duck": "control", "lean_left": "q", "lean_right": "e", "use": "f", "reload": "r", "grenade": "g",
-        "ability": SET_ICON_KEY, "inspect": INSPECT_KEY}
+# v55: Tastenbelegung. Jede Aktion hat eine Taste (Panda3D-Name: "w", "space", "shift", "control", "tab", "f3", "mouse1" ...);
+# Einstellungen > Steuerung > Tastenbelegung ändert sie, gespeichert in spiel_einstellungen.json ("keys", nur Abweichungen).
+# (Gruppe, Aktion, Beschriftung, Standardtaste) - Reihenfolge = Reihenfolge im Menü.
+KEY_ACTIONS = (
+    ("Bewegung", "forward", "Vorwärts", "w"), ("Bewegung", "back", "Rückwärts", "s"),
+    ("Bewegung", "left", "Links", "a"), ("Bewegung", "right", "Rechts", "d"),
+    ("Bewegung", "jump", "Springen / Heli steigen", "space"), ("Bewegung", "sprint", "Rennen / Dash", "shift"),
+    ("Bewegung", "duck", "Ducken (halten) / Heli sinken", "control"), ("Bewegung", "duck_toggle", "Ducken umschalten", "c"),
+    ("Bewegung", "lean_left", "Nach links lehnen", "q"), ("Bewegung", "lean_right", "Nach rechts lehnen", "e"),
+    ("Kampf", "fire", "Schiessen", "mouse1"), ("Kampf", "aim", "Zielen", "mouse3"),
+    ("Kampf", "reload", "Nachladen", "r"), ("Kampf", "fire_mode", "Feuermodus / Wagen: Schütze", "v"),
+    ("Kampf", "grenade", "Granate", "g"), ("Kampf", "gren_next", "Granatenart wechseln", GREN_KEY_NEXT),
+    ("Kampf", "use", "Benutzen / Schlag", "f"), ("Kampf", "ability", "Set-Fähigkeit", SET_ICON_KEY),
+    ("Waffen", "slot1", "Slot 1: Hauptwaffe", "1"), ("Waffen", "slot2", "Slot 2: Sekundärwaffe", "2"),
+    ("Waffen", "slot3", "Slot 3: Spezialwaffe", "3"), ("Waffen", "slot4", "Slot 4: Gadget", "4"),
+    ("Waffen", "slot5", "Slot 5: Nahkampf", "5"), ("Waffen", "slot6", "Slot 6: Granate", "6"),
+    ("Ausrüstung", "inspect", "Waffe ansehen / Aufsätze", INSPECT_KEY),
+    ("Ausrüstung", "gear_off", "Einzelteile ablegen", GEAR_OFF_KEY), ("Ausrüstung", "heli_flare", "Heli: Flares", HELI_FLARE_KEY),
+    ("Anzeige", "scoreboard", "Übersicht (halten)", "tab"), ("Anzeige", "bigmap", "Grosse Karte", "m"),
+    ("Anzeige", "mm_out", "Minimap heraus", "x"), ("Anzeige", "mm_in", "Minimap hinein", "y"),
+    ("Anzeige", "fps", "Bildrate anzeigen", "f3"), ("Anzeige", "fullscreen", "Vollbild", "f11"),
+)
+KEY_DEFAULTS = {a: k for _g, a, _l, k in KEY_ACTIONS}
+KEY_LABELS = {a: l for _g, a, l, _k in KEY_ACTIONS}
+KEYS = dict(KEY_DEFAULTS)        # aktuelle Belegung (wird beim Start aus den Einstellungen überschrieben)
+KEY_RESERVED = ("escape", "enter", "wheel_up", "wheel_down", "f1")   # Menü / Mausrad (Waffenwechsel) / Dev-Menü
+KEY_NAMES = {"space": "Leertaste", "shift": "Shift", "control": "Strg", "alt": "Alt", "tab": "Tab",
+             "mouse1": "Linke Maus", "mouse2": "Mittlere Maus", "mouse3": "Rechte Maus", "mouse4": "Maustaste 4",
+             "mouse5": "Maustaste 5", "backspace": "Rücktaste", "caps_lock": "Feststell", "insert": "Einfg",
+             "delete": "Entf", "home": "Pos1", "end": "Ende", "page_up": "Bild auf", "page_down": "Bild ab",
+             "arrow_up": "Pfeil hoch", "arrow_down": "Pfeil runter", "arrow_left": "Pfeil links",
+             "arrow_right": "Pfeil rechts", "lmeta": "Win", "rmeta": "Win", "menu": "Menütaste",
+             "print_screen": "Druck", "scroll_lock": "Rollen", "num_lock": "Num", "pause": "Pause"}
+KEY_NORMAL = {"lshift": "shift", "rshift": "shift", "lcontrol": "control", "rcontrol": "control",
+              "lalt": "alt", "ralt": "alt"}
+
+
+def key_label(b):
+    """v55: Anzeigename einer Taste ("space" -> "Leertaste", "f3" -> "F3", "e" -> "E")."""
+    if not b:
+        return "-"
+    if b in KEY_NAMES:
+        return KEY_NAMES[b]
+    if len(b) == 1:
+        return b.upper()
+    if b[0] == "f" and b[1:].isdigit():
+        return b.upper()
+    return b.replace("_", " ").capitalize()
+
+
+def key_of(act):
+    """v55: Anzeigename der Taste, die gerade auf der Aktion act liegt."""
+    return key_label(KEYS.get(act, ""))
+
+
+def key_valid(b):
+    """v55: darf b belegt werden? (Panda3D-Tastenname, keine reservierte Taste)"""
+    return isinstance(b, str) and 0 < len(b) <= 24 and b not in KEY_RESERVED and "-" not in b
+
+
+def keys_from_settings(d):
+    """v55: gespeicherte Belegung übernehmen (nur gültige Einträge, keine Doppelbelegung)."""
+    KEYS.clear()
+    KEYS.update(KEY_DEFAULTS)
+    if not isinstance(d, dict):
+        return
+    for act, b in d.items():
+        if act in KEYS and key_valid(b) and b not in KEYS.values():
+            KEYS[act] = b
+    if len(set(KEYS.values())) != len(KEYS):           # Standardtaste einer Aktion ist jetzt woanders belegt
+        KEYS.clear()
+        KEYS.update(KEY_DEFAULTS)
+
+
+_KEY_H = {}
+
+
+def key_handle(b):
+    """v55: ButtonHandle zu einem Tastennamen (für is_button_down), zwischengespeichert. None = unbekannt."""
+    if b in _KEY_H:
+        return _KEY_H[b]
+    h = None
+    try:
+        if b.startswith("mouse") and b[5:].isdigit():
+            h = MouseButton.button(int(b[5:]) - 1)
+        elif len(b) == 1:
+            h = KeyboardButton.asciiKey(b)
+        else:
+            from panda3d.core import ButtonHandle, ButtonRegistry
+            h = ButtonRegistry.ptr().findButton(b)
+            if h == ButtonHandle.none():
+                h = None
+    except Exception:
+        h = None
+    _KEY_H[b] = h
+    return h
 SEMI_SPREAD = 0.8              # Faktor auf die Streuung im Einzelfeuer-Modus
 SELECTIVE_FIRE = (1, 9, 10)    # Waffen mit Feuermodus-Schalter (V): Colt M4 Carbine, SCAR-L, AK
 
@@ -4531,6 +4625,20 @@ KEY_LEGEND = (("W A S D", "laufen"), ("Shift", "rennen / Dash"), ("Leertaste", "
               ("V", "Wagen: Schütze"), ("Q / E", "lehnen"), ("Strg / C", "ducken / sinken"), ("Tab", "Übersicht"), ("T", "Waffe/Aufsätze"),
               ("T + Pfanne", "essen"), ("L.M. halten", "Katana/Schwert: Spezial"),
               ("Mittlere M.", "Set-Fähigkeit"), ("B (Heli)", "Flares"), ("M", "ganze Karte"), ("F3", "Bildrate"), ("Esc", "Menü"))
+
+
+def key_legend():
+    """v55: Tastenübersicht (Tab) aus der aktuellen Belegung KEYS."""
+    k = key_of
+    mv = " ".join(k(a) for a in ("forward", "left", "back", "right"))
+    return ((mv, "laufen"), (k("sprint"), "rennen / Dash"), (k("jump"), "springen / steigen"),
+            ("Maus", "umschauen"), (k("fire"), "schiessen"), (k("aim"), "zielen"), (k("reload"), "nachladen"),
+            (" ".join(k("slot%d" % i) for i in (1, 2, 3)), "Hauptwaffe / Sekundär / Spezial"), ("Mausrad", "Waffe wechseln"),
+            (f"{k('grenade')} / {k('slot6')}", "Granate"), (k("gren_next"), "Granatenart"), (k("use"), "benutzen / Schlag"),
+            (k("slot4"), "Gadget"), (k("slot5"), "Nahkampfwaffe"), (k("fire_mode"), "Feuermodus / Wagen: Schütze"),
+            (f"{k('lean_left')} / {k('lean_right')}", "lehnen"), (f"{k('duck')} / {k('duck_toggle')}", "ducken / sinken"),
+            (k("scoreboard"), "Übersicht"), (k("inspect"), "Waffe/Aufsätze"), (k("ability"), "Set-Fähigkeit"),
+            (k("heli_flare"), "Heli: Flares"), (k("bigmap"), "ganze Karte"), (k("fps"), "Bildrate"), ("Esc", "Menü"))
 
 
 INPUT_LOCK_T = 0.3       # 7a: s Feuersperre nach Spielstart, Respawn, Menü/Karte zu, Fensterwechsel; dazu muss die
@@ -21302,6 +21410,132 @@ class _PalHit(HitRect):
 
     def hit(self, ax, az):
         return self.page.pal_open is not None and HitRect.hit(self, ax, az)
+
+
+class KeyBindPage:
+    """v55: Einstellungen > Steuerung > Tastenbelegung. Zwei Spalten mit allen Aktionen (KEY_ACTIONS, nach Gruppen);
+    Klick auf eine Taste -> nächste gedrückte Taste/Maustaste wird zugewiesen (Game.on_btn_down). Darunter
+    'Alle auf Standard' und 'Zurück'."""
+    COLS = (("Bewegung", "Kampf"), ("Waffen", "Ausrüstung", "Anzeige"))
+    ROW, HEAD, TOP = 0.064, 0.085, 0.80
+    KEY_W = 0.40
+
+    def __init__(self, g):
+        self.g = g
+        self.root = g.aspect2d.attachNewNode("tastenbelegung")
+        self.rows = []                 # (Aktion, Karte, Text der Taste, x0, x1, z0, z1)
+        self.btns = []                 # (Karte, Text, x0, x1, z0, z1, Aktion)
+        self.hot, self.msg_t = None, 0.0
+        self.shown = None
+        OnscreenText(text="Tastenbelegung", parent=self.root, pos=(0, 0.88), scale=0.085, fg=(1.0, 0.78, 0.3, 1),
+                     shadow=(0, 0, 0, 0.8), font=BOLD_FONT, mayChange=False)
+        for c, groups in enumerate(self.COLS):
+            x0 = -1.62 + c * 1.66
+            z = self.TOP
+            for grp in groups:
+                OnscreenText(text=grp, parent=self.root, pos=(x0, z - 0.012), scale=0.05, fg=(1.0, 0.7, 0.28, 1),
+                             align=TextNode.ALeft, shadow=(0, 0, 0, 0.8), font=BOLD_FONT, mayChange=False)
+                z -= self.HEAD
+                for g_, act, lab, _d in KEY_ACTIONS:
+                    if g_ != grp:
+                        continue
+                    OnscreenText(text=lab, parent=self.root, pos=(x0 + 0.03, z), scale=0.038,
+                                 fg=(0.86, 0.9, 0.96, 1), align=TextNode.ALeft, shadow=(0, 0, 0, 0.8), mayChange=False)
+                    kx0 = x0 + 1.1
+                    card = self.card(kx0, kx0 + self.KEY_W, z - 0.017, z + 0.043, BTN_C)
+                    t = OnscreenText(text="", parent=self.root, pos=(kx0 + self.KEY_W / 2, z), scale=0.038,
+                                     fg=Hot.BASE, shadow=(0, 0, 0, 0.8), mayChange=True)
+                    self.rows.append((act, card, t, kx0, kx0 + self.KEY_W, z - 0.017, z + 0.043))
+                    z -= self.ROW
+                z -= 0.02
+        self.info = OnscreenText(text="", parent=self.root, pos=(0, -0.7), scale=0.04, fg=(0.75, 0.82, 0.92, 1),
+                                 shadow=(0, 0, 0, 0.8), mayChange=True)
+        for x, lab, fn in ((-0.42, "Alle auf Standard", self.reset), (0.42, "Zurück   (Esc)", self.back)):
+            card = self.card(x - 0.38, x + 0.38, -0.84, -0.76, BTN_C)
+            t = OnscreenText(text=lab, parent=self.root, pos=(x, -0.815), scale=0.05, fg=Hot.BASE, font=BOLD_FONT,
+                             shadow=(0, 0, 0, 0.8), mayChange=True)
+            self.btns.append((card, t, x - 0.38, x + 0.38, -0.84, -0.76, fn))
+        self.update()
+
+    def card(self, x0, x1, z0, z1, col):
+        cm = CardMaker("kb")
+        cm.setFrame(x0, x1, z0, z1)
+        n = self.root.attachNewNode(cm.generate())
+        n.setColor(*col)
+        n.setTransparency(TransparencyAttrib.MAlpha)
+        btn3d(n)
+        return n
+
+    def note(self, s):
+        self.set_info(s)
+        self.msg_t = 4.0
+
+    def set_info(self, s):
+        if s != getattr(self, "_info", None):
+            self._info = s
+            self.info.setText(s)
+
+    def hit(self, m):
+        if m is None:
+            return None
+        for act, _c, _t, x0, x1, z0, z1 in self.rows:
+            if x0 <= m[0] <= x1 and z0 <= m[1] <= z1:
+                return ("key", act)
+        for _c, _t, x0, x1, z0, z1, fn in self.btns:
+            if x0 <= m[0] <= x1 and z0 <= m[1] <= z1:
+                return ("btn", fn)
+        return None
+
+    def click(self, m):
+        h = self.hit(m)
+        if h is None or self.g.key_capture is not None:
+            return
+        self.g.sfx.ui_click()
+        if h[0] == "key":
+            self.g.key_capture_start(h[1])
+            self.set_info(f"{KEY_LABELS[h[1]]}: neue Taste oder Maustaste drücken   (Esc = abbrechen, Entf = Standard)")
+            self.msg_t = 0.0
+        else:
+            h[1]()
+
+    def reset(self):
+        self.g.keys_reset()
+        self.note("Alle Tasten auf Standard zurückgesetzt")
+
+    def back(self):
+        self.g.show_menu("set_ctrl")
+
+    def tick(self, dt):
+        self.msg_t = max(0.0, self.msg_t - dt)
+        hit = self.hit(self.g.mouse_2d()) if self.g.key_capture is None else None
+        if hit != self.hot:
+            self.hot = hit
+            if hit is not None:
+                self.g.sfx.ui_click()
+        self.update()
+
+    def update(self):
+        cap = self.g.key_capture
+        st = (cap, tuple(KEYS[a] for a in KEY_DEFAULTS), self.hot)
+        if st != self.shown:
+            self.shown = st
+            for act, card, t, *_r in self.rows:
+                b = KEYS.get(act, "")
+                t.setText("[ ... ]" if act == cap else key_label(b))
+                on = self.hot == ("key", act)
+                card.setColor(*((0.75, 0.48, 0.12, 0.98) if act == cap else (BTN_HC if on else BTN_C)))
+                t.setFg(Hot.ON if (on or act == cap) else (Hot.BASE if b == KEY_DEFAULTS[act] else (0.55, 0.9, 1.0, 1)))
+            for card, t, *_r, fn in self.btns:
+                on = self.hot == ("btn", fn)
+                card.setColor(*(BTN_HC if on else BTN_C))
+                t.setFg(Hot.ON if on else Hot.BASE)
+        if cap is None and self.msg_t <= 0:
+            self.set_info("Taste anklicken, dann die neue Taste drücken. Blau = geändert. Belegte Tasten werden getauscht.")
+
+    def destroy(self):
+        if self.g.key_capture is not None:
+            self.g.key_capture_stop()
+        self.root.removeNode()
 
 
 class CharPage(SetupPage):
@@ -120083,6 +120317,7 @@ class Game(ShowBase):
         self.fov_base = float(fv) if isinstance(fv, (int, float)) and not isinstance(fv, bool) and 60 <= fv <= 110 else FOV   # Sichtfeld
         self.invert_y = bool(st.get("inv"))      # Maus hoch/runter invertiert
         self.gren_mode = 1 if st.get("gm") == 1 else 0   # v55: Granaten-Steuerung (GREN_MODES)
+        keys_from_settings(st.get("keys"))               # v55: Tastenbelegung
         vm = st.get("vm")
         self.vol_music = int(vm) if isinstance(vm, (int, float)) and not isinstance(vm, bool) and 0 <= vm <= 100 else 100      # Hintergrundmusik in %
         vs_ = st.get("vs")
@@ -120214,28 +120449,14 @@ class Game(ShowBase):
             self.buttonThrowers[0].node().setModifierButtons(ModifierButtons())
         except Exception:
             pass
-        self.accept("mouse1", self.on_click)
-        self.accept("mouse1-up", self.on_mouse_up)
-        self.accept("w", self.on_w)
         for _k, _dx, _dy in (("arrow_left", -1, 0), ("arrow_right", 1, 0), ("arrow_up", 0, -1), ("arrow_down", 0, 1)):
-            self.accept(_k, self.on_arrow, [_dx, _dy])
             self.accept(_k + "-repeat", self.on_arrow, [_dx, _dy])
         self.accept("escape", self.on_escape)
-        self.accept("q", self.on_q)          # im Spiel lehnt Q (wird per Tastenabfrage gelesen)
-        self.accept("f", self.on_use)
-        self.accept("f3", self.toggle_fps)
-        self.accept("f11", self.toggle_fullscreen)
         self.accept(DEV_KEY, self.on_dev)                     # v50: Dev-Menü (nur auf dem Testgelände)
-        self.accept(GEAR_OFF_KEY, self.on_gear_off)           # v51: Einzelteile ablegen (Exo-Jetpack, Hermes-Boots)
-        self.accept("c", self.toggle_duck)
         self.duck_lock = False
-        self.accept("m", self.toggle_bigmap)
         self._hover_hit = None
         self.sfx = Sfx(self)
         self.apply_volume()
-        self.accept("v", self.on_alt)
-        self.accept("g", self.on_grenade)
-        self.accept(GREN_KEY_NEXT, self.on_gren_next, [1])      # Granatenart wechseln
         self.g_hold_t = -1.0                                   # so lange wird G schon gehalten (-1 = nicht)
         self.gren_slot = False                                 # v55: Granate als Slot 6 in der Hand (taktischer Slot)
         self.gren_slot_t = 0.0                                 # v55: s seit dem Nehmen von Slot 6
@@ -120243,24 +120464,14 @@ class Game(ShowBase):
         self.g_throw_charge = 0.0
         self.prev_swing, self.quick_melee, self.prev_run, self.prev_jump = 0.0, False, False, False
         self.spec_fp, self.shield_flash, self.bite_t = None, 0.0, 0.0
-        self.accept(KEYS["ability"], self.on_ability)          # Set-Fähigkeit (Schockwelle, Scan, Nest-Wählrad; v53: MMB)
-        self.accept(HELI_FLARE_KEY, self.on_heli_flare)        # v53: Heli-Flares auf eigener Taste (B)
-        self.accept("j", self.on_confirm, [True])
-        self.accept("y", self.on_y)
-        self.accept("x", self.on_mm_zoom, [1])
-        self.accept("n", self.on_confirm, [False])
-        self.accept("arrow_left", self.end_key, [-1])
-        self.accept("arrow_right", self.end_key, [1])
-        self.accept("tab", self.tab_down)
-        self.accept("tab-up", self.tab_up)
-        self.accept(KEYS["inspect"], self.on_inspect)          # 9b: Waffen-Inspektion (Aufsätze)
-        self.accept("r", self.on_r)
-        for i in range(10):          # Ziffern: Waffenwahl im Spiel, Auswahl/IP-Eingabe im Menü
-            self.accept(str(i), self.on_digit, [i])
+        self.key_capture, self.key_capture_end = None, 0.0     # v55: Tastenbelegung - wartet auf eine neue Taste
+        self.bind_keys()                                       # v55: alle Tasten über eine Tabelle (Tastenbelegung)
         bt = getattr(self, "buttonThrowers", None)
         if bt:                       # Texteingabe (Name, IP) über Tastenanschläge
             bt[0].node().setKeystrokeEvent("keystroke")
             self.accept("keystroke", self.on_keystroke)
+            bt[0].node().setButtonDownEvent("btn-down")        # v55: jede gedrückte Taste (für die Tastenbelegung)
+            self.accept("btn-down", self.on_btn_down)
         self.accept("backspace", self.menu_backspace)
         self.accept("backspace-repeat", self.menu_backspace)
         self.accept("enter", self.menu_enter)
@@ -120434,7 +120645,7 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "char"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "char", "set_keys"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
         if state not in ("loadout", "loadconf", "setup2"):
@@ -120469,13 +120680,17 @@ class Game(ShowBase):
         elif st == "multi":
             spec = [("Spielen", None), ("Spiel hosten", dig(1)), ("Spiel beitreten", dig(2)),
                     ("Zurück   (Esc)", back)]
-        elif st == "settings":
-            spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)),
-                    (self.invert_label(), dig(2)),
-                    (self.gren_mode_label(), dig(3)),
-                    ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None), ("", None),
-                    ("", None), ("", None), ("", None), ("", None),     # Platz für 6 Regler
-                    ("Zurück   (Esc)", back)]
+        elif st == "settings":                         # v55: Übersicht mit Kategorien
+            spec = [("Einstellungen", None), (f"Name:  {self.my_name}", dig(1)), ("Steuerung", dig(2)),
+                    ("Grafik", dig(3)), ("Audio", dig(4)), ("Zurück   (Esc)", back)]
+        elif st == "set_ctrl":
+            spec = [("Steuerung", None), ("Tastenbelegung", dig(1)), (self.invert_label(), dig(2)),
+                    (self.gren_mode_label(), dig(3))] + [("", None)] * 2 + [("Zurück   (Esc)", back)]
+        elif st == "set_gfx":
+            spec = [("Grafik", None), (f"Vollbild:  {'an' if is_fullscreen(self) else 'aus'}", dig(1))] \
+                + [("", None)] * 6 + [("Zurück   (Esc)", back)]
+        elif st == "set_audio":
+            spec = [("Audio", None)] + [("", None)] * 4 + [("Zurück   (Esc)", back)]
         elif st == "setup2":
             c = self.cfg
             mc = self.cfg_is_mc()
@@ -120532,6 +120747,10 @@ class Game(ShowBase):
             else:
                 self.setup_page.update()
             return
+        if self.menu_state == "set_keys":                 # v55: Tastenbelegung - eigene Seite
+            if self.setup_page is None:
+                self.setup_page = KeyBindPage(self)
+            return
         if self.menu_state == "loadconf":                 # Loadout konfigurieren: eigene Seite
             if self.loadscreen is None:
                 self.loadscreen = LoadoutScreen(self, self.close_loadscreen)
@@ -120563,13 +120782,14 @@ class Game(ShowBase):
             self.menu_cards = []
             big = self.menu_state in ("main", "multi")
             step, scale = (0.16, 0.078) if big else (0.105, 0.06)
-            z = -0.6 if self.menu_state == "loadout" else (0.46 if self.menu_state == "settings" else 0.36)
+            setl = self.menu_state in SETTINGS_PAGES
+            z = -0.6 if self.menu_state == "loadout" else (0.46 if setl else 0.36)
             blank_z = []
             for i, it in enumerate(spec):
                 label, action = it[0], it[1]
                 head = i == 0 and action is None and self.menu_state != "main"
                 zz = z
-                z -= step * (1.25 if head else (0.72 if (not label and self.menu_state == "settings") else 1.0))
+                z -= step * (1.25 if head else (0.72 if (not label and setl) else 1.0))
                 sc = 0.085 if head else scale
                 if not label:
                     blank_z.append(zz)
@@ -120594,10 +120814,11 @@ class Game(ShowBase):
                     hot.x0, hot.x1 = -0.78, 0.78
                     self.menu_cards.append((hot, card))
             self.ui_sliders_clear()
-            if self.menu_state == "settings":
-                ps_ = self.personal_sliders()
-                for k, sp in enumerate([self.fps_slider(), self.view_slider(), ps_[0], self.fov_slider()] + ps_[1:]):
-                    self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
+            ps_ = self.personal_sliders()                # v55: Regler je Kategorie (je Regler zwei Leerzeilen)
+            sl_ = {"set_ctrl": ps_[:1], "set_gfx": [self.fps_slider(), self.view_slider(), self.fov_slider()],
+                   "set_audio": ps_[1:]}.get(self.menu_state, [])
+            for k, sp in enumerate(sl_):
+                self.ui_sliders.append(UiSlider(self.aspect2d, sp, -0.6, 0.6, blank_z[2 * k], binned=False))
 
     # ------------------------------------------------------------ Maus im Menü
     def mouse_2d(self):
@@ -120672,7 +120893,15 @@ class Game(ShowBase):
         if self.mode == "play" and self.quit_box is None and getattr(self, "insp_on", False):
             self.insp_click(self.mouse_2d())                 # 9b: Inspektion - Markierung/Aufsatz anklicken
             return
+        if (self.mode == "play" and self.quit_box is None and not self.captured and not self.dead_free
+                and KEYS["fire"] != "mouse1"):
+            self.set_capture(True)                           # v55: Schiessen liegt woanders - Klick fängt die Maus ein
+            self.lock_trigger()
+            return
         if self.mode != "menu" and self.quit_box is None:
+            return
+        if self.mode == "menu" and self.quit_box is None and isinstance(self.setup_page, KeyBindPage):
+            self.setup_page.click(self.mouse_2d())           # v55: Tastenbelegung
             return
         hit, card = self.update_hover()
         if hit is None and self.ui_sliders and self.ui_slider_press(self.mouse_2d()):
@@ -121041,15 +121270,24 @@ class Game(ShowBase):
                 elif d == 2:
                     self.ip_text, self.ip_edited = "", False
                     self.show_menu("join")
-            elif st == "settings":
+            elif st == "settings":                     # v55: Kategorien
                 if d == 1:
                     self.name_back = "settings"
                     self.show_menu("name")
+                elif 2 <= d <= 4:
+                    self.show_menu(("set_ctrl", "set_gfx", "set_audio")[d - 2])
+            elif st == "set_ctrl":
+                if d == 1:
+                    self.show_menu("set_keys")
                 elif d == 2:
                     self.toggle_invert()
                     self.menu_refresh()
                 elif d == 3:
                     self.toggle_gren_mode()
+                    self.menu_refresh()
+            elif st == "set_gfx":
+                if d == 1:
+                    self.toggle_fullscreen()
                     self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
@@ -121060,21 +121298,7 @@ class Game(ShowBase):
             if self.player.hp <= 0:
                 if not self.world.exp:             # Experimental: keine Ausrüstungswahl (Start mit der Pistole)
                     self.pick_loadout(d)           # tot: Waffen für den nächsten Spawn wählen
-            elif 1 <= d <= 2:
-                self.request_weapon(d - 1)
-            elif d == 3:
-                if self.player.slots[SPECIAL_SLOT] is not None:
-                    self.request_weapon(SPECIAL_SLOT)      # 3 = Spezialwaffe (aus der Kiste)
-                else:
-                    self.toast("Keine Spezialwaffe - gibt es in Kisten", (0.9, 0.85, 0.7), 1.5)
-            elif d == 4:
-                self.set_gren_slot(False)
-                self.toggle_gadget()                   # 4 = Gadget
-            elif d == 5:
-                self.set_gren_slot(False)
-                self.sel_req = MELEE_SEL               # 5 = Nahkampfwaffe
-            elif d == 6:
-                self.on_grenade()                      # 6 = Granate (wie G: halten = weiter werfen / v55: Slot 6)
+            # lebend: Waffenwahl über die (frei belegbaren) Slot-Tasten - on_slot
 
     def on_keystroke(self, ch):
         """Texteingabe im Menü (Name, IP-Adresse)."""
@@ -121109,6 +121333,8 @@ class Game(ShowBase):
             self.menu_msg = ""
 
     def menu_enter(self):
+        if self.key_capture is not None or time.time() < self.key_capture_end:
+            return                                           # v55: Enter wird gerade als Taste belegt
         if self.quit_box is not None:
             self.on_confirm(True)
             return
@@ -121567,6 +121793,8 @@ class Game(ShowBase):
         self.back_btn_text.hide()
 
     def on_escape(self):
+        if self.key_capture is not None or time.time() < self.key_capture_end:
+            return                                           # v55: Esc bricht nur die Tastenbelegung ab (on_btn_down)
         sp_ = getattr(self, "setup_page", None)
         if isinstance(sp_, CharPage) and sp_.pal_open is not None and self.mode == "menu":
             sp_.pal_close()                                  # v53: Esc klappt zuerst die Farbpalette zu
@@ -121600,6 +121828,10 @@ class Game(ShowBase):
             self.show_menu(self.pending_start[1])
         elif self.mode == "menu" and self.menu_state in ("multi", "settings", "loadout", "char"):
             self.show_menu("main")
+        elif self.mode == "menu" and self.menu_state in ("set_ctrl", "set_gfx", "set_audio"):
+            self.show_menu("settings")                       # v55: Kategorie -> Übersicht
+        elif self.mode == "menu" and self.menu_state == "set_keys":
+            self.show_menu("set_ctrl")
         elif self.mode == "menu" and self.menu_state == "name" and self.name_back != "main":
             self.name_back = "main"
             self.show_menu("settings")
@@ -122149,6 +122381,7 @@ class Game(ShowBase):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
                        "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code,
                        "fov": self.fov_base, "inv": 1 if self.invert_y else 0, "gm": self.gren_mode,
+                       "keys": {a: b for a, b in KEYS.items() if b != KEY_DEFAULTS.get(a)},
                        "fs": is_fullscreen(self)})
 
     def apply_volume(self):
@@ -122211,7 +122444,9 @@ class Game(ShowBase):
         return f"Maus invertieren (hoch/runter):  {'an' if self.invert_y else 'aus'}"
 
     def gren_mode_label(self):
-        return f"Granaten-Steuerung:  {GREN_MODES[self.gren_mode]}"
+        lab = (f"Halten & Laden ({key_of('grenade')})" if self.gren_mode == 0
+               else f"Taktischer Slot ({key_of('slot6')})")          # v55: mit der aktuellen Taste
+        return f"Granaten-Steuerung:  {lab}"
 
     def toggle_gren_mode(self):
         """v55: Granaten-Steuerung umschalten (Halten & Laden <-> Taktischer Slot)."""
@@ -124280,9 +124515,10 @@ class Game(ShowBase):
         sep.setZ(0.06)
         OnscreenText(text="Steuerung", parent=root, pos=(0, -0.01), scale=0.048, fg=(1.0, 0.75, 0.3, 1),
                      shadow=(0, 0, 0, 0.9), mayChange=False)
-        n3 = (len(KEY_LEGEND) + 2) // 3
+        legend = key_legend()                            # v55: aus der aktuellen Tastenbelegung
+        n3 = (len(legend) + 2) // 3
         for c in range(3):
-            part = KEY_LEGEND[c * n3:(c + 1) * n3]
+            part = legend[c * n3:(c + 1) * n3]
             x0 = -TAB_W + 0.08 + c * (2 * TAB_W - 0.1) / 3
             OnscreenText(text="\n".join(k for k, _w in part), parent=root, pos=(x0, -0.1), scale=0.036,
                          fg=(1.0, 0.8, 0.4, 1), align=TextNode.ALeft, mayChange=False)
@@ -124308,7 +124544,7 @@ class Game(ShowBase):
     def update_tab_overlay(self):
         mw = self.mouseWatcherNode                   # Tab-Loslassen verpasst (Fenster gewechselt)? dann zu
         if mw is not None and hasattr(mw, "is_button_down") and not getattr(self, "tab_test", False):
-            if not mw.is_button_down(KeyboardButton.tab()):
+            if not self.key_down("scoreboard"):
                 self.tab_up()
                 return
         world = self.world
@@ -124750,7 +124986,7 @@ class Game(ShowBase):
         if not self.gren_slot:
             self.gren_slot_t = 0.0
             k = gren_fix_sel(pl)
-            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}   (Linksklick werfen, Rechtsklick Art)",
+            self.toast(f"Granate: {GREN_NAMES[k]}  x{pl.gren.get(k, 0)}   ({key_of('fire')} werfen, {key_of('aim')} Art)",
                        tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k]), 1.6)
         self.gren_slot = True
         return True
@@ -125430,7 +125666,7 @@ class Game(ShowBase):
         self.set_text(self.gren_text, f"x{n}")
         self.set_text(self.gren_label, f"6 {GREN_SHORT[kind]}")
         more = [f"{GREN_SHORT[k_]} {pl.gren[k_]}" for k_ in GREN_KINDS if k_ != kind and pl.gren.get(k_, 0) > 0]
-        self.set_text(self.gren_more, ("H: " + "  ".join(more)) if more else "")
+        self.set_text(self.gren_more, (f"{key_of('gren_next')}: " + "  ".join(more)) if more else "")
         ch = self.gren_charge() if pl.hp > 0 else -1.0
         if ch >= 0 or (self.gren_slot and pl.hp > 0):    # v55: Slot 6 aktiv = hervorgehoben
             self.gren_frame.setColor(1.0, 0.85, 0.2, 1.0)
@@ -127142,16 +127378,8 @@ class Game(ShowBase):
 
         k = KeyboardButton.ascii_key
 
-        def key(name):                                 # zentrale Tastenzuordnung (KEYS)
-            b = KEYS.get(name, "")
-            if b == "shift":
-                return down(KeyboardButton.shift())
-            if b == "space":
-                return down(KeyboardButton.space())
-            if b == "control":
-                return down(KeyboardButton.control())
-            return down(k(b)) if len(b) == 1 else False
-        trig = down(MouseButton.one())
+        key = self.key_down                            # v55: zentrale Tastenzuordnung (KEYS, frei belegbar)
+        trig = key("fire")
         edge = trig and not self.prev_trig
         self.prev_trig = trig
         if self.player is not None:                    # 7a: Wiederbelebt? -> Feuersperre wie nach dem Start
@@ -127184,7 +127412,7 @@ class Game(ShowBase):
             self.set_gren_slot(False)                  # tot, eingestiegen, Runde vorbei, keine Granaten, Gadget/Nahkampf
         self.gren_slot_t = self.gren_slot_t + dt if self.gren_slot else 0.0
         slot_trig = False
-        rmb_ = down(MouseButton.three())
+        rmb_ = key("aim")
         if self.gren_slot:
             slot_trig = trig                           # Linksklick wirft (halten lädt wie G)
             if (rmb_ and not self.gren_rmb_prev and self.captured and self.quit_box is None
@@ -127199,11 +127427,11 @@ class Game(ShowBase):
             look=down(KeyboardButton.up()) - down(KeyboardButton.down()),
             lean=key("lean_right") - key("lean_left"),
             duck=key("duck") or self.duck_lock,
-            trigger=trig, edge=edge, ads=(down(MouseButton.three()) and not getattr(self, "tab_held", False) and self.captured
+            trigger=trig, edge=edge, ads=(key("aim") and not getattr(self, "tab_held", False) and self.captured
                                           and not self.gren_slot),
             reload=self.reload_req, select=self.sel_req, use=self.use_req, alt=self.alt_req,
             throw=self.throw_req, mdx=0, mdy=0)
-        g_held = self.gren_mode == 0 and (down(k(KEYS["grenade"])) or down(k("6")))   # 10e: G halten = weiter werfen
+        g_held = self.gren_mode == 0 and (key("grenade") or key("slot6"))   # 10e: G halten = weiter werfen
         inp.throw = self.gren_hold_input(dt, g_held or slot_trig)        # v55: im Slot 6 lädt/wirft die linke Maustaste
         if self.gren_slot and pl_ is not None and pl_.hp > 0 and getattr(pl_, "gren_hold", -1) < 0 and gren_total(pl_) > 0:
             pl_.gren_hold = GREN_KINDS.index(gren_fix_sel(pl_))         # Mitspieler sehen die Granate in der Hand
@@ -130056,10 +130284,127 @@ class Game(ShowBase):
         self.mm_vis = self.MM_LEVELS[self.mm_level]
 
     def on_y(self):
+        """Y bestätigt Abfragen (fest); Minimap hinein liegt auf der Aktion mm_in (Standard ebenfalls Y)."""
         if self.quit_box is not None or (self.mode == "menu" and self.menu_state == "quit"):
             self.on_confirm(True)
+
+    # ------------------------------------------------------------ v55: Tastenbelegung
+    def bind_keys(self):
+        """v55: alle Tasten-Ereignisse neu verdrahten - feste Tasten (Menü) und die Aktionen aus KEYS. Je Ereignis gibt es
+        nur einen Panda-Handler (on_key_event), der alle zuständigen Funktionen aufruft; so überschreiben sich zwei
+        Belegungen auf derselben Taste nie gegenseitig."""
+        for ev in getattr(self, "_kb_events", ()):
+            self.ignore(ev)
+        m = {}
+
+        def add(ev, fn, *a):
+            m.setdefault(ev, []).append((fn, a))
+        add("mouse1", self.on_click)                   # fest: Menüs, Fenster, Maus einfangen
+        add("mouse1-up", self.on_mouse_up)
+        add("w", self.on_w)                            # fest: Menü-Kürzel (Setup weiter, Beenden, Ja/Nein)
+        add("q", self.on_q)
+        add("j", self.on_confirm, True)
+        add("n", self.on_confirm, False)
+        add("y", self.on_y)
+        add("arrow_left", self.end_key, -1)
+        add("arrow_right", self.end_key, 1)
+        add("arrow_up", self.on_arrow, 0, -1)
+        add("arrow_down", self.on_arrow, 0, 1)
+        for i in range(10):                            # fest: Ziffern in Menüs und auf dem Todesbildschirm
+            add(str(i), self.on_digit, i)
+        acts = {"use": (self.on_use,), "reload": (self.on_r,), "fire_mode": (self.on_alt,), "grenade": (self.on_grenade,),
+                "gren_next": (self.on_gren_next, 1), "ability": (self.on_ability,), "inspect": (self.on_inspect,),
+                "heli_flare": (self.on_heli_flare,), "gear_off": (self.on_gear_off,), "duck_toggle": (self.toggle_duck,),
+                "scoreboard": (self.tab_down,), "bigmap": (self.toggle_bigmap,), "mm_out": (self.on_mm_zoom, 1),
+                "mm_in": (self.on_mm_zoom, -1), "fps": (self.toggle_fps,), "fullscreen": (self.toggle_fullscreen,)}
+        for act, (fn, *a) in acts.items():
+            add(KEYS[act], fn, *a)
+        add(KEYS["scoreboard"] + "-up", self.tab_up)
+        for n in range(1, 7):
+            add(KEYS["slot%d" % n], self.on_slot, n)
+        for ev in m:
+            self.accept(ev, self.on_key_event, [ev])
+        self._kb_events, self._kb_map = list(m), m
+
+    def on_key_event(self, ev):
+        if self.key_capture is not None or time.time() < self.key_capture_end:
+            return                                     # Tastenbelegung wartet gerade auf eine Taste
+        for fn, a in list(self._kb_map.get(ev, ())):
+            fn(*a)
+
+    def key_down(self, act):
+        """v55: ist die Taste der Aktion act gerade gedrückt?"""
+        mw = self.mouseWatcherNode
+        h = key_handle(KEYS.get(act, ""))
+        return bool(mw is not None and h is not None and mw.is_button_down(h))
+
+    def on_slot(self, n):
+        """v55: Slot-Tasten 1-6 (frei belegbar) im Spiel - lebend; tot wählen die Ziffern die Ausrüstung (on_digit)."""
+        if self.mode != "play" or self.quit_box is not None or getattr(self, "end", None) is not None:
+            return
+        pl = self.player
+        if pl is None or pl.hp <= 0:
+            return
+        if n <= 2:
+            self.request_weapon(n - 1)
+        elif n == 3:
+            if pl.slots[SPECIAL_SLOT] is not None:
+                self.request_weapon(SPECIAL_SLOT)      # 3 = Spezialwaffe (aus der Kiste)
+            else:
+                self.toast("Keine Spezialwaffe - gibt es in Kisten", (0.9, 0.85, 0.7), 1.5)
+        elif n == 4:
+            self.set_gren_slot(False)
+            self.toggle_gadget()                       # 4 = Gadget
+        elif n == 5:
+            self.set_gren_slot(False)
+            self.sel_req = MELEE_SEL                   # 5 = Nahkampfwaffe
         else:
-            self.on_mm_zoom(-1)
+            self.on_grenade()                          # 6 = Granate (wie G: halten = weiter werfen / Slot 6)
+
+    def key_capture_start(self, act):
+        self.key_capture, self.key_capture_t = act, time.time()
+
+    def key_capture_stop(self):
+        self.key_capture, self.key_capture_end = None, time.time() + 0.25
+
+    def on_btn_down(self, name):
+        """v55: jede gedrückte Taste/Maustaste. Wartet die Tastenbelegung, wird sie der Aktion zugewiesen
+        (Esc = abbrechen, Entf = Standardtaste); liegt sie schon auf einer anderen Aktion, tauschen beide."""
+        act = self.key_capture
+        if act is None or time.time() - getattr(self, "key_capture_t", 0.0) < 0.15:
+            return
+        name = KEY_NORMAL.get(name, name)
+        page = self.setup_page if isinstance(getattr(self, "setup_page", None), KeyBindPage) else None
+        if name in ("wheel_up", "wheel_down"):
+            return
+        if name == "escape":
+            self.key_capture_stop()
+            if page is not None:
+                page.note("Abgebrochen")
+            return
+        if name == "delete":
+            name = KEY_DEFAULTS[act]
+        if not key_valid(name):
+            if page is not None:
+                page.note(f"{key_label(name)} ist fest belegt - bitte eine andere Taste")
+            return
+        msg = f"{KEY_LABELS[act]}: {key_label(name)}"
+        other = next((a for a, b in KEYS.items() if b == name and a != act), None)
+        if other is not None:                              # schon belegt: die andere Aktion bekommt die alte Taste
+            KEYS[other] = KEYS[act]
+            msg += f"   ({KEY_LABELS[other]} jetzt auf {key_label(KEYS[other])})"
+        KEYS[act] = name
+        self.key_capture_stop()
+        self.bind_keys()
+        self.save_prefs()
+        if page is not None:
+            page.note(msg)
+
+    def keys_reset(self):
+        KEYS.clear()
+        KEYS.update(KEY_DEFAULTS)
+        self.bind_keys()
+        self.save_prefs()
 
     PING_T = 3.0          # so lange bleibt ein schiessender Spieler auf der Minimap sichtbar
 
