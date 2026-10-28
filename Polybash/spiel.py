@@ -252,9 +252,9 @@ SWITCH_T = 0.38          # Dauer des Waffenwechsels
 N_GRUNT, N_BRUTE, N_HUNT = 8, 3, 5
 
 
-N_COLOSSUS = 1           # Koloss: selten (höchstens MAX_COLOSSUS gleichzeitig)
+N_COLOSSUS = 1           # Koloss: fest 1 (v55: unabhängig von Kartengrösse und Dichte, ausser "Aus")
 
-MAX_COLOSSUS = 2
+MAX_COLOSSUS = 2         # (v55: nicht mehr verwendet - siehe calculate_map_spawns)
 
 N_TITAN = 2              # Titan (Boss): höchstens so viele gleichzeitig (10g: 2 - jeder mit eigenem Revier)
 
@@ -330,6 +330,79 @@ DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; s
 N_CRITTER = 5            # Fluchttiere (spawnen wie alle Monster nach RESPAWN_T wieder nach)
 MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.6), ("Mäßig", 1.5), ("Viel", 3.0), ("Gottlos", 5.0))   # Monsterdichte
 MOB_DEFAULT = 2
+
+# v55: Universelle Flächen-Skalierung der Monster-Spawns. Referenz ist Polytown (300 x 300 m = 90.000 m²): dort gelten die
+# Grundzahlen (N_GRUNT, N_HUNT, N_BRUTE, N_CRITTER) mal Dichte. Andere Karten bekommen F_area = Fläche / SPAWN_REF_AREA
+# mehr bzw. weniger, die Monsterdichte pro m² bleibt also gleich (ist die Dichte > 0, mindestens 1 je Art).
+# Drohnen ignorieren die Dichte (sonst Dauer-Betäubung): round(DRONE_COUNT * F_area), begrenzt auf DRONE_MIN..DRONE_MAX.
+# Koloss (N_COLOSSUS) und Titan (N_TITAN) sind fest - unabhängig von Fläche und Dichte (ausser "Aus": 0).
+SPAWN_REF_AREA = 90000.0
+DRONE_MIN, DRONE_MAX = 2, 8
+# v55: Spawn-Ringe um die Kartenmitte (m, auf Polytown; andere Karten anteilig zur Kartengrösse). Ringe, die über den
+# Kartenrand hinausreichen, werden je Richtung auf SPAWN_RING_PAD m innerhalb des Randes zurückgezogen (Polytown: der
+# Rand liegt 150 m von der Mitte, in den Ecken bis 212 m).
+DRONE_RING = (150.0, 200.0)      # Drohnen: gleichmässig auf Sektoren verteilt
+TITAN_RING = (150.0, 250.0)      # Titanen beim Rundenstart: je einer pro Hälfte (gegenüberliegende Sektoren)
+SPAWN_RING_PAD = 12.0
+# v55: Organische Koloss-Patrouille. Ohne Aggro läuft der Koloss im Korridor COLOSSUS_CORRIDOR (m um die Kartenmitte,
+# skaliert wie die Ringe) im Zickzack um die Karte: jedes neue Ziel liegt COLOSSUS_STEP Grad weiter in seiner Drehrichtung,
+# der Abstand zur Mitte wird jedes Mal neu gewürfelt. Alle COLOSSUS_TICK s (Zufall, beim Spawn versetzt) wechselt er mit
+# COLOSSUS_TURN_CHANCE die Richtung: dann bleibt er COLOSSUS_IDLE s stehen und sieht sich um. Nach Jagd/Suche läuft er auf
+# dem kürzesten Weg zurück in den Korridor (Tempo speed * HOME_RETURN_K), würfelt die Richtung neu und patrouilliert weiter.
+COLOSSUS_CORRIDOR = (100.0, 180.0)
+COLOSSUS_STEP = (30.0, 60.0)
+COLOSSUS_TICK = (120.0, 300.0)
+COLOSSUS_TURN_CHANCE = 0.4
+COLOSSUS_IDLE = (3.0, 6.0)
+COLOSSUS_PATROL_SPEED = 1.0      # m/s auf Patrouille (wander-Tempo 0,6 wäre für eine Runde um die Karte zu langsam)
+COLOSSUS_WP_REACH = 3.0          # m: Wegpunkt erreicht
+COLOSSUS_CORRIDOR_TOL = 8.0      # m: so weit darf er ausserhalb des Korridors stehen, ohne zurückzulaufen
+COLOSSUS_NO_PROGRESS = 12.0      # s: kommt er dem Wegpunkt so lange nicht näher (Gebäude im Weg), würfelt er ein neues Ziel
+
+
+def spawn_area_factor(map_width=None, map_height=None):
+    """v55: F_area = Kartenfläche / SPAWN_REF_AREA (Polytown = 1,0). Ohne Angaben: aktuelle Karte (WORLD x WORLD)."""
+    w = WORLD if map_width is None else float(map_width)
+    h = w if map_height is None else float(map_height)
+    return max(0.0, w * h) / SPAWN_REF_AREA
+
+
+def calculate_map_spawns(map_width, map_height, density_setting, bonus_hares=True, override_spawns=True):
+    """v55: Ziel-Anzahl je Monsterart für eine Karte. density_setting = Index in MOB_LEVELS (oder direkt der Faktor als
+    float). override_spawns=False (Testgelände, Sonderkarten) erzwingt überall 0. -> {Art: Anzahl}"""
+    if isinstance(density_setting, float):
+        k = density_setting
+    else:
+        k = MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, int(density_setting)))][1]
+    kinds = ("grunt", "huntress", "brute", "critter", "drone", "colossus", "titan")
+    if not override_spawns or k <= 0:
+        return {kind: 0 for kind in kinds}
+    fa = spawn_area_factor(map_width, map_height)
+    out = {}
+    for kind, base in (("grunt", N_GRUNT), ("huntress", N_HUNT), ("brute", N_BRUTE),
+                       ("critter", N_CRITTER if bonus_hares else 0)):
+        out[kind] = max(1, int(base * k * fa + 0.5)) if base > 0 else 0   # kaufmännisch runden (4,5 -> 5)
+    out["drone"] = max(DRONE_MIN, min(DRONE_MAX, int(DRONE_COUNT * fa + 0.5)))
+    out["colossus"] = N_COLOSSUS
+    out["titan"] = N_TITAN
+    return out
+
+
+def ring_scale():
+    """v55: Ringe (DRONE_RING, TITAN_RING, COLOSSUS_CORRIDOR) gelten auf Polytown; andere Karten anteilig."""
+    return WORLD / DRONE_REF_WORLD
+
+
+def ring_limit(a):
+    """v55: Grösster Abstand von der Kartenmitte in Richtung a (rad), der noch SPAWN_RING_PAD m im Spielfeld liegt."""
+    c, s_ = abs(math.cos(a)), abs(math.sin(a))
+    return max(1.0, CENTER / max(c, s_, 1e-6) - SPAWN_RING_PAD * ring_scale())
+
+
+def ring_point(a, r):
+    """v55: Punkt in Richtung a (rad) im Abstand r von der Kartenmitte - auf ring_limit gekappt."""
+    r = min(r, ring_limit(a))
+    return CENTER + math.cos(a) * r, CENTER + math.sin(a) * r
 
 
 def mob_level_of(v):
@@ -3400,6 +3473,11 @@ class Mob:
         self.chk_pos = None       # 12: zuletzt geprüfte Position (Kollision/Boden) - steht es still, entfällt die Prüfung
         self.lod_dt = 0.0         # 12: gestaffelte Updates - aufgelaufene Zeit seit dem letzten Update (ferne Monster)
         self.upd_n = 0            # 12: Zähler der Updates - die Darstellung (MobView) rechnet nur, wenn er sich ändert
+        if kind == "colossus":    # v55: Korridor-Patrouille (colossus_patrol)
+            self.patrol_mode = "RETURNING_TO_CORRIDOR"     # CORRIDOR_PATROL | IDLE_DECISION | RETURNING_TO_CORRIDOR
+            self.patrol_dir = rng.choice((-1, 1))          # +1 = gegen den Uhrzeigersinn, -1 = im Uhrzeigersinn
+            self.patrol_tick = rng.uniform(COLOSSUS_TICK[0] * 0.25, COLOSSUS_TICK[1])   # versetzt beim Spawn
+            self.patrol_wp, self.patrol_wp_t, self.patrol_idle, self.patrol_n = None, 0.0, 0.0, -9
 
     def aggressive(self):
         return not MOB_KINDS[self.kind].get("calm", False)
@@ -3635,6 +3713,94 @@ class Mob:
                 return True
         return False
 
+    def corridor_at(self, a):
+        """v55: Korridor (r0, r1) des Kolosses in Richtung a (rad) - skaliert und am Kartenrand gekappt."""
+        sc, lim = ring_scale(), ring_limit(a)
+        return min(COLOSSUS_CORRIDOR[0] * sc, lim), min(COLOSSUS_CORRIDOR[1] * sc, lim)
+
+    def patrol_waypoint(self, world):
+        """v55: nächstes Patrouillenziel: COLOSSUS_STEP Grad weiter in Drehrichtung, Abstand zur Mitte neu gewürfelt
+        (Zickzack). Ziele in Teichen/Hindernissen werden neu gewürfelt (höchstens 8x)."""
+        rng = world.mrng
+        a0 = math.atan2(self.y - CENTER, self.x - CENTER)
+        sc = ring_scale()
+        for _ in range(8):
+            a = a0 + self.patrol_dir * math.radians(rng.uniform(*COLOSSUS_STEP))
+            x, y = ring_point(a, rng.uniform(*COLOSSUS_CORRIDOR) * sc)
+            if any(math.hypot(x - px, y - py) < r * 1.7 for px, py, r in world.ponds):
+                continue
+            if not world.in_solid(x, y, 2.5):
+                break
+        self.patrol_wp = (x, y)
+        d = math.hypot(x - self.x, y - self.y)
+        self.patrol_wp_t = d / COLOSSUS_PATROL_SPEED * 2.5 + 20.0   # hängt er fest: nach dieser Zeit nächstes Ziel
+        self.patrol_best, self.patrol_stall = d, 0.0
+
+    def colossus_patrol(self, dt, world, k):
+        """v55: Koloss ohne Aggro (Zustände in patrol_mode): CORRIDOR_PATROL - Zickzack um die Karte im Korridor;
+        IDLE_DECISION - bleibt nach einem Richtungswechsel stehen und sieht sich um; RETURNING_TO_CORRIDOR - nach Jagd/
+        Suche (oder beim Spawn ausserhalb) auf kürzestem Weg zurück in den Korridor, dann Richtung neu würfeln.
+        -> (speed, ux, uy)"""
+        rng = world.mrng
+        cx, cy = self.x - CENTER, self.y - CENTER
+        r = math.hypot(cx, cy)
+        a = math.atan2(cy, cx) if r > 0.5 else rng.uniform(0, 2 * math.pi)
+        r0, r1 = self.corridor_at(a)
+        if self.patrol_n != self.upd_n - 1 and self.patrol_mode != "RETURNING_TO_CORRIDOR":
+            tol = COLOSSUS_CORRIDOR_TOL * ring_scale()          # war gerade auf Jagd/Suche: noch im Korridor?
+            if not (r0 - tol <= r <= r1 + tol):
+                self.patrol_mode = "RETURNING_TO_CORRIDOR"
+            else:
+                self.patrol_wp = None                           # weiter patrouillieren, ab hier neues Ziel
+        self.patrol_n = self.upd_n
+        mode = self.patrol_mode
+        if mode == "RETURNING_TO_CORRIDOR":
+            w_ = r1 - r0
+            rt = r0 + w_ * 0.15 if r < r0 + w_ * 0.15 else (r1 - w_ * 0.15 if r > r1 - w_ * 0.15 else r)
+            tx, ty = ring_point(a, rt)
+            tdx, tdy = tx - self.x, ty - self.y
+            td = math.hypot(tdx, tdy)
+            if td > COLOSSUS_WP_REACH:
+                self.turn_toward(tdx, tdy, dt, 200.0)
+                return k["speed"] * HOME_RETURN_K, tdx / td, tdy / td
+            self.patrol_mode = "CORRIDOR_PATROL"                # angekommen: Drehrichtung neu bestimmen
+            self.patrol_dir = rng.choice((-1, 1))
+            self.patrol_wp = None
+            return 0.0, 0.0, 0.0
+        if mode == "IDLE_DECISION":
+            self.patrol_idle -= dt
+            self.heading += 75.0 * math.sin(self.patrol_idle * 2.4) * dt   # sieht sich um
+            if self.patrol_idle <= 0:
+                self.patrol_mode = "CORRIDOR_PATROL"
+                self.patrol_wp = None
+            return 0.0, 0.0, 0.0
+        self.patrol_tick -= dt                                  # CORRIDOR_PATROL
+        if self.patrol_tick <= 0:
+            self.patrol_tick = rng.uniform(*COLOSSUS_TICK)
+            if rng.random() < COLOSSUS_TURN_CHANCE:             # Richtungswechsel: kurz stehen bleiben
+                self.patrol_dir = -self.patrol_dir
+                self.patrol_mode = "IDLE_DECISION"
+                self.patrol_idle = rng.uniform(*COLOSSUS_IDLE)
+                self.patrol_wp = None
+                return 0.0, 0.0, 0.0
+        if self.patrol_wp is not None:
+            self.patrol_wp_t -= dt
+        if (self.patrol_wp is None or self.patrol_wp_t <= 0
+                or math.hypot(self.patrol_wp[0] - self.x, self.patrol_wp[1] - self.y) <= COLOSSUS_WP_REACH):
+            self.patrol_waypoint(world)
+        tdx, tdy = self.patrol_wp[0] - self.x, self.patrol_wp[1] - self.y
+        td = math.hypot(tdx, tdy) or 1e-6
+        if td < self.patrol_best - 1.0:                         # Fortschritt zum Ziel?
+            self.patrol_best, self.patrol_stall = td, 0.0
+        else:
+            self.patrol_stall += dt
+            if self.patrol_stall >= COLOSSUS_NO_PROGRESS:       # Gebäude im Weg: anderes Ziel weiter vorn
+                self.patrol_waypoint(world)
+                tdx, tdy = self.patrol_wp[0] - self.x, self.patrol_wp[1] - self.y
+                td = math.hypot(tdx, tdy) or 1e-6
+        self.turn_toward(tdx, tdy, dt, 120.0)
+        return COLOSSUS_PATROL_SPEED, tdx / td, tdy / td
+
     def turn_toward(self, dx, dy, dt, rate=420.0):
         target = math.degrees(math.atan2(-dx, dy))   # Blick = (-sin h, cos h)
         diff = (target - self.heading + 180.0) % 360.0 - 180.0
@@ -3867,36 +4033,39 @@ class Mob:
                                      clampf(ny + math.sin(a) * 4, 4, WORLD - 4))
         else:
             self.state = "idle"
-            self.wander_t -= dt
-            if dazed:                                      # 10e: taumelt ziellos hin und her
-                self.wander_t = min(self.wander_t, rng.uniform(0.3, 0.8))
-            hx = hy = hr = None
-            going_home = False
-            if self.home is not None:                      # 10g: Revier (Titan/Koloss)
-                hx, hy, hr = self.home
-                if math.hypot(self.x - hx, self.y - hy) > hr:
-                    going_home = True                      # ausserhalb: zurück ins Revier (nach Suche/Ping)
-                    if math.hypot(self.tx - hx, self.ty - hy) > hr * 0.7:
-                        a, r = rng.uniform(0, 2 * math.pi), hr * 0.5 * math.sqrt(rng.random())
-                        self.tx, self.ty = hx + math.cos(a) * r, hy + math.sin(a) * r
-                    self.wander_t = max(self.wander_t, 1.0)
-            if self.wander_t <= 0:
-                a, r = rng.uniform(0, 2 * math.pi), rng.uniform(3, 10)
-                self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
-                self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
-                if hr is not None and math.hypot(self.tx - hx, self.ty - hy) > hr * 0.9:
-                    a = math.atan2(hy - self.y, hx - self.x) + rng.uniform(-0.8, 0.8)   # am Rand: wieder hinein
+            if self.kind == "colossus" and not dazed and getattr(self, "dev_ai", None) is None:
+                speed, ux, uy = self.colossus_patrol(dt, world, k)   # v55: Zickzack-Patrouille im Korridor
+            else:
+                self.wander_t -= dt
+                if dazed:                                      # 10e: taumelt ziellos hin und her
+                    self.wander_t = min(self.wander_t, rng.uniform(0.3, 0.8))
+                hx = hy = hr = None
+                going_home = False
+                if self.home is not None:                      # 10g: Revier (Titan/Koloss)
+                    hx, hy, hr = self.home
+                    if math.hypot(self.x - hx, self.y - hy) > hr:
+                        going_home = True                      # ausserhalb: zurück ins Revier (nach Suche/Ping)
+                        if math.hypot(self.tx - hx, self.ty - hy) > hr * 0.7:
+                            a, r = rng.uniform(0, 2 * math.pi), hr * 0.5 * math.sqrt(rng.random())
+                            self.tx, self.ty = hx + math.cos(a) * r, hy + math.sin(a) * r
+                        self.wander_t = max(self.wander_t, 1.0)
+                if self.wander_t <= 0:
+                    a, r = rng.uniform(0, 2 * math.pi), rng.uniform(3, 10)
                     self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
                     self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
-                if rng.random() < 0.4:                 # manchmal einfach stehen bleiben
-                    self.tx, self.ty = self.x, self.y
-                self.wander_t = rng.uniform(3, 7)
-            tdx, tdy = self.tx - self.x, self.ty - self.y
-            td = math.hypot(tdx, tdy)
-            if td > 0.5:
-                self.turn_toward(tdx, tdy, dt, 200.0)
-                speed = k["speed"] * HOME_RETURN_K if going_home else k["wander"]
-                ux, uy = tdx / td, tdy / td
+                    if hr is not None and math.hypot(self.tx - hx, self.ty - hy) > hr * 0.9:
+                        a = math.atan2(hy - self.y, hx - self.x) + rng.uniform(-0.8, 0.8)   # am Rand: wieder hinein
+                        self.tx = clampf(self.x + math.cos(a) * r, 4, WORLD - 4)
+                        self.ty = clampf(self.y + math.sin(a) * r, 4, WORLD - 4)
+                    if rng.random() < 0.4:                 # manchmal einfach stehen bleiben
+                        self.tx, self.ty = self.x, self.y
+                    self.wander_t = rng.uniform(3, 7)
+                tdx, tdy = self.tx - self.x, self.ty - self.y
+                td = math.hypot(tdx, tdy)
+                if td > 0.5:
+                    self.turn_toward(tdx, tdy, dt, 200.0)
+                    speed = k["speed"] * HOME_RETURN_K if going_home else k["wander"]
+                    ux, uy = tdx / td, tdy / td
         stuck_kind = self.kind in MOB_STUCK_KINDS
         if speed > 0 and self.hover <= 0 and self.detour_t <= 0 and self.state == "chase" and self.aggressive():
             ux, uy = self.steer_around(ux, uy, speed, dt, world)   # Hindernis voraus: seitlich daran vorbei
@@ -6340,31 +6509,64 @@ class World:
 
     # ------------------------------------------------------------ Mobs
     def populate_mobs(self):
-        k = MOB_LEVELS[max(0, min(len(MOB_LEVELS) - 1, self.mob_level))][1]
-        for kind, n in (("grunt", N_GRUNT), ("brute", N_BRUTE), ("huntress", N_HUNT),
-                        ("colossus", N_COLOSSUS), ("drone", DRONE_COUNT), ("critter", N_CRITTER if self.bonus_hares else 0),
-                        ("titan", N_TITAN)):
-            cnt = int(n * k + 0.5) if kind not in ("colossus", "titan") else min(MAX_COLOSSUS, n)
-            if kind == "drone":                          # 9b: unabhängig von der Dichte; v54: nach Kartengrösse, max. 4
-                cnt = self.drone_cap() if k > 0 else 0
+        """v55: Rundenstart - Anzahl je Art aus calculate_map_spawns (Flächen-Skalierung), Drohnen und Titanen im Ring."""
+        self.drone_off = None                                        # Drohnen-Sektoren je Runde neu ausrichten
+        lvl = max(0, min(len(MOB_LEVELS) - 1, self.mob_level))
+        ok = self.mobs_on and not self.mc and not self.dev          # Testgelände / Minecraft: nie Monster
+        cnt = calculate_map_spawns(WORLD, WORLD, lvl, bonus_hares=self.bonus_hares, override_spawns=ok)
+        made = dict.fromkeys(cnt, 0)
+        ta = self.mrng.uniform(0, 2 * math.pi)                       # Titanen: gegenüberliegende Hälften
+        for kind in ("grunt", "brute", "huntress", "colossus", "drone", "critter", "titan"):
+            n = cnt[kind]
             if kind in BOSS_KINDS:
-                self.boss_n[kind] = cnt                  # 13f: so viele kommen pro Zyklus wieder
-            for _ in range(cnt):
-                self.spawn_mob(kind, [], 0.0)
+                self.boss_n[kind] = n                    # 13f: so viele kommen pro Zyklus wieder
+            for i in range(n):
+                ring = None
+                if kind == "titan":
+                    w_ = 2 * math.pi / max(1, n)              # je Titan ein eigener Sektor (halbe Breite, Abstand)
+                    ring = (TITAN_RING, ta + i * w_ - w_ / 4, ta + i * w_ + w_ / 4)
+                if self.spawn_mob(kind, [], 0.0, ring=ring):
+                    made[kind] += 1
+        name = MOB_LEVELS[lvl][0].upper()
+        txt = (f"{made['grunt']} Zombies, {made['huntress']} Jägerinnen, {made['brute']} Brutes, {made['drone']} Drohnen, "
+               f"{made['colossus']} Koloss, {made['titan']} Titanen")
+        if self.bonus_hares:
+            txt += f", {made['critter']} Hasen"
+        print(f"[SpawnManager] Map: {WORLD:.0f}x{WORLD:.0f}m | Dichte: {name} | Spawns: {txt}", flush=True)
+        return made
 
     def drone_cap(self):
-        """v54: So viele Drohnen (Monster) dürfen gleichzeitig leben: DRONE_COUNT auf einer Polytown-grossen Karte,
-        auf kleineren Karten anteilig zur Fläche (mind. 1), nie mehr als DRONE_COUNT."""
-        return max(1, min(DRONE_COUNT, int(DRONE_COUNT * (WORLD / DRONE_REF_WORLD) ** 2 + 0.5)))
+        """v54/v55: So viele Drohnen (Monster) dürfen gleichzeitig leben: round(DRONE_COUNT * F_area), begrenzt auf
+        DRONE_MIN..DRONE_MAX (Polytown: 4). Unabhängig von der Monsterdichte."""
+        return max(DRONE_MIN, min(DRONE_MAX, int(DRONE_COUNT * spawn_area_factor() + 0.5)))
+
+    def drone_ring(self):
+        """v55: Ring-Sektor (DRONE_RING, a0, a1) für die nächste Drohne: der Sektor mit den wenigsten lebenden Drohnen
+        (drone_cap() gleich grosse Sektoren, fester Versatz je Runde)."""
+        n = self.drone_cap()
+        w_ = 2 * math.pi / n
+        off = getattr(self, "drone_off", None)
+        if off is None:
+            off = self.drone_off = self.mrng.uniform(0, w_)
+        occ = [0] * n
+        for o in self.mobs:
+            if o.kind == "drone" and o.state != "dead":
+                occ[int(((math.atan2(o.y - CENTER, o.x - CENTER) - off) % (2 * math.pi)) / w_) % n] += 1
+        lo = min(occ)
+        i = self.mrng.choice([j for j in range(n) if occ[j] == lo])
+        return DRONE_RING, off + i * w_, off + (i + 1) * w_
 
     def drones_alive(self):
         return sum(1 for o in self.mobs if o.kind == "drone" and o.state != "dead")
 
-    def spawn_mob(self, kind, avoid, min_dist, edge=False):
+    def spawn_mob(self, kind, avoid, min_dist, edge=False, ring=None):
         """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll. 13f: edge = am Kartenrand
-        (BOSS_EDGE_BAND), buddelt sich aus dem Boden (dig_t, Ereignis 'bossdig')."""
+        (BOSS_EDGE_BAND), buddelt sich aus dem Boden (dig_t, Ereignis 'bossdig'). v55: ring = ((r0, r1), a0, a1) - Ring-
+        Sektor um die Kartenmitte (Polytown-Meter, ring_scale); Drohnen immer im DRONE_RING (drone_ring)."""
         if kind == "drone" and self.drones_alive() >= self.drone_cap():
             return False                                 # v54: harte Obergrenze, egal woher der Spawn kommt
+        if kind == "drone" and ring is None and not edge:
+            ring = self.drone_ring()
         rng = self.mrng
         home, home_i, area = None, -1, None
         if kind == "critter" and getattr(self, "forest_areas", None):
@@ -6374,6 +6576,10 @@ class World:
                 lo, hi = BOSS_EDGE_BAND if i < 100 else (BOSS_EDGE_BAND[1], BOSS_EDGE_BAND[1] * 2.5)
                 e_, t_ = rng.uniform(lo, hi), rng.uniform(lo, WORLD - lo)
                 x, y = ((e_, t_), (WORLD - e_, t_), (t_, e_), (t_, WORLD - e_))[rng.randrange(4)]
+            elif ring is not None and i < 60:            # v55: im Ring-Sektor (am Rand gekappt, ring_point)
+                (r0, r1), a0, a1 = ring
+                sc = ring_scale()
+                x, y = ring_point(rng.uniform(a0, a1), rng.uniform(r0, r1) * sc)
             elif area is not None and i < 60:
                 a, r = rng.uniform(0, 2 * math.pi), area[2] * 0.85 * math.sqrt(rng.random())
                 x, y = area[0] + math.cos(a) * r, area[1] + math.sin(a) * r

@@ -2,6 +2,32 @@
 
 Neueste Änderungen oben.
 
+## Monster-Spawns skalieren mit der Kartenfläche, Koloss patrouilliert im Zickzack (Robin, 2026-10-28)
+Gilt für alle Modi. NET_VERSION bleibt 54 (nur Host-Logik, keine neue Nachricht).
+
+Spawns nach Kartenfläche (`calculate_map_spawns`):
+- **Formel**: Anzahl = Grundzahl x Dichte x Flächenfaktor, kaufmännisch gerundet; bei Dichte > 0 mindestens 1 je Art. Flächenfaktor = Kartenfläche / 90.000 m² (Polytown 300 x 300 m = 1,0).
+- **Grundzahlen**: Zombie 8, Jägerin 5, Brute 3, Hase 5 (nur mit Bonushasen). Dichten unverändert: Aus 0 / Wenig 0,6 / Mäßig 1,5 / Viel 3 / Gottlos 5.
+- **Polytown bleibt gleich** (Mäßig: 12 Zombies, 8 Jägerinnen, 5 Brutes). Kleinere Karten bekommen weniger, grössere mehr - die Monster pro m² bleiben gleich (200-m-Karte, Mäßig: 5 / 3 / 2).
+- **Drohnen**: ignorieren die Dichte, round(4 x Flächenfaktor), mindestens 2, höchstens 8 (Polytown 4, 200 m: 2 statt bisher 1). Die harte Obergrenze in `spawn_mob` bleibt.
+- **Koloss fest 1, Titanen fest 2** - unabhängig von Fläche und Dichte, auf "Aus" keine.
+- Testgelände und Minecraft-Karte: weiterhin gar keine Monster (`override_spawns`).
+- Konsole beim Rundenstart: `[SpawnManager] Map: 300x300m | Dichte: MÄSSIG | Spawns: 12 Zombies, 8 Jägerinnen, 5 Brutes, 4 Drohnen, 1 Koloss, 2 Titanen, 8 Hasen`.
+
+Spawn-Ringe um die Kartenmitte (Polytown-Meter, andere Karten anteilig):
+- **Drohnen** im Ring 150-200 m, gleichmässig auf Sektoren verteilt (je Drohne ein Sektor; nachspawnende Drohnen gehen in den leersten Sektor).
+- **Titanen** beim Rundenstart im Ring 150-250 m, in gegenüberliegenden Sektoren (je einer pro Seite). Der Boss-Zyklus nach dem Tod (Ausbuddeln am Rand) bleibt.
+- Wichtig: Polytown endet 150 m von der Mitte (in den Ecken 212 m). Ringteile ausserhalb der Karte werden je Richtung auf 12 m innerhalb des Randes zurückgezogen - Drohnen und Titanen starten also nahe am Rand bzw. in den Ecken.
+
+Koloss-Patrouille (`colossus_patrol`):
+- **Korridor 100-180 m** um die Mitte (am Kartenrand gekappt, kleinere Karten anteilig). Statt im Kreis zu stehen, läuft er im **Zickzack** um die Karte: jedes Ziel liegt 30-60 Grad weiter in seiner Drehrichtung, der Abstand zur Mitte wird jedes Mal neu gewürfelt. Tempo auf Patrouille 1 m/s (`COLOSSUS_PATROL_SPEED`).
+- **Richtungswechsel**: alle 2-5 min (beim Spawn zufällig versetzt) 40 % Chance, die Drehrichtung umzukehren. Dann bleibt er 3-6 s stehen und sieht sich um (`IDLE_DECISION`).
+- **Lärm, Schüsse, Sicht** brechen die Patrouille sofort ab (Jagd wie bisher). Nach der Suche läuft er auf dem kürzesten Weg zurück in den Korridor (`RETURNING_TO_CORRIDOR`), würfelt die Richtung neu und patrouilliert weiter.
+- Steht ein Gebäude im Weg und er kommt 12 s nicht näher, nimmt er ein neues Ziel weiter vorn (`COLOSSUS_NO_PROGRESS`).
+- Zum Nachjustieren: `COLOSSUS_CORRIDOR`, `COLOSSUS_STEP`, `COLOSSUS_TICK`, `COLOSSUS_TURN_CHANCE`, `COLOSSUS_IDLE`, `DRONE_RING`, `TITAN_RING`, `SPAWN_RING_PAD`, `DRONE_MIN`/`DRONE_MAX`.
+
+Technik: `calculate_map_spawns`, `spawn_area_factor`, `ring_scale`, `ring_limit`, `ring_point`, `World.drone_ring`, `spawn_mob(..., ring=)`, `Mob.colossus_patrol`, `Mob.patrol_waypoint`, `Mob.corridor_at`.
+
 ## Drohnen-Obergrenze, Granaten und Gadgets im Vorbeilaufen, F nimmt, was man anschaut (Robin, 2026-10-27)
 Gilt für alle Modi. **NET_VERSION 54**: die Nachricht `use` trägt jetzt das angeschaute Ziel mit, der Host wählt anders aus - alle müssen aktualisieren.
 
