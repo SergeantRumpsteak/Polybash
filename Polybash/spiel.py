@@ -152,6 +152,7 @@ import threading
 import time
 import zlib
 from array import array
+from itertools import repeat
 import dataclasses
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -451,6 +452,22 @@ MOB_VIEW_FAR = 40.0
 MOB_VIEW_FAR_DIV = 2
 MOB_VIEW_FAR2 = 80.0
 MOB_VIEW_FAR2_DIV = 4
+# v58: Monster-Culling (nur Optik, jeder Rechner selbst, Game.cull_mob_views): ein Monster ausserhalb des Kamera-Sichtkegels
+# (Rand MOB_CULL_PAD m) oder hinter Wänden wird ausgeblendet und gar nicht animiert; sobald es wieder sichtbar sein
+# könnte, wird es im selben Bild eingeblendet und neu gezeichnet. Verdeckung: Strahlen von der Kamera zu 4 Punkten am
+# Monster (über dem Kopf, links/rechts mit MOB_OCC_PAD m Vorhalt, unten); erst wenn alle MOB_OCC_HITS Prüfungen in Folge
+# verdeckt sind, wird ausgeblendet. Geprüft wird gestaffelt (jedes Monster nur jedes MOB_OCC_DIV. Bild), ein mögliches
+# verdecktes Monster sofort neu, wenn sich Kamera oder Monster um mehr als MOB_OCC_MOVE m bewegt haben.
+MOB_CULL_PAD = 1.5       # m Rand um den Sichtkegel (wird eingeblendet, bevor es ins Bild kommt)
+MOB_OCC_ON = True
+MOB_OCC_NEAR = 14.0      # m: näher an der Kamera nie wegen Verdeckung ausblenden
+MOB_OCC_FAR = 90.0       # m: weiter weg keine Verdeckungsprüfung (fern: einfaches Modell, Nebel)
+MOB_OCC_DIV = 6          # Zeitscheiben: ein vermutlich verdecktes Monster prüft jedes 6. Bild, ein sichtbares jedes 12.
+MOB_OCC_HITS = 2         # so viele verdeckte Prüfungen in Folge, bevor ausgeblendet wird
+MOB_OCC_PAD = 1.2        # m seitlicher Vorhalt der Prüfpunkte (tritt hinter der Ecke hervor)
+MOB_OCC_MOVE = 0.3       # m Bewegung von Kamera oder Monster seit der letzten Prüfung -> verdecktes Monster sofort neu prüfen
+MOB_OCC_THIN = 0.12      # m: dünnere Quader verdecken nicht (Glas, Fensterattrappen, Bretter, Dachflächen)
+MOB_OCC_NARROW = 1.2     # m: schmalere Quader verdecken nicht (Stämme, Pfosten, Masten: der Quader ist breiter als das Bild)
 SMOKE_BUCKETS = 2        # v57: Schornsteinrauch - jedes Bild nur jeder 2. Schornstein (Rauch steigt langsam: 30 Hz reichen)
 
 MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
@@ -4690,6 +4707,29 @@ class Mob:
         return best
 
 
+def seg_cells(x0, y0, x1, y1, c):
+    """v58: Rasterzellen (i, j) der Grösse c, die die Strecke (x0, y0)-(x1, y1) in der Draufsicht berührt - vom Start
+    zum Ende (Generator: wer früh fündig wird, bricht ab). Spaltenweise: je Spalte der y-Bereich der Strecke darin
+    (eher eine Zelle zu viel als eine zu wenig). Ersetzt in World.los das Rechteck um die ganze Strecke (bei 120 m
+    schräg bis zu 900 Zellen statt ~60)."""
+    i0, i1 = int(x0 // c), int(x1 // c)
+    up = y1 >= y0
+    if i0 == i1:
+        ja, jb = int(min(y0, y1) // c), int(max(y0, y1) // c)
+        yield from zip(repeat(i0), range(ja, jb + 1) if up else range(jb, ja - 1, -1))
+        return
+    k = (y1 - y0) / (x1 - x0)
+    xl, xh = min(x0, x1), max(x0, x1)
+    step = 1 if i1 > i0 else -1
+    for i in range(i0, i1 + step, step):
+        lo, hi = max(xl, i * c), min(xh, i * c + c)
+        ya, yb = y0 + (lo - x0) * k, y0 + (hi - x0) * k
+        if ya > yb:
+            ya, yb = yb, ya
+        ja, jb = int((ya - 1e-7) // c), int((yb + 1e-7) // c)
+        yield from zip(repeat(i), range(ja, jb + 1) if up else range(jb, ja - 1, -1))
+
+
 def seg_box(p0, p1, b):
     """Schnitt der Strecke p0->p1 mit einem Quader (Slab-Methode).
     Gibt den Eintrittsparameter t in [0,1] zurück oder None."""
@@ -8358,14 +8398,114 @@ class World:
 
     # ------------------------------------------------------------ Geschütze (von Spielern bedient)
     def los(self, p0, p1):
-        """Freie Sichtlinie (keine Quader, keine Bäume/Felsen dazwischen)?"""
-        for b in self.boxes_near(p0[0], p0[1], p1[0], p1[1]):
-            if seg_box(p0, p1, b) is not None:
-                return False
-        for q in self.props_near(p0[0], p0[1], p1[0], p1[1]):
-            if q.hit_r > 0 and seg_cyl(p0, p1, q.x, q.y, q.hit_r, q.z - 0.3, q.z + q.hit_h) is not None:
+        """Freie Sichtlinie (keine Quader, keine Bäume/Felsen dazwischen)?
+        v58: prüft nur die Rasterzellen entlang der Strecke (seg_cells), jeden Quader einmal - Ergebnis wie vorher."""
+        bg, pg = self.bgrid, self.grid
+        seen = set()
+        for key in seg_cells(p0[0], p0[1], p1[0], p1[1], self.GRID):
+            for b in bg.get(key, ()):
+                if b not in seen:
+                    seen.add(b)
+                    if seg_box(p0, p1, b) is not None:
+                        return False
+            for q in pg.get(key, ()):
+                if q.hit_r > 0 and q not in seen:
+                    seen.add(q)
+                    if seg_cyl(p0, p1, q.x, q.y, q.hit_r, q.z - 0.3, q.z + q.hit_h) is not None:
+                        return False
+        return True
+
+    def occ_grid(self):
+        """v58: Raster nur der Quader, die die Sicht verdecken (Monster-Culling, MOB_OCC_*): ohne Zäune (clip), ohne
+        dünne Teile (kleinste Kante < MOB_OCC_THIN: Glas, Fensterattrappen, Bretter, Dachflächen) und ohne schmale
+        (beide Seiten < MOB_OCC_NARROW: Stämme, Pfosten). Einmal gebaut."""
+        og = getattr(self, "_ogrid", None)
+        if og is None:
+            th = MOB_OCC_THIN
+            og = self._ogrid = {}
+            for key, lst in self.bgrid.items():
+                keep = [b for b in lst if not b.clip and b.x1 - b.x0 >= th and b.y1 - b.y0 >= th and b.z1 - b.z0 >= th
+                        and max(b.x1 - b.x0, b.y1 - b.y0) >= MOB_OCC_NARROW]
+                if keep:
+                    og[key] = keep
+        return og
+
+    def eye_in_occluder(self, x, y, z):
+        """v58: Steckt die Kamera in einem verdeckenden Quader (Flugkamera durch eine Wand)? Dann wird nicht verdeckt."""
+        c = self.GRID
+        for b in self.occ_grid().get((int(x // c), int(y // c)), ()):
+            if b.x0 < x < b.x1 and b.y0 < y < b.y1 and b.z0 < z < b.z1:
+                return True
+        return False
+
+    def occluded(self, eye, pts):
+        """v58: Sind alle Punkte pts von eye aus durch Wände verdeckt? Nur dicke Quader und grosse Felsen zählen (eher
+        sichtbar als fälschlich verdeckt). Bricht beim ersten freien Strahl ab."""
+        og, pg, c = self.occ_grid(), self.grid, self.GRID
+        for p in pts:
+            if not self._occ_hit(eye, p, og, pg, c):
                 return False
         return True
+
+    @staticmethod
+    def _occ_hit(eye, p, og, pg, c):
+        """Trifft die Strecke eye->p einen verdeckenden Quader? Slab-Test wie seg_box, aber eingebettet (schneller)."""
+        ox, oy, oz = eye
+        dx, dy, dz = p[0] - ox, p[1] - oy, p[2] - oz
+        ix = 1.0 / dx if abs(dx) >= 1e-12 else None
+        iy = 1.0 / dy if abs(dy) >= 1e-12 else None
+        iz = 1.0 / dz if abs(dz) >= 1e-12 else None
+        seen = set()
+        for key in seg_cells(ox, oy, p[0], p[1], c):
+            for b in og.get(key, ()):
+                if b in seen:
+                    continue
+                seen.add(b)
+                t0, t1 = 0.0, 1.0
+                if ix is None:
+                    if ox < b.x0 or ox > b.x1:
+                        continue
+                else:
+                    ta, tb = (b.x0 - ox) * ix, (b.x1 - ox) * ix
+                    if ta > tb:
+                        ta, tb = tb, ta
+                    if ta > t0:
+                        t0 = ta
+                    if tb < t1:
+                        t1 = tb
+                    if t0 > t1:
+                        continue
+                if iy is None:
+                    if oy < b.y0 or oy > b.y1:
+                        continue
+                else:
+                    ta, tb = (b.y0 - oy) * iy, (b.y1 - oy) * iy
+                    if ta > tb:
+                        ta, tb = tb, ta
+                    if ta > t0:
+                        t0 = ta
+                    if tb < t1:
+                        t1 = tb
+                    if t0 > t1:
+                        continue
+                if iz is None:
+                    if oz < b.z0 or oz > b.z1:
+                        continue
+                else:
+                    ta, tb = (b.z0 - oz) * iz, (b.z1 - oz) * iz
+                    if ta > tb:
+                        ta, tb = tb, ta
+                    if ta > t0:
+                        t0 = ta
+                    if tb < t1:
+                        t1 = tb
+                    if t0 > t1:
+                        continue
+                return True
+            for q in pg.get(key, ()):
+                if q.hit_r >= 0.8 and seg_cyl(eye, p, q.x, q.y, q.hit_r, q.z - 0.3, q.z + q.hit_h) is not None:
+                    return True
+        return False
 
     def sync_turret_pos(self):
         """Das Geschütz auf dem Wagen fährt mit."""
@@ -128703,8 +128843,11 @@ class Game(ShowBase):
             np.setH(heading)
             np.setColor(0, 0, 0, alpha)
 
-        for m in self.mob_views:
+        for m, mv_ in self.mob_views.items():
             if m.state != "dead":
+                if mv_ is not None and mv_.culled:          # v58: ausgeblendetes Monster - Schatten auch weg
+                    hide_far(("m", id(m)))
+                    continue
                 lim = SHADOW_R * max(1.0, m.scale * 0.5)           # 12: grosse Monster (Titan) werfen weiter sichtbare Schatten
                 if (m.x - cx_) ** 2 + (m.y - cy_) ** 2 > lim * lim:
                     hide_far(("m", id(m)))
@@ -130724,13 +130867,11 @@ class Game(ShowBase):
                     v.update(m)
                     self.boss_dig_fx(m, v, dep, dt)
                     continue
-            n = getattr(m, "upd_n", None)                  # 12: gestaffelt nicht gerechnet -> Bild bleibt gleich, nichts tun
-            if n is not None:                              # (Mitspieler: Monster aus dem Netz haben keinen Zähler)
-                key = (n, m.hp)
-                if v.drawn == key:
-                    continue
-            else:
-                key = None
+            if v.culled:                                   # v58: ausserhalb des Sichtkegels / verdeckt: nicht animieren
+                continue                                   # (cull_mob_views blendet es wieder ein und zeichnet es neu)
+            key = mob_draw_key(m)                          # 12: gestaffelt nicht gerechnet -> Bild bleibt gleich, nichts tun
+            if key is not None and v.drawn == key:         # (Mitspieler: Monster aus dem Netz haben keinen Zähler)
+                continue
             if m.state != "dead" and m.hp >= v.drawn_hp:   # v57: fern und nicht getroffen -> nur jedes 2./4. Bild zeichnen
                 d2_ = (m.x - ccx) * (m.x - ccx) + (m.y - ccy) * (m.y - ccy)
                 if d2_ > f1 * m.scale * m.scale:
@@ -130815,6 +130956,8 @@ class Game(ShowBase):
         self.update_hud(dt)
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
+        self.mcull_frame = getattr(self, "mcull_frame", 0) + 1
+        cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame)   # v58
 
     def update_objects(self, dt):
         """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
@@ -132702,6 +132845,9 @@ class MobView:
         self.bar_hp = mob.hp      # 13c: zuletzt gesehene HP (sinkt sie -> Treffer -> Balken ploppt auf)
         self.bar_age = 1e9        # 13c: s seit dem letzten Treffer (gross = Balken unsichtbar)
         self.bar.setTransparency(TransparencyAttrib.MAlpha)
+        self.culled = False       # v58: ausgeblendet (ausserhalb des Sichtkegels / verdeckt) - nicht animiert
+        self.occ_n = 0            # v58: verdeckte Prüfungen in Folge
+        self.occ_at = None        # v58: (Kamera x, y, z, Monster x, y) bei der letzten Verdeckungsprüfung
 
     def update_bar(self, m, dt):
         """13c: Lebensbalken nur nach Treffern: MOB_BAR_SHOW_T s voll sichtbar, dann in MOB_BAR_FADE_T s ausblenden.
@@ -132822,6 +132968,74 @@ class MobView:
         else:
             r.clearColorScale()
         # 13c: Lebensbalken steuert update_bar (Auto-Fade nach Treffern)
+
+
+def mob_draw_key(m):
+    """12: (Update-Zähler, HP) - gleicher Schlüssel wie beim letzten Zeichnen = nichts Neues zu zeichnen."""
+    n = getattr(m, "upd_n", None)
+    return (n, m.hp) if n is not None else None
+
+
+def cull_mob_views(views, world, cam, render, lens, frame, stats=None):
+    """v58: Monster-Culling (MOB_CULL_PAD, MOB_OCC_*): nach dem Setzen der Kamera, vor dem Zeichnen. Ausserhalb des
+    Sichtkegels oder (gestaffelt geprüft) hinter Wänden -> Modell aus (hide) und keine Animation mehr; kommt es wieder
+    in Frage, wird es im selben Bild eingeblendet und neu gezeichnet. Nur Darstellung."""
+    if not views:
+        return
+    cp = cam.getPos(render)
+    q = cam.getQuat(render)
+    f, r, u = q.getForward(), q.getRight(), q.getUp()
+    ex, ey, ez = cp[0], cp[1], cp[2]
+    fx, fy, fz, rx, ry, rz, ux, uy, uz = f[0], f[1], f[2], r[0], r[1], r[2], u[0], u[1], u[2]
+    fov = lens.getFov()
+    ah, av = math.radians(min(fov[0], 179.0) * 0.5), math.radians(min(fov[1], 179.0) * 0.5)
+    ch, sh, cv, sv = math.cos(ah), math.sin(ah), math.cos(av), math.sin(av)
+    occ_on = MOB_OCC_ON and not world.eye_in_occluder(ex, ey, ez)   # Flugkamera steckt in einer Wand: nicht verdecken
+    eye = (ex, ey, ez)
+    n2, f2, mv2 = MOB_OCC_NEAR * MOB_OCC_NEAR, MOB_OCC_FAR * MOB_OCC_FAR, MOB_OCC_MOVE * MOB_OCC_MOVE
+    for m, v in views.items():
+        if v is None:
+            continue
+        h = m.height
+        R = max(m.radius * 1.5, h * 0.6) + MOB_CULL_PAD
+        dx, dy, dz = m.x - ex, m.y - ey, m.z + h * 0.5 - ez
+        zc = dx * fx + dy * fy + dz * fz                   # Kameraraum: vorwärts / rechts / oben
+        xc = dx * rx + dy * ry + dz * rz
+        yc = dx * ux + dy * uy + dz * uz
+        hide = (zc < -R or abs(xc) * ch - zc * sh > R or abs(yc) * cv - zc * sv > R)
+        if hide:
+            v.occ_at = None                                # kommt es zurück ins Bild: sofort neu prüfen
+            if stats is not None:
+                stats["frustum"] += 1
+        elif occ_on and n2 < dx * dx + dy * dy + dz * dz < f2:
+            oa = v.occ_at
+            due = (oa is None or (frame + m.id) % (MOB_OCC_DIV if v.occ_n else MOB_OCC_DIV * 2) == 0   # frei: halb so oft
+                   or (v.occ_n > 0 and ((ex - oa[0]) ** 2 + (ey - oa[1]) ** 2 + (ez - oa[2]) ** 2 > mv2
+                                        or (m.x - oa[3]) ** 2 + (m.y - oa[4]) ** 2 > mv2)))
+            if due:
+                dh = math.hypot(dx, dy) or 1e-6
+                lx, ly = -dy / dh, dx / dh                 # quer zur Blickrichtung (Draufsicht)
+                pad = m.radius + MOB_OCC_PAD
+                zm = m.z + h * 0.55
+                pts = ((m.x, m.y, m.z + h + 0.4), (m.x + lx * pad, m.y + ly * pad, zm),
+                       (m.x - lx * pad, m.y - ly * pad, zm), (m.x, m.y, m.z + 0.3))
+                v.occ_at = (ex, ey, ez, m.x, m.y)
+                v.occ_n = v.occ_n + 1 if world.occluded(eye, pts) else 0
+                if stats is not None:
+                    stats["checks"] += 1
+            hide = v.occ_n >= MOB_OCC_HITS
+            if hide and stats is not None:
+                stats["occ"] += 1
+        else:
+            v.occ_n, v.occ_at = 0, None
+        if hide != v.culled:
+            v.culled = hide
+            if hide:
+                v.root.hide()
+            else:
+                v.root.show()
+                v.update(m)                                # im selben Bild auf den aktuellen Stand
+                v.drawn, v.drawn_hp = mob_draw_key(m), m.hp
 
 
 def _log_path():

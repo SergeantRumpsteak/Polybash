@@ -2,6 +2,43 @@
 
 Neueste Änderungen oben.
 
+## Performance II: Monster-Culling (Sichtkegel + Wände), schnellere Sichtlinie (Robin, 2026-10-29)
+Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung; die Sichtlinie liefert bitgleich dasselbe Ergebnis).
+
+Monster-Culling (`cull_mob_views`, nur Optik, jeder Rechner selbst):
+- **Ausserhalb des Sichtkegels** der Kamera (mit 1,5 m Rand, passt sich Sichtfeld und Zielfernrohr an) wird ein Monster
+  **ausgeblendet und gar nicht mehr animiert** (vorher: weiter jedes 1./2./4. Bild animiert, nur nicht gezeichnet).
+- **Hinter Wänden** ebenso: Strahlen von der Kamera zu 4 Punkten am Monster (über dem Kopf, links/rechts mit 1,2 m Vorhalt,
+  unten). Erst wenn alle verdeckt sind, zwei Prüfungen in Folge, wird ausgeblendet. Zählt nur, was wirklich blickdicht ist:
+  keine Zäune, kein Glas/Fensterattrappen/Bretter (dünner als 12 cm), keine Stämme/Pfosten (schmaler als 1,2 m).
+  Näher als 14 m und weiter als 90 m wird nie wegen Verdeckung ausgeblendet.
+- **Zeitscheiben**: die Verdeckung prüft ein vermutlich verdecktes Monster nur jedes 6. Bild, ein sichtbares jedes 12. Bild
+  (bei 60 FPS 0,1 / 0,2 s). Bewegen sich Kamera oder Monster um mehr als 30 cm, wird ein verdecktes sofort neu geprüft (um die Ecke spähen).
+- Kommt ein Monster wieder in Frage, wird es **im selben Bild** eingeblendet und neu gezeichnet. Blob-Schatten ausgeblendeter Monster sind ebenfalls aus.
+- Kamera steckt in einer Wand (Flugkamera): dann wird nicht verdeckt.
+- Geprüft per Bildvergleich im echten Spiel (Software-Renderer, Polytown-Zentrum, Mäßig und Gottlos): Bild mit Culling und
+  dasselbe Bild mit allen Monstern sind pixelgleich (Gegenprobe: ein absichtlich ausgeblendetes Monster wird erkannt).
+- Wirkung im Zentrum (Gottlos): rund 78 % der Monster liegen ausserhalb des Sichtkegels, weitere 5-10 % hinter Wänden
+  - je Monster fallen 6-11 Draw Calls + Schatten weg, die Animationsrechnung sinkt entsprechend.
+
+Sichtlinie (`World.los`, `seg_cells`):
+- Prüft nur noch die Rasterzellen **entlang** der Strecke statt des ganzen Rechtecks darum, jeden Quader einmal.
+  Polytown: 120 m schräg **1,36 -> 0,08 ms**, im Mittel 0,52 -> 0,09 ms. Ergebnis bitgleich (an 160.000 Strecken auf
+  Polytown, Minecraft-Karte, Testgelände und Blood Gulch geprüft).
+- Nutzt alles mit Sichtprüfung: Sichtkontakt/Trichter (bis 10x je Sekunde je Gegner - war bei vielen Spielern ein Ruckler), Drohnen, Titan, Geschütze, Kisten.
+
+Bewusst nicht umgesetzt (geprüft):
+- **Monster-Raycasts staffeln**: Die Aggro der Monster prüft keine Sichtlinie (nur Abstand, Rauch, Blendung). Im Zentrum
+  (Gottlos, 20 s gemessen) kam aus der Monster-KI **kein einziger** Sichtlinien-Aufruf; ferne Monster im Leerlauf rechnen
+  schon gestaffelt (jedes 4. Bild) bzw. schlafen (v57). Grösster Posten der Monster-KI ist das gegenseitige Wegschieben.
+- **Static Batching / flattenStrong**: schon da - Polytown sind 1.559 Geometrien in 529 Blöcken (32 m), je Block und Material eine.
+- **Vereinfachte Materialien ab 25 m**: das Spiel nutzt keine Normal-/Specular-Maps (Standardgrafik ohne Shader). Monster
+  schalten ab 40 m auf das einfache Modell (`MOB_LOD_DIST`); 25 m wäre möglich, sieht aber deutlich gröber aus - auf Wunsch.
+
+Technik: `seg_cells`, `World.los`, `World.occ_grid` / `eye_in_occluder` / `occluded` / `_occ_hit`, `cull_mob_views`,
+`mob_draw_key`, `MobView.culled/occ_n/occ_at`, `Game.mcull_frame`. Zum Nachjustieren: `MOB_CULL_PAD`, `MOB_OCC_ON`,
+`MOB_OCC_NEAR`, `MOB_OCC_FAR`, `MOB_OCC_DIV`, `MOB_OCC_HITS`, `MOB_OCC_PAD`, `MOB_OCC_MOVE`, `MOB_OCC_THIN`, `MOB_OCC_NARROW`.
+
 ## Monsterdichte verdoppelt, Performance im Zentrum (Robin, 2026-10-29)
 Gilt für alle Modi. NET_VERSION bleibt 56 (nur Host-Rechnung und eigene Darstellung).
 
