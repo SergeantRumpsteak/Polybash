@@ -329,7 +329,7 @@ DRONE_REF_WORLD = 300.0  # v54: ... auf einer Karte dieser Grösse (Polytown); k
 DRONE_SIZE = 1.4         # 9b: Drohnen so viel grösser (Modell + Trefferzone; sinnvoll 1,25-1,5)
 
 N_CRITTER = 5            # Fluchttiere (spawnen wie alle Monster nach RESPAWN_T wieder nach)
-MOB_LEVELS = (("Aus", 0.0), ("Wenig", 0.8), ("Mäßig", 1.35), ("Viel", 2.2), ("Gottlos", 4.5))   # Monsterdichte (v55: Mäßig 1,35)
+MOB_LEVELS = (("Aus", 0.0), ("Wenig", 1.6), ("Mäßig", 2.7), ("Viel", 4.4), ("Gottlos", 9.0))   # Monsterdichte (v57: verdoppelt, Mäßig 2,7)
 MOB_DEFAULT = 2
 
 # v55: Universelle Flächen-Skalierung der Monster-Spawns. Referenz ist Polytown (300 x 300 m = 90.000 m²): dort gelten die
@@ -435,6 +435,23 @@ MOB_LOD_R = 70.0         # m: Monster näher als das an einem lebenden Spieler r
 MOB_LOD_DIV = 4          # ferne Monster im Leerlauf: gestaffelt, jedes nur jedes 4. Bild (dafür mit der aufgelaufenen Zeit)
 
 MOB_LOD_MAX_DT = 0.12    # s: spätestens nach so viel aufgelaufener Zeit wird ein fernes Monster trotzdem aktualisiert
+
+# v57: Schlafmodus. Monster der Arten MOB_SLEEP_KINDS im Leerlauf, die weiter als MOB_SLEEP_R von jedem lebenden Spieler
+# entfernt sind, bleiben stehen und rechnen nur alle MOB_SLEEP_DT s ihre Zeitgeber weiter (keine Bewegung, keine Kollision,
+# keine Bodenabfrage). Alles, was sie aufweckt (Geräusch, Treffer, Alarm, Spieler näher als MOB_SLEEP_R), macht sie sofort
+# wieder voll aktiv. Kolosse/Titanen (Patrouille), Harpien (kreisen) und Drohnen bleiben ausgenommen.
+MOB_SLEEP_R = 80.0
+MOB_SLEEP_DT = 1.0
+MOB_SLEEP_KINDS = ("grunt", "huntress", "brute", "critter")
+
+# v57: Darstellung ferner Monster (nur Optik, jeder Rechner selbst): weiter als MOB_VIEW_FAR m von der Kamera wird die
+# Animation nur jedes MOB_VIEW_FAR_DIV. Bild neu gesetzt, weiter als MOB_VIEW_FAR2 nur jedes MOB_VIEW_FAR2_DIV. Bild.
+# Treffer (HP sinkt) und Tod werden immer sofort gezeichnet.
+MOB_VIEW_FAR = 40.0
+MOB_VIEW_FAR_DIV = 2
+MOB_VIEW_FAR2 = 80.0
+MOB_VIEW_FAR2_DIV = 4
+SMOKE_BUCKETS = 2        # v57: Schornsteinrauch - jedes Bild nur jeder 2. Schornstein (Rauch steigt langsam: 30 Hz reichen)
 
 MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
 
@@ -3935,6 +3952,17 @@ class Mob:
             return k.get("mortar_recover", 1.0)
         return k.get("rock_recover", 1.0) if self.atk_kind == 2 else k.get("recover", 0.4)
 
+    def sleep_tick(self, dt):
+        """v57: Schlafmodus (update_mobs_staggered, MOB_SLEEP_*): steht still, nur die Zeitgeber laufen weiter."""
+        self.speed_now = 0.0
+        self.hurt_t = max(0.0, self.hurt_t - dt)
+        self.alert_t = max(0.0, self.alert_t - dt)
+        self.atk_cd = max(0.0, self.atk_cd - dt)
+        self.zap_hold = max(0.0, self.zap_hold - dt)
+        if getattr(self, "pstun_lock", 0.0) > 0:
+            self.pstun_lock = max(0.0, self.pstun_lock - dt)
+        self.wander_t = min(self.wander_t, 0.5)          # wacht es auf, sucht es sich gleich ein neues Wanderziel
+
     def needs_check(self, world):
         """12: Kollision (push_out) und Bodenhöhe (floor_at) neu prüfen? Nur, wenn sich das Monster seit der letzten
         Prüfung um mehr als MOB_STILL_EPS bewegt hat (auch durch Wegschieben) oder ein Fahrzeug in der Nähe ist -
@@ -5366,11 +5394,39 @@ class TriMesh:
         return u >= -tol and v >= -tol and u + v <= 1.0 + tol
 
     def _query(self, grid, x, y):
+        """Höhen aller Dreiecke der Zelle, die (x,y) überdecken (Reihenfolge wie in der Zelle).
+        v57: schneller - je Zelle einmal eine Liste mit gepolsterten Umrissen (x0, x1, y0, y1, Dreieck) anlegen; Dreiecke,
+        deren Umriss (x,y) nicht enthält, fallen ohne Rechnung weg; die Ebenen-Rechnung von _z_at steht direkt in der
+        Schleife. Die Polsterung (Toleranz x 1,5 x grösste Kantenlänge) ist grösser als alles, was die Toleranz von _z_at
+        noch durchlässt - das Ergebnis ist exakt dasselbe wie vorher."""
+        key = (int(x // self.CELL), int(y // self.CELL))
+        cache = self.__dict__.get("_qcache")
+        if cache is None:
+            cache = self._qcache = {}
+        cc = cache.get(id(grid))
+        if cc is None:
+            cc = cache[id(grid)] = {}
+        lst = cc.get(key)
+        if lst is None:
+            lst = []
+            for t in grid.get(key, ()):
+                pad = 2e-3 * 1.5 * max(t[15] - t[14], t[17] - t[16]) + 1e-6
+                lst.append((t[14] - pad, t[15] + pad, t[16] - pad, t[17] + pad, t))
+            cc[key] = lst
         out = []
-        for t in grid.get((int(x // self.CELL), int(y // self.CELL)), ()):
-            z = self._z_at(t, x, y)
-            if z is not None:
-                out.append(z)
+        tol = -2e-3
+        for x0, x1, y0, y1, t in lst:
+            if x < x0 or x > x1 or y < y0 or y > y1:
+                continue
+            det = t[13]
+            ax, ay, bx, by, cx, cy = t[0], t[1], t[3], t[4], t[6], t[7]
+            l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / det
+            if l1 < tol:
+                continue
+            l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / det
+            if l2 < tol or 1.0 - l1 - l2 < tol:
+                continue
+            out.append(t[2] - (t[9] * (x - ax) + t[10] * (y - ay)) / t[11])
         return out
 
     def floor(self, x, y, zmax):
@@ -5787,6 +5843,7 @@ class World:
         self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
         self.boss_n, self.boss_wave = {}, {}             # 13f: Bosse je Art beim Rundenstart; laufender Zyklus [Restzeit, offen]
         self.nav_clock, self.nav_ms = 0.0, NAV_MS        # 13f: Wegsuche ins Gebäude (nav_steer)
+        self.nav_frac = 1.0                              # v57: Anteil des Budgets je Teilschritt (Game setzt 1/Teilschritte)
         self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
         self.noise_log = []      # NOISE_DEBUG: (x, y, Radius, Restzeit) zur Anzeige
         self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
@@ -11075,7 +11132,7 @@ class World:
         self.auto_pickup(players)                        # v54: bekannte Granaten/Gadgets im Vorbeilaufen
         self.update_noise(dt, players)
         self.nav_clock += dt                             # 13f: Wegsuche: Uhr und Rechenzeit je Bild
-        self.nav_ms = NAV_MS
+        self.nav_ms = NAV_MS * self.nav_frac             # v57: bei Teilschritten nur ein Teil (Budget gilt je Bild)
         self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
         if self.rocks:
             self.update_rocks(dt)
@@ -11440,19 +11497,31 @@ class World:
         self.lod_frame = getattr(self, "lod_frame", 0) + 1
         live = [(p.x, p.y) for p in players if p.hp > 0]
         r2 = MOB_LOD_R * MOB_LOD_R
+        s2 = MOB_SLEEP_R * MOB_SLEEP_R
         for m in self.mobs:
             busy = (m.kind in TEMP_MOBS or m.noise_at is not None or m.alert_t > 0 or m.hurt_t > 0
                     or (m.state != "idle" and not (m.state == "dead" and m.dead_t > 1.0))
                     or getattr(m, "stun_t", 0.0) > 0 or getattr(m, "daze_t", 0.0) > 0
                     or m.fear is not None or abs(m.kx) + abs(m.ky) > 0.2
                     or getattr(m, "dig_t", 0.0) > 0)             # 13f: Ausbuddeln flüssig (jedes Bild)
+            sleep = False
             if not busy:
                 x, y = m.x, m.y
+                near2 = 1e18
                 for px, py in live:
-                    if (px - x) * (px - x) + (py - y) * (py - y) < r2:
-                        busy = True
-                        break
+                    d2_ = (px - x) * (px - x) + (py - y) * (py - y)
+                    if d2_ < near2:
+                        near2 = d2_
+                busy = near2 < r2
+                sleep = near2 > s2 and m.kind in MOB_SLEEP_KINDS and m.state == "idle"
             step = m.lod_dt + dt
+            if sleep:                                    # v57: Schlafmodus (siehe MOB_SLEEP_*): nur Zeitgeber, selten
+                if step >= MOB_SLEEP_DT:
+                    m.lod_dt = 0.0
+                    m.sleep_tick(step)
+                else:
+                    m.lod_dt = step
+                continue
             if busy or (self.lod_frame + m.id) % MOB_LOD_DIV == 0 or step >= MOB_LOD_MAX_DT:
                 m.lod_dt = 0.0
                 m.upd_n += 1
@@ -16317,7 +16386,7 @@ def _build_mob_lo(kind, look=None):
 # die Animationen in MobView bleiben dieselben). In der Entfernung schaltet ein LODNode auf das alte, einfache Modell
 # um (MOB_LOD_DIST, in Modell-Metern: grosse Monster schalten entsprechend später um). Die Geometrie wird je Art nur
 # einmal gebaut und von allen Exemplaren geteilt.
-MOB_LOD_DIST = 45.0
+MOB_LOD_DIST = 40.0     # v57: vorher 45 m
 
 _MOB_GEOM = {}
 
@@ -128550,7 +128619,9 @@ class Game(ShowBase):
                 snp.setHpr(h0, 0.0, (t * spd) % 360.0)                 # Muehlenfluegel: Welle zeigt nach vorn (+y), Drehung um sie
             else:
                 snp.setH(h0 + (t * spd) % 360.0)
-        for qx, qy, qz, puffs in getattr(self, "smoke", ()):            # Schornsteinrauch: steigt auf, weht mit dem Wind, wird grösser und verblasst
+        sm_ = getattr(self, "smoke", ())
+        self.smoke_frame = (getattr(self, "smoke_frame", 0) + 1) % SMOKE_BUCKETS   # v57: gestaffelt - je Bild eine Gruppe
+        for qx, qy, qz, puffs in (sm_[self.smoke_frame::SMOKE_BUCKETS] if SMOKE_BUCKETS > 1 else sm_):   # Schornsteinrauch: steigt auf, weht mit dem Wind, wird grösser und verblasst
             if abs(qx - cp[0]) > 110 or abs(qy - cp[1]) > 110:
                 for pn in puffs:
                     pn.hide()
@@ -128937,6 +129008,7 @@ class Game(ShowBase):
         else:                              # Einzelspiel oder Host: die Welt läuft hier
             if self.host is not None:
                 self.host.poll(dt)         # Eingaben und Schüsse der Mitspieler
+            world.nav_frac = 1.0 / nsub    # v57: Wegsuch-Budget gilt je Bild, nicht je Teilschritt (sonst bei < 30 FPS doppelt)
             for _ in range(nsub):
                 world.update(dt / nsub)
             if self.host is not None:
@@ -130630,6 +130702,10 @@ class Game(ShowBase):
 
         # Mobs
         current = set(world.mobs)
+        self.mview_frame = mvf = getattr(self, "mview_frame", 0) + 1     # v57: ferne Monster seltener animieren
+        ccp = self.camera.getPos(self.render)
+        ccx, ccy = ccp[0], ccp[1]
+        f1, f2 = MOB_VIEW_FAR * MOB_VIEW_FAR, MOB_VIEW_FAR2 * MOB_VIEW_FAR2
         for m in world.mobs:
             v = self.mob_views.get(m)
             if v is not None and m.kind == "pdrone" and v.col != self.player_pcol(getattr(m, "owner", -1)):
@@ -130653,7 +130729,16 @@ class Game(ShowBase):
                 key = (n, m.hp)
                 if v.drawn == key:
                     continue
-                v.drawn = key
+            else:
+                key = None
+            if m.state != "dead" and m.hp >= v.drawn_hp:   # v57: fern und nicht getroffen -> nur jedes 2./4. Bild zeichnen
+                d2_ = (m.x - ccx) * (m.x - ccx) + (m.y - ccy) * (m.y - ccy)
+                if d2_ > f1 * m.scale * m.scale:
+                    div = MOB_VIEW_FAR2_DIV if d2_ > f2 * m.scale * m.scale else MOB_VIEW_FAR_DIV
+                    if (mvf + m.id) % div:
+                        continue
+            v.drawn = key
+            v.drawn_hp = m.hp
             v.update(m)
         for m in [m for m in self.mob_views if m not in current]:
             self.mob_views.pop(m).root.removeNode()
@@ -132613,6 +132698,7 @@ class MobView:
                 lod.setSwitch(1, 1e6, d_)
         self.spark_t = 0.0
         self.drawn = None         # 12: (Update-Zähler, HP) des zuletzt gezeichneten Zustands
+        self.drawn_hp = mob.hp    # v57: HP beim letzten Zeichnen (sinkt sie, wird sofort gezeichnet)
         self.bar_hp = mob.hp      # 13c: zuletzt gesehene HP (sinkt sie -> Treffer -> Balken ploppt auf)
         self.bar_age = 1e9        # 13c: s seit dem letzten Treffer (gross = Balken unsichtbar)
         self.bar.setTransparency(TransparencyAttrib.MAlpha)

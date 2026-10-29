@@ -2,6 +2,39 @@
 
 Neueste Änderungen oben.
 
+## Monsterdichte verdoppelt, Performance im Zentrum (Robin, 2026-10-29)
+Gilt für alle Modi. NET_VERSION bleibt 56 (nur Host-Rechnung und eigene Darstellung).
+
+Monsterdichte (verdoppelt):
+- **Aus 0 / Wenig 1,6 / Mäßig 2,7 (Standard) / Viel 4,4 / Gottlos 9,0** (vorher 0,8 / 1,35 / 2,2 / 4,5).
+- Polytown, Mäßig: 22 Zombies, 14 Jägerinnen, 8 Brutes, 14 Hasen, 8 Harpien (Drohnen, Koloss, Titanen unverändert).
+
+Performance (gemessen im echten Spiel-Loop, Polytown-Zentrum, Python-Zeit je Bild ohne Rendern, gleiche Monsterzahl):
+- Mäßig (73 Monster): **22,6 -> 12,4 ms**. Gottlos (223 Monster): **47,0 -> 26,1 ms**. Doppelt so viele Monster kosten damit
+  etwa so viel wie vorher die einfache Dichte.
+- **Bodenabfrage der Netz-Karte 4,3x schneller** (`TriMesh._query`): Dreiecke, deren Umriss den Punkt nicht enthält, fallen
+  ohne Rechnung weg. Ergebnis bitgleich (an 207.000 Punkten geprüft). Das war der grösste Posten (viele Dreiecke je Zelle im Zentrum).
+- **Keine Abwärtsspirale mehr unter 30 FPS**: die Welt rechnet in Teilschritten (max. 34 ms). Das Wegsuch-Budget (A* ins
+  Gebäude, 3 ms) wurde bisher je Teilschritt neu vergeben - unter ~29 FPS also doppelt. Jetzt gilt es je Bild (`nav_frac`).
+- **Schlafmodus** (`MOB_SLEEP_*`): Zombies, Jägerinnen, Brutes und Hasen im Leerlauf, die **weiter als 80 m** von jedem
+  lebenden Spieler sind, bleiben stehen und rechnen nur **jede Sekunde** ihre Zeitgeber (keine Bewegung, Kollision, Bodenabfrage).
+  Spieler näher als 80 m, Geräusch, Treffer oder Alarm wecken sie sofort. Kolosse/Titanen (Patrouille), Harpien und Drohnen sind ausgenommen.
+- **Ferne Monster seltener animiert** (nur Darstellung, `MOB_VIEW_*`): ab **40 m** jedes 2. Bild, ab **80 m** jedes 4. Bild
+  (grosse Monster entsprechend später). Treffer und Tod werden sofort gezeichnet.
+- **Einfaches Monster-Modell schon ab 40 m** (`MOB_LOD_DIST`, vorher 45 m).
+- **Schornsteinrauch gestaffelt** (`SMOKE_BUCKETS`): je Bild nur jeder 2. Schornstein.
+
+Bewusst nicht umgesetzt (geprüft):
+- Frustum Culling macht Panda3D schon automatisch, je 32-m-Block der Stadt. `setTwoSided(False)` ist kein Culling, sondern
+  Rückseiten-Ausblendung - die zweiseitigen Teile (Laub, Glas, Zäune) müssen zweiseitig bleiben.
+- Batching der Stadt: ist schon da (eine Geometrie je 32-m-Block und Material, 1.559 für die ganze Karte); Zusammenfassen bringt nichts mehr.
+- Hardware-Instancing: Kisten/Trümmer stecken in der Blender-Geometrie, Monster werden je Teil animiert - Instancing bräuchte eigene Shader.
+- Occlusion Culling: Panda3D hat nur von Hand gesetzte Verdecker (OccluderNode); erst lohnend, wenn eine Messung zeigt, dass die Grafikkarte der Engpass ist.
+
+Technik: `TriMesh._query` (Zell-Cache `_qcache`), `World.nav_frac`, `Mob.sleep_tick`, `update_mobs_staggered` (Schlafmodus),
+`MobView.drawn_hp`, `Game.mview_frame`, `Game.smoke_frame`. Zum Nachjustieren: `MOB_SLEEP_R`, `MOB_SLEEP_DT`, `MOB_SLEEP_KINDS`,
+`MOB_VIEW_FAR`, `MOB_VIEW_FAR_DIV`, `MOB_VIEW_FAR2`, `MOB_VIEW_FAR2_DIV`, `MOB_LOD_DIST`, `SMOKE_BUCKETS`.
+
 ## LAN-Dynamics: Manhunt-King, Trichter-Minimap, Smart-Decoys, Todes-Sequenz mit Flugkamera, Killfeed mit Symbolen (Robin, 2026-10-29)
 Gilt für alle Modi. **NET_VERSION 56**: neue Ereignisse und Snapshot-Felder - alle müssen aktualisieren.
 
