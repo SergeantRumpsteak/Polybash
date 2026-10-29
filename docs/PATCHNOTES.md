@@ -2,6 +2,36 @@
 
 Neueste Änderungen oben.
 
+## LAN-Dynamics: Manhunt-King, Trichter-Minimap, Smart-Decoys, Todes-Sequenz mit Flugkamera, Killfeed mit Symbolen (Robin, 2026-10-29)
+Gilt für alle Modi. **NET_VERSION 56**: neue Ereignisse und Snapshot-Felder - alle müssen aktualisieren.
+
+Manhunt-King (Anti-Camp / High Value Target):
+- Wer **60 s im 10-m-Umkreis** bleibt (in der KotH-Zone zählt das nicht) oder **6 Spieler-Kills ohne eigenen Tod** macht, bekommt eine Warnung; nach **10 s Karenzzeit** ist er **King** (beim Campen entgeht man der Markierung, wenn man weiterzieht). Erst ab 2 Spielern.
+- King bis zum Tod: alle **10 s** erscheint für alle anderen **3 s** eine **goldgelbe Silhouette** durch Wände - genau seine Haltung (stehend, geduckt), im Heli/Wagen das Fahrzeug; dazu ein goldener Punkt auf der Minimap. Der King sieht oben "KING - Kopfgeld auf dich".
+- **Kopfgeld**: wer den King erledigt, bekommt sofort **zwei verschiedene zufällige Hasen-Buffs mit doppelter Dauer** (neuer zweiter Buff-Platz, eigenes Symbol über der Minimap).
+
+Trichter-Minimap:
+- Ereignisse von Gegnern zeigen als **Trichter** von der eigenen Position in ihre Richtung (dreht mit der Karte), **3 s**, hell am Anfang, linear aus.
+- Auslöser: **Schüsse und Decoys bis 150 m** (gedämpfte Schüsse nur in ihrem Lärmradius), **Sichtkontakt bis 120 m**, **Bullet-By** (Kugel fliegt < 3 m am Kopf vorbei -> Trichter Richtung Schütze, rot). Ein Trichter je Quelle, neue Ereignisse frischen ihn auf. Lärm-Kreise und rote Sicht-Punkte bleiben.
+
+Smart-Decoys:
+- Der Decoy ahmt die **Waffe in der Hand des Werfers** nach: Klang, Kadenz, Feuerstösse mit Pausen, Nachladen nach dem Magazin; mit 40 % "wechselt" er zwischendurch zur Kleinwaffe; am Ende ein **harmloser Fake-Knall**.
+- So laut wie echte Schüsse der Waffe (Monster laufen hin) und mit **vollwertigen Trichtern** bei den Gegnern - von echten Schüssen nicht zu unterscheiden.
+
+Todes-Sequenz und Combat-Panel:
+- Die Figur **fällt physikalisch um** (Schwerkraft, kurzes Nachfedern, weg vom Killer) - auch bei den Mitspielern.
+- **Flugkamera**: Kamera zieht sich zurück (man sieht sich fallen), fliegt dann im Bogen zum Killer (Dauer = Entfernung / 75 m/s, **1-3 s**) und folgt ihm **3,6 m dahinter** über die Schulter (Wände werden berücksichtigt, im Heli/Wagen weiter weg). Ohne Killer: langsame Kreisfahrt um die eigene Figur.
+- Während der Kamerafahrt kein Grauschleier und noch keine Ausrüstungswahl; danach leichter Schleier (Experimental noch leichter).
+- **Combat-Panel rechts**: Killer und Todesursache (Symbol), **Duell-Stand** (inkl. Kills per Gadget, Drohne, beschworenem Monster), **Schaden im letzten Gefecht** (ausgeteilt / erlitten, mit Balken), aufklappbare **Kill-Historie** der gegenseitigen Kills.
+- **Respawn per Leertaste** (oder Knopf). Danach ist Springen gesperrt, bis die Leertaste losgelassen ist.
+
+Killfeed (oben links, bleibt auch auf dem Todesbildschirm):
+- Zeilen **[Täter]  Symbol  [Opfer]**, keine Ortsangaben; eigene Zeilen golden hinterlegt.
+- Symbole: Sturmgewehr, Sniper, Schrotflinte, Gatling, Pistole, MP, Explosion (Granaten, Raketen, C4, Claymore), Roadkill (Auto mit Crash, auch Heli), Messer (alle Nahkampfwaffen), Molotow, Geschütz/Flak, Tomahawk, Jet-Strike, Sturz, Totenkopf; Monster-Porträts (Zombie, Jägerin, Brute, Koloss, Titan, Harpie, Drohnen).
+- Bei Monster-Kills steht das Monster als Täter, bei beschworenen Monstern (Nekromanten-Nest) der Beschwörer.
+
+Technik: `World.king_update` / `king_on_death`, `Player.king/streak/camp_*`, `give_buff(kind, slot, k)`, `has_buff`, `buff2/buff2_t`, `World.cur_mob`, `dmg_src_pid`, `mob_src`, Ereignisse `kill` (+ Monsterart, Beschwörer), `player_hurt`/`shieldhit` (+ Angreifer), `king`, `kingping`, `bounty`, `decoy` (+ Waffe, Besitzer), `decoypop`; `decoy_weapons`, `decoy_pattern`; `Game.funnel_event` / `update_funnels`, `KillFeed`, `kill_icon`, `FEED_ICONS`, `place_deathcam`, `update_combat_panel`, `space_respawn`, `update_king_view`. Zum Nachjustieren: `FUNNEL_*`, `KING_*`, `DECOY_SEC_P`, `DECOY_MAX_SHOTS`, `DEATHCAM_*`, `FIGHT_GAP`.
+
 ## Einstellungen mit Kategorien und frei belegbare Tasten (Robin, 2026-10-28)
 Nur dieser Rechner (Einstellungen), NET_VERSION bleibt 55.
 

@@ -448,7 +448,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 55         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 56         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 220               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -563,7 +563,7 @@ GREN_COL = {"frag": (0.30, 0.40, 0.20), "decoy": (0.80, 0.68, 0.20), "flash": (0
             "jet": (0.16, 0.17, 0.19)}   # Erkennungsfarbe (Modell, HUD-Symbol); 13c: Jet-Strike schwarz
 
 GREN_INFO = {"frag": "Explodiert nach 2,5 s, tödlich im Nahbereich",
-             "decoy": "Landet und macht dort Schusslärm - Monster laufen hin. Kein Schaden",
+             "decoy": "Landet und ahmt dort deine Waffe nach (Kadenz, Klang, Nachladen) - Gegner hören Schüsse, Monster laufen hin. Kein Schaden",
              "flash": "Blendet bis 10 m (je näher und je mehr man hinschaut, desto stärker)",
              "smoke": "Rauchwolke, blockiert die Sicht (bleibt in Räumen und Tunneln)",
              "drone": "G: Drohne steigt sofort neben dir auf (in deiner Spielerfarbe) und betäubt Gegner",
@@ -604,11 +604,7 @@ GREN_KEY_NEXT = "h"       # Taste: Granatenart wechseln (dazu Mausrad bei gehalt
 GREN_MODES = ("Halten & Laden (G)", "Taktischer Slot (6)")
 SETTINGS_PAGES = ("settings", "set_ctrl", "set_gfx", "set_audio")   # v55: Einstellungs-Menüseiten (Hauptmenü)
 
-DECOY_T = 6.0             # s macht der Decoy Lärm ...
-
-DECOY_SHOTS = 9           # ... so viele "Schüsse" ...
-
-DECOY_NOISE = 80.0        # ... je mit so viel Lärmradius (m; Schuss 60, Explosion 90)
+DECOY_NOISE = 80.0        # Lärmradius (m) des Fake-Knalls am Ende; v56: die "Schüsse" sind so laut wie die nachgeahmte Waffe
 
 FLASH_R = 10.0            # m Wirkung der Blendgranate
 
@@ -2253,6 +2249,67 @@ BUFF_DAMAGE = 1.5               # Schadens-Buff: eigene Treffer (Kugeln, Explosi
 BUFF_TANK_HP = (150.0, 200.0)   # Tank-Buff: max. Leben zufällig eines davon (HP werden mitskaliert)
 
 
+def decoy_weapons(pl):
+    """v56: (Waffe, die der Decoy nachahmt, zweite Waffe für den Wechsel): die Waffe in der Hand, sonst die erste im
+    Inventar; als zweite die Kleinwaffe (bzw. bei einer Kleinwaffe in der Hand die Hauptwaffe)."""
+    if pl is None:
+        return START_WEAPON, None
+    slots = [w_ for w_ in getattr(pl, "slots", ()) if isinstance(w_, int) and 0 <= w_ < len(WEAPONS)]
+    cur = getattr(pl, "cur", -1)
+    wi = cur if isinstance(cur, int) and 0 <= cur < len(WEAPONS) and cur in slots else (slots[0] if slots else START_WEAPON)
+    rest = [w_ for w_ in slots if w_ != wi]
+    secs = [w_ for w_ in rest if WEAPONS[w_].weapon_type == WT_SECONDARY]
+    pris = [w_ for w_ in rest if WEAPONS[w_].weapon_type != WT_SECONDARY]
+    wi2 = (pris or secs or [None])[0] if WEAPONS[wi].weapon_type == WT_SECONDARY else (secs or pris or [None])[0]
+    return wi, wi2
+
+
+def decoy_pattern(rng, wi, wi2=None):
+    """v56: Schussfolge eines Smart-Decoys als [(Zeit s, Waffe)] und Ende - wie die Waffe des Werfers: Kadenz,
+    Feuerstösse mit Pausen, Nachladen nach dem Magazin; mit DECOY_SEC_P "wechselt" er zwischendurch zur Kleinwaffe."""
+    out, t = [], 0.15
+
+    def fire(w_i, budget, n_max):
+        nonlocal t
+        w = WEAPONS[w_i]
+        rounds, n, end = max(1, w.mag), 0, t + budget
+        while t < end and n < n_max and len(out) < DECOY_MAX_SHOTS:
+            if w.auto:                                   # Feuerstoss: 3-8 Schuss (Minigun mehr), dann kurze Pause
+                k = rng.randint(8, 20) if w.spin > 0 else rng.randint(3, 8)
+                for _ in range(k):
+                    if rounds <= 0 or len(out) >= DECOY_MAX_SHOTS or n >= n_max:
+                        break
+                    out.append((round(t, 3), w_i))
+                    rounds, n = rounds - 1, n + 1
+                    t += w.interval * rng.uniform(1.0, 1.12)
+                t += rng.uniform(0.35, 1.15)
+            else:                                        # Einzelfeuer / Repetierer / Pumpe: im Takt der Waffe, mal zögernd
+                out.append((round(t, 3), w_i))
+                rounds, n = rounds - 1, n + 1
+                t += max(w.interval, 0.16) * rng.uniform(1.0, 1.9 if not w.bolt else 1.3)
+                if rng.random() < 0.22:
+                    t += rng.uniform(0.5, 1.3)
+            if rounds <= 0:                              # Magazin leer: Nachladepause
+                t += w.reload * rng.uniform(0.95, 1.08)
+                rounds = max(1, w.mag)
+
+    if not (isinstance(wi, int) and 0 <= wi < len(WEAPONS)):
+        wi = START_WEAPON
+    sec = isinstance(wi2, int) and 0 <= wi2 < len(WEAPONS) and wi2 != wi and rng.random() < DECOY_SEC_P
+    big = WEAPONS[wi].blast_r > 0 or wi == STINGER_WI    # Raketen: ein, zwei Abschüsse
+    fire(wi, 3.6 if sec else 5.2, 2 if big else 999)
+    if sec:
+        t += rng.uniform(0.45, 0.8)                      # Waffenwechsel
+        fire(wi2, 1.8, rng.randint(2, 6))
+    return out, (out[-1][0] if out else round(t, 3))   # Ende = letzter Schuss (danach DECOY_POP_DELAY bis zum Knall)
+
+
+def has_buff(p, kind):
+    """v56: Wirkt dieser Buff gerade (erster oder - Kopfgeld - zweiter Platz)?"""
+    return p is not None and ((getattr(p, "buff", None) == kind and getattr(p, "buff_t", 0.0) > 0)
+                              or (getattr(p, "buff2", None) == kind and getattr(p, "buff2_t", 0.0) > 0))
+
+
 # --- Lärm: Monster hören Spieler. Ein Geräusch alarmiert alle Monster im Radius (x hear der Art); sie laufen
 # zum Ort des Geräuschs (nicht direkt zum Spieler!) und suchen dort. Die Radien orientieren sich an der
 # Sichtweite der Monster (aggro 18-30 m): Schleichen bleibt darunter, Laufen etwa halb so weit, Sprinten etwa so
@@ -2361,6 +2418,45 @@ ENEMY_SIGHT_FOV = 100.0   # Grad: Blickfeld (waagerecht) für den Sichtkontakt
 ENEMY_SEEN_GLOW = 1.5     # s: so lange leuchtet der rote Punkt nach dem letzten Sichtkontakt (an der letzten Stelle) nach
 
 ENEMY_SIGHT_RATE = 10.0   # Prüfungen pro Sekunde (Sichtlinie)
+
+# --- v56: Trichter auf der Minimap - jedes Ereignis eines Gegners zeigt als Keil von der eigenen Position in seine Richtung
+FUNNEL = True             # aus: keine Trichter (die Lärm-Kreise und Sicht-Punkte bleiben)
+FUNNEL_T = 3.0            # s: so lange bleibt ein Trichter - hell am Anfang, linear aus bis FUNNEL_T
+FUNNEL_SHOT_R = 150.0     # m: Schüsse und Decoys bis zu dieser Entfernung (gedämpfte Schüsse nur in ihrem Lärmradius)
+FUNNEL_SPOT_R = 120.0     # m: direkter Sichtkontakt bis zu dieser Entfernung
+FUNNEL_BY_R = 3.0         # m: Kugel fliegt so nah am Kopf vorbei (Bullet-By) -> Trichter in Richtung des Schützen
+FUNNEL_HALF = 11.0        # Grad: halber Öffnungswinkel des Trichters
+FUNNEL_MIN = 0.32         # Mindestlänge (Anteil am Minimap-Radius), damit auch nahe Ereignisse eine Richtung zeigen
+FUNNEL_ALPHA = 0.62       # Deckkraft am breiten Ende (Spitze bei dir fast durchsichtig)
+FUNNEL_COL = {"shot": (1.0, 0.36, 0.18), "spot": (1.0, 0.84, 0.22), "by": (1.0, 0.12, 0.12)}   # Decoy = wie Schuss
+
+# --- v56: Manhunt-King (Anti-Camp / High Value Target). Wer zu lange campt oder viele Kills in Folge macht, wird nach
+# einer Karenzzeit King: alle anderen sehen ihn regelmässig kurz als goldene Silhouette. Wer ihn erledigt, kassiert das
+# Kopfgeld: zwei verschiedene zufällige Hasen-Buffs mit KING_BUFF_K-facher Dauer.
+KING = True
+KING_CAMP_R = 10.0        # m: bleibt man in diesem Umkreis ...
+KING_CAMP_T = 60.0        # s: ... so lange, gilt das als Campen (in der KotH-Zone zählt die Zeit nicht)
+KING_STREAK = 6           # Spieler-Kills ohne eigenen Tod
+KING_GRACE = 10.0         # s Karenzzeit: Warnung nur an den Betroffenen; wer beim Campen weiterzieht, entgeht ihr
+KING_PULSE = 10.0         # s: so oft erscheint die Silhouette ...
+KING_SHOW_T = 3.0         # s: ... und so lange (blendet am Ende aus)
+KING_MIN_PLAYERS = 2      # erst ab so vielen Spielern (allein gibt es niemanden, der jagt)
+KING_BUFF_K = 2.0         # Kopfgeld: Buff-Dauer x so viel
+KING_COL = (1.0, 0.80, 0.18)    # Goldgelb der Silhouette
+
+# --- v56: Smart-Decoy - ahmt die Waffe des Werfers nach (Kadenz, Pausen, Nachladen, evtl. Kleinwaffe, Fake-Knall)
+DECOY_SEC_P = 0.4         # Chance, dass der Decoy zwischendurch zur Kleinwaffe "wechselt"
+DECOY_MAX_SHOTS = 60      # höchstens so viele Schüsse je Decoy (Minigun)
+DECOY_POP_DELAY = 0.7     # s nach dem letzten Schuss: harmloser Knall, dann ist er leer
+
+# --- v56: Todes-Sequenz und Flugkamera zum Killer
+DEATHCAM = True
+DEATHCAM_FALL_T = 1.1     # s: Kamera zieht sich zurück und man sieht die eigene Figur umfallen
+DEATHCAM_SPEED = 75.0     # m/s: Flugtempo zum Killer - Dauer = Entfernung / Tempo ...
+DEATHCAM_FLY_MIN, DEATHCAM_FLY_MAX = 1.0, 3.0   # s: ... aber mindestens / höchstens so lange
+DEATHCAM_BACK = 3.6       # m: Abstand der Verfolgerkamera hinter dem Killer
+DEATHCAM_UP = 0.9         # m: über Kopfhöhe
+FIGHT_GAP = 12.0          # s: Schadens-Log - so lange Pause trennt zwei Gefechte
 
 SET_FRAME_W = 0.008       # 10h: Set komplett - Rahmenstärke um die drei Ausrüstungs-Kacheln (Bildschirmeinheiten)
 
@@ -3246,6 +3342,8 @@ class Grenade:
         self.hit = False          # 10e: hat schon etwas getroffen (Molotow zerschellt)
         self.shot_t = 0.0         # 10e: Decoy - Zeit bis zum nächsten "Schuss"
         self.shots = 0
+        self.dwi = self.dwi2 = None   # v56: Smart-Decoy - Waffe(n) des Werfers beim Wurf (Haupt- und Kleinwaffe)
+        self.dq, self.dage, self.dend, self.popped = [], 0.0, 0.0, False   # v56: Schussfolge [(Zeit, Waffe)]
         self.tier = "common"      # 10e: Airdrop-Fackel - welche Kiste sie bringt (nur Host)
 
 
@@ -4872,8 +4970,9 @@ def gear_info(gi, pl=None):
         out += f"\n{SETS[g.set][0]} {n}/3 - Set-Bonus: {SET_BONUS_TEXT[g.set]}"
     return out
 
-def buff_info(kind, pl=None):
-    left = f"   noch {int(math.ceil(pl.buff_t))} s" if pl is not None and pl.buff_t > 0 else ""
+def buff_info(kind, pl=None, t=None):
+    t = (pl.buff_t if pl is not None else 0.0) if t is None else t        # v56: t = Restzeit (zweiter Buff)
+    left = f"   noch {int(math.ceil(t))} s" if t > 0 else ""
     desc = {"speed": f"Du läufst und rennst {int(round((BUFF_SPEED - 1) * 100))} % schneller.",
             "damage": f"Deine Treffer machen {int(round(BUFF_DAMAGE * 100))} % Schaden (Spieler und Monster).",
             "tank": "Mehr maximale Lebenspunkte; danach anteilig zurück auf 100."}.get(kind, "")
@@ -6619,7 +6718,62 @@ class World:
         Waffenwahl) läuft über das Ereignis 'respawn'."""
         x, y = self.pick_spawn(pl.pid)
         pl.respawn(self, x, y, DEFAULT_LOADOUT)
+        pl.camp_at, pl.camp_t = None, 0.0                # v56: Camp-Messung beginnt neu
         self.events.append(("respawn", pl.pid, round(x, 2), round(y, 2)))
+
+    # ------------------------------------------------------------ v56: Manhunt-King (Anti-Camp / High Value Target)
+    def king_update(self, dt, players):
+        """Campen messen (KING_CAMP_R / KING_CAMP_T, die KotH-Zone zählt nicht) und Kill-Serien prüfen. Erfüllt jemand
+        eine Bedingung, läuft die Karenzzeit KING_GRACE (Warnung nur an ihn; wer beim Campen weiterzieht, entgeht
+        ihr). Danach ist er King bis zu seinem Tod: alle KING_PULSE s geht "kingping" an alle (goldene Silhouette)."""
+        if not KING or self.phase != "play" or getattr(self, "lobby", False):
+            return
+        enough = sum(1 for p in players if not p.prespawn) >= KING_MIN_PLAYERS
+        for pl in players:
+            if pl.hp <= 0 or pl.prespawn:
+                continue
+            here = (pl.x, pl.y, pl.z)
+            if (pl.camp_at is None or math.dist(here, pl.camp_at) > KING_CAMP_R
+                    or (self.mode == "koth" and self.in_zone(pl))):
+                pl.camp_at, pl.camp_t = here, 0.0
+            else:
+                pl.camp_t += dt
+            if pl.king == 2:
+                pl.king_t -= dt
+                if pl.king_t <= 0:
+                    pl.king_t = KING_PULSE
+                    self.events.append(("kingping", pl.pid, KING_SHOW_T))
+                continue
+            why = "camp" if pl.camp_t >= KING_CAMP_T else ("streak" if pl.streak >= KING_STREAK else "")
+            if pl.king == 1:
+                if not why:                              # weitergezogen: Warnung zurückgenommen
+                    pl.king, pl.king_t = 0, 0.0
+                    self.events.append(("king", pl.pid, 0, "ok"))
+                    continue
+                pl.king_t -= dt
+                if pl.king_t <= 0:
+                    pl.king, pl.king_t, pl.king_why = 2, 0.0, why    # erste Silhouette gleich im nächsten Schritt
+                    self.events.append(("king", pl.pid, 2, why))
+            elif why and enough:
+                pl.king, pl.king_t, pl.king_why = 1, KING_GRACE, why
+                self.events.append(("king", pl.pid, 1, why, KING_GRACE))
+
+    def king_on_death(self, pl, k):
+        """Tod: Serie und Camp-Messung zurück. War er King und hat ihn ein Gegner erledigt, bekommt der das Kopfgeld:
+        zwei verschiedene zufällige Hasen-Buffs mit KING_BUFF_K-facher Dauer."""
+        pl.streak, pl.camp_at, pl.camp_t = 0, None, 0.0
+        enemy = k is not None and k is not pl and not self.allied(k.pid, pl.pid)
+        if enemy:
+            k.streak += 1
+        if pl.king:
+            was = pl.king
+            pl.king, pl.king_t = 0, 0.0
+            self.events.append(("king", pl.pid, 0, "dead"))
+            if was == 2 and enemy and k.hp > 0:
+                kinds = self.mrng.sample(BUFF_KINDS, 2)
+                self.give_buff(k, kinds[0], 1, KING_BUFF_K)
+                self.give_buff(k, kinds[1], 2, KING_BUFF_K)
+                self.events.append(("bounty", k.pid, pl.pid, kinds[0], kinds[1]))
 
     # ------------------------------------------------------------ 11: Capture the Flag
     def ctf_cfg(self):
@@ -7201,7 +7355,7 @@ class World:
             pl.shield_t = 0.0
             dmg -= absorb
             if absorb > 0:
-                self.events.append(("shieldhit", pl.pid, round(absorb, 1)))
+                self.events.append(("shieldhit", pl.pid, round(absorb, 1), self.dmg_src_pid(attacker, pl)))
             if dmg <= 0:
                 return
         if dmg >= pl.hp and wi == WI_TOMAHAWK and set_full(pl, "second"):   # 10c: Set-Bonus - überlebt den Tomahawk,
@@ -7226,11 +7380,42 @@ class World:
                 self.events.append(("gearbreak", pl.pid, gi, gear_list(pl)))
                 self.events.append(("player_hurt", dmg, pl.pid))
                 return
+        real = min(dmg, pl.hp)                           # v56: Schadens-Log (Death-Screen) - tatsächlich verlorene HP
         pl.hp = max(0.0, pl.hp - dmg)
         pl.since_hurt = 0.0
-        self.events.append(("player_hurt", dmg, pl.pid))
+        self.events.append(("player_hurt", dmg, pl.pid, self.dmg_src_pid(attacker, pl), round(real, 1)))
         if pl.hp <= 0:
+            self.death_src = self.mob_src(attacker, wi)  # v56: welches Monster / wessen beschworenes Monster
             self.player_died(pl, attacker, wi)
+            self.death_src = None
+
+    def dmg_src_pid(self, attacker, pl=None):
+        """v56: Spieler, dem ein Treffer zugerechnet wird (Schadens-Log): der Schütze, bei beschworenen Monstern
+        (Nekromanten-Nest) und eigenen Drohnen deren Besitzer, sonst -1."""
+        if isinstance(attacker, int) and attacker >= 0:
+            return attacker
+        m = getattr(self, "cur_mob", None)
+        if m is not None:
+            o = getattr(m, "nest_owner", -1)
+            if not (isinstance(o, int) and o >= 0):
+                o = getattr(m, "owner", -1) if m.kind in TEMP_MOBS else -1
+            if isinstance(o, int) and o >= 0 and (pl is None or o != pl.pid):
+                return o
+        return -1
+
+    def mob_src(self, attacker, wi):
+        """v56: (Monsterart, Beschwörer-ID) für die Kill-Anzeige, wenn ein Monster getötet hat - sonst (None, -1).
+        Gerade aktives Monster (update_mobs_staggered), sonst an der "Waffe" erkannt (Fels = Titan, Stampfer = Koloss)."""
+        if isinstance(attacker, int) and attacker >= 0:
+            return None, -1
+        m = getattr(self, "cur_mob", None)
+        if m is not None:
+            return m.kind, self.dmg_src_pid(-1)
+        if wi == WI_ROCK:
+            return "titan", -1
+        if wi == WI_SLAM:
+            return "colossus", -1
+        return None, -1
 
     def player_died(self, pl, attacker, wi):
         if wi == MELEE_WI0 + MELEE_IDX.get(PAN_NAME, -99) and attacker != pl.pid:
@@ -7313,7 +7498,10 @@ class World:
         elif not (k is not None and k is not pl):        # 11: Teamkill - im Killfeed trotzdem mit Namen
             k = None
         self.events.append(("player_dead", pl.pid))
-        self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi))
+        mk, mo = getattr(self, "death_src", None) or (None, -1)
+        self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi,
+                            KINDS.index(mk) if mk in KINDS else -1, mo))      # v56: + Monsterart, Beschwörer
+        self.king_on_death(pl, k)                        # v56: Manhunt-King - Status endet, evtl. Kopfgeld
 
     def head_mult(self, wi):
         try:
@@ -8548,7 +8736,7 @@ class World:
     def dmg_mult(self, owner):
         """Schadens-Buff des Verursachers (Fluchttier): eigene Treffer machen BUFF_DAMAGE-fachen Schaden."""
         p = self.players.get(owner) if isinstance(owner, int) and owner >= 0 else None
-        return BUFF_DAMAGE if p is not None and p.buff == "damage" and p.buff_t > 0 else 1.0
+        return BUFF_DAMAGE if has_buff(p, "damage") else 1.0
 
     def shock(self, pl):
         """7c: Schild-Set-Fähigkeit (v49: "Schockwelle"): betäubt alle Gegner und Monster im Umkreis SHOCK_R (nicht einen
@@ -8738,24 +8926,43 @@ class World:
         m.gz = self.floor_at(m.x, m.y, m.gz + STEP_H)
         m.z = m.gz + getattr(m, "hover", 0.0)
 
-    def give_buff(self, pl):
-        """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank)."""
+    def give_buff(self, pl, kind=None, slot=1, k=1.0):
+        """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank). v56: slot 2 = zweiter Buff gleichzeitig
+        (Kopfgeld auf den King), k = Faktor auf die Dauer."""
         if pl is None or pl.hp <= 0:
             return
-        self.end_buff(pl)
-        kind = self.mrng.choice(BUFF_KINDS)
-        pl.buff, pl.buff_t = kind, BUFF_T[kind]
+        if kind is None:
+            kind = self.mrng.choice(BUFF_KINDS)
+        if slot == 1:
+            self.end_buff(pl, 1)
+            if getattr(pl, "buff2", None) == kind:       # dieselbe Art läuft schon im zweiten Platz: dort beenden
+                self.end_buff(pl, 2)
+        else:
+            self.end_buff(pl, 2)
+            if pl.buff == kind:
+                self.end_buff(pl, 1)
+        dur = BUFF_T[kind] * k
+        if slot == 1:
+            pl.buff, pl.buff_t = kind, dur
+        else:
+            pl.buff2, pl.buff2_t = kind, dur
         if kind == "tank":                               # 7c: Tank kommt zu Ausrüstung/Set dazu
             pl.tank_add = self.mrng.choice(BUFF_TANK_HP) - PLAYER_HP
             update_max_hp(pl)                            # Leben mitskalieren (80/100 -> 160/200)
         pl.stats["buffs"] += 1
-        self.events.append(("buff", pl.pid, kind, BUFF_T[kind], pl.max_hp))
+        self.events.append(("buff", pl.pid, kind, round(dur, 1), pl.max_hp, slot))
 
-    def end_buff(self, pl):
-        if pl.buff == "tank":
-            pl.tank_add = 0.0
-            update_max_hp(pl)                            # prozentual zurück: 180/200 -> 90/100
-        pl.buff, pl.buff_t = None, 0.0
+    def end_buff(self, pl, slot=0):
+        """slot 0 = beide Buffs (Tod), 1 / 2 = nur diesen Platz."""
+        for s_ in ((1, 2) if slot == 0 else (slot,)):
+            kind = pl.buff if s_ == 1 else getattr(pl, "buff2", None)
+            if kind == "tank":
+                pl.tank_add = 0.0
+                update_max_hp(pl)                        # prozentual zurück: 180/200 -> 90/100
+            if s_ == 1:
+                pl.buff, pl.buff_t = None, 0.0
+            else:
+                pl.buff2, pl.buff2_t = None, 0.0
 
     def blast_los(self, pos, *targets):
         """10a: Erreicht eine Explosion bei pos das Ziel (einer der Punkte frei sichtbar)? Start leicht angehoben,
@@ -9222,7 +9429,9 @@ class World:
             self.explode(pos, g.owner, GREN_R, GREN_DMG, WI_GRENADE)
             return False
         if k == "decoy":
-            g.active, g.fuse, g.shot_t, g.shots = True, DECOY_T, 0.05, 0
+            g.dq, g.dend = decoy_pattern(self.mrng, g.dwi, g.dwi2)      # v56: Smart-Decoy
+            g.active, g.dage, g.popped, g.shots = True, 0.0, False, 0
+            g.fuse = g.dend + DECOY_POP_DELAY + 0.4
             return True
         if k == "flash":
             self.flashbang(pos, g.owner)
@@ -10224,6 +10433,8 @@ class World:
                     d[0] * sp, d[1] * sp, d[2] * sp + 2.0, owner, GREN_FUSE_K.get(kind, GREN_FUSE), kind)
         if tier:
             g.tier = tier
+        if kind == "decoy":                              # v56: Smart-Decoy merkt sich die Waffen des Werfers
+            g.dwi, g.dwi2 = decoy_weapons(self.players.get(owner))
         self.next_gid += 1
         self.grenades.append(g)
         self.events.append(("throw", owner, GREN_KINDS.index(g.kind)))
@@ -10233,16 +10444,23 @@ class World:
         for g in self.grenades:
             g.fuse -= dt
             if g.active:                                 # 10e: liegt und wirkt (Decoy-Lärm, Rauch qualmt)
-                if g.kind == "decoy":
-                    g.shot_t -= dt
-                    if g.shot_t <= 0 and g.shots < DECOY_SHOTS:
+                if g.kind == "decoy":                    # v56: Smart-Decoy spielt die Schussfolge der Waffe ab
+                    g.dage += dt
+                    while g.dq and g.dq[0][0] <= g.dage:
+                        _t, wi_ = g.dq.pop(0)
                         g.shots += 1
-                        g.shot_t = self.mrng.uniform(0.25, 1.1) if self.mrng.random() < 0.8 else 0.08
-                        self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
+                        nr = NOISE_SHOT * WEAPONS[wi_].loud          # so laut wie ein echter Schuss dieser Waffe
+                        self.make_noise(g.x, g.y, nr, g.z + 0.5)
                         self.events.append(("lnoise", g.owner, round(g.x, 1), round(g.y, 1), round(g.z + 0.5, 1),
-                                            DECOY_NOISE))           # 10h: Gegner hören den Decoy wie Schüsse
+                                            round(nr, 1)))          # 10h: Gegner hören den Decoy wie Schüsse
                         self.events.append(("decoy", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
-                                            self.mrng.choice((0, 0, 1, 2, 3))))
+                                            wi_, g.owner))
+                    if not g.dq and not g.popped and g.dage >= g.dend + DECOY_POP_DELAY:
+                        g.popped = True                  # harmloser Fake-Knall zum Schluss (kein Schaden)
+                        self.make_noise(g.x, g.y, DECOY_NOISE, g.z + 0.5)
+                        self.events.append(("decoypop", g.gid, round(g.x, 2), round(g.y, 2), round(g.z + 0.2, 2),
+                                            g.owner))
+                        g.fuse = min(g.fuse, 0.15)
                 if g.fuse > 0:
                     self.grenade_settle(g, dt)
                     alive.append(g)
@@ -10911,8 +11129,14 @@ class World:
             if pl.buff is not None:
                 pl.buff_t -= dt
                 if pl.buff_t <= 0:
-                    self.end_buff(pl)
-                    self.events.append(("buffend", pl.pid))
+                    self.end_buff(pl, 1)
+                    self.events.append(("buffend", pl.pid, 1))
+            if pl.buff2 is not None:                     # v56: zweiter Buff (Kopfgeld auf den King)
+                pl.buff2_t -= dt
+                if pl.buff2_t <= 0:
+                    self.end_buff(pl, 2)
+                    self.events.append(("buffend", pl.pid, 2))
+        self.king_update(dt, players)                    # v56: Manhunt-King
         self.ctf_update(dt)                              # CTF: Flaggen aufnehmen, tragen, abgeben
         if self.phase == "play":
             self.time_left -= dt
@@ -11232,7 +11456,11 @@ class World:
             if busy or (self.lod_frame + m.id) % MOB_LOD_DIV == 0 or step >= MOB_LOD_MAX_DT:
                 m.lod_dt = 0.0
                 m.upd_n += 1
-                m.update(step, self, players)
+                self.cur_mob = m                         # v56: wer gerade handelt (Kill-Anzeige: Monsterart)
+                try:
+                    m.update(step, self, players)
+                finally:
+                    self.cur_mob = None
             else:
                 m.lod_dt = step
 
@@ -11350,6 +11578,13 @@ class Player:
         self.stun_t = 0.0                 # Betäubung (Drohne): s
         self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
         self.buff, self.buff_t = None, 0.0   # Buff vom Fluchttier: "speed" | "damage" | "tank", Restzeit
+        self.buff2, self.buff2_t = None, 0.0  # v56: zweiter Buff gleichzeitig (Kopfgeld auf den King)
+        self.king = 0                        # v56: 0 = nichts, 1 = Karenzzeit läuft (Warnung), 2 = King
+        self.king_t = 0.0                    # v56: Restzeit der Karenzzeit bzw. bis zur nächsten Silhouette
+        self.king_why = ""                   # v56: "camp" | "streak"
+        self.camp_t = 0.0                    # v56: Sekunden im Umkreis KING_CAMP_R um camp_at
+        self.camp_at = None
+        self.streak = 0                      # v56: Spieler-Kills seit dem letzten eigenen Tod
         self.gear = {sl: None for sl in GEAR_SLOTS}   # Ausrüstung je Slot (Index in GEAR)
         self.shield_hp, self.shield_t = 0.0, 99.0   # Schild: Stand, s seit dem letzten Schildschaden (7c: Teile laden ihn)
         self.tank_add = 0.0               # 7c: + max. HP durch den Tank-Buff
@@ -11681,7 +11916,7 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         if pl.ads:
             speed *= 0.6
         speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
-        if getattr(pl, "buff", None) == "speed" and pl.buff_t > 0:
+        if has_buff(pl, "speed"):                              # v56: auch als zweiter Buff (Kopfgeld)
             speed *= BUFF_SPEED
         if getattr(pl, "eat_t", 0.0) > 0:
             speed = min(speed, WALK * PAN_EAT_SPEED)            # 9c: beim Essen nur langsam gehen
@@ -20265,6 +20500,465 @@ def ui_raise(parent, first, base):
                 n.setBin("fixed", base + n.getBinDrawOrder())
 
 
+# --------------------------------------------------------------- v56: Killfeed-Symbole und Killfeed
+
+FEED_ICON_W = {}            # Schlüssel -> Breite des Symbols (Höhe = 1)
+
+KILL_ICON_BY_WEAPON = {"Colt M4 Carbine": "rifle", "SCAR-L": "rifle", "AK": "rifle",
+                       "DSR": "sniper", "Railgun": "sniper", "VSS": "sniper", "Karabiner 98k": "sniper",
+                       "Schrotflinte": "shotgun", "Abgesägte Schrotflinte": "shotgun", "Minigun": "heavy",
+                       "Colt ACP": "pistol", "Revolver": "pistol", "Baretta": "pistol", "Dual Baretta": "pistol",
+                       "MP9": "smg", "Raketenwerfer": "explosion", "Stinger": "explosion"}
+
+
+def kill_icon(wi, mob_kind=None):
+    """v56: Symbol für die Kill-Anzeige: Monster-Porträt, Waffenklasse, Explosion, Roadkill, Messer, Gadget."""
+    if mob_kind:
+        return "m_" + mob_kind if ("m_" + mob_kind) in FEED_ICONS else "skull"
+    if isinstance(wi, int) and 0 <= wi < len(WEAPONS):
+        return KILL_ICON_BY_WEAPON.get(WEAPONS[wi].name, "rifle")
+    if isinstance(wi, int) and wi >= MELEE_WI0 or wi == WI_MELEE:
+        return "knife"
+    return {WI_GRENADE: "explosion", WI_C4: "explosion", WI_CLAY: "explosion", WI_GL: "explosion",
+            WI_VEHICLE: "roadkill", WI_HELI: "roadkill", WI_TURRET: "turret", WI_FLAK: "turret",
+            WI_TOMAHAWK: "rocket", WI_JET: "jet", WI_MOLOTOV: "fire", WI_FALL: "fall"}.get(wi, "skull")
+
+
+def _icon_parts():
+    """Zeichenhilfen für die flachen Symbole (x nach rechts, z nach oben, Höhe etwa -0.5 .. 0.5)."""
+    m = Mesh(lit=False)
+
+    def poly(pts, col):
+        cx = sum(p[0] for p in pts) / len(pts)
+        cz = sum(p[1] for p in pts) / len(pts)
+        for i in range(len(pts)):
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            m.tri((cx, 0, cz), (a[0], 0, a[1]), (b[0], 0, b[1]), col)
+
+    def rect(x0, z0, x1, z1, col):
+        poly([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], col)
+
+    def circle(cx, cz, r, col, n=18, rz=None):
+        rz = r if rz is None else rz
+        poly([(cx + math.cos(math.tau * i / n) * r, cz + math.sin(math.tau * i / n) * rz) for i in range(n)], col)
+
+    def line(x0, z0, x1, z1, w, col):
+        dx, dz = x1 - x0, z1 - z0
+        ln = math.hypot(dx, dz) or 1.0
+        nx, nz = -dz / ln * w / 2, dx / ln * w / 2
+        poly([(x0 + nx, z0 + nz), (x1 + nx, z1 + nz), (x1 - nx, z1 - nz), (x0 - nx, z0 - nz)], col)
+
+    def star(cx, cz, r0, r1, n, col, rot=0.0):
+        pts = []
+        for i in range(2 * n):
+            a = rot + math.pi * i / n
+            r = r0 if i % 2 == 0 else r1
+            pts.append((cx + math.cos(a) * r, cz + math.sin(a) * r))
+        for i in range(len(pts)):                        # Fächer um die Mitte (sternförmig, nicht konvex)
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            m.tri((cx, 0, cz), (a[0], 0, a[1]), (b[0], 0, b[1]), col)
+    return m, poly, rect, circle, line, star
+
+
+L_, D_, M_ = (0.93, 0.93, 0.95), (0.18, 0.18, 0.2), (0.62, 0.62, 0.66)   # hell, dunkel, mittel
+
+
+def _ic_rifle():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-1.2, -0.12), (-1.2, 0.16), (-0.68, 0.14), (-0.68, 0.0)], L_)          # Schaft
+    rect(-0.7, -0.02, 0.35, 0.2, L_)                                              # Gehäuse
+    rect(0.35, 0.03, 0.78, 0.18, L_)                                              # Handschutz
+    rect(0.78, 0.08, 1.2, 0.13, L_)                                               # Lauf
+    rect(1.1, 0.13, 1.15, 0.22, L_)                                               # Korn
+    rect(-0.25, 0.2, 0.05, 0.28, L_)                                              # Visier
+    poly([(-0.06, -0.02), (0.13, -0.02), (0.07, -0.42), (-0.14, -0.36)], L_)     # gebogenes Magazin
+    poly([(-0.48, -0.02), (-0.32, -0.02), (-0.4, -0.34), (-0.56, -0.31)], L_)    # Griff
+    return m, 2.5
+
+
+def _ic_sniper():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-1.42, -0.14), (-1.42, 0.17), (-1.0, 0.14), (-0.78, 0.1), (-0.78, -0.02), (-1.05, -0.05)], L_)
+    rect(-0.8, -0.03, 0.15, 0.14, L_)
+    rect(0.15, 0.04, 1.42, 0.1, L_)                                               # langer Lauf
+    rect(-0.42, 0.22, 0.2, 0.32, L_)                                              # Zielfernrohr
+    poly([(-0.5, 0.19), (-0.38, 0.22), (-0.38, 0.32), (-0.5, 0.35)], L_)
+    poly([(0.17, 0.22), (0.3, 0.19), (0.3, 0.35), (0.17, 0.32)], L_)
+    rect(-0.18, 0.14, -0.08, 0.22, L_)
+    rect(-0.15, -0.22, 0.02, -0.03, L_)                                           # Magazin
+    poly([(-0.55, -0.03), (-0.42, -0.03), (-0.48, -0.32), (-0.62, -0.3)], L_)
+    line(0.95, 0.04, 0.82, -0.3, 0.05, L_)                                        # Zweibein
+    line(0.95, 0.04, 1.08, -0.3, 0.05, L_)
+    return m, 2.9
+
+
+def _ic_shotgun():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-1.2, -0.16), (-1.2, 0.14), (-0.62, 0.12), (-0.62, -0.02)], L_)
+    rect(-0.64, -0.04, 0.1, 0.19, L_)
+    rect(0.1, 0.07, 1.2, 0.2, L_)                                                 # dicker Lauf
+    rect(0.1, -0.03, 1.0, 0.06, L_)                                               # Röhrenmagazin
+    rect(0.32, -0.12, 0.72, 0.09, M_)                                             # Pumpe
+    for x_ in (0.4, 0.5, 0.6):
+        line(x_, -0.1, x_, 0.07, 0.025, D_)
+    poly([(-0.42, -0.04), (-0.27, -0.04), (-0.35, -0.33), (-0.5, -0.3)], L_)
+    return m, 2.5
+
+
+def _ic_heavy():
+    m, poly, rect, circle, line, star = _icon_parts()
+    rect(-0.75, -0.16, 0.1, 0.28, L_)                                             # Gehäuse
+    for z_ in (-0.04, 0.06, 0.16):
+        rect(0.1, z_, 1.2, z_ + 0.06, L_)                                         # drei Läufe
+    rect(0.62, -0.08, 0.72, 0.26, L_)                                             # Laufschelle
+    rect(1.08, -0.08, 1.16, 0.26, L_)
+    line(-0.55, 0.28, -0.4, 0.45, 0.07, L_)                                       # Tragegriff
+    line(-0.4, 0.45, -0.05, 0.45, 0.07, L_)
+    line(-0.05, 0.45, 0.05, 0.28, 0.07, L_)
+    rect(-0.6, -0.48, -0.1, -0.2, M_)                                             # Munitionskasten
+    for i in range(5):
+        rect(-0.08 + i * 0.05, -0.2 - i * 0.03, -0.04 + i * 0.05, -0.12 - i * 0.03, L_)   # Gurt
+    poly([(-0.95, 0.02), (-0.75, 0.02), (-0.75, 0.16), (-0.95, 0.1)], L_)
+    return m, 2.5
+
+
+def _ic_pistol():
+    m, poly, rect, circle, line, star = _icon_parts()
+    rect(-0.5, 0.05, 0.6, 0.27, L_)                                               # Schlitten
+    rect(0.52, 0.27, 0.58, 0.33, L_)
+    poly([(-0.5, 0.06), (-0.22, 0.06), (-0.3, -0.45), (-0.62, -0.4)], L_)       # Griff
+    line(-0.18, 0.06, -0.06, -0.12, 0.05, L_)                                     # Abzugsbügel
+    line(-0.06, -0.12, 0.12, 0.05, 0.05, L_)
+    return m, 1.35
+
+
+def _ic_smg():
+    m, poly, rect, circle, line, star = _icon_parts()
+    rect(-0.45, -0.02, 0.48, 0.2, L_)
+    rect(0.48, 0.07, 0.85, 0.13, L_)
+    rect(0.0, -0.46, 0.13, -0.02, L_)                                             # gerades Magazin
+    poly([(-0.38, -0.02), (-0.24, -0.02), (-0.3, -0.32), (-0.44, -0.3)], L_)
+    line(-0.9, 0.04, -0.45, 0.04, 0.05, L_)                                       # Klappschaft (Draht)
+    line(-0.9, 0.16, -0.45, 0.16, 0.05, L_)
+    line(-0.9, 0.02, -0.9, 0.18, 0.06, L_)
+    return m, 1.85
+
+
+def _ic_explosion():
+    m, poly, rect, circle, line, star = _icon_parts()
+    star(0, 0, 0.52, 0.27, 9, (1.0, 0.45, 0.12), 0.2)
+    star(0, 0, 0.34, 0.18, 7, (1.0, 0.82, 0.25), 0.5)
+    circle(0, 0, 0.12, (1.0, 0.97, 0.8), 12)
+    return m, 1.15
+
+
+def _ic_roadkill():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-0.85, -0.18), (-0.85, 0.06), (-0.55, 0.1), (-0.32, 0.32), (0.22, 0.32), (0.4, 0.1), (0.72, 0.06),
+          (0.78, -0.18)], L_)                                                     # Wagen von der Seite
+    poly([(-0.27, 0.12), (-0.08, 0.12), (-0.08, 0.27), (-0.18, 0.27)], D_)       # Fenster
+    poly([(-0.02, 0.12), (0.3, 0.12), (0.18, 0.27), (-0.02, 0.27)], D_)
+    for x_ in (-0.48, 0.45):                                                      # Räder
+        circle(x_, -0.2, 0.17, D_, 14)
+        circle(x_, -0.2, 0.07, M_, 10)
+    rect(0.68, -0.08, 0.8, 0.0, (1.0, 0.85, 0.3))                                 # Scheinwerfer
+    for a in (-35.0, 0.0, 35.0):                                                  # Aufprall vorne
+        ar = math.radians(a)
+        line(0.92 + math.cos(ar) * 0.05, -0.02 + math.sin(ar) * 0.05,
+             0.92 + math.cos(ar) * 0.26, -0.02 + math.sin(ar) * 0.26, 0.06, (1.0, 0.55, 0.15))
+    star(0.86, -0.02, 0.1, 0.05, 5, (1.0, 0.85, 0.3))
+    return m, 2.3
+
+
+def _ic_knife():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-0.02, -0.02), (0.6, 0.02), (0.95, 0.14), (0.62, 0.2), (-0.02, 0.18)], L_)   # Klinge
+    line(0.05, 0.08, 0.55, 0.1, 0.03, M_)                                         # Hohlkehle
+    rect(-0.1, -0.1, -0.02, 0.28, L_)                                             # Parierstange
+    rect(-0.72, -0.01, -0.1, 0.17, (0.55, 0.42, 0.3))                             # Griff
+    for x_ in (-0.58, -0.42, -0.26):
+        rect(x_, -0.01, x_ + 0.04, 0.17, (0.35, 0.26, 0.18))
+    circle(-0.75, 0.08, 0.06, L_, 8)
+    return m, 1.85
+
+
+def _ic_fire():
+    m, poly, rect, circle, line, star = _icon_parts()
+
+    def flame(sc, col, dx=0.0):
+        pts = []
+        for i in range(20):
+            a = math.tau * i / 20
+            r = 0.3 * sc
+            x = math.sin(a) * r * (1.0 - 0.3 * max(0.0, math.cos(a)))
+            z = -math.cos(a) * r * 1.0
+            if math.cos(a) < 0:                           # oben: spitz zulaufen
+                z = -math.cos(a) * r * 1.8
+                x *= 0.75
+            pts.append((x + dx, z - 0.08 * sc))
+        poly(pts, col)
+    flame(1.0, (1.0, 0.42, 0.1))
+    flame(0.62, (1.0, 0.78, 0.2), 0.02)
+    flame(0.3, (1.0, 0.97, 0.75), 0.03)
+    return m, 0.9
+
+
+def _ic_turret():
+    m, poly, rect, circle, line, star = _icon_parts()
+    line(-0.15, -0.05, -0.55, -0.48, 0.07, L_)                                    # Dreibein
+    line(-0.15, -0.05, 0.2, -0.48, 0.07, L_)
+    line(-0.15, -0.05, -0.15, -0.48, 0.07, L_)
+    rect(-0.55, -0.05, 0.25, 0.22, L_)                                            # Gehäuse
+    rect(0.25, 0.06, 1.0, 0.14, L_)                                               # Rohr
+    rect(0.88, 0.03, 1.02, 0.17, L_)
+    rect(-0.75, 0.0, -0.55, 0.06, L_)                                             # Griffe
+    rect(-0.75, 0.14, -0.55, 0.2, L_)
+    rect(-0.42, 0.22, -0.05, 0.3, M_)
+    return m, 1.85
+
+
+def _ic_rocket():
+    m, poly, rect, circle, line, star = _icon_parts()
+    rect(-0.7, -0.09, 0.45, 0.09, L_)                                             # Rumpf
+    poly([(0.45, -0.09), (0.85, 0.0), (0.45, 0.09)], (0.85, 0.2, 0.15))           # Spitze
+    poly([(-0.7, 0.09), (-0.45, 0.09), (-0.82, 0.32)], L_)                        # Leitwerk
+    poly([(-0.7, -0.09), (-0.45, -0.09), (-0.82, -0.32)], L_)
+    poly([(-0.72, -0.06), (-1.0, 0.0), (-0.72, 0.06)], (1.0, 0.6, 0.15))          # Flamme
+    return m, 1.95
+
+
+def _ic_jet():
+    m, poly, rect, circle, line, star = _icon_parts()
+    poly([(-0.85, -0.05), (0.75, -0.05), (0.95, 0.03), (0.75, 0.1), (-0.85, 0.1)], L_)   # Rumpf
+    poly([(-0.15, 0.0), (0.25, 0.0), (-0.35, -0.45), (-0.5, -0.45)], L_)                  # Flügel
+    poly([(-0.6, 0.08), (-0.45, 0.08), (-0.82, 0.42), (-0.88, 0.42)], L_)                 # Seitenleitwerk
+    poly([(0.45, 0.07), (0.72, 0.08), (0.6, 0.16), (0.45, 0.15)], D_)                     # Kanzel
+    return m, 2.0
+
+
+def _ic_fall():
+    m, poly, rect, circle, line, star = _icon_parts()
+    rect(-0.48, -0.5, 0.48, -0.4, L_)                                             # Boden
+    rect(-0.07, -0.05, 0.07, 0.5, L_)                                             # Pfeil nach unten
+    poly([(-0.25, -0.02), (0.25, -0.02), (0.0, -0.32)], L_)
+    line(-0.35, 0.3, -0.35, 0.05, 0.04, M_)                                       # Fallstreifen
+    line(0.35, 0.3, 0.35, 0.05, 0.04, M_)
+    return m, 1.0
+
+
+def _ic_skull():
+    m, poly, rect, circle, line, star = _icon_parts()
+    circle(0, 0.08, 0.38, L_, 20, 0.36)
+    rect(-0.2, -0.38, 0.2, -0.1, L_)
+    circle(-0.14, 0.06, 0.1, D_, 10)
+    circle(0.14, 0.06, 0.1, D_, 10)
+    poly([(-0.04, -0.1), (0.04, -0.1), (0.0, -0.02)], D_)
+    for x_ in (-0.1, 0.0, 0.1):
+        line(x_, -0.38, x_, -0.22, 0.03, D_)
+    return m, 0.9
+
+
+def _face(eyes, eye_col, skin, extra=None, w=1.0):
+    m, poly, rect, circle, line, star = _icon_parts()
+    if extra is not None:
+        extra(m, poly, rect, circle, line, star, "back")
+    circle(0, 0, 0.4, skin, 20, 0.44)
+    for ex, ez, er in eyes:
+        circle(ex, ez, er, eye_col, 10)
+    if extra is not None:
+        extra(m, poly, rect, circle, line, star, "front")
+    return m, w
+
+
+def _ic_grunt():                                       # Zombie
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "front":
+            poly([(-0.2, -0.2), (0.22, -0.18), (0.18, -0.3), (0.0, -0.26), (-0.16, -0.32)], (0.15, 0.08, 0.06))
+            for x_ in (-0.1, 0.02, 0.12):
+                rect(x_, -0.24, x_ + 0.04, -0.18, (0.85, 0.82, 0.6))
+            line(-0.3, 0.2, -0.05, 0.12, 0.05, (0.2, 0.3, 0.15))          # Narbe/Braue
+            circle(-0.14, 0.04, 0.035, (1.0, 0.3, 0.2), 6)
+            circle(0.15, 0.06, 0.035, (1.0, 0.3, 0.2), 6)
+    return _face(((-0.14, 0.04, 0.1), (0.15, 0.06, 0.09)), (0.12, 0.1, 0.08), (0.45, 0.62, 0.36), ex)
+
+
+def _ic_huntress():                                    # Jägerin
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            poly([(-0.52, -0.5), (-0.5, 0.2), (0.0, 0.62), (0.5, 0.2), (0.52, -0.5)], (0.28, 0.2, 0.34))   # Kapuze
+        else:
+            poly([(-0.42, 0.42), (0.0, 0.55), (0.42, 0.42), (0.4, 0.18), (-0.4, 0.18)], (0.28, 0.2, 0.34))
+            line(-0.12, -0.24, 0.12, -0.24, 0.04, (0.35, 0.15, 0.2))
+            line(-0.3, -0.05, -0.36, -0.3, 0.05, (0.75, 0.2, 0.25))      # Kriegsbemalung
+            line(0.3, -0.05, 0.36, -0.3, 0.05, (0.75, 0.2, 0.25))
+    return _face(((-0.15, 0.02, 0.07), (0.15, 0.02, 0.07)), (0.95, 0.4, 0.95), (0.78, 0.64, 0.56), ex)
+
+
+def _ic_brute():
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            poly([(-0.42, 0.25), (-0.62, 0.55), (-0.3, 0.38)], (0.85, 0.82, 0.7))   # Hörner
+            poly([(0.42, 0.25), (0.62, 0.55), (0.3, 0.38)], (0.85, 0.82, 0.7))
+            rect(-0.48, -0.5, 0.48, -0.05, (0.58, 0.42, 0.32))                      # breiter Kiefer
+        else:
+            rect(-0.36, 0.1, 0.36, 0.2, (0.3, 0.2, 0.15))                           # Wulst
+            rect(-0.3, -0.38, 0.3, -0.26, (0.2, 0.1, 0.08))
+            poly([(-0.22, -0.26), (-0.16, -0.12), (-0.1, -0.26)], (0.95, 0.92, 0.8))   # Hauer
+            poly([(0.1, -0.26), (0.16, -0.12), (0.22, -0.26)], (0.95, 0.92, 0.8))
+    return _face(((-0.15, 0.02, 0.06), (0.15, 0.02, 0.06)), (1.0, 0.85, 0.2), (0.62, 0.45, 0.34), ex, 1.15)
+
+
+def _ic_colossus():
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            rect(-0.46, -0.46, 0.46, 0.4, (0.5, 0.5, 0.54))                         # Steinblock
+        else:
+            line(-0.3, 0.32, -0.1, 0.12, 0.03, (0.28, 0.28, 0.3))                   # Risse
+            line(0.25, -0.1, 0.4, -0.35, 0.03, (0.28, 0.28, 0.3))
+            rect(-0.32, 0.12, 0.32, 0.18, (0.3, 0.3, 0.32))
+            rect(-0.25, -0.34, 0.25, -0.24, (0.25, 0.22, 0.2))
+    return _face(((-0.15, 0.0, 0.08), (0.15, 0.0, 0.08)), (1.0, 0.55, 0.12), (0.62, 0.62, 0.66), ex, 1.05)
+
+
+def _ic_titan():
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            for x_ in (-0.32, -0.12, 0.12, 0.32):                                   # Steinzacken-Krone
+                poly([(x_ - 0.1, 0.3), (x_, 0.62 if abs(x_) < 0.2 else 0.5), (x_ + 0.1, 0.3)], (0.36, 0.32, 0.3))
+            rect(-0.5, -0.5, 0.5, 0.36, (0.44, 0.4, 0.37))
+        else:
+            rect(-0.36, 0.1, 0.36, 0.17, (0.25, 0.2, 0.18))
+            poly([(-0.25, -0.22), (0.25, -0.22), (0.18, -0.36), (-0.18, -0.36)], (0.5, 0.1, 0.05))
+            line(-0.42, -0.1, -0.25, 0.32, 0.03, (0.95, 0.4, 0.1))                  # glühende Adern
+    return _face(((-0.16, 0.0, 0.09), (0.16, 0.0, 0.09)), (1.0, 0.25, 0.1), (0.55, 0.5, 0.46), ex, 1.1)
+
+
+def _ic_harpy():
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            for a in (-60, -30, 0, 30, 60):                                         # Federkranz
+                ar = math.radians(90 + a)
+                poly([(math.cos(ar - 0.2) * 0.3, math.sin(ar - 0.2) * 0.3),
+                      (math.cos(ar) * 0.62, math.sin(ar) * 0.62),
+                      (math.cos(ar + 0.2) * 0.3, math.sin(ar + 0.2) * 0.3)], (0.38, 0.3, 0.42))
+        else:
+            poly([(-0.1, -0.02), (0.1, -0.02), (0.0, -0.4)], (0.95, 0.75, 0.2))   # Schnabel
+            line(-0.28, 0.2, -0.06, 0.1, 0.05, (0.2, 0.15, 0.22))
+            line(0.28, 0.2, 0.06, 0.1, 0.05, (0.2, 0.15, 0.22))
+    return _face(((-0.15, 0.06, 0.07), (0.15, 0.06, 0.07)), (1.0, 0.9, 0.2), (0.58, 0.5, 0.62), ex)
+
+
+def _drone_face(lens):
+    def ex(m, poly, rect, circle, line, star, layer):
+        if layer == "back":
+            line(-0.55, 0.42, 0.55, 0.42, 0.06, (0.3, 0.3, 0.32))                   # Rotoren
+            line(-0.35, 0.42, -0.25, 0.25, 0.05, (0.3, 0.3, 0.32))
+            line(0.35, 0.42, 0.25, 0.25, 0.05, (0.3, 0.3, 0.32))
+        else:
+            circle(0, -0.02, 0.22, (0.15, 0.15, 0.17), 16)
+            circle(0, -0.02, 0.14, lens, 14)
+            circle(0.05, 0.03, 0.04, (1, 1, 1), 6)
+    return _face((), (0, 0, 0), (0.62, 0.64, 0.68), ex)
+
+
+FEED_ICONS = {"rifle": _ic_rifle, "sniper": _ic_sniper, "shotgun": _ic_shotgun, "heavy": _ic_heavy,
+              "pistol": _ic_pistol, "smg": _ic_smg, "explosion": _ic_explosion, "roadkill": _ic_roadkill,
+              "knife": _ic_knife, "fire": _ic_fire, "turret": _ic_turret, "rocket": _ic_rocket, "jet": _ic_jet,
+              "fall": _ic_fall, "skull": _ic_skull,
+              "m_grunt": _ic_grunt, "m_huntress": _ic_huntress, "m_brute": _ic_brute, "m_colossus": _ic_colossus,
+              "m_titan": _ic_titan, "m_harpy": _ic_harpy, "m_drone": lambda: _drone_face((1.0, 0.2, 0.15)),
+              "m_pdrone": lambda: _drone_face((0.95, 0.55, 1.0)), "m_gdrone": lambda: _drone_face((0.3, 0.8, 1.0))}
+
+
+_TEXT_MEASURE = []
+
+
+def text_width(s_, font=None):
+    """v56: Breite eines Textes in Texteinheiten (x Schriftgrösse = Bildschirmeinheiten)."""
+    if not _TEXT_MEASURE:
+        _TEXT_MEASURE.append(TextNode("measure"))
+    tn = _TEXT_MEASURE[0]
+    f = font or TextNode.getDefaultFont()
+    if f is not None:
+        tn.setFont(f)
+    return tn.calcWidth(s_)
+
+
+class KillFeed:
+    """v56: Globaler Killfeed oben links: je Zeile [Täter]  Symbol  [Opfer] (oder ein Hinweistext), halbtransparent
+    hinterlegt; Zeilen, an denen man selbst beteiligt ist, golden. Neue Zeilen unten, alte blenden aus."""
+    ROW_H = 0.064
+    ICON_H = 0.05
+    PAD = 0.014
+
+    def __init__(self, parent, x, z):
+        self.root = parent.attachNewNode("killfeed")
+        self.root.setPos(x, 0, z)
+        self.tpl = {}
+        self.rows = []                                   # (Eintrag, Knoten)
+
+    def icon_np(self, key):
+        tpl = self.tpl.get(key)
+        if tpl is None:
+            fn = FEED_ICONS.get(key, _ic_skull)
+            m, w = fn()
+            tpl = NodePath(m.node("icon_" + key))
+            tpl.setTwoSided(True)
+            tpl.setLightOff()
+            self.tpl[key] = tpl
+            FEED_ICON_W[key] = w
+        return tpl, FEED_ICON_W.get(key, 1.0)
+
+    def build_row(self, e, i):
+        """Eine Zeile. Gezeichnet wird in der Reihenfolge im Szenengraphen (wie das übrige HUD): erst der Hintergrund,
+        dann Namen und Symbol."""
+        row = self.root.attachNewNode("row")
+        row.setTransparency(TransparencyAttrib.MAlpha)
+        row.setZ(-i * self.ROW_H)
+        cm = CardMaker("feedbg")
+        cm.setFrame(0, 1, -self.ROW_H * 0.45, self.ROW_H * 0.45)
+        bg = row.attachNewNode(cm.generate())
+        bg.setColor(*((0.42, 0.3, 0.04, 0.6) if e.get("me") else (0.0, 0.0, 0.0, 0.45)))
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        x = 0.0
+
+        def text(s_, col):
+            nonlocal x
+            OnscreenText(text=s_, parent=row, pos=(x, -0.015), scale=HUD_TEXT, fg=col + (1,),
+                         shadow=(0, 0, 0, 0.85), align=TextNode.ALeft, mayChange=False)
+            x += text_width(s_) * HUD_TEXT
+        if e.get("text") is not None:
+            text(e["text"], (1, 0.92, 0.78))
+        else:
+            if e.get("a"):
+                text(e["a"], e.get("ac", (1, 1, 1)))
+                x += 0.016
+            tpl, w = self.icon_np(e.get("icon", "skull"))
+            ic = tpl.copyTo(row)
+            ic.setScale(self.ICON_H)
+            ic.setPos(x + w * self.ICON_H / 2, 0, 0.0)
+            x += w * self.ICON_H + 0.016
+            text(e.get("v", "?"), e.get("vc", (1, 1, 1)))
+        bg.setX(-self.PAD)
+        bg.setSx(x + 2 * self.PAD)
+        return row
+
+    def update(self, entries, now, fade=0.8):
+        """entries: Liste von Einträgen (dict mit "t" und "text" oder "a"/"icon"/"v"); baut nur bei Änderungen neu."""
+        if [id(e) for e in entries] != [id(e) for e, _n in self.rows]:
+            for _e, n in self.rows:
+                n.removeNode()
+            self.rows = [(e, self.build_row(e, i)) for i, e in enumerate(entries)]
+        for e, n in self.rows:
+            left = FEED_T - (now - e["t"])
+            n.setAlphaScale(1.0 if fade is None else max(0.0, min(1.0, left / fade)))
+
+    def clear(self):
+        for _e, n in self.rows:
+            n.removeNode()
+        self.rows = []
+
+
 class Tooltip:
     """Hinweisfeld neben der Maus. Inhalt wird mit title()/sub()/bar()/para() beschrieben und beim Wechsel neu gebaut."""
     W = 0.88
@@ -22789,7 +23483,9 @@ class HostSession:
                         int(p.max_hp), gear_list(p), r1(p.shield_hp), 1 if p.jet_on else (2 if getattr(p, "cling", False) else 0),
                         p.melee, 1 if p.melee_out else 0, p.look, 1 if p.ready else 0,
                         ((p.gadget if p.gad_out and p.hp > 0 else -1) if p.pid == 0 else p.hold_gad),
-                        getattr(p, "gren_hold", -1)]
+                        getattr(p, "gren_hold", -1),
+                        BUFF_KINDS.index(p.buff2) if p.buff2 in BUFF_KINDS else -1, r1(p.buff2_t),   # v56
+                        int(getattr(p, "king", 0))]
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
@@ -23083,12 +23779,17 @@ class ClientSession:
             hg = row[27] if len(row) > 27 else -1
             gh = row[28] if len(row) > 28 and isinstance(row[28], int) else -1
             buff = BUFF_KINDS[bi] if isinstance(bi, int) and 0 <= bi < len(BUFF_KINDS) else None
+            b2i = row[29] if len(row) > 29 else -1                                   # v56: zweiter Buff, King
+            buff2 = BUFF_KINDS[b2i] if isinstance(b2i, int) and 0 <= b2i < len(BUFF_KINDS) else None
+            b2t = float(row[30]) if len(row) > 30 else 0.0
+            kg = row[31] if len(row) > 31 and isinstance(row[31], int) else 0
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
                 me = w.players.get(pid)
                 if me is not None:
                     me.kills, me.deaths, me.score, me.protect = kl, de, sc, prot
                     me.buff, me.buff_t, me.max_hp = buff, bt, float(mx)
+                    me.buff2, me.buff2_t, me.king = buff2, b2t, kg
                     me.gear, me.shield_hp = gear, shp      # Ausrüstung und Schild entscheidet der Host
                     me.melee = mel                         # welche Nahkampfwaffe (ziehen tut man selbst)
                     if time.time() - me.ready_set > 0.7:
@@ -23105,6 +23806,7 @@ class ClientSession:
             pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
             pl.stun_t, pl.buff, pl.buff_t, pl.max_hp = st, buff, bt, float(mx)
+            pl.buff2, pl.buff2_t, pl.king = buff2, b2t, kg
             pl.gear, pl.shield_hp, pl.jet_on = gear, shp, jet == 1
             pl.cling = jet == 2
             pl.melee, pl.melee_out = mel, mout
@@ -24043,15 +24745,31 @@ class PlayerView:
         r.setPos(self.x, self.y, self.z)
         (r.hide if p.heli >= 0 else r.show)()                           # Piloten sieht man im Cockpit nicht
         if p.hp <= 0:                                                    # umfallen
-            self.dead_t += dt
-            t = min(1.0, self.dead_t / 0.5)
-            r.setHpr(self.h, 90.0 * t * (2 - t), 0)
+            self.dead_t += dt                                            # v56: wie unter Schwerkraft, kurzes Nachfedern,
+            tt, T_ = self.dead_t, 0.55                                   # weg vom Killer (sonst nach hinten)
+            if tt < T_:
+                ang = 90.0 * (tt / T_) ** 2
+            else:
+                ang = 90.0 - 10.0 * math.exp(-5.0 * (tt - T_)) * abs(math.sin(13.0 * (tt - T_)))
+            ff = getattr(self, "fall_from", None)
+            if ff is not None and math.hypot(self.x - ff[0], self.y - ff[1]) > 0.05:
+                dx, dy = self.x - ff[0], self.y - ff[1]
+            else:
+                hr_ = math.radians(self.h)
+                dx, dy = math.sin(hr_), -math.cos(hr_)
+            ln_ = math.hypot(dx, dy) or 1.0
+            qh_, qt_ = Quat(), Quat()
+            qh_.setHpr((self.h, 0, 0))
+            qt_.setFromAxisAngle(ang, Vec3(-dy / ln_, dx / ln_, 0))      # Achse = oben x Fallrichtung
+            r.setQuat(qh_ * qt_)
             r.setSz(1.0)
             r.setColorScale(0.7, 0.7, 0.7, 1)
             self.bar.hide()
             self.rl_t = self.th_t = self.swing = 0.0
             self.pose_arms(0.0)
             return
+        if self.dead_t > 0:
+            self.fall_from = None                                        # v56: wieder am Leben
         self.dead_t = 0.0
         hg = getattr(p, "hold_gad", -1)
         self.show_held(getattr(p, "cur", 0))
@@ -119663,15 +120381,18 @@ class Sfx:
         self.walk.clear()
 
     # ----- Ereignisse
-    def shot(self, wi, pid):
+    def shot(self, wi, pid, pos=None):
+        """v56: pos = fester Ort (Smart-Decoy: klingt wie die Waffe, nie gedämpft)."""
         g = self.game
-        pl = g.world.players.get(pid)
-        own = pid == g.my_id
-        if pl is None and not own:
+        decoy = pos is not None
+        pl = None if decoy else g.world.players.get(pid)
+        own = not decoy and pid == g.my_id
+        if pl is None and not own and not decoy:
             return
-        pos = None if own else (pl.x, pl.y, pl.z + 1.4)
+        if not decoy:
+            pos = None if own else (pl.x, pl.y, pl.z + 1.4)
         name = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
-        shooter = pl if pl is not None else g.player
+        shooter = pl if pl is not None else (None if decoy else g.player)
         if shooter is not None and att_silenced(wi, getattr(shooter, "att", {}).get(wi)):
             # v48: Schalldämpfer - nur ein leises Zischen, das man bloss in der Nähe hört (Sfx.RANGE["silenced"])
             self.play("silenced", pos, 0.55 if own else 0.75, g.prng.uniform(0.94, 1.06) * SILENCED_PITCH.get(mdl(name), 1.0))
@@ -120376,7 +121097,8 @@ class Game(ShowBase):
         self._prev_tex = {}
         self.loadout = list(DEFAULT_LOADOUT) + [ATT_NONE, ATT_NONE, SC_IRON]   # [Hauptwaffe, Kleinwaffe, Gadget, Visier, Aufsätze Haupt, Aufsätze Klein, v52: Visier Kleinwaffe] für den nächsten Spawn
         self.scopes = dict(DEFAULT_SCOPE)     # gewähltes Visier je Primärwaffe
-        self.feed = []                        # Kill-Anzeige: (Text, Zeit)
+        self.feed = []                        # Kill-Anzeige (v56: Einträge als dict, siehe feed_add / feed_kill)
+        self.v56_reset()                      # v56: Kill-Log, Flugkamera, King
         self.pings = {}                       # Minimap: Spieler-ID -> (Zeit, x, y) des letzten Schusses
         self.mm_level = 2                     # Minimap-Zoomstufe (Index in MM_LEVELS)
         self.toast_later = None
@@ -121383,12 +122105,15 @@ class Game(ShowBase):
         if getattr(self.world, "lobby", False):
             self.lobby_click(m)
             return
-        card = self.death_picker.hit(m[0], m[1])
+        if self.combat_click(m):                    # v56: Kill-Historie auf-/zuklappen
+            return
+        cine = self.deathcam_cine()                 # v56: während der Kamerafahrt ist die Ausrüstungswahl noch zu
+        card = None if cine else self.death_picker.hit(m[0], m[1])
         b = self.DEAD_BTN
         rb = self.right_btn_rect()
         if card is not None:
             self.set_loadout_card(card[0], card[1])
-        elif b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
+        elif not cine and b[0] <= m[0] <= b[1] and b[2] <= m[1] <= b[3]:
             self.open_loadscreen()
         elif rb[0] <= m[0] <= rb[1] and rb[2] <= m[1] <= rb[3]:
             self.do_respawn()
@@ -122568,6 +123293,7 @@ class Game(ShowBase):
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
+        self.v56_reset()                           # v56: Kill-Log, Flugkamera, King
         self.intel_reset()
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
@@ -122833,6 +123559,7 @@ class Game(ShowBase):
             world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
+        self.v56_reset()                           # v56: Kill-Log, Flugkamera, King
         self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
@@ -123460,6 +124187,7 @@ class Game(ShowBase):
             self.slot_labels.append(lab)
         # Fähigkeiten/Buffs: Symbole links über der Minimap (Buff vom Fluchttier; Ausrüstung kommt dazu)
         self.ability_icons = {"buff": AbilityIcon(self.a2dBottomLeft, 0.13, 0.78, "B", (1.0, 0.8, 0.2)),
+                              "buff2": AbilityIcon(self.a2dBottomLeft, 0.77, 0.78, "B", (1.0, 0.8, 0.2)),   # v56
                               "dash": AbilityIcon(self.a2dBottomLeft, 0.29, 0.78, "D", GEAR[GEAR_IDX["Hermes-Boots"]].col),
                               "jet": AbilityIcon(self.a2dBottomLeft, 0.45, 0.78, "J", GEAR[GEAR_IDX["Schweres Exo-Jetpack"]].col),
                               "shock": AbilityIcon(self.a2dBottomLeft, 0.61, 0.78, "S", SETS["shield"][1])}
@@ -123555,9 +124283,9 @@ class Game(ShowBase):
                                        scale=0.042, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.8),
                                        align=TextNode.ARight, mayChange=True)
         self.score_text.hide()
-        self.feed_text = OnscreenText(text="", parent=self.a2dTopLeft, pos=(HUD_MARGIN, -0.08),   # Killfeed
-                                      scale=HUD_TEXT, fg=(1, 0.92, 0.78, 1), shadow=(0, 0, 0, 0.8),
-                                      align=TextNode.ALeft, mayChange=True)
+        self.v56_tl = self.aspect2d.attachNewNode("v56_oben_links")       # v56: eigene Anker - die HUD-Ecken blendet der
+        self.v56_rc = self.aspect2d.attachNewNode("v56_rechts_mitte")     # Todesbildschirm aus, Killfeed/Panel bleiben
+        self.killfeed = KillFeed(self.v56_tl, HUD_MARGIN + 0.01, -0.15)   # v56: Killfeed mit Symbolen
         self.prompt_text = OnscreenText(text="", pos=(0, -0.55), scale=0.055, fg=(1, 0.95, 0.5, 1),
                                         shadow=(0, 0, 0, 0.9), mayChange=True)
         self.look_text = OnscreenText(text="", pos=(0, -0.37), scale=0.042, fg=(0.85, 0.95, 1.0, 1),   # 7b: Drop ansehen
@@ -123571,6 +124299,9 @@ class Game(ShowBase):
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.strike_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.2), scale=0.065,
                                         fg=(1, 0.25, 0.15, 1), shadow=(0, 0, 0, 0.95), mayChange=True)
+        self.king_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.29), scale=0.05,   # v56: King
+                                      fg=KING_COL + (1,), shadow=(0, 0, 0, 0.95), font=BOLD_FONT, mayChange=True)
+        self.build_combat_panel()                         # v56: Combat-Panel des Todesbildschirms
         self._txt = {}
 
         # Zielfernrohr (nur Scharfschütze/Railgun beim Zielen)
@@ -126064,12 +126795,17 @@ class Game(ShowBase):
             if gi is not None:
                 tl["label"].setFg(tuple(c * 0.65 + 0.35 for c in GEAR[gi].col) + (1,))   # aufgehellt: lesbar
             tl["sym"].setColorScale(1, 1, 1, 0.1 if gi is not None else 0.2)   # leer: Umriss etwas deutlicher
-        b = getattr(pl, "buff", None)
-        if b in BUFF_T and pl.buff_t > 0 and pl.hp > 0:
-            lab, col = self.BUFF_LOOK.get(b, ("B", (1, 1, 1)))
-            ic.set(True, pl.buff_t / BUFF_T[b], lab, f"{BUFF_NAMES[b]} {int(math.ceil(pl.buff_t))} s", col)
-        else:
-            ic.hide()
+        for key_, b, t_, tot_ in (("buff", getattr(pl, "buff", None), pl.buff_t, getattr(pl, "buff_tot", 0.0)),
+                                  ("buff2", getattr(pl, "buff2", None), getattr(pl, "buff2_t", 0.0),
+                                   getattr(pl, "buff2_tot", 0.0))):
+            ic = self.ability_icons.get(key_)
+            if ic is None:
+                continue
+            if b in BUFF_T and t_ > 0 and pl.hp > 0:
+                lab, col = self.BUFF_LOOK.get(b, ("B", (1, 1, 1)))
+                ic.set(True, min(1.0, t_ / max(BUFF_T[b], tot_)), lab, f"{BUFF_NAMES[b]} {int(math.ceil(t_))} s", col)
+            else:
+                ic.hide()
 
     def look_info(self):
         """7b: Schaut man auf einen Drop (bis LOOT_LOOK_R m, höchstens LOOT_LOOK_ANG Grad neben der Blickrichtung,
@@ -126211,11 +126947,12 @@ class Game(ShowBase):
                 out.append((p[0], p[2], GEAR_HUD_W / 2, GEAR_HUD_H / 2, gear_info(gi, pl)))
         p = self.melee_frame.getPos(a2)
         out.append((p[0], p[2], 0.13, 0.085, melee_info(pl.melee, pl)))
-        b = getattr(pl, "buff", None)
-        ic = self.ability_icons.get("buff")
-        if b in BUFF_T and pl.buff_t > 0 and ic is not None:
-            p = ic.root.getPos(a2)
-            out.append((p[0], p[2], 0.065, 0.065, buff_info(b, pl)))
+        for key_, b, t_ in (("buff", getattr(pl, "buff", None), pl.buff_t),
+                            ("buff2", getattr(pl, "buff2", None), getattr(pl, "buff2_t", 0.0))):   # v56: zwei Buffs
+            ic = self.ability_icons.get(key_)
+            if b in BUFF_T and t_ > 0 and ic is not None:
+                p = ic.root.getPos(a2)
+                out.append((p[0], p[2], 0.065, 0.065, buff_info(b, pl, t_)))
         for key, gk in (("dash", "dash"), ("jet", "jetpack")):
             gi = next((g for g in pl.gear.values() if g is not None and GEAR[g].kind == gk), None)
             ic = self.ability_icons.get(key)
@@ -126290,6 +127027,12 @@ class Game(ShowBase):
                     continue
                 c = (p0[0] + ab[0] * t, p0[1] + ab[1] * t, p0[2] + ab[2] * t)
                 d = math.dist(c, head)
+                if d < FUNNEL_BY_R:                          # v56: Bullet-By -> Trichter in Richtung des Schützen
+                    sh_ = self.world.players.get(b.owner)
+                    sx_, sy_ = (sh_.x, sh_.y) if sh_ is not None else (b.x - b.vx * 0.5, b.y - b.vy * 0.5)
+                    self.funnel_event(("p", b.owner, "by"), b.owner, sx_, sy_, "by", 1e9)
+                    if d >= WHIZ_MAX:
+                        self.whizzed.add(b)
                 if d >= WHIZ_MAX:
                     continue
                 self.whizzed.add(b)
@@ -126309,6 +127052,7 @@ class Game(ShowBase):
         self.enemy_ping_last = {}                  # Gegner-ID -> Zeit des letzten Pings (ENEMY_PING_CD)
         self.sightings = {}                        # Beobachter-ID -> {Gegner-ID: (Zeit, x, y)} - pro Spieler (Team-fähig)
         self.intel_clock = self.intel_veh_clock = 0.0
+        self.funnel_reset()                        # v56: Trichter
         for d in (getattr(self, "mm_dots", {}), getattr(self, "bm_dots", {})):
             for n in d.values():
                 n.hide()
@@ -126353,6 +127097,613 @@ class Game(ShowBase):
             for key in ("mm", "bm"):
                 if old[key] is not None:
                     old[key][0].removeNode()
+
+    # ------------------------------------------------------------ v56: Kill-Log, Todes-Sequenz, Combat-Panel, King
+    def v56_reset(self):
+        """Neues Spiel: Kill-/Schadens-Log, Flugkamera, King-Silhouetten (die Knoten räumt cleanup_scene ab)."""
+        self.kill_log = []                         # [{t, k (Täter/Beschwörer oder -1), v, icon, mk}]
+        self.dmg_log = []                          # [(Zeit, Angreifer, Opfer, HP)] - nur mit eigener Beteiligung
+        self.dcam = None
+        self.self_view = None
+        self.king_show = {}                        # Spieler-ID -> sichtbar bis (Zeit)
+        self.king_sil = {}                         # Spieler-ID -> (Halter, Ziel-Knoten)
+        self.king_warn_until = 0.0
+        self.jump_block = False
+        self.jump_prev = False
+        self.hist_open = False
+
+    def note_kill(self, k_, v_, wi_, mk, cr, icon):
+        """Kill fürs Duell-Gedächtnis (Täter = Schütze, bei beschworenen Monstern/Drohnen der Besitzer), Fallrichtung der
+        Figur (weg vom Killer) und - eigener Tod - die Flugkamera."""
+        if not hasattr(self, "kill_log"):
+            self.v56_reset()
+        credit = k_ if isinstance(k_, int) and k_ >= 0 else (cr if isinstance(cr, int) and cr >= 0 else -1)
+        self.kill_log.append({"t": time.time(), "k": credit, "v": v_, "icon": icon, "mk": mk})
+        if len(self.kill_log) > 300:
+            del self.kill_log[:100]
+        kp = self.world.players.get(credit) if credit >= 0 and credit != v_ else None
+        view = self.player_views.get(v_) if v_ != self.my_id else getattr(self, "self_view", None)
+        if kp is not None:
+            if view is not None:
+                view.fall_from = (kp.x, kp.y)
+            if v_ == self.my_id:
+                self.my_fall_from = (kp.x, kp.y)
+        if v_ == self.my_id:
+            self.start_deathcam(credit if credit != self.my_id else -1, mk, icon, wi_)
+
+    def note_damage(self, att, vic, amount):
+        """Schadens-Log (nur Treffer mit eigener Beteiligung) für das Combat-Panel."""
+        if not hasattr(self, "dmg_log"):
+            self.v56_reset()
+        if amount > 0 and self.my_id in (att, vic) and att != vic:
+            self.dmg_log.append((time.time(), att, vic, float(amount)))
+            if len(self.dmg_log) > 400:
+                del self.dmg_log[:150]
+
+    def duel_score(self, other):
+        """(meine Kills an ihm, seine an mir) in diesem Spiel - auch per Gadget, Drohne, beschworenem Monster."""
+        me = self.my_id
+        mine = sum(1 for e in self.kill_log if e["k"] == me and e["v"] == other)
+        his = sum(1 for e in self.kill_log if e["k"] == other and e["v"] == me)
+        return mine, his
+
+    def last_fight(self, other, t_end=None):
+        """(ausgeteilt, erlitten) im letzten Gefecht mit ihm: vom Tod rückwärts, bis eine Pause > FIGHT_GAP kommt."""
+        me = self.my_id
+        evs = [e for e in getattr(self, "dmg_log", ()) if {e[1], e[2]} == {me, other}]
+        if t_end is not None:
+            evs = [e for e in evs if e[0] <= t_end + 0.3]
+        dealt = taken = 0.0
+        last = None
+        for t, att, _vic, amt in reversed(evs):
+            if last is not None and last - t > FIGHT_GAP:
+                break
+            last = t
+            if att == me:
+                dealt += amt
+            else:
+                taken += amt
+        return dealt, taken
+
+    # --- Flugkamera
+    def start_deathcam(self, killer, mk, icon, wi):
+        pl = self.player
+        if not DEATHCAM or pl is None:
+            return
+        c = self.camera.getPos(self.render)
+        self.dcam = {"t0": time.time(), "killer": killer, "mk": mk, "icon": icon, "wi": wi,
+                     "h0": pl.heading, "p0": pl.pitch, "body": (pl.x, pl.y, pl.z),
+                     "eye": (c[0], c[1], c[2]), "fly": None, "cam": None, "look": None, "last": time.time()}
+
+    def deathcam_cine(self):
+        """Läuft die Kamerafahrt noch (Umfallen + Flug + kurz beim Killer)? Solange keine Ausrüstungswahl, kein Schleier."""
+        if not self.deathcam_on():
+            return False
+        dc = self.dcam
+        fly = dc["fly"]["dur"] if dc.get("fly") else (DEATHCAM_FLY_MAX if dc["killer"] >= 0 else 0.0)
+        return time.time() - dc["t0"] < DEATHCAM_FALL_T + fly + 1.2
+
+    def deathcam_veil(self):
+        """Deckkraft des Grauschleiers auf dem Todesbildschirm (None = wie bisher). Nach der Kamerafahrt blendet er auf
+        einen leichten Schleier (Experimental: noch leichter - es gibt keine Ausrüstungswahl darüber)."""
+        if not self.deathcam_on():
+            return None
+        if self.deathcam_cine():
+            return 0.0
+        dc = self.dcam
+        fly = dc["fly"]["dur"] if dc.get("fly") else 0.0
+        u = smoothstep(0.0, 0.5, time.time() - dc["t0"] - (DEATHCAM_FALL_T + fly + 1.2))
+        return u * (0.25 if self.world.exp else 0.6)
+
+    def deathcam_on(self):
+        pl, w = self.player, self.world
+        return (DEATHCAM and pl is not None and w is not None and pl.hp <= 0 and w.phase == "play"
+                and not getattr(pl, "prespawn", False) and getattr(self, "dcam", None) is not None)
+
+    def dc_clear(self, a, b):
+        """Kamerapunkt b vom Punkt a aus: steht eine Wand dazwischen, so weit heranziehen, bis die Sicht frei ist."""
+        w = self.world
+        for k in (1.0, 0.8, 0.62, 0.46, 0.32, 0.2):
+            p = (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)
+            if w.los(a, p):
+                return p
+        return (a[0] + (b[0] - a[0]) * 0.12, a[1] + (b[1] - a[1]) * 0.12, a[2] + (b[2] - a[2]) * 0.12)
+
+    def dc_follow(self, k):
+        """Verfolgerkamera hinter dem Killer: (Kamerapunkt, Blickpunkt). Im Heli / Wagen weiter weg."""
+        w = self.world
+        v = self.player_views.get(k.pid)
+        kx, ky, kz, kh = (v.x, v.y, v.z, v.h) if v is not None else (k.x, k.y, k.z, k.heading)
+        dist, up = DEATHCAM_BACK, body_h(k) + DEATHCAM_UP
+        if k.heli >= 0:
+            q = w.heli_by_id(k.heli)
+            if q is not None:
+                hv = self.heli_views.get(q)
+                kx, ky, kz = (hv.x, hv.y, hv.z) if hv is not None else (q.x, q.y, q.z)
+                dist, up = HELI_CAM_DIST * 1.15, 4.0
+        elif k.vehicle >= 0:
+            q = w.vehicle_by_id(k.vehicle)
+            if q is not None:
+                vv = self.veh_views.get(q)
+                kx, ky, kz = (vv.x, vv.y, vv.z) if vv is not None else (q.x, q.y, q.z)
+                dist, up = 7.5, 2.8
+        hr = math.radians(kh)
+        fx, fy = -math.sin(hr), math.cos(hr)
+        head = (kx, ky, kz + up * 0.8)
+        want = (kx - fx * dist + fy * 0.6, ky - fy * dist - fx * 0.6, kz + up)   # leicht über die rechte Schulter
+        cam = self.dc_clear(head, want)
+        cam = (cam[0], cam[1], max(cam[2], w.height(cam[0], cam[1], cam[2]) + 0.4))
+        look = (kx + fx * 9.0, ky + fy * 9.0, kz + up * 0.65)
+        return cam, look, head
+
+    def place_deathcam(self):
+        """Todes-Sequenz: Kamera zieht sich zurück (man sieht die eigene Figur umfallen), fliegt dann in einem Bogen zum
+        Killer (Dauer = Entfernung / DEATHCAM_SPEED, 1-3 s) und folgt ihm von hinten. Ohne Killer: langsame Kreisfahrt
+        um die eigene Figur."""
+        dc, w, pl = self.dcam, self.world, self.player
+        now = time.time()
+        dt = max(0.0, min(0.1, now - dc["last"]))
+        dc["last"] = now
+        age = now - dc["t0"]
+        bx, by, bz = dc["body"]
+        h0 = math.radians(dc["h0"])
+        fx, fy = -math.sin(h0), math.cos(h0)
+        body_look = (bx, by, bz + 0.45)
+        watch = self.dc_clear((bx, by, bz + 1.4), (bx - fx * 4.4 + fy * 1.2, by - fy * 4.4 - fx * 1.2, bz + 2.8))
+        k = w.players.get(dc["killer"]) if dc["killer"] >= 0 else None
+        if age < DEATHCAM_FALL_T or k is None:
+            if age < DEATHCAM_FALL_T:
+                u = smoothstep(0.0, 0.5, age)
+                e = dc["eye"]
+                pos = tuple(e[i] + (watch[i] - e[i]) * u for i in range(3))
+                p0 = math.radians(dc["p0"])
+                fwd = (e[0] + fx * math.cos(p0) * 5, e[1] + fy * math.cos(p0) * 5, e[2] + math.sin(p0) * 5)
+                look = tuple(fwd[i] + (body_look[i] - fwd[i]) * u for i in range(3))
+            else:                                        # niemand zum Hinfliegen: langsam um die Figur kreisen
+                a = h0 + math.radians(12.0 * (age - DEATHCAM_FALL_T))
+                ofs = (math.sin(a) * 4.6, -math.cos(a) * 4.6)
+                pos = self.dc_clear((bx, by, bz + 1.4), (bx + ofs[0], by + ofs[1], bz + 2.9))
+                look = body_look
+            dc["cam"], dc["look"] = pos, look
+            self.camera.setPos(*pos)
+            self.camera.lookAt(Point3(*look))
+            return
+        cam, look, head = self.dc_follow(k)
+        if dc["fly"] is None:
+            p0 = dc["cam"] or watch
+            dist = math.dist(p0, cam)
+            dc["fly"] = {"t": now, "p0": p0, "l0": dc["look"] or body_look,
+                         "dur": clampf(dist / DEATHCAM_SPEED, DEATHCAM_FLY_MIN, DEATHCAM_FLY_MAX),
+                         "arc": min(30.0, dist * 0.18)}
+        fl = dc["fly"]
+        u = (now - fl["t"]) / fl["dur"]
+        if u < 1.0:
+            s_ = u * u * u * (u * (u * 6 - 15) + 10)     # smootherstep: weich los, weich an
+            pos = tuple(fl["p0"][i] + (cam[i] - fl["p0"][i]) * s_ for i in range(3))
+            pos = (pos[0], pos[1], pos[2] + fl["arc"] * math.sin(math.pi * s_))
+            lu = smoothstep(0.0, 0.55, u)                # Blick dreht früh zum Killer, am Ende über seine Schulter
+            mid = tuple(fl["l0"][i] + (head[i] - fl["l0"][i]) * lu for i in range(3))
+            lk = smoothstep(0.75, 1.0, u)
+            look = tuple(mid[i] + (look[i] - mid[i]) * lk for i in range(3))
+            dc["cam"], dc["look"] = pos, look
+        else:                                            # Verfolgerkamera: weich hinterher
+            a = min(1.0, 7.0 * dt)
+            pc, lc = dc["cam"] or cam, dc["look"] or look
+            pos = tuple(pc[i] + (cam[i] - pc[i]) * a for i in range(3))
+            look = tuple(lc[i] + (look[i] - lc[i]) * a for i in range(3))
+            dc["cam"], dc["look"] = pos, look
+        self.camera.setPos(*pos)
+        self.camera.lookAt(Point3(*look))
+
+    def update_self_view(self, dt):
+        """Eigene Figur während der Todes-Sequenz sichtbar (sie fällt um und bleibt liegen)."""
+        on = self.deathcam_on()
+        sv = getattr(self, "self_view", None)
+        if not on:
+            if sv is not None:
+                sv.root.removeNode()
+                self.self_view = None
+            return
+        pl = self.player
+        if sv is None:
+            sv = self.self_view = PlayerView(pl)
+            sv.root.reparentTo(self.render)
+            sv.fall_from = getattr(self, "my_fall_from", None)
+            bx, by, bz = self.dcam["body"]
+            sv.x, sv.y, sv.z, sv.h = bx, by, bz, self.dcam["h0"]
+        sv.update(pl, dt)
+
+    # --- Combat-Panel (rechts auf dem Todesbildschirm)
+    CP_W, CP_X = 0.58, -0.64          # Breite, linker Rand (relativ zum rechten Bildrand)
+
+    def build_combat_panel(self):
+        root = self.v56_rc.attachNewNode("combat_panel")
+        root.setPos(self.CP_X, 0, 0)
+        W = self.CP_W
+        cm = CardMaker("cp_bg")
+        cm.setFrame(0, W, -0.66, 0.62)
+        bg = root.attachNewNode(cm.generate())
+        bg.setColor(0.03, 0.04, 0.06, 0.8)
+        bg.setTransparency(TransparencyAttrib.MAlpha)
+        cm2 = CardMaker("cp_bar")
+        cm2.setFrame(0, 0.008, -0.66, 0.62)
+        bar = root.attachNewNode(cm2.generate())
+        bar.setColor(*KING_COL, 1)
+
+        def txt(z, sc, col=(1, 1, 1), x=0.04, align=TextNode.ALeft, font=None):
+            kw = {"font": font} if font is not None else {}
+            return OnscreenText(text="", parent=root, pos=(x, z), scale=sc, fg=col + (1,), shadow=(0, 0, 0, 0.85),
+                                align=align, mayChange=True, **kw)
+        cp = {"root": root}
+        cp["head"] = txt(0.54, 0.042, (0.75, 0.78, 0.85))
+        cp["killer"] = txt(0.455, 0.06, (1.0, 0.86, 0.3), font=BOLD_FONT)
+        cp["by_icon"] = root.attachNewNode("by_icon")
+        cp["by_icon"].setPos(0.06, 0, 0.39)
+        cp["by_txt"] = txt(0.375, 0.038, (0.85, 0.85, 0.9), x=0.17)
+        cp["duel_h"] = txt(0.27, 0.04, (0.75, 0.78, 0.85))
+        cp["duel"] = txt(0.15, 0.1, (1, 1, 1), x=W / 2, align=TextNode.ACenter, font=BOLD_FONT)
+        cp["duel_l"] = txt(0.095, 0.034, (0.7, 0.72, 0.78), x=W / 2, align=TextNode.ACenter)
+        cp["dmg_h"] = txt(0.0, 0.04, (0.75, 0.78, 0.85))
+        cp["dmg_out"] = txt(-0.075, 0.046, (0.55, 1.0, 0.55))
+        cp["dmg_in"] = txt(-0.145, 0.046, (1.0, 0.5, 0.45))
+        for key, z, col in (("bar_out", -0.1, (0.35, 0.85, 0.35)), ("bar_in", -0.17, (0.9, 0.35, 0.3))):
+            c_ = CardMaker(key)
+            c_.setFrame(0, 1, 0, 0.012)
+            n_ = root.attachNewNode(c_.generate())
+            n_.setPos(0.04, 0, z)
+            n_.setColor(*col, 0.9)
+            n_.setTransparency(TransparencyAttrib.MAlpha)
+            cp[key] = n_
+        cm3 = CardMaker("cp_hist")
+        cm3.setFrame(0.03, W - 0.03, -0.29, -0.215)
+        hb = root.attachNewNode(cm3.generate())
+        hb.setColor(0.12, 0.14, 0.2, 0.9)
+        hb.setTransparency(TransparencyAttrib.MAlpha)
+        cp["hist_btn"] = hb
+        cp["hist_txt"] = txt(-0.265, 0.04, (1, 1, 1), x=0.055)
+        cp["hist"] = KillFeed(root, 0.06, -0.345)
+        cp["hist"].ROW_H = 0.052
+        cp["hint"] = txt(-0.62, 0.04, (0.8, 0.95, 0.8), x=W / 2, align=TextNode.ACenter)
+        root.hide()
+        self.cpanel = cp
+
+    def hist_rect(self):
+        a = float(self.getAspectRatio())
+        return (a + self.CP_X + 0.03, a + self.CP_X + self.CP_W - 0.03, -0.29, -0.215)
+
+    def combat_click(self, m):
+        """Klick auf 'Kill-Historie' klappt die Liste auf/zu. -> True, wenn getroffen."""
+        cp = getattr(self, "cpanel", None)
+        if cp is None or cp["root"].isHidden() or m is None:
+            return False
+        r = self.hist_rect()
+        if r[0] <= m[0] <= r[1] and r[2] <= m[1] <= r[3]:
+            self.hist_open = not getattr(self, "hist_open", False)
+            self.sfx.ui_click()
+            return True
+        return False
+
+    def update_combat_panel(self, show, mpos, ready):
+        cp = getattr(self, "cpanel", None)
+        if cp is None:
+            return
+        dc = getattr(self, "dcam", None)
+        if not show or dc is None:
+            if not cp["root"].isHidden():
+                cp["root"].hide()
+                cp["hist"].clear()
+            return
+        cp["root"].show()
+        w, me = self.world, self.my_id
+        kid, mk = dc["killer"], dc["mk"]
+        kp = w.players.get(kid) if kid >= 0 else None
+        if kp is not None:
+            self.set_text(cp["head"], "ELIMINIERT VON")
+            self.set_text(cp["killer"], kp.name)
+        else:
+            self.set_text(cp["head"], "DU BIST GESTORBEN")
+            self.set_text(cp["killer"], MOB_NAMES.get(mk, "Monster") if mk else
+                          ("Sturz" if dc["wi"] == WI_FALL else "Eigenverschulden" if dc["wi"] not in (-1, None) else "Unbekannt"))
+        ic_key = dc["icon"]
+        if cp.get("by_key") != ic_key:                   # Symbol der Todesursache (wie im Killfeed)
+            cp["by_key"] = ic_key
+            cp["by_icon"].getChildren().detach()
+            tpl, iw = cp["hist"].icon_np(ic_key)
+            ic = tpl.copyTo(cp["by_icon"])
+            ic.setScale(0.06)
+            ic.setX(iw * 0.03)
+            cp["by_w"] = iw
+        cp["by_txt"].setX(0.06 + cp.get("by_w", 1.0) * 0.06 + 0.03)
+        self.set_text(cp["by_txt"], (MOB_NAMES.get(mk, "") if mk and kp is not None else
+                                     weapon_name(dc["wi"]) if dc["wi"] not in (-1, None) and not mk else ""))
+        if kp is not None:
+            a_, b_ = self.duel_score(kid)
+            self.set_text(cp["duel_h"], "DUELL")
+            self.set_text(cp["duel"], f"{a_}  :  {b_}")
+            self.set_text(cp["duel_l"], f"Du{' ' * 22}{kp.name[:12]}")
+            dealt, taken = self.last_fight(kid, dc["t0"])
+            self.set_text(cp["dmg_h"], "SCHADEN IM LETZTEN GEFECHT")
+            self.set_text(cp["dmg_out"], f"Ausgeteilt   {int(round(dealt))}")
+            self.set_text(cp["dmg_in"], f"Erlitten     {int(round(taken))}")
+            top = max(1.0, dealt, taken)
+            for key, v in (("bar_out", dealt), ("bar_in", taken)):
+                cp[key].setSx(max(0.001, (self.CP_W - 0.08) * v / top))
+                cp[key].show()
+            hist = [e for e in self.kill_log if {e["k"], e["v"]} == {me, kid}][-6:][::-1]
+        else:
+            for key in ("duel_h", "duel", "duel_l", "dmg_h", "dmg_out", "dmg_in"):
+                self.set_text(cp[key], "")
+            cp["bar_out"].hide()
+            cp["bar_in"].hide()
+            hist = [e for e in self.kill_log if e["v"] == me][-6:][::-1]
+        n = len(hist)
+        op = getattr(self, "hist_open", False)
+        self.set_text(cp["hist_txt"], f"{'-' if op else '+'}  Kill-Historie ({n})")
+        r = self.hist_rect()
+        hov = mpos is not None and r[0] <= mpos[0] <= r[1] and r[2] <= mpos[1] <= r[3]
+        cp["hist_btn"].setColor(*((0.22, 0.26, 0.36, 0.95) if hov else (0.12, 0.14, 0.2, 0.9)))
+        if op and n:
+            ents = cp.setdefault("hist_ents", {})
+            rows = []
+            for e in hist:
+                key = (e["t"], e["k"], e["v"])
+                ent = ents.get(key)
+                if ent is None:
+                    kn = (self.pname(e["k"]) if e["k"] >= 0 else MOB_NAMES.get(e["mk"], None) if e["mk"] else None)
+                    ent = ents[key] = {"t": e["t"], "a": kn, "ac": (1.0, 0.86, 0.3) if e["k"] == me else (1, 1, 1),
+                                       "icon": e["icon"], "v": self.pname(e["v"]),
+                                       "vc": (1.0, 0.86, 0.3) if e["v"] == me else (1, 1, 1), "me": False}
+                rows.append(ent)
+            cp["hist"].update(rows, time.time(), fade=None)
+        else:
+            cp["hist"].update([], time.time(), fade=None)
+        self.set_text(cp["hint"], "LEERTASTE  =  Spawn" if ready else "")
+
+    # --- Respawn per Leertaste (mit Sprungsperre)
+    def space_respawn(self, jmp):
+        """Leertaste auf dem Todesbildschirm = Spawn-Knopf. Danach bleibt Springen gesperrt, bis die Taste losgelassen
+        ist (sonst hüpft man beim Spawnen gleich hoch)."""
+        prev = getattr(self, "jump_prev", False)
+        self.jump_prev = jmp
+        if getattr(self, "jump_block", False) and not jmp:
+            self.jump_block = False
+        pl, w = self.player, self.world
+        if (not jmp or prev or pl is None or w is None or pl.hp > 0 or w.phase != "play" or getattr(w, "lobby", False)
+                or self.quit_box is not None or self.loadscreen is not None or getattr(pl, "prespawn", False)):
+            return
+        self.jump_block = True
+        self.do_respawn()
+
+    # --- Manhunt-King (Darstellung)
+    def king_event(self, e):
+        kind, pid = e[0], e[1]
+        now = time.time()
+        if not hasattr(self, "king_show"):
+            self.v56_reset()
+        if kind == "kingping":
+            self.king_show[pid] = now + (float(e[2]) if len(e) > 2 else KING_SHOW_T)
+            if pid == self.my_id:
+                self.toast("Deine Silhouette ist für alle sichtbar!", KING_COL, 1.6)
+            return
+        if kind == "bounty":
+            k_, v_ = e[1], e[2]
+            self.feed_add(f"{self.pname(k_)} kassiert das Kopfgeld auf {self.pname(v_)}")
+            if k_ == self.my_id and len(e) > 4:
+                self.toast(f"KOPFGELD: {BUFF_NAMES.get(e[3], e[3])} + {BUFF_NAMES.get(e[4], e[4])}  (doppelte Dauer)",
+                           KING_COL, 3.5)
+                self.sfx.ui_click()
+            return
+        st = e[2] if len(e) > 2 else 0                   # ("king", Spieler, Zustand, Grund[, Karenzzeit])
+        why = e[3] if len(e) > 3 else ""
+        p = self.world.players.get(pid)
+        if p is not None:
+            p.king = st
+        if st != 2:
+            self.king_show.pop(pid, None)
+        if pid == self.my_id:
+            if st == 1:
+                g_ = float(e[4]) if len(e) > 4 else KING_GRACE
+                self.king_warn_until = now + g_
+                self.toast(("Du campst zu lange - beweg dich, sonst wirst du markiert!" if why == "camp" else
+                            "Kill-Serie! Gleich bist du der King - Kopfgeld auf dich"), (1.0, 0.6, 0.25), 3.0)
+            elif st == 2:
+                self.king_warn_until = 0.0
+                self.toast("DU BIST DER KING - alle sehen regelmässig deine Silhouette", KING_COL, 3.5)
+            elif why == "ok":
+                self.king_warn_until = 0.0
+                self.toast("Markierung abgewendet", (0.7, 1.0, 0.7), 1.8)
+            else:
+                self.king_warn_until = 0.0
+        elif st == 2 and p is not None:
+            self.feed_add(f"{p.name} ist der King - Kopfgeld: 2 Buffs")
+
+    def king_target(self, p):
+        """Knoten, dessen Silhouette gezeigt wird: Figur, im Heli der Heli, im Wagen der Wagen."""
+        w = self.world
+        if p.heli >= 0:
+            q = w.heli_by_id(p.heli)
+            hv = self.heli_views.get(q) if q is not None else None
+            if hv is not None:
+                return hv.root
+        if p.vehicle >= 0:
+            q = w.vehicle_by_id(p.vehicle)
+            vv = self.veh_views.get(q) if q is not None else None
+            if vv is not None:
+                return vv.root
+        v = self.player_views.get(p.pid)
+        return v.root if v is not None else None
+
+    def update_king_view(self):
+        """Goldene Silhouette des Kings (durch Wände sichtbar, genaue Haltung - gleiche Figur als Instanz) für die
+        Dauer eines Pings; dazu ein goldener Punkt auf der Minimap. Ausserdem die eigene King-Anzeige."""
+        if not hasattr(self, "king_show"):
+            self.v56_reset()
+        now, w = time.time(), self.world
+        for pid in list(self.king_sil):
+            until = self.king_show.get(pid, 0.0)
+            p = w.players.get(pid)
+            tgt = self.king_target(p) if (p is not None and until > now and p.hp > 0) else None
+            hold, old = self.king_sil[pid]
+            if tgt is None or tgt != old or hold.isEmpty():
+                if not hold.isEmpty():
+                    hold.removeNode()
+                del self.king_sil[pid]
+        for pid, until in list(self.king_show.items()):
+            p = w.players.get(pid)
+            if until <= now or p is None or p.hp <= 0:
+                self.king_show.pop(pid, None)
+                continue
+            if pid == self.my_id:
+                continue
+            if pid not in self.king_sil:
+                tgt = self.king_target(p)
+                if tgt is None:
+                    continue
+                hold = self.render.attachNewNode("king_sil")
+                tgt.instanceTo(hold)
+                hold.setColor(*KING_COL, 0.6, 1001)
+                hold.setTransparency(TransparencyAttrib.MAlpha, 1001)
+                hold.setDepthTest(False, 1001)
+                hold.setDepthWrite(False, 1001)
+                hold.setBin("fixed", 45, 1001)
+                hold.setLightOff(1001)
+                hold.setTextureOff(1001)
+                hold.setFogOff(1001)
+                hold.setShaderOff(1001)
+                self.king_sil[pid] = (hold, tgt)
+            hold = self.king_sil[pid][0]
+            left = until - now
+            a = min(1.0, (KING_SHOW_T - left) / 0.2, left / 0.6) if left < KING_SHOW_T else 1.0
+            pulse = 0.82 + 0.18 * math.sin(now * 9.0)
+            hold.setColorScale(1, 1, 1, max(0.0, a) * pulse)
+        # goldene Punkte auf der Minimap
+        dots = getattr(self, "mm_king", None)
+        if dots is None:
+            dots = self.mm_king = {}
+        shown = set()
+        for pid in self.king_show:
+            p = w.players.get(pid)
+            if p is None or pid == self.my_id or not hasattr(self, "mm_dot_factory"):
+                continue
+            pp = self.mm_xy(p.x, p.y)
+            n = dots.get(pid)
+            if n is None or n.isEmpty():
+                n = dots[pid] = self.mm_dot_factory(0.016, KING_COL + (1,))
+            n.setPos(pp[0], 0, pp[1])
+            n.show()
+            shown.add(pid)
+        for pid, n in list(dots.items()):
+            if pid not in shown and not n.isEmpty():
+                n.hide()
+        # eigener Status
+        me = w.players.get(self.my_id)
+        kt = getattr(self, "king_text", None)
+        if kt is not None and me is not None:
+            if me.hp > 0 and getattr(me, "king", 0) == 2:
+                self.set_text(kt, "KING  -  Kopfgeld auf dich")
+                kt.setFg(KING_COL + (0.75 + 0.25 * math.sin(now * 4.0),))
+            elif me.hp > 0 and getattr(me, "king", 0) == 1 and self.king_warn_until > now:
+                self.set_text(kt, f"Markierung in {int(math.ceil(self.king_warn_until - now))} s")
+                kt.setFg((1.0, 0.6, 0.25, 1))
+            else:
+                self.set_text(kt, "")
+
+    # ------------------------------------------------------------ v56: Trichter auf der Minimap
+    FUNNEL_SEG = 10
+
+    def funnel_event(self, key, src, x, y, kind, rmax):
+        """v56: Ereignis eines Gegners (Schuss, Decoy, Sichtkontakt, Kugel knapp vorbei) -> Trichter von der eigenen
+        Position in seine Richtung. Ein Trichter je Quelle (key): ein neues Ereignis frischt ihn auf (wieder hell)."""
+        if not FUNNEL or not isinstance(src, int) or src < 0 or src == self.my_id:
+            return
+        w, pl = self.world, self.player
+        if w is None or pl is None or pl.hp <= 0 or getattr(pl, "prespawn", False) or w.allied(self.my_id, src):
+            return
+        if math.hypot(x - pl.x, y - pl.y) > rmax:
+            return
+        if not hasattr(self, "funnels"):
+            self.funnels = {}
+        f = self.funnels.get(key)
+        if f is None:
+            f = self.funnels[key] = {"np": None, "vd": None, "built": None}
+        f.update(x=x, y=y, t0=time.time(), kind=kind)
+
+    def funnel_reset(self):
+        for f in getattr(self, "funnels", {}).values():
+            if f["np"] is not None:
+                f["np"].removeNode()
+        self.funnels = {}
+
+    def funnel_geom(self, kind):
+        """Keil: Spitze bei dir (fast durchsichtig), innen heller werdend, am breiten Ende ein heller Rand. Die Punkte
+        setzt update_funnels jedes Bild neu (Richtung dreht mit der Minimap)."""
+        n = self.FUNNEL_SEG
+        vd = GeomVertexData("funnel", GeomVertexFormat.getV3c4(), Geom.UHDynamic)
+        vd.setNumRows(1 + 2 * (n + 1))
+        cw, vw = GeomVertexWriter(vd, "color"), GeomVertexWriter(vd, "vertex")
+        r_, g_, b_ = FUNNEL_COL.get(kind, FUNNEL_COL["shot"])
+        cw.addData4(r_, g_, b_, 0.05)
+        vw.addData3(0, 0, 0)
+        for a_ in (FUNNEL_ALPHA * 0.7, FUNNEL_ALPHA):    # Innenbogen, Aussenbogen (Rand)
+            for _ in range(n + 1):
+                cw.addData4(min(1.0, r_ + 0.15), min(1.0, g_ + 0.15), min(1.0, b_ + 0.15), a_)
+                vw.addData3(0, 0, 0)
+        prim = GeomTriangles(Geom.UHStatic)
+        for i in range(n):
+            prim.addVertices(0, 1 + i, 2 + i)
+            o0, o1 = 1 + (n + 1) + i, 2 + (n + 1) + i
+            prim.addVertices(1 + i, o0, o1)
+            prim.addVertices(1 + i, o1, 2 + i)
+        geom = Geom(vd)
+        geom.addPrimitive(prim)
+        gn = GeomNode("funnel")
+        gn.addGeom(geom)
+        np_ = self.mm_root.attachNewNode(gn)
+        np_.setTwoSided(True)
+        np_.setLightOff()
+        np_.setTransparency(TransparencyAttrib.MAlpha)
+        np_.setBin("fixed", 22)
+        np_.setDepthTest(False)
+        np_.setDepthWrite(False)
+        return np_, vd
+
+    def update_funnels(self):
+        """Trichter zeichnen: Richtung vom aktuellen eigenen Standort zum Ereignis (dreht mit der Karte), Länge bis zum
+        Ereignis (mindestens FUNNEL_MIN, höchstens bis zum Rand). Deckkraft fällt in FUNNEL_T linear auf 0."""
+        fs = getattr(self, "funnels", None)
+        if not fs:
+            return
+        pl, now, R = self.player, time.time(), self.mm_R
+        dead = pl is None or pl.hp <= 0
+        k = R / self.mm_vis
+        h = math.radians(pl.heading) if pl is not None else 0.0
+        ch, sh = math.cos(h), math.sin(h)
+        half = math.radians(FUNNEL_HALF)
+        n = self.FUNNEL_SEG
+        for key in list(fs):
+            f = fs[key]
+            age = now - f["t0"]
+            if age >= FUNNEL_T or dead:
+                if f["np"] is not None:
+                    f["np"].removeNode()
+                del fs[key]
+                continue
+            if f["np"] is None or f["built"] != f["kind"]:
+                if f["np"] is not None:
+                    f["np"].removeNode()
+                f["np"], f["vd"] = self.funnel_geom(f["kind"])
+                f["built"] = f["kind"]
+            dx, dy = f["x"] - pl.x, f["y"] - pl.y
+            sx, sy = dx * ch + dy * sh, -dx * sh + dy * ch
+            ln = max(R * FUNNEL_MIN, min(R * 0.97, math.hypot(sx, sy) * k))
+            ang = math.atan2(sy, sx)
+            vw = GeomVertexWriter(f["vd"], "vertex")
+            vw.setData3(0, 0, 0)
+            for r_ in (ln * 0.88, ln):
+                for i in range(n + 1):
+                    a = ang - half + 2 * half * i / n
+                    vw.setData3(math.cos(a) * r_, 0, math.sin(a) * r_)
+            f["np"].setColorScale(1, 1, 1, max(0.0, 1.0 - age / FUNNEL_T))
 
     def ping_geom(self, parent, sort, col=None, alpha=None, edge=0.75):
         """10h: Kreis (Fläche + Rand) als dynamisches Mesh - die Punkte werden jedes Bild neu gesetzt (an der Minimap
@@ -126546,6 +127897,8 @@ class Game(ShowBase):
                             break
                     if vis:
                         seen[tg.pid] = (now, tg.x, tg.y)
+                        if ob.pid == self.my_id and d <= FUNNEL_SPOT_R:   # v56: eigener Sichtkontakt -> Trichter
+                            self.funnel_event(("p", tg.pid, "spot"), tg.pid, tg.x, tg.y, "spot", FUNNEL_SPOT_R)
         if now - self.intel_veh_clock >= NOISE_TICK:            # Fahrzeuge/Heli der Gegner: Lärm wie Monster ihn hören
             self.intel_veh_clock = now
             for tg in enemies:
@@ -127308,6 +128661,9 @@ class Game(ShowBase):
             self.camera.setPos(cx, cy, cz)
             self.camera.setHpr(0.0, pit, 0.0)
             return
+        if self.deathcam_on():                                    # v56: Todes-Sequenz und Flugkamera zum Killer
+            self.place_deathcam()
+            return
         bob = math.sin(pl.phase) * 0.045 if pl.moving and pl.on_ground else 0.0
         t = self.death_t if hasattr(self, "death_t") else 0.0
         eye = pl.z + (eye_h(pl) + bob) * (1 - t) + 0.35 * t
@@ -127420,9 +128776,10 @@ class Game(ShowBase):
                 self.on_gren_next(1)                   # Rechtsklick: nächste Granatenart
             trig = edge = False
         self.gren_rmb_prev = rmb_
+        self.space_respawn(bool(key("jump")))         # v56: Leertaste auf dem Todesbildschirm = Spawn
         inp = SimpleNamespace(
             forward=key("forward") - key("back"), strafe=key("right") - key("left"),
-            run=key("sprint"), jump=key("jump"),
+            run=key("sprint"), jump=key("jump") and not self.jump_block,   # v56: Sperre nach Spawn per Leertaste
             turn=down(KeyboardButton.left()) - down(KeyboardButton.right()),
             look=down(KeyboardButton.up()) - down(KeyboardButton.down()),
             lean=key("lean_right") - key("lean_left"),
@@ -127924,7 +129281,25 @@ class Game(ShowBase):
         return p.name if p is not None else "?"
 
     def feed_add(self, text):
-        self.feed.append((text, time.time()))
+        self.feed.append({"t": time.time(), "text": text})
+
+    def feed_kill(self, killer, icon, victim):
+        """v56: Killfeed-Zeile [Täter] Symbol [Opfer]. killer/victim: Spieler-ID oder Text (Monstername), None = leer."""
+        me = self.my_id
+
+        def nm(x):
+            if x is None:
+                return None, (1, 1, 1)
+            if isinstance(x, int):
+                col = (1.0, 0.86, 0.3) if x == me else ((0.55, 0.75, 1.0) if self.world.allied(me, x) else (1, 1, 1))
+                if self.world.mode == "ctf" and self.world.team_of.get(x) in (0, 1):
+                    col = tuple(min(1.0, c * 0.6 + 0.4) for c in CTF_TEAM_COLS[self.world.team_of[x]])
+                return self.pname(x), col
+            return str(x), (0.85, 1.0, 0.75)
+        a, ac = nm(killer)
+        v, vc = nm(victim)
+        self.feed.append({"t": time.time(), "a": a, "ac": ac, "icon": icon, "v": v, "vc": vc,
+                          "me": me in (killer, victim)})
 
     def ctf_event(self, e):
         """11: CTF-Ereignis ("ctf", Art, Spieler-ID, Flaggen-ID, Team) -> Killfeed, Hinweis, Ton."""
@@ -128029,14 +129404,19 @@ class Game(ShowBase):
                     if len(e) > 4 and isinstance(e[3], int) and 0 <= e[3] < len(GREN_KINDS) and e[4] > 0:
                         k_ = GREN_KINDS[e[3]]
                         self.toast(f"+{e[4]} {GREN_NAMES[k_]}", tuple(min(1.0, c * 1.4 + 0.25) for c in GREN_COL[k_]), 1.6)
-            elif kind == "decoy":              # 10e: Decoy "schiesst" (nur Lärm)
+            elif kind == "decoy":              # 10e: Decoy "schiesst" (nur Lärm); v56: Klang der nachgeahmten Waffe
                 pos_ = (e[2], e[3], e[4])
-                clip = ("ar_single", "pistol_single", "smg_single", "shotgun_shot")[e[5] % 4] if len(e) > 5 else "rifle"
-                if clip not in self.sfx.pool:
-                    clip = "rifle"
-                self.sfx.play(clip, pos_, 0.9, self.prng.uniform(0.97, 1.03))
+                wi_ = e[5] if len(e) > 6 and isinstance(e[5], int) and 0 <= e[5] < len(WEAPONS) else START_WEAPON
+                self.sfx.shot(wi_, None, pos=pos_)
                 self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.3), 0.08, 0.05, 0.25, (1.0, 0.9, 0.5),
                               (1.0, 0.6, 0.2), p=0.5, fog=False)
+                if len(e) > 6:
+                    self.funnel_event(("d", e[1]), e[6], pos_[0], pos_[1], "shot", FUNNEL_SHOT_R)   # wie ein echter Schuss
+            elif kind == "decoypop":           # v56: harmloser Fake-Knall am Ende des Decoys
+                pos_ = (e[2], e[3], e[4])
+                self.sfx.play("explosion", pos_, 0.55, 1.35)
+                self.fx_spawn(self.sphere_np, (pos_[0], pos_[1], pos_[2] + 0.2), 0.25, 0.1, 0.9, (1.0, 0.95, 0.7),
+                              (0.6, 0.6, 0.6), p=0.6, fog=False)
             elif kind == "flash":              # 10e: Blendgranate
                 self.flash_hit(e[1], e[2] if len(e) > 2 else -1)
                 if len(e) > 2:
@@ -128143,28 +129523,25 @@ class Game(ShowBase):
                         w = self.player.wp(i_)
                         g.reserve = min(w.max_reserve, g.reserve + w.pickup)
             elif kind == "player_hurt":
+                if len(e) > 3:                  # v56: Schadens-Log (Angreifer, tatsächliche HP)
+                    self.note_damage(e[3], e[2], e[4] if len(e) > 4 else e[1])
                 if e[2] == self.my_id:
                     self.hurt_flash = min(0.75, self.hurt_flash + 0.25 + e[1] * 0.012)
                     self.sp_hurt.kick(self.prng.choice((-1, 1)) * (25 + e[1] * 1.5))
-            elif kind == "kill":            # (Killer oder -1 = Monster, Opfer, Waffe)
-                victim = self.pname(e[2])
-                wn = weapon_name(e[3])
-                if e[1] < 0 and e[3] == WI_TURRET:
-                    self.feed_add(f"{victim} wurde vom Geschütz erledigt")
-                elif e[1] < 0 and e[3] == WI_TOMAHAWK:
-                    self.feed_add(f"{victim} starb im Tomahawk-Angriff")
-                elif e[1] < 0 and e[3] == WI_FALL:
-                    self.feed_add(f"{victim} ist in den Tod gestürzt")
-                elif e[1] < 0 and e[3] == WI_SLAM:
-                    self.feed_add(f"{victim} wurde zerstampft")
-                elif e[1] < 0 and e[3] == WI_ROCK:
-                    self.feed_add(f"{victim} wurde vom Titan mit einem Felsbrocken erschlagen")
-                elif e[1] < 0 and e[3] != -1:
-                    self.feed_add(f"{victim} hat sich selbst erledigt  [{wn}]")
-                elif e[1] < 0:
-                    self.feed_add(f"{victim} wurde von einem Monster erledigt")
-                else:
-                    self.feed_add(f"{self.pname(e[1])}  [{wn}]  {victim}")
+            elif kind == "kill":            # (Killer oder -1 = Monster, Opfer, Waffe; v56: Monsterart, Beschwörer)
+                k_, v_, wi_ = e[1], e[2], e[3]
+                mki = e[4] if len(e) > 4 and isinstance(e[4], int) else -1
+                mk = KINDS[mki] if 0 <= mki < len(KINDS) else None
+                cr = e[5] if len(e) > 5 and isinstance(e[5], int) else -1
+                icon = kill_icon(wi_, mk)
+                if isinstance(k_, int) and k_ >= 0:
+                    killer = k_
+                elif mk is not None:          # Monster: Beschwörer (Nekromant) oder der Monstername als Täter
+                    killer = cr if cr >= 0 else MOB_NAMES.get(mk, "Monster")
+                else:                         # Selbst, Sturz, Geschütz, Tomahawk: nur Symbol und Opfer
+                    killer = None
+                self.feed_kill(killer, icon, v_)
+                self.note_kill(k_, v_, wi_, mk, cr, icon)
                 if e[1] == self.my_id:
                     self.hit_t = 0.3
                     self.sfx.hitmark()
@@ -128189,6 +129566,9 @@ class Game(ShowBase):
                             v_.fire(op.cur)
                     self.heard_noise(e[1], e[2], e[3], e[5] if len(e) > 5 else None,
                                      e[4] if len(e) > 4 else NOISE_SHOT)     # 10h: Lärm-Ping statt rotem Marker
+                    nr_ = e[4] if len(e) > 4 else NOISE_SHOT                 # v56: Trichter (gedämpft: nur im Lärmradius)
+                    self.funnel_event(("p", e[1], "shot"), e[1], e[2], e[3], "shot",
+                                      min(FUNNEL_SHOT_R, nr_) if nr_ <= SILENCED_NOISE + 0.01 else FUNNEL_SHOT_R)
             elif kind == "lnoise":             # 10h: anderer lauter Lärm eines Spielers (Decoy, Geschütz)
                 self.heard_noise(e[1], e[2], e[3], e[4], e[5])
             elif kind == "lootdbg":            # LOOT_DEBUG: Chancen nach dem Öffnen (nur für den Spieler selbst)
@@ -128438,7 +129818,10 @@ class Game(ShowBase):
             elif kind == "buff":
                 if e[1] == self.my_id:
                     pl = self.player
-                    pl.buff, pl.buff_t = e[2], float(e[3])
+                    if len(e) > 5 and e[5] == 2:           # v56: zweiter Buff (Kopfgeld)
+                        pl.buff2, pl.buff2_t, pl.buff2_tot = e[2], float(e[3]), float(e[3])
+                    else:
+                        pl.buff, pl.buff_t, pl.buff_tot = e[2], float(e[3]), float(e[3])
                     if len(e) > 4:
                         pl.max_hp = float(e[4])
                     self.toast(f"Buff: {buff_text(e[2], pl.max_hp)}  -  {int(e[3])} s",
@@ -128614,7 +129997,11 @@ class Game(ShowBase):
                 if e[1] == self.my_id:
                     self.toast(f"{GEAR[e[3]].name} sperrt den Slot {GEAR_SLOT_NAMES[GEAR[e[2]].slot]}",
                                (1.0, 0.7, 0.4), 2.0)
+            elif kind in ("king", "kingping", "bounty"):     # v56: Manhunt-King
+                self.king_event(e)
             elif kind == "shieldhit":
+                if len(e) > 3:                  # v56: Schild-Schaden zählt im Schadens-Log mit
+                    self.note_damage(e[3], e[1], e[2])
                 if e[1] == self.my_id:
                     self.hurt_flash = max(0.0, self.hurt_flash - 0.2)
                     self.shield_flash = 0.4
@@ -129287,6 +130674,8 @@ class Game(ShowBase):
             v.update(p, dt)
         for pid in [pid for pid in self.player_views if pid not in others]:
             self.player_views.pop(pid).root.removeNode()
+        self.update_self_view(dt)                            # v56: eigene Figur in der Todes-Sequenz
+        self.update_king_view()                              # v56: King-Silhouetten
         self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
 
         # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände
@@ -129667,7 +131056,9 @@ class Game(ShowBase):
         low = 0.35 * max(0.0, 1 - pl.hp / 40.0) if pl.hp > 0 else 0.5
         if pl.hp <= 0:                                    # tot: neutraler grauer Hintergrund statt Rot
             # Esc-Menü offen: kein Grauschleier, das Bild sieht aus wie bei einem lebenden Spieler
-            self.hurt_card.setColor(0.15, 0.16, 0.18, 0.0 if self.quit_box is not None else 0.86)
+            # v56: während der Todes-Sequenz kein Schleier (Flugkamera), danach nur ein leichter
+            veil = self.deathcam_veil()
+            self.hurt_card.setColor(0.15, 0.16, 0.18, 0.0 if self.quit_box is not None else (0.86 if veil is None else veil))
         elif getattr(pl, "stun_t", 0.0) > 0:
             f = 0.5 + 0.5 * math.sin(time.time() * 35.0)
             self.hurt_card.setColor(0.25, 0.55, 1.0, 0.18 + 0.22 * f)
@@ -129689,8 +131080,11 @@ class Game(ShowBase):
             zone = "   IN DER BURG  +1/s"
         self.set_text(self.timer_text, f"{world.mode_name()}   {int(t) // 60:02d}:{int(t) % 60:02d}{zone}")
         # Killfeed (oben links)
-        self.feed = [f for f in self.feed if now - f[1] < FEED_T][-FEED_N:]
-        self.set_text(self.feed_text, "\n".join(f[0] for f in self.feed))
+        self.feed = [f for f in self.feed if now - f["t"] < FEED_T][-FEED_N:]
+        a_ = float(self.getAspectRatio())               # v56: Anker an den Bildrand (Fenstergrösse kann sich ändern)
+        self.v56_tl.setPos(-a_, 0, 1.0)
+        self.v56_rc.setPos(a_, 0, 0.0)
+        self.killfeed.update(self.feed, now)          # v56: Zeilen mit Symbolen
 
         # Hinweis: Spawnschutz oder etwas in Reichweite, das F benutzen kann
         prompt = ""
@@ -129843,7 +131237,7 @@ class Game(ShowBase):
             txt_ = f"TEAM {CTF_TEAM_NAMES[self.world.team_of[self.my_id]].upper()}\n" + txt_   # CTF: Teamname im Todesbildschirm
         self.set_text(self.dead_text, txt_ if show_dead else "")
         mpos = self.mouse_2d() if (dead_screen and self.dead_free) else None
-        if show_dead and not exp_:
+        if show_dead and not exp_ and not self.deathcam_cine():   # v56: Auswahl erst nach der Kamerafahrt
             card = self.death_picker.hit(mpos[0], mpos[1]) if mpos is not None else None
             self.death_picker.update(self.loadout, card)
             self.death_picker.show()
@@ -129872,6 +131266,8 @@ class Game(ShowBase):
         else:
             self.resp_btn.hide()
             self.resp_btn_text.hide()
+        self.update_combat_panel(show_dead and not lobby and not getattr(pl, "prespawn", False), mpos,   # v56
+                                 wait <= 0)
         self.update_lobby_ui(lobby and not equip_view and self.loadscreen is None and self.quit_box is None, mpos)
         if lobby and self.loadscreen is None and self.quit_box is None:       # Knopf unten links
             bb = self.back_btn_rect()
@@ -130767,6 +132163,7 @@ class Game(ShowBase):
         self.mm_me.setR(0)                          # eigener Pfeil zeigt immer nach oben
         self.mm_north.setPos(sh * R * 0.84, ch * R * 0.84 - 0.014)
         self.update_intel()                         # 10h: Lärm-Pings und Sichtkontakte (statt roter Marker bei jedem Schuss)
+        self.update_funnels()                       # v56: Trichter (Schüsse, Decoys, Sichtkontakt, Kugel knapp vorbei)
         w = self.world
         if w.strike == 1 and w.strike_by == self.my_id and w.phase == "play":
             p = self.mm_xy(w.strike_x, w.strike_y, False)
