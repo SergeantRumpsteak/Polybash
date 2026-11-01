@@ -163,12 +163,28 @@ from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, Colo
                           NodePath, PerspectiveLens, PNMImage, Point2, Point3, RenderState, Texture,
                           TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3, Quat,
                           WindowProperties, loadPrcFileData)
-from panda3d.core import GeomVertexArrayFormat, InternalName, LightAttrib, LODNode
+from panda3d.core import ClockObject, GeomVertexArrayFormat, InternalName, LightAttrib, LODNode, CullBinManager, BitMask32, PythonCallbackObject
 
 # Konfiguration muss VOR dem Erzeugen des Fensters passieren
+
+
+def msaa_from_settings():
+    """v59: Kantenglättung aus den Einstellungen (0 = aus, sonst Anzahl Samples). Muss vor dem Fenster feststehen."""
+    try:
+        base = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+        with open(os.path.join(base, "spiel_einstellungen.json"), encoding="utf-8") as f:
+            v = json.load(f).get("msaa", 4)
+        return v if v in MSAA_CHOICES else 4
+    except (OSError, ValueError, AttributeError):
+        return 4
+
+
+MSAA_CHOICES = (0, 2, 4)
+MSAA_START = msaa_from_settings()
 loadPrcFileData("", "window-title Polybash\nwin-size 1280 720\n"
                     "show-frame-rate-meter 0\nsync-video 0\n"
-                    "framebuffer-multisample 1\nmultisamples 4\n")
+                    + (f"framebuffer-multisample 1\nmultisamples {MSAA_START}\n" if MSAA_START else
+                       "framebuffer-multisample 0\nmultisamples 0\n"))
 if getattr(sys, "frozen", False):  # in der Executable gibt es keine Config.prc: Grafiktreiber nennen
     loadPrcFileData("", "load-display pandagl\naux-display p3tinydisplay\n")
 if os.environ.get("SPIEL_OFFSCREEN"):  # nur für automatische Tests ohne Bildschirm
@@ -14600,7 +14616,7 @@ def _pt_geom(g):
         vd = GeomVertexData("pt", _pt_format(uvd is not None), Geom.UHStatic)
         vd.setNumRows(nv)
         prim = GeomTriangles(Geom.UHStatic)
-        prim.setIndexType(Geom.NTUint16)
+        prim.setIndexType(Geom.NTUint32 if g.get("I32") else Geom.NTUint16)
         prim.modifyVertices(ni)
         fuell = [(vd.modifyArray(0), g["P"]), (vd.modifyArray(1), nb), (vd.modifyArray(2), g["C"]),
                  (prim.modifyVertices(), g["I"])]
@@ -14632,13 +14648,237 @@ def _pt_geom(g):
             nw.addData3(nx, ny, nz)
             cw.addData4(g["C"][4 * i] / 255.0, g["C"][4 * i + 1] / 255.0, g["C"][4 * i + 2] / 255.0, g["C"][4 * i + 3] / 255.0)
         prim = GeomTriangles(Geom.UHStatic)
-        idx = array("H")
+        idx = array("I" if g.get("I32") else "H")
         idx.frombytes(g["I"])
         for i in range(0, ni, 3):
             prim.addVertices(idx[i], idx[i + 1], idx[i + 2])
     geom = Geom(vd)
     geom.addPrimitive(prim)
     return geom
+
+
+def _pt_states():
+    """Zustände der Klassen 0 opak, 1 zweiseitig, 2 durchsichtig, 3 leuchtend."""
+    return {0: RenderState.makeEmpty(),
+            1: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone)),
+            2: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone),
+                                TransparencyAttrib.make(TransparencyAttrib.MAlpha)),
+            3: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone), LightAttrib.makeAllOff())}
+
+
+def pt_merged_node(pt, inner=3, outer=8):
+    """v59: Testbündel für PerfBench: je grober Zelle und Zustand eine Geometrie (32-Bit-Indizes), statt 32-m-Blöcken.
+    inner/outer = Zellgrösse in Blöcken innerhalb/ausserhalb der Spielfläche."""
+    cells = {}
+    for g in pt["groups"]:
+        if g.get("sp") or g["nv"] <= 0 or g["ni"] <= 0:
+            continue
+        i, j = g.get("k") or (0, 0)
+        n = inner if 0 <= i <= 9 and 0 <= j <= 9 else outer
+        cells.setdefault((g["c"], g.get("tx"), i // n, j // n, n), []).append(g)
+    states, root = _pt_states(), NodePath("pt_buendel")
+    nodes = {}
+    for (c, tx, ci, cj, n), gl in cells.items():
+        off, idx = 0, array("I")
+        for g in gl:
+            a = array("H")
+            a.frombytes(g["I"])
+            idx.extend([v + off for v in a])
+            off += g["nv"]
+        m = {"nv": off, "ni": len(idx), "I32": True, "I": idx.tobytes(), "tx": tx,
+             "P": b"".join(g["P"] for g in gl), "N": b"".join(g["N"] for g in gl), "C": b"".join(g["C"] for g in gl),
+             "UV": b"".join(g["UV"] for g in gl) if gl[0].get("UV") else None}
+        geom = _pt_geom(m)
+        node = nodes.get((ci, cj, n))
+        if node is None:
+            node = nodes[(ci, cj, n)] = GeomNode("b_%d_%d_%d" % (ci, cj, n))
+            root.attachNewNode(node)
+        node.addGeom(geom, _pt_state(states[c], tx))
+    return root
+
+
+class PerfBench:
+    """v59: Leistungstest (Taste F9 im Spiel): schaltet nacheinander einzelne Teile ab, misst die echte Bildzeit auf dieser
+    Grafikkarte und schreibt perf_report_*.txt neben das Spiel. Nur Diagnose, verändert nichts dauerhaft."""
+    SETTLE, MEASURE = 0.6, 1.6
+
+    def __init__(self, game):
+        self.g = g = game
+        self.rows, self.i, self.t0, self.frames, self.ren, self.ticks = [], -1, 0.0, [], [], []
+        self.sec = {}
+        self.head = self.scene_info()
+        g.toast("Leistungstest läuft: stehen bleiben, Maus nicht bewegen (ca. 45 s)", (1.0, 0.85, 0.3), 5.0)
+        self.merged = None
+        if getattr(g.world, "pt", None):
+            self.merged = pt_merged_node(g.world.pt)
+            self.merged.reparentTo(g.render)
+            self.merged.hide()
+        self.dr = g.camNode.getDisplayRegion(0)
+        self.steps = self.make_steps()
+        ClockObject.getGlobalClock().setMode(ClockObject.MNormal)   # Grenze aus: sonst misst man die Grenze
+        self.wrap()
+        self.last = time.perf_counter()
+        g.taskMgr.add(self.before, "perf-vor", sort=49)
+        g.taskMgr.add(self.after, "perf-nach", sort=51)
+        self.next_step()
+
+    def wrap(self):
+        g = self.g
+        self.tick0 = g.tick
+        self.upd0 = g.world.update
+
+        def timed(name, fn):
+            def run(*a, **k):
+                t = time.perf_counter()
+                try:
+                    return fn(*a, **k)
+                finally:
+                    self.sec[name] = self.sec.get(name, 0.0) + time.perf_counter() - t
+            return run
+        g.tick = timed("logik", g.tick)
+        g.world.update = timed("welt", g.world.update)
+        g.update_views = timed("ansicht", g.update_views)
+        g.update_hud = timed("hud", g.update_hud)
+        g.sfx.update = timed("sound", g.sfx.update)
+
+    def unwrap(self):
+        g = self.g
+        for o, n in ((g, "tick"), (g.world, "update"), (g, "update_views"), (g, "update_hud"), (g.sfx, "update")):
+            o.__dict__.pop(n, None)
+
+    def scene_info(self):
+        g = self.g
+        gsg = g.win.getGsg()
+        p = g.win.getProperties()
+        lods = sum(1 for c in g.town_np.getChildren() if isinstance(c.node(), LODNode)) if g.town_np is not None else 0
+        return [f"Polybash {VERSION}, Karte: {'Polytown' if getattr(g.world, 'pt', None) else 'andere'}, LOD-Bloecke: {lods}",
+                f"Grafik: {gsg.getDriverVendor()} / {gsg.getDriverRenderer()} / {gsg.getDriverVersion()}",
+                f"Fenster: {p.getXSize()} x {p.getYSize()}, Vollbild: {p.getFullscreen()}, Rahmen: {g.win.getFbProperties()}",
+                f"MSAA-Einstellung: {g.msaa}, Sichtweite: {g.view_pct} %, FOV: {g.fov_base}, FPS-Grenze: {g.fps_limit}, Netz: {g.net_mode}",
+                f"Kamera: {g.camera.getPos(g.render)}, Blick {g.camera.getH(g.render):.0f}, Monster: {len(g.world.mobs)}"]
+
+    def mask_nodes(self, nps, hide):
+        bit = BitMask32.bit(20)
+        for n in nps:
+            (n.hide if hide else n.show)(bit)
+
+    def make_steps(self):
+        g = self.g
+        bins = CullBinManager.getGlobalPtr()
+        ob = bins.findBin("opaque")
+        cb = PythonCallbackObject(lambda data: None)
+        map_kids = [c for c in g.town_np.getChildren() if c.getName().startswith("pt_") and c.getName() != "pt_spin"] if g.town_np is not None else []
+        mobs = lambda: [v.root for v in g.mob_views.values() if v is not None]
+        extra = []
+        if g.town_np is not None:
+            extra += list(g.town_np.findAllMatches("**/rauch"))
+        extra += [c for c in g.render.getChildren() if c.getName().startswith("zone")] + list(g.water_nps)
+        others = [g.win.getDisplayRegion(i) for i in range(g.win.getNumDisplayRegions())]
+        others = [d for d in others if not d.getCamera().isEmpty() and d.getCamera() not in (g.cam, g.cam2d)
+                  and d.getCamera().getName() != "camera2d"]
+        far0 = g.camLens.getFar()
+        tex = lambda on: g.render.setTextureOff(1000) if on else g.render.clearTexture()
+
+        def sound(on):
+            g.sfx.muted = on
+            (g.disableAllAudio if on else g.enableAllAudio)()
+
+        def buendel(on):
+            for c in map_kids:
+                (c.hide if on else c.show)()
+            (self.merged.show if on else self.merged.hide)()
+        st = [("Basis", None),
+              ("Ohne Karte", lambda on: (g.town_np.hide if on else g.town_np.show)()),
+              ("3D zeichnen uebersprungen (nur CPU)", lambda on: self.dr.setDrawCallback(cb) if on else self.dr.clearDrawCallback()),
+              ("3D-Flaeche nur 1/4 der Pixel", lambda on: self.dr.setDimensions(*((0.25, 0.75, 0.25, 0.75) if on else (0, 1, 0, 1)))),
+              ("Ohne HUD/2D", lambda on: (g.render2d.hide if on else g.render2d.show)()),
+              ("Ohne Waffe in der Hand", lambda on: [d.setActive(not on) for d in others]),
+              ("Ohne Sound", sound),
+              ("Ohne Monster", lambda on: self.mask_nodes(mobs(), on)),
+              ("Ohne Rauch/Zone/Wasser", lambda on: self.mask_nodes(extra, on)),
+              ("Ohne Texturen", tex),
+              ("Ohne Nebel", lambda on: g.render.setFogOff(1000) if on else g.render.setFog(g.fog)),
+              ("Sichtweite 160 m", lambda on: g.camLens.setFar(160.0 if on else far0)),
+              ("LOD aus", lambda on: g.camNode.setLodScale(PT_LOD_OFF_SCALE if on else 1.0)),
+              ("Rendern nach Zustand statt vorn-nach-hinten",
+               lambda on: bins.setBinType(ob, CullBinManager.BT_state_sorted if on else CullBinManager.BT_front_to_back)),
+              ("Antialias-Attribut aus", lambda on: g.render.setAntialias(AntialiasAttrib.MNone if on else (AntialiasAttrib.MAuto if MSAA_START else AntialiasAttrib.MNone)))]
+        if self.merged is not None:
+            st.append(("Karte stark gebuendelt (viel weniger Drawcalls)", buendel))
+        st.append(("Basis (Kontrolle)", None))
+        return st
+
+    def next_step(self):
+        self.i += 1
+        if self.i >= len(self.steps):
+            self.finish()
+            return
+        fn = self.steps[self.i][1]
+        if fn is not None:
+            fn(True)
+        self.t0, self.frames, self.ren, self.ticks, self.sec = time.perf_counter(), [], [], [], {}
+
+    def keep_alive(self):
+        g = self.g
+        if g.net_mode != "client" and g.player.hp > 0:
+            g.player.hp = getattr(g.player, "max_hp", 100.0)
+
+    def before(self, task):
+        self.t_r = time.perf_counter()
+        return task.cont
+
+    def after(self, task):
+        g = self.g
+        if g.mode != "play" or g.world is None:
+            self.finish(False)
+            return task.done
+        now = time.perf_counter()
+        dt, self.last = now - self.last, now
+        self.keep_alive()
+        if now - self.t0 < self.SETTLE:
+            self.sec = {}
+            return task.cont
+        self.frames.append(dt)
+        self.ren.append(now - self.t_r)
+        if now - self.t0 < self.SETTLE + self.MEASURE or len(self.frames) < 15:
+            return task.cont
+        f = sorted(self.frames)
+        n = len(f)
+        self.rows.append((self.steps[self.i][0], sum(f) / n * 1e3, f[n // 10] * 1e3, f[n // 2] * 1e3, f[n * 95 // 100] * 1e3,
+                          sum(self.ren) / n * 1e3, {k: v / n * 1e3 for k, v in self.sec.items()}, n))
+        fn = self.steps[self.i][1]
+        if fn is not None:
+            fn(False)
+        self.next_step()
+        return task.done if self.i >= len(self.steps) else task.cont
+
+    def finish(self, ok=True):
+        g = self.g
+        g.taskMgr.remove("perf-vor")
+        g.taskMgr.remove("perf-nach")
+        if 0 <= self.i < len(self.steps) and not ok and self.steps[self.i][1] is not None:
+            self.steps[self.i][1](False)
+        self.unwrap()
+        if self.merged is not None:
+            self.merged.removeNode()
+        g.apply_fps()
+        g.perf_bench = None
+        if not ok:
+            return
+        base = self.rows[0][1] or 1.0
+        out = self.head + ["", f"{'Test':<48}{'FPS':>7}{'ms':>7}{'p10':>7}{'p50':>7}{'p95':>7}{'Render':>8}{'Logik':>7}{'Welt':>7}{'Ansicht':>8}{'HUD':>6}{'Sound':>7}{'Delta':>8}"]
+        for nm, mean, p10, p50, p95, ren, sc, n in self.rows:
+            out.append(f"{nm:<48}{1000.0 / mean:7.1f}{mean:7.1f}{p10:7.1f}{p50:7.1f}{p95:7.1f}{ren:8.1f}{sc.get('logik', 0):7.1f}"
+                       f"{sc.get('welt', 0):7.1f}{sc.get('ansicht', 0):8.1f}{sc.get('hud', 0):6.1f}{sc.get('sound', 0):7.1f}{mean - base:+8.1f}")
+        name = time.strftime("perf_report_%Y%m%d_%H%M%S.txt")
+        path = os.path.join(os.path.dirname(_log_path()), name)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(out) + "\n")
+            g.toast(f"Leistungstest fertig: {name}", (0.55, 1.0, 0.55), 8.0)
+        except OSError as e:
+            g.toast(f"Bericht nicht schreibbar: {e}", (1.0, 0.5, 0.4), 8.0)
+        print("\n".join(out))
 
 
 def _pt_far_geom(g, geom):
@@ -14708,11 +14948,7 @@ def build_pt_scene(world, progress=None):
     Land (leer), Wasser (leer), Zone, extra - alles Sichtbare hängt als 'Stadt' in extra[6], drehende Teile in extra[7]."""
     pg = progress or (lambda f, t: None)
     pt = world.pt
-    states = {0: RenderState.makeEmpty(),
-              1: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone)),
-              2: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone),
-                                  TransparencyAttrib.make(TransparencyAttrib.MAlpha)),
-              3: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone), LightAttrib.makeAllOff())}
+    states = _pt_states()
     chunks, spins = {}, []
     fars, reduced = {}, set()                              # v59: Fern-Geometrie je Block (siehe PT_LOD_*)
     gl = pt["groups"]
@@ -121309,8 +121545,12 @@ class Game(ShowBase):
         default_fullscreen(self)
         self.disableMouse()
         self.setBackgroundColor(*SKY)
-        self.render.setAntialias(AntialiasAttrib.MAuto)      # MSAA (wenn die Grafikkarte es kann)
+        if MSAA_START:
+            self.render.setAntialias(AntialiasAttrib.MAuto)  # MSAA (wenn die Grafikkarte es kann)
+        bins_ = CullBinManager.getGlobalPtr()                # v59: undurchsichtiges von vorn nach hinten (weniger Überzeichnung)
+        bins_.setBinType(bins_.findBin("opaque"), CullBinManager.BT_front_to_back)
         st = load_settings()
+        self.msaa = MSAA_START
         self.gfx = "standard"                    # überall Standardgrafik (alte Einstellung "hoch" wird ignoriert)
         vd = st.get("vd")
         self.view_pct = int(vd) if isinstance(vd, (int, float)) and not isinstance(vd, bool) and 25 <= vd <= 300 else 100   # Sichtweite in %
@@ -121457,6 +121697,7 @@ class Game(ShowBase):
         for _k, _dx, _dy in (("arrow_left", -1, 0), ("arrow_right", 1, 0), ("arrow_up", 0, -1), ("arrow_down", 0, 1)):
             self.accept(_k + "-repeat", self.on_arrow, [_dx, _dy])
         self.accept("escape", self.on_escape)
+        self.accept("f9", self.start_perf_bench)              # v59: Leistungstest (siehe PerfBench)
         self.accept(DEV_KEY, self.on_dev)                     # v50: Dev-Menü (nur auf dem Testgelände)
         self.duck_lock = False
         self._hover_hit = None
@@ -121692,8 +121933,8 @@ class Game(ShowBase):
             spec = [("Steuerung", None), ("Tastenbelegung", dig(1)), (self.invert_label(), dig(2)),
                     (self.gren_mode_label(), dig(3))] + [("", None)] * 2 + [("Zurück   (Esc)", back)]
         elif st == "set_gfx":
-            spec = [("Grafik", None), (f"Vollbild:  {'an' if is_fullscreen(self) else 'aus'}", dig(1))] \
-                + [("", None)] * 6 + [("Zurück   (Esc)", back)]
+            spec = [("Grafik", None), (f"Vollbild:  {'an' if is_fullscreen(self) else 'aus'}", dig(1)),
+                    (self.msaa_label(), dig(2))] + [("", None)] * 5 + [("Zurück   (Esc)", back)]
         elif st == "set_audio":
             spec = [("Audio", None)] + [("", None)] * 4 + [("Zurück   (Esc)", back)]
         elif st == "setup2":
@@ -122293,6 +122534,9 @@ class Game(ShowBase):
             elif st == "set_gfx":
                 if d == 1:
                     self.toggle_fullscreen()
+                    self.menu_refresh()
+                elif d == 2:
+                    self.toggle_msaa()
                     self.menu_refresh()
             elif st == "setup":
                 self.setup_pick(d - 1)
@@ -123388,7 +123632,7 @@ class Game(ShowBase):
     def save_prefs(self):
         save_settings({"gfx": self.gfx, "sens": self.sens_mult, "fps": self.fps_limit, "name": self.my_name,
                        "vm": self.vol_music, "vs": self.vol_sfx, "vd": self.view_pct, "look": self.look_code,
-                       "fov": self.fov_base, "inv": 1 if self.invert_y else 0, "gm": self.gren_mode,
+                       "fov": self.fov_base, "inv": 1 if self.invert_y else 0, "gm": self.gren_mode, "msaa": self.msaa,
                        "keys": {a: b for a, b in KEYS.items() if b != KEY_DEFAULTS.get(a)},
                        "fs": is_fullscreen(self)})
 
@@ -123443,6 +123687,15 @@ class Game(ShowBase):
     def set_fov_value(self, v):
         self.fov_base = float(v)
         self.prefs_dirty = True
+
+    def msaa_label(self):
+        name = f"{self.msaa}x" if self.msaa else "aus"
+        return f"Kantenglättung (MSAA):  {name}" + ("  (wirkt nach Neustart)" if self.msaa != MSAA_START else "")
+
+    def toggle_msaa(self):
+        """v59: Aus / 2x / 4x. Das Fenster legt die Samples beim Start fest, also gilt es ab dem nächsten Start."""
+        self.msaa = MSAA_CHOICES[(MSAA_CHOICES.index(self.msaa) + 1) % len(MSAA_CHOICES)]
+        self.save_prefs()
 
     def toggle_invert(self):
         self.invert_y = not self.invert_y
@@ -125663,6 +125916,10 @@ class Game(ShowBase):
         """C: Ducken ein-/ausschalten (man bleibt geduckt, bis man C erneut drückt)."""
         if self.mode != "menu" and self.quit_box is None:
             self.duck_lock = not self.duck_lock
+
+    def start_perf_bench(self):
+        if self.mode == "play" and getattr(self, "perf_bench", None) is None and self.player is not None:
+            self.perf_bench = PerfBench(self)
 
     def toggle_fps(self):
         self.show_fps = not getattr(self, "show_fps", False)

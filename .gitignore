@@ -3,3 +3,4 @@ __pycache__/
 dist/
 .venv/
 polybash_netz.log
+perf_report_*.txt

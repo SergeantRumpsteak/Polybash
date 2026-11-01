@@ -2,6 +2,15 @@
 
 Neueste Änderungen oben.
 
+## Leistungstest (F9), MSAA-Schalter, Rendern von vorn nach hinten (Robin, 2026-11-02)
+Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung). Anlass: Das LOD brachte auf echter Hardware keinen FPS-Gewinn.
+
+- **Leistungstest: F9 im Spiel** (`PerfBench`, ca. 45 s): schaltet nacheinander Karte, 3D-Zeichnen, Pixelfläche, HUD, Waffe, Sound, Monster, Rauch/Zone/Wasser, Texturen, Nebel, Sichtweite, LOD, Sortierung und Antialias-Attribut um, dazu eine stark gebündelte Karte (1.559 -> 261 Geoms). Misst die echte Bildzeit und schreibt `perf_report_*.txt` neben das Spiel, mit Grafikkarte, Auflösung und MSAA. Danach ist alles wieder wie vorher.
+- **Kantenglättung (MSAA)**: Einstellungen -> Grafik: Aus / 2x / 4x (Standard 4x). Wirkt nach einem Neustart, weil das Fenster die Samples beim Start festlegt.
+- **Bin `opaque` rendert jetzt von vorn nach hinten** (`front_to_back`) statt nach Zustand.
+
+Technik: `PerfBench`, `pt_merged_node`, `_pt_states`, `msaa_from_settings`, `MSAA_START`, `toggle_msaa`; `_pt_geom` kann 32-Bit-Indizes. Die Bündelung läuft bisher nur im Test.
+
 ## Performance III: Polytown-LOD ab 80 m, Monster-KI einmal je Bild (Robin, 2026-11-01)
 Gilt für alle Modi. NET_VERSION bleibt 56 (LOD nur eigene Darstellung; Monster-KI rechnet nur der Host, Mitspieler bekommen Snapshots). Blender, Kartendatei und Kollision bleiben unverändert.
 
