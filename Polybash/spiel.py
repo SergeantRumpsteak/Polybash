@@ -470,6 +470,14 @@ MOB_OCC_THIN = 0.12      # m: dünnere Quader verdecken nicht (Glas, Fensterattr
 MOB_OCC_NARROW = 1.2     # m: schmalere Quader verdecken nicht (Stämme, Pfosten, Masten: der Quader ist breiter als das Bild)
 SMOKE_BUCKETS = 2        # v57: Schornsteinrauch - jedes Bild nur jeder 2. Schornstein (Rauch steigt langsam: 30 Hz reichen)
 
+# v59: Polytown-LOD (nur Darstellung, jeder Rechner selbst): weiter als PT_LOD_DIST m von der Blockmitte werden Dreiecke unter
+# PT_LOD_AREA m² nicht gezeichnet (dieselben Eckpunkte, zweite Indexliste; Kollision unberührt). Durchsichtiges und Leuchtendes
+# bleibt immer vollständig. Ab Vergrösserung PT_LOD_ZOOM (Zielen, Zielfernrohr, Geschütz) ist das LOD aus.
+PT_LOD_ON = True
+PT_LOD_DIST = 80.0
+PT_LOD_AREA = 0.05
+PT_LOD_ZOOM = 1.25
+PT_LOD_OFF_SCALE = 0.001       # Panda multipliziert den Abstand damit: klein = alles zählt als nah
 MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
 
 SHADOW_R = 90.0          # m: Blob-Schatten von Monstern nur bis zu dieser Entfernung zur Kamera (Titan & Co.: weiter)
@@ -5883,7 +5891,7 @@ class World:
         self.pending = []        # [Restzeit, Art] zum Wiederauftauchen
         self.boss_n, self.boss_wave = {}, {}             # 13f: Bosse je Art beim Rundenstart; laufender Zyklus [Restzeit, offen]
         self.nav_clock, self.nav_ms = 0.0, NAV_MS        # 13f: Wegsuche ins Gebäude (nav_steer)
-        self.nav_frac = 1.0                              # v57: Anteil des Budgets je Teilschritt (Game setzt 1/Teilschritte)
+        self.mob_dt = 0.0                                # v59: aufgelaufene Zeit der Monster-KI (läuft nur im letzten Teilschritt)
         self.noise_clock = 0.0   # Lärm: nächste Auswertung der Spielerbewegung
         self.noise_log = []      # NOISE_DEBUG: (x, y, Radius, Restzeit) zur Anzeige
         self.events = []         # für die Darstellung (Treffer, Schüsse, ...)
@@ -11223,9 +11231,10 @@ class World:
         self.events.append(("newmatch",))
         netlog(f"Host: Lobby beendet, Runde startet mit {len(self.players)} Spielern")
 
-    def update(self, dt):
+    def update(self, dt, last_sub=True):
         """Simulation der Welt (Monster, Kugeln, Schaden, Punkte) - läuft nur beim Host
-        bzw. im Einzelspiel. Die Gegenseite sind alle Spieler in self.players."""
+        bzw. im Einzelspiel. Die Gegenseite sind alle Spieler in self.players.
+        v59: last_sub = letzter Teilschritt des Bildes. Nur dann rechnet die Monster-KI, mit der aufgelaufenen Zeit."""
         players = list(self.players.values())
         if self.lobby:                                   # Lobby: nichts läuft, alle warten auf 'Spiel starten'
             for pl in players:
@@ -11272,11 +11281,15 @@ class World:
         self.auto_pickup(players)                        # v54: bekannte Granaten/Gadgets im Vorbeilaufen
         self.update_noise(dt, players)
         self.nav_clock += dt                             # 13f: Wegsuche: Uhr und Rechenzeit je Bild
-        self.nav_ms = NAV_MS * self.nav_frac             # v57: bei Teilschritten nur ein Teil (Budget gilt je Bild)
-        self.update_mobs_staggered(dt, players)          # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
+        self.mob_dt += dt
+        if last_sub:                                     # v59: Monster-KI einmal je Bild, sonst verdoppelt sie sich unter 29 FPS
+            self.nav_ms = NAV_MS                         # (Wegsuch-Budget gilt damit von selbst je Bild)
+            self.update_mobs_staggered(self.mob_dt, players)   # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
+            self.mob_dt = 0.0
         if self.rocks:
             self.update_rocks(dt)
-        self.separate_mobs()
+        if last_sub:
+            self.separate_mobs()
         for pl in players:
             self.push_player(pl)
         for m in self.mobs:                              # 10e: eigene Drohnen leben nur PDRONE_LIFE s
@@ -14628,6 +14641,55 @@ def _pt_geom(g):
     return geom
 
 
+def _pt_far_geom(g, geom):
+    """v59: Geom für die Ferne: dieselben Eckpunkte, ohne Dreiecke unter PT_LOD_AREA. None = nichts fällt weg (Original nehmen)."""
+    P, I = array("f"), array("H")
+    P.frombytes(g["P"])
+    I.frombytes(g["I"])
+    lim = 4.0 * PT_LOD_AREA * PT_LOD_AREA                  # |Kreuzprodukt|² = (2 x Fläche)²
+    keep = array("H")
+    add = keep.extend
+    for a, b, c in zip(I[0::3], I[1::3], I[2::3]):
+        a3, b3, c3 = a * 3, b * 3, c * 3
+        ax, ay, az = P[a3], P[a3 + 1], P[a3 + 2]
+        ux, uy, uz = P[b3] - ax, P[b3 + 1] - ay, P[b3 + 2] - az
+        vx, vy, vz = P[c3] - ax, P[c3 + 1] - ay, P[c3 + 2] - az
+        nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+        if nx * nx + ny * ny + nz * nz >= lim:
+            add((a, b, c))
+    if len(keep) == len(I) or not keep:
+        return None if keep else False                     # False = in der Ferne gar nichts zu zeichnen
+    prim = GeomTriangles(Geom.UHStatic)
+    prim.setIndexType(Geom.NTUint16)
+    prim.modifyVertices(len(keep))
+    arr = prim.modifyVertices()
+    data = keep.tobytes()
+    try:
+        arr.modifyHandle().copyDataFrom(data)
+    except Exception:                                      # ältere/andere Panda3D-Fassung: Pufferzugriff
+        memoryview(arr).cast("B")[:] = data
+    far = Geom(geom.getVertexData())
+    far.addPrimitive(prim)
+    return far
+
+
+def _pt_lod_nodes(chunks, fars, reduced):
+    """v59: Blöcke, in denen etwas wegfällt, werden zum LODNode (nah alles, fern ohne Kleinteile); der Rest bleibt, wie er ist."""
+    out = []
+    for k, node in chunks.items():
+        if k not in reduced:
+            out.append(node)
+            continue
+        lod = LODNode("pt_lod_%d_%d" % k)
+        lod.setCenter(node.getBounds().getCenter())
+        lod.addChild(node)
+        lod.addSwitch(PT_LOD_DIST, 0.0)
+        lod.addChild(fars[k])
+        lod.addSwitch(1e6, PT_LOD_DIST)
+        out.append(lod)
+    return out
+
+
 SMOKE_PUFFS = 14             # Puffs je rauchendem Schornstein
 SMOKE_PERIOD = 10.0          # Sekunden, bis ein Puff aufgestiegen und verblasst ist
 
@@ -14652,6 +14714,7 @@ def build_pt_scene(world, progress=None):
                                   TransparencyAttrib.make(TransparencyAttrib.MAlpha)),
               3: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone), LightAttrib.makeAllOff())}
     chunks, spins = {}, []
+    fars, reduced = {}, set()                              # v59: Fern-Geometrie je Block (siehe PT_LOD_*)
     gl = pt["groups"]
     for n, g in enumerate(gl):
         if n % 60 == 0:
@@ -14670,11 +14733,22 @@ def build_pt_scene(world, progress=None):
         node = chunks.get(k)
         if node is None:
             node = chunks[k] = GeomNode("pt_%d_%d" % k)
-        node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
+        state = _pt_state(states[g["c"]], g.get("tx"))
+        node.addGeom(geom, state)
+        far = _pt_far_geom(g, geom) if PT_LOD_ON and g["c"] in (0, 1) else None
+        if far is not None:
+            reduced.add(k)
+        if far is not False:
+            fnode = fars.get(k)
+            if fnode is None:
+                fnode = fars[k] = GeomNode("pt_fern")
+            fnode.addGeom(far if far is not None else geom, state)
+        elif k not in fars:
+            fars[k] = GeomNode("pt_fern")
     zone = []
     if world.mode == "koth":
         zone = _koth_zone()
-    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], list(chunks.values()), spins,
+    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], _pt_lod_nodes(chunks, fars, reduced), spins,
              [tuple(q) for q in (pt["meta"].get("smoke") or [])]]
     return GeomNode("leer_land"), GeomNode("leer_wasser"), zone, extra
 
@@ -129151,9 +129225,8 @@ class Game(ShowBase):
         else:                              # Einzelspiel oder Host: die Welt läuft hier
             if self.host is not None:
                 self.host.poll(dt)         # Eingaben und Schüsse der Mitspieler
-            world.nav_frac = 1.0 / nsub    # v57: Wegsuch-Budget gilt je Bild, nicht je Teilschritt (sonst bei < 30 FPS doppelt)
-            for _ in range(nsub):
-                world.update(dt / nsub)
+            for i_ in range(nsub):         # v59: Monster-KI nur im letzten Teilschritt (World.update)
+                world.update(dt / nsub, i_ == nsub - 1)
             if self.host is not None:
                 self.host.queue_events(world.events)
                 self.host.send(dt)         # Snapshot an alle Mitspieler
@@ -130371,6 +130444,14 @@ class Game(ShowBase):
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
     # ------------------------------------------------------------ Darstellung
+    def apply_lod_zoom(self):
+        """v59: Mit Vergrösserung (Zielen, Zielfernrohr, Geschütz) kein LOD: die Ferne zeigt volle Details."""
+        off = (math.tan(math.radians(self.fov_base) * 0.5)
+               >= PT_LOD_ZOOM * math.tan(math.radians(self.fov_cur) * 0.5))
+        if off != getattr(self, "lod_zoom_off", False):
+            self.lod_zoom_off = off
+            self.camNode.setLodScale(PT_LOD_OFF_SCALE if off else 1.0)
+
     def update_views(self, dt, mdx, mdy):
         pl, world = self.player, self.world
         w = WEAPONS[pl.cur]
@@ -130381,6 +130462,7 @@ class Game(ShowBase):
         target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) * (self.fov_base / FOV) if pl.ads else self.fov_base
         self.fov_cur += (target - self.fov_cur) * min(1.0, 14 * dt)
         self.camLens.setFov(self.fov_cur)
+        self.apply_lod_zoom()
         self.gun_lens.setAspectRatio(self.getAspectRatio())
         self.ads_t += ((1.0 if pl.ads else 0.0) - self.ads_t) * min(1.0, 14 * dt)
         self.death_t = min(1.0, self.death_t + dt * 1.5) if pl.hp <= 0 else 0.0

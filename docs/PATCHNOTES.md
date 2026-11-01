@@ -2,6 +2,23 @@
 
 Neueste Änderungen oben.
 
+## Performance III: Polytown-LOD ab 80 m, Monster-KI einmal je Bild (Robin, 2026-11-01)
+Gilt für alle Modi. NET_VERSION bleibt 56 (LOD nur eigene Darstellung; Monster-KI rechnet nur der Host, Mitspieler bekommen Snapshots). Blender, Kartendatei und Kollision bleiben unverändert.
+
+Polytown-LOD (`PT_LOD_*`, nur Darstellung):
+- **Weiter als 80 m von der Blockmitte** fallen Dreiecke unter 0,05 m² weg (gleiche Eckpunkte, zweite Indexliste, Blöcke als `LODNode`). Durchsichtiges und Leuchtendes bleibt vollständig.
+- Gemessen (Software-OpenGL, 1280 x 720, Vergleich): Dreiecke vom Kartenrand zum Zentrum rund halbiert, Bildzeit vom Rand 152 -> 105 ms, 160 -> 131 ms, aus dem Zentrum 114 -> 98 ms. Bildvergleich: unter 0,2 % der Pixel weichen ab, Wind und Rauch eingerechnet.
+- **Zoom schaltet das LOD aus**: ab 1,25-facher Vergrösserung (Zielen, Zielfernrohr, Geschütz) gilt alles als nah (`apply_lod_zoom`). Geprüft im 14-Grad-Zielfernrohr: Bild mit Abschaltung und Bild mit erzwungen vollen Details sind pixelgleich.
+- Nebeneffekt: Beim Zoomen zeigen auch ferne Monster ihr detailliertes Modell.
+- Ladezeit rund 1 s länger.
+
+Monster-KI bei niedriger Bildrate:
+- **Bug behoben**: Unter etwa 29 FPS lief die Monster-KI je Teilschritt, also doppelt oder dreifach, und verstärkte den Einbruch. `update_mobs_staggered` und `separate_mobs` laufen jetzt nur im letzten Teilschritt des Bildes, mit der aufgelaufenen Zeit (`World.mob_dt`, `World.update(dt, last_sub)`). `nav_frac` entfällt, das Wegsuch-Budget gilt von selbst je Bild.
+- Gemessen (Gottlos, 223 Monster, alarmiert): `World.update` bei 25 FPS 18,0 -> 9,4 ms, bei 12 FPS 26,6 -> 9,7 ms.
+- Verhalten: bei 60 FPS bitgleich (gleicher Schaden, gleiche Zustände). Bei 25 und 12 FPS gleiche Laufstrecken im Rahmen der Streuung, keine Monster in Wänden.
+
+Technik: `_pt_far_geom`, `_pt_lod_nodes`, `Game.apply_lod_zoom`, `World.mob_dt`. Zum Nachjustieren: `PT_LOD_ON`, `PT_LOD_DIST`, `PT_LOD_AREA`, `PT_LOD_ZOOM`.
+
 ## Performance II: Monster-Culling (Sichtkegel + Wände), schnellere Sichtlinie (Robin, 2026-10-29)
 Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung; die Sichtlinie liefert bitgleich dasselbe Ergebnis).
 
