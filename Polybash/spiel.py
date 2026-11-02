@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 56         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 57         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 220               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -876,6 +876,12 @@ def set_world_size(size):
     TO = CENTER - 80.0
 
 
+def set_world_sun(sun):
+    """Sonnenrichtung der nächsten Welt (None = Standard)."""
+    global SUN
+    SUN = norm(sun) if sun else SUN0
+
+
 # --- Fallschaden
 FALL_SAFE = 5.5          # bis zu dieser Fallhöhe (m) passiert nichts (Hausdach, Burgmauer, Sprung in den Tunnelschacht)
 FALL_DMG = 11.0          # Schaden pro Meter darüber (Sprung vom 9-m-Turm: ~50, ab ~14,6 m tödlich)
@@ -1036,6 +1042,8 @@ def norm(v):
 
 
 SUN = norm(SUN)
+SUN0 = SUN                 # Sonne der Standardkarten (Himmel); eine Karte kann SUN für ihr Licht ändern ("sun")
+BAKE_LIGHT = None         # Karte mit eigenem Licht: f((x, y, z), n.Sonne) -> (r, g, b) statt Umgebung + Sonne in Mesh.tri
 
 
 def seg_point_dist(a, b, p):
@@ -2599,6 +2607,8 @@ def sanitize_map(raw):
     Fehlt eine Liste, nimmt das Spiel für diese Sache die Standard-Karte; eine vorhandene (auch leere) Liste gilt wörtlich."""
     if not isinstance(raw, dict) or raw.get("format") != MAP_FORMAT:
         raise ValueError("Das ist keine Polybash-Karte")
+    if raw.get("inari") and "blocks" not in raw:         # eingebaute Karte: übers Netz kommt nur die Kennung
+        return inari_mapdata()
     if raw.get("dev") and "blocks" not in raw:           # v50: Testgelände - übers Netz kommt nur die Kennung
         raw = dev_map_raw()
     m = {"name": str(raw.get("name") or "Karte")[:40], "author": str(raw.get("author") or "")[:30]}
@@ -2657,7 +2667,8 @@ def sanitize_map(raw):
             x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
             if x1 - x0 < 0.3 or y1 - y0 < 0.3:
                 continue
-            out.append(dict(x0=x0, y0=y0, x1=x1, y1=y1, h=h, za=za, zb=zb, c=col or STONE_D, mm=bool(b.get("mm", h >= 2.0))))
+            out.append(dict(x0=x0, y0=y0, x1=x1, y1=y1, h=h, za=za, zb=zb, c=col or STONE_D, mm=bool(b.get("mm", h >= 2.0)),
+                            vis=bool(b.get("vis", 1))))
         v = out
     m["blocks"] = v
     v = lst("houses")
@@ -5730,6 +5741,1116 @@ def decode_mesh(raw, size):
         return None
 
 
+# ------------------------------------------------------------ Karte "Inari Temple Sanctuary" (eingebaut, aus dem Code)
+# 400 x 400 m, Gelände als Dreiecksnetz, Schrein aus Quadern. Die Karte entsteht auf jedem Rechner gleich aus diesem Code,
+# übers Netz geht nur die Kennung INARI_MAP_STUB. Koordinaten in der Konfiguration: (0, 0) = Kartenmitte, wie in der
+# Spezifikation; to_world() rechnet in die Spielkoordinaten um (Ecke bei 0/0).
+INARI_MAP_NAME = "Inari Temple Sanctuary"
+INARI_MAP_PATH = "builtin:inari"
+INARI_MAP_STUB = {"format": MAP_FORMAT, "name": INARI_MAP_NAME, "inari": 1}
+INA_WOOD = (0.39, 0.28, 0.20)
+INA_WOOD_D = (0.26, 0.19, 0.14)
+INA_RED = (0.76, 0.19, 0.11)
+INA_STONE = (0.52, 0.51, 0.47)
+INA_MOSS = (0.40, 0.44, 0.34)
+
+
+class MapConfigInariSanctuary:
+    """Alle Daten der Karte: Maße, Oberflächen, Wege, Schrein, Licht. Die Bauroutinen unten lesen nur von hier."""
+    NAME = INARI_MAP_NAME
+    SIZE = 400.0
+    HALF = SIZE / 2.0
+    Z_EDGE, Z_SHRINE = 0.0, 18.0            # Höhe am Aussenrand / am Sockel des Schreins
+    Z_FLOOR = 18.2                          # Fussboden im Schrein (Plattform + Stufe)
+    WALKABLE_R = 195.0                      # Felsring beginnt hier: ergibt rund 120.000 m² begehbare Fläche
+    GRID = 3.0                              # Rasterweite des Geländenetzes
+    MARGIN = 60.0                           # so weit reicht das Gelände über die Karte hinaus (Felsen im Nebel)
+
+    # Oberflächen. DEFORMABLE_EARTH ist nur ein Merker: das Spiel kann Gelände (noch) nicht verformen.
+    STATIC_STONE, DEFORMABLE_EARTH = "STATIC_STONE", "DEFORMABLE_EARTH"
+    SURFACE_TYPES = {"STONE_PATH": STATIC_STONE, "TEMPLE_FOUNDATION": STATIC_STONE,
+                     "FOREST_DIRT": DEFORMABLE_EARTH, "MOSS_EARTH": DEFORMABLE_EARTH}
+    SECTOR = 25.0                           # Kantenlänge eines Sektors im Oberflächenraster
+
+    PLAZA_HALF = 33.0                       # Tempelplattform (Stein): Halbbreite
+    PATH_HW, SIDE_HW = 3.0, 1.5             # Halbbreite Hauptweg / Nebenweg
+    # Vier gewundene Hauptwege vom Aussenring zur Plattform. N und S sind Rampen (Fahrzeuge), O und W enden an Treppen.
+    PATHS = {
+        "N": ((-70, 178), (-105, 130), (-55, 96), (-72, 62), (-18, 66), (0, 33.4)),
+        "E": ((178, 70), (130, 105), (96, 55), (62, 72), (66, 18), (38.4, 0)),
+        "S": ((70, -178), (105, -130), (55, -96), (72, -62), (18, -66), (0, -33.4)),
+        "W": ((-178, -70), (-130, -105), (-96, -55), (-62, -72), (-66, -18), (-38.4, 0)),
+    }
+    RAMPS, STAIRS = ("N", "S"), ("E", "W")
+    TORII_SPANS = ((0.14, 0.34), (0.58, 0.82))   # Abschnitte der Wege (Anteil der Länge) mit Torii-Tunneln
+    TORII_GAP = (2.0, 4.0)                  # Abstand der Tore in einem Tunnel
+    # Kleine Altäre im Wald: Position, je zwei Nebenwege zu den nächsten Hauptwegen
+    ALTARS = ((-20, 135), (135, 20), (20, -135), (-135, -20), (-135, 62), (62, 135), (135, -62), (-62, -135))
+    SPAWN_NODES = ((-70, 178), (178, 70), (70, -178), (-178, -70))        # Enden der Hauptwege
+    SPAWN_EXTRA = ((-150, 110), (110, 150), (150, -110), (-110, -150), (-20, 110), (110, 20), (20, -110), (-110, -20),
+                   (-48, 48), (48, 48), (48, -48), (-48, -48), (-28, 28), (28, 28), (28, -28), (-28, -28))
+    VEHICLES = ((-96, 118, 0.0), (96, -118, 180.0), (-80, 150, 0.0), (80, -150, 180.0))
+    CRATES = ((-20, 128), (128, 20), (20, -128), (-128, -20), (-128, 62), (62, 128), (128, -62), (-62, -128),
+              (-8.2, -8.2), (8.2, 8.2), (-26, 26), (26, -26))
+
+    # Schrein (Grundriss Plus, relativ zur Mitte, Höhen relativ zu Z_FLOOR)
+    SHRINE = {"halls": 10.0, "arm": 15.0, "arm_half": 5.0, "wall": 0.6, "height": 14.0, "hall_top": 11.6, "arm_top": 8.2,
+              "catwalk_z": 5.0, "catwalk_w": 3.0, "buddhas": ((-4.6, -4.6), (4.6, -4.6), (-4.6, 4.6), (4.6, 4.6)),
+              "buddha_h": 11.3}
+    SHRINE_BOUNDS = (-15.3, -15.3, 0.0, 15.3, 15.3, 14.0)       # Bounding Box: x0, y0, z0, x1, y1, z1 (z relativ zum Boden)
+    PORTALS = {  # Öffnungen: (x0, y0, x1, y1, z0, z1, Ziel)
+        "N": (-1.8, 15.0, 1.8, 15.0, 0.0, 3.2, "ground"), "S": (-1.8, -15.0, 1.8, -15.0, 0.0, 3.2, "ground"),
+        "E": (15.0, -4.7, 15.0, -2.7, 0.0, 3.2, "catwalk"), "W": (-15.0, 2.7, -15.0, 4.7, 0.0, 3.2, "catwalk"),
+    }
+
+    # Licht (Spezifikation, Abschnitt 3). exposure: das Spiel hat keine Tonwerte, Bilder aus Vertexfarben brauchen mehr Grund.
+    LIGHT_FOREST = dict(ambient=(0.15, 0.18, 0.25, 1.0), exposure=2.3, sun_col=(1.0, 0.72, 0.50), sun_gain=0.9,
+                        sun_dir=(-0.62, -0.74, 0.27), canopy=0.16, fog_col=(0.16, 0.19, 0.25), fog_dens=0.0105,
+                        sky_scale=(0.22, 0.24, 0.29), actor_scale=(0.66, 0.70, 0.84))
+    LIGHT_SHRINE = dict(ambient=(0.27, 0.20, 0.15, 1.0), exposure=1.0, torch_col=(1.0, 0.6, 0.2, 1.0), torch_r=10.0,
+                        torch_gain=0.62, flicker=0.06, fog_col=(0.19, 0.12, 0.07), fog_dens=0.0030,
+                        actor_scale=(1.0, 0.84, 0.66))
+    DYNAMIC_LIGHTS = False                  # Echtzeit-Fackeln mit Schatten (teuer, das Spiel zeichnet sonst ohne Lichtquellen)
+    DYNAMIC_SHADOW_LIGHTS = 2               # so viele der Echtzeit-Lichter werfen Schatten
+
+    @classmethod
+    def to_world(cls, x, y):
+        return x + cls.HALF, y + cls.HALF
+
+    @classmethod
+    def torches(cls):
+        """Fackeln: (x, y, z, Zone). Zone 'in' = leuchtet nur im Schrein, 'out' = nur draussen."""
+        z, zc = cls.Z_FLOOR, cls.Z_FLOOR + cls.SHRINE["catwalk_z"] + 2.2
+        out = [(sx * 9.1, sy * 9.1, z + 3.0, "in") for sx in (-1, 1) for sy in (-1, 1)]      # Ecken der Halle
+        for k in (-1, 1):
+            out += [(k * 9.3, 6.5 * s, zc, "in") for s in (-1, 0, 1)]                        # Galerie
+            out += [(6.5 * s, k * 9.3, zc, "in") for s in (-1, 0, 1)]
+            out += [(0.0, k * 11.2, z + 2.7, "in")]                                          # Windfang
+            out += [(s * 2.6, k * 15.7, z + 2.7, "out") for s in (-1, 1)]                    # Tore Nord/Süd
+        out += [(15.7, -5.6, z + 2.7, "out"), (15.7, -1.8, z + 2.7, "out"),                  # Tore Ost/West
+                (-15.7, 5.6, z + 2.7, "out"), (-15.7, 1.8, z + 2.7, "out"),
+                (13.6, 3.7, z + 7.0, "in"), (-13.6, -3.7, z + 7.0, "in"),                    # Treppenköpfe
+                (13.6, -4.2, z + 2.4, "in"), (-13.6, 4.2, z + 2.4, "in")]                    # Treppenfüsse
+        return out
+
+    @classmethod
+    def in_shrine(cls, x, y, m=0.0):
+        """Liegt (x, y) relativ zur Mitte im Inneren des Schreins (m = Rand nach innen)?"""
+        a, b = abs(x), abs(y)
+        h, arm, w = 9.75 - m, 14.75 - m, 4.75 - m
+        return (a <= h and b <= h) or (a <= arm and b <= w) or (b <= arm and a <= w)
+
+    @classmethod
+    def surface_at(cls, x, y):
+        """Oberflächentyp eines Punkts (relativ zur Mitte): STATIC_STONE oder DEFORMABLE_EARTH (Sektorraster + Wege)."""
+        data = inari_data()
+        if max(abs(x), abs(y)) <= cls.PLAZA_HALF or data["open"].get((int(round(x / cls.GRID)), int(round(y / cls.GRID))), 99) <= cls.PATH_HW:
+            return cls.STATIC_STONE
+        return cls.DEFORMABLE_EARTH
+
+    @classmethod
+    def sector_grid(cls):
+        """{(i, j): Typ} für das Sektorraster: Stein, sobald die Sektormitte auf Weg oder Plattform liegt."""
+        n = int(cls.SIZE / cls.SECTOR)
+        return {(i, j): cls.surface_at(-cls.HALF + (i + 0.5) * cls.SECTOR, -cls.HALF + (j + 0.5) * cls.SECTOR)
+                for i in range(n) for j in range(n)}
+
+
+def _ina_spline(pts, step=1.5):
+    """Catmull-Rom durch pts, gleichmässig alle step Meter abgetastet."""
+    p = [tuple(map(float, pts[0]))] + [tuple(map(float, q)) for q in pts] + [tuple(map(float, pts[-1]))]
+    raw = []
+    for i in range(1, len(p) - 2):
+        a, b, c, d = p[i - 1], p[i], p[i + 1], p[i + 2]
+        for k in range(40):
+            t = k / 40.0
+            t2, t3 = t * t, t * t * t
+            raw.append(tuple(0.5 * (2 * b[n] + (c[n] - a[n]) * t + (2 * a[n] - 5 * b[n] + 4 * c[n] - d[n]) * t2
+                                    + (3 * b[n] - a[n] - 3 * c[n] + d[n]) * t3) for n in (0, 1)))
+    raw.append(p[-2])
+    out = [raw[0]]
+    left = step
+    for q0, q1 in zip(raw, raw[1:]):
+        seg = math.hypot(q1[0] - q0[0], q1[1] - q0[1])
+        pos = 0.0
+        while seg - pos >= left and seg > 1e-9:
+            pos += left
+            f = pos / seg
+            out.append((q0[0] + (q1[0] - q0[0]) * f, q0[1] + (q1[1] - q0[1]) * f))
+            left = step
+        left -= seg - pos
+    if out[-1] != raw[-1]:
+        out.append(raw[-1])
+    return out
+
+
+def _ina_noise(x, y):
+    return (math.sin(x * 0.037 + 1.1) * math.cos(y * 0.043 - 0.6) + 0.55 * math.sin(x * 0.091 - y * 0.073 + 0.4)
+            + 0.3 * math.sin(x * 0.19 + 2.0) * math.sin(y * 0.17 + 1.0))
+
+
+def _ina_base(x, y):
+    """Geländehöhe ohne Wege: nichtlinearer Anstieg zur Mitte, unebener Waldboden, Felsring am Rand."""
+    cfg = MapConfigInariSanctuary
+    r = math.hypot(x, y)
+    a = math.atan2(y, x)
+    s = smoothstep(36.0, 188.0, r)
+    z = (cfg.Z_SHRINE - 2.8) * (1.0 - s) ** 1.3
+    z = max(cfg.Z_EDGE + 0.2, z + _ina_noise(x, y) * 1.15 * smoothstep(38.0, 80.0, r))
+    edge = cfg.WALKABLE_R + 4.0 * math.sin(3 * a + 0.7) + 2.5 * math.sin(7 * a)
+    if r > edge:
+        d = r - edge
+        z += min(62.0, d * 1.9 + 0.012 * d * d) + _ina_noise(y * 1.7, x * 1.7) * min(3.0, d * 0.2)
+    return z
+
+
+class _InaGroup:
+    """Render-Gruppe des Karten-Netzes: flache Dreiecke mit eigener Normalen."""
+
+    def __init__(self, mat, tint):
+        self.mat, self.tint = mat, tint
+        self.v, self.n, self.t = [], [], []
+
+    def tri(self, a, b, c, n=None):
+        if n is None:
+            n = norm(cross(sub(b, a), sub(c, a)))
+        k = len(self.v)
+        self.v += [a, b, c]
+        self.n += [n, n, n] if len(n) == 3 and not isinstance(n[0], tuple) else list(n)
+        self.t.append((k, k + 1, k + 2))
+
+    def quad(self, a, b, c, d):
+        n = norm(cross(sub(b, a), sub(c, a)))
+        self.tri(a, b, c, n)
+        self.tri(a, c, d, n)
+
+    def out(self):
+        return self.mat, self.tint, self.v, self.n, self.t
+
+
+class _InaColl:
+    def __init__(self):
+        self.v, self.t, self.k = [], [], []
+
+    def tri(self, a, b, c, kind=0):
+        i = len(self.v)
+        self.v += [a, b, c]
+        self.t.append((i, i + 1, i + 2))
+        self.k.append(kind)
+
+    def quad(self, a, b, c, d, kind=0):
+        self.tri(a, b, c, kind)
+        self.tri(a, c, d, kind)
+
+
+def _ina_obox(g, coll, cx, cy, cz, lx, ly, lz, ang):
+    """Gedrehter Quader (Länge lx quer zum Blick, um ang gedreht) als Mesh, optional mit Kollision."""
+    ca, sa = math.cos(ang), math.sin(ang)
+
+    def p(u, v, w):
+        return (cx + u * ca - v * sa, cy + u * sa + v * ca, cz + w)
+    hx, hy, hz = lx / 2, ly / 2, lz / 2
+    c = [p(sx * hx, sy * hy, sz * hz) for sz in (-1, 1) for sy, sx in ((-1, -1), (-1, 1), (1, 1), (1, -1))]
+    faces = ((0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7), (4, 5, 6, 7), (3, 2, 1, 0))
+    for a, b, d, e in faces:
+        g.quad(c[a], c[b], c[d], c[e])
+        if coll is not None:
+            coll.quad(c[a], c[b], c[d], c[e], 4)      # Dach-Bit: Balken zählen nicht als Geländehöhe
+
+
+def _ina_lathe(g, cx, cy, z0, prof, sides=14, sx=1.0):
+    """Drehkörper aus (Radius, Höhe); sx staucht/streckt quer (flache Statuen)."""
+    rings = [[(cx + math.cos(2 * math.pi * i / sides) * r * sx, cy + math.sin(2 * math.pi * i / sides) * r, z0 + h)
+              for i in range(sides)] for r, h in prof]
+    for a, b in zip(rings, rings[1:]):
+        for i in range(sides):
+            j = (i + 1) % sides
+            g.quad(a[i], a[j], b[j], b[i])
+
+
+class _InaBuilder:
+    """Baut die Karte einmal: Gelände, Wege, Schrein, Tore, Altäre, Wald."""
+
+    def __init__(self):
+        self.cfg = cfg = MapConfigInariSanctuary
+        self.C = cfg.HALF
+        self.rng = random.Random(4610)
+        self.blocks, self.spawns, self.spawn_z, self.crates, self.vehicles = [], [], [], [], []
+        self.coll = _InaColl()
+        self.groups = {k: _InaGroup(*v) for k, v in {
+            "moss": ("grass", (0.56, 0.64, 0.56)), "dirt": ("dirt", (0.56, 0.48, 0.38)), "rock": ("rock", (0.72, 0.74, 0.78)),
+            "stone": ("cobble", (1.0, 0.98, 0.92)), "gravel": ("dirt", (0.82, 0.74, 0.62)),
+            "torii": ("wood", (1.45, 0.34, 0.20)), "torii_cap": ("wood", (0.28, 0.25, 0.25)), "gold": ("plaster", (1.05, 0.80, 0.42)),
+            "statue": ("stone", (0.92, 0.92, 0.88)), "bib": ("wood", (1.3, 0.25, 0.18)), "roof": ("roof", (0.52, 0.54, 0.60)),
+            "gable": ("wood", (0.75, 0.48, 0.30)), "iron": ("metal", (0.35, 0.33, 0.32)),
+            "beam": ("wood", (0.42, 0.30, 0.24)), "beam_red": ("plaster", (1.3, 0.34, 0.2))}.items()}
+        self.rk = 0                                        # Vierteldrehungen für den Schreinbau
+        self.lines = {k: _ina_spline(v) for k, v in cfg.PATHS.items()}
+        self.side_lines = self.make_side_paths()
+        self.stamp = {}                                    # Rasterpunkt -> (Abstand, Weghöhe, Halbbreite)
+        self.open = {}                                     # Rasterpunkt -> Abstand zum nächsten Weg (Lichtung im Wald)
+        self.heights = {}
+        self.make_heights()
+        self.make_terrain()
+        self.make_paths()
+        self.make_plaza()
+        self.make_shrine()
+        self.make_torii()
+        self.make_altars()
+        self.make_forest()
+        self.make_points()
+
+    # ------------------------------------------------------------ Höhen
+    def make_side_paths(self):
+        """Nebenwege: jeder Altar hängt an zwei Hauptwegen (unterschiedliche Richtung)."""
+        out = []
+        for ax, ay in self.cfg.ALTARS:
+            cand = []
+            for key, ln in self.lines.items():
+                i = min(range(0, len(ln), 4), key=lambda q: math.hypot(ln[q][0] - ax, ln[q][1] - ay))
+                cand.append((math.hypot(ln[i][0] - ax, ln[i][1] - ay), key, ln[i]))
+            cand.sort(key=lambda e: e[0])
+            for _d, _k, q in cand[:2]:
+                mx, my = (ax + q[0]) / 2 + (q[1] - ay) * 0.22, (ay + q[1]) / 2 - (q[0] - ax) * 0.22
+                out.append(_ina_spline(((ax, ay), (mx, my), q)))
+        return out
+
+    def stamp_line(self, ln, hw, ramp=False, stair=False):
+        G = self.cfg.GRID
+        rad = hw + 10.0
+        k = int(rad / G) + 1
+        total = len(ln) - 1
+        for n, (x, y) in enumerate(ln):
+            left = (total - n) * 1.5
+            pz = sum(_ina_base(ln[max(0, min(total, n + o))][0], ln[max(0, min(total, n + o))][1]) for o in range(-6, 7, 3)) / 5.0
+            if ramp:
+                pz += (self.cfg.Z_SHRINE - pz) * (1.0 - smoothstep(0.0, 30.0, left))
+            elif stair and left < 16.0:
+                pz = _ina_base(ln[total][0], ln[total][1])
+            ci, cj = int(round(x / G)), int(round(y / G))
+            for i in range(ci - k, ci + k + 1):
+                for j in range(cj - k, cj + k + 1):
+                    d = math.hypot(i * G - x, j * G - y)
+                    if d > rad:
+                        continue
+                    old = self.stamp.get((i, j))
+                    if old is None or d - hw < old[0] - old[2]:
+                        self.stamp[(i, j)] = (d, pz, hw)
+                    if d < self.open.get((i, j), 99.0):
+                        self.open[(i, j)] = d
+
+    def make_heights(self):
+        cfg, G = self.cfg, self.cfg.GRID
+        for key, ln in self.lines.items():
+            self.stamp_line(ln, cfg.PATH_HW, key in cfg.RAMPS, key in cfg.STAIRS)
+        for ln in self.side_lines:
+            self.stamp_line(ln, cfg.SIDE_HW)
+        n = int((self.C + cfg.MARGIN) / G)
+        self.n = n
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                x, y = i * G, j * G
+                z = _ina_base(x, y)
+                s = self.stamp.get((i, j))
+                if s is not None:
+                    z += (s[1] - z) * (1.0 - smoothstep(s[2] + 0.5, s[2] + 9.5, s[0]))
+                if max(abs(x), abs(y)) <= cfg.PLAZA_HALF:
+                    z = cfg.Z_SHRINE
+                self.heights[(i, j)] = z
+
+    def h(self, x, y):
+        """Höhe auf den Dreiecken des Netzes (gleiche Teilung wie make_terrain)."""
+        G = self.cfg.GRID
+        fx, fy = x / G, y / G
+        i, j = int(math.floor(fx)), int(math.floor(fy))
+        tx, ty = fx - i, fy - j
+        H = self.heights
+        n = self.n
+        i, j = max(-n, min(n - 1, i)), max(-n, min(n - 1, j))
+        a, b, c, d = H[(i, j)], H[(i + 1, j)], H[(i + 1, j + 1)], H[(i, j + 1)]
+        if tx >= ty:
+            return a + (b - a) * tx + (c - b) * ty
+        return a + (c - d) * tx + (d - a) * ty
+
+    def make_terrain(self):
+        cfg, G, H, n = self.cfg, self.cfg.GRID, self.heights, self.n
+
+        def nrm(i, j):
+            a = H.get((i - 1, j), H[(i, j)]) - H.get((i + 1, j), H[(i, j)])
+            b = H.get((i, j - 1), H[(i, j)]) - H.get((i, j + 1), H[(i, j)])
+            return norm((a, b, 2 * G))
+        N = {}
+        C = self.C
+        for j in range(-n, n):
+            for i in range(-n, n):
+                keys = ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))
+                ps = [(k[0] * G + C, k[1] * G + C, H[k]) for k in keys]
+                for k in keys:
+                    if k not in N:
+                        N[k] = nrm(*k)
+                self.coll.quad(*ps)
+                x, y = (i + 0.5) * G, (j + 0.5) * G
+                r = math.hypot(x, y)
+                up = norm(cross(sub(ps[1], ps[0]), sub(ps[2], ps[0])))[2]
+                if max(abs(x), abs(y)) <= cfg.PLAZA_HALF:
+                    g = self.groups["stone"]
+                elif up < 0.78 or r > cfg.WALKABLE_R + 2.0:
+                    g = self.groups["rock"]
+                elif up < 0.93:                                # FOREST_DIRT: offene Erde an Hängen
+                    g = self.groups["dirt"]
+                else:
+                    g = self.groups["moss"]
+                g.tri(ps[0], ps[1], ps[2], (N[keys[0]], N[keys[1]], N[keys[2]]))
+                g.tri(ps[0], ps[2], ps[3], (N[keys[0]], N[keys[2]], N[keys[3]]))
+
+    # ------------------------------------------------------------ Wege
+    def ribbon(self, ln, hw, g, lift=0.07):
+        C, P = self.C, self.cfg.PLAZA_HALF + 0.3
+        for n in range(len(ln) - 1):
+            (x0, y0), (x1, y1) = ln[n], ln[n + 1]
+            dx, dy = x1 - x0, y1 - y0
+            ll = math.hypot(dx, dy)
+            if ll < 1e-6:
+                continue
+            nx, ny = -dy / ll, dx / ll
+            if n + 2 < len(ln):
+                ax, ay = ln[n + 2][0] - x1, ln[n + 2][1] - y1
+                al = max(1e-6, math.hypot(ax, ay))
+                mx, my = -ay / al, ax / al
+            else:
+                mx, my = nx, ny
+            s = 3
+            for k in range(s):
+                u0, u1 = hw * (2 * k / s - 1), hw * (2 * (k + 1) / s - 1)
+                q = ((x0 + nx * u0, y0 + ny * u0), (x0 + nx * u1, y0 + ny * u1), (x1 + mx * u1, y1 + my * u1), (x1 + mx * u0, y1 + my * u0))
+                if all(max(abs(a), abs(b)) < P for a, b in q):
+                    continue
+                pts = [(a + C, b + C, self.h(a, b) + lift) for a, b in q]
+                up = (0.0, 0.0, 1.0)
+                g.tri(pts[0], pts[3], pts[2], up)                # Richtung der Linie: Vorderseite nach oben
+                g.tri(pts[0], pts[2], pts[1], up)
+
+    def make_paths(self):
+        for ln in self.lines.values():
+            self.ribbon(ln, self.cfg.PATH_HW, self.groups["stone"])
+        for ln in self.side_lines:
+            self.ribbon(ln, self.cfg.SIDE_HW, self.groups["gravel"])
+
+    # ------------------------------------------------------------ Quader
+    def B(self, x0, y0, x1, y1, z0, z1, c, vis=True, mm=None):
+        """Quader relativ zur Mitte (mit der aktuellen Vierteldrehung)."""
+        for _ in range(self.rk % 4):
+            x0, y0, x1, y1 = -y1, x0, -y0, x1
+        d = dict(x0=min(x0, x1) + self.C, x1=max(x0, x1) + self.C, y0=min(y0, y1) + self.C, y1=max(y0, y1) + self.C,
+                 za=z1, zb=z0, h=max(0.2, min(30.0, z1 - z0)), c=list(c), mm=(z1 - z0 >= 2.0) if mm is None else mm)
+        if not vis:
+            d["vis"] = 0
+        self.blocks.append(d)
+
+    def wall(self, axis, f, a0, a1, z0, z1, ops=(), c=INA_WOOD, t=0.3, seg=3.0):
+        """Wand entlang axis ('x'/'y') bei Koordinate f, von a0 bis a1, in Stücken (fürs eingebackene Licht), mit Öffnungen
+        (a, b, zunten, zoben) relativ zum Boden der Wand."""
+        cuts = {a0, a1}
+        for a, b, _lo, _hi in ops:
+            cuts |= {a, b}
+        n = max(1, int((a1 - a0) / seg))
+        cuts |= {a0 + (a1 - a0) * i / n for i in range(n)}
+        cuts = sorted(q for q in cuts if a0 <= q <= a1)
+        for u0, u1 in zip(cuts, cuts[1:]):
+            if u1 - u0 < 0.05:
+                continue
+            spans = [(0.0, z1 - z0)]
+            for a, b, lo, hi in ops:
+                if a <= (u0 + u1) / 2 <= b:
+                    spans = [s for sp in spans for s in ((sp[0], min(sp[1], lo)), (max(sp[0], hi), sp[1])) if s[1] - s[0] > 0.19]
+            for lo, hi in spans:
+                brk = sorted({lo, hi} | ({5.0} if lo < 5.0 < hi else set()))
+                for p, q in zip(brk, brk[1:]):
+                    if axis == "x":
+                        self.B(u0, f - t, u1, f + t, z0 + p, z0 + q, c)
+                    else:
+                        self.B(f - t, u0, f + t, u1, z0 + p, z0 + q, c)
+
+    def make_plaza(self):
+        """Stützmauer der Plattform mit Lücken für Rampen (N, S) und Treppen (O, W)."""
+        P, Z, s = self.cfg.PLAZA_HALF, self.cfg.Z_SHRINE, 6.0
+        for rk in range(4):
+            self.rk = rk
+            gap = 4.6 if rk % 2 == 0 else 3.6                  # rk 0 = Nordkante (Rampe), rk 1 = Westkante (Treppe)
+            a = -P - 0.5
+            while a < P + 0.5:
+                b = min(a + s, P + 0.5)
+                for u0, u1 in ((a, min(b, -gap)), (max(a, gap), b)):
+                    if u1 - u0 > 0.3:
+                        self.B(u0, P - 0.6, u1, P + 0.4, Z - 6.0, Z + 0.35, INA_STONE)
+                a = b
+        self.rk = 0
+        for sgn in (-1, 1):                                    # Treppen Ost/West
+            xo = 38.4
+            z0 = self.h(sgn * (xo + 0.5), 0.0)
+            n = 10
+            sh, sd = (Z - z0) / n, (xo - (P - 0.6)) / n
+            for i in range(n):
+                xa, xb = xo - i * sd, xo - (i + 1) * sd
+                self.B(min(sgn * xa, sgn * xb), -3.6, max(sgn * xa, sgn * xb), 3.6, z0 - 1.5, z0 + (i + 1) * sh, INA_STONE, mm=False)
+            for sy in (-1, 1):                                 # Wangen
+                self.B(min(sgn * xo, sgn * (P - 0.6)), sy * 3.6, max(sgn * xo, sgn * (P - 0.6)), sy * 4.2, z0 - 1.5, Z + 0.35, INA_STONE)
+
+    # ------------------------------------------------------------ Schrein
+    def make_shrine(self):
+        cfg = self.cfg
+        S = cfg.SHRINE
+        Z = cfg.Z_FLOOR
+        H, A, W = S["halls"], S["arm"], S["arm_half"]
+        top, atop, cz = S["hall_top"], S["arm_top"], S["catwalk_z"]
+        wall = self.wall
+        # Fussboden: Kreuz aus Holzplatten
+        for a in range(-11, 10, 3):
+            for b in range(-11, 10, 3):
+                self.B(a, b, a + 3, b + 3, Z - 1.0, Z, INA_WOOD_D, mm=False)
+        for rk in (0, 1, 2, 3):
+            self.rk = rk
+            self.B(-5.3, 10.0, 5.3, 15.3, Z - 1.0, Z, INA_STONE if rk % 2 else INA_WOOD_D, mm=False)
+            self.B(-6.5, 15.3, 6.5, 17.5, Z - 1.0, Z - 0.1, INA_STONE, mm=False)     # Vorstufe vor dem Tor
+        # Hallenwände (Tore N/S unten, Öffnungen O/W auf Galeriehöhe)
+        door = [(-1.8, 1.8, 0.0, 3.2)]
+        self.rk = 0
+        wall("x", H, -H - 0.3, H + 0.3, Z, Z + top, door)
+        wall("x", -H, -H - 0.3, H + 0.3, Z, Z + top, door)
+        wall("y", H, -H + 0.3, H - 0.3, Z, Z + top, [(2.9, 4.7, cz, cz + 2.7)])
+        wall("y", -H, -H + 0.3, H - 0.3, Z, Z + top, [(-4.7, -2.9, cz, cz + 2.7)])
+        # Arme Nord/Süd: Windfang
+        for rk in (0, 2):
+            self.rk = rk
+            wall("x", A, -W - 0.3, W + 0.3, Z, Z + atop, door)
+            wall("y", W, H + 0.3, A - 0.3, Z, Z + atop)
+            wall("y", -W, H + 0.3, A - 0.3, Z, Z + atop)
+            wall("x", 12.6, -2.6, 2.6, Z, Z + 2.6, t=0.2)      # Sichtschutz: kein Blick von aussen in die Halle
+            self.B(-W, H + 0.3, W, A + 0.3, Z + atop, Z + atop + 0.3, INA_WOOD_D, mm=False)
+        # Arme Ost/West: Treppenhaus zur Galerie (kein Zugang zum Hallenboden). rk 3: Lokal +y zeigt nach Osten (+x)
+        n_st, rise, tread = 18, cz / 18.0, 0.32      # zwei Stufen zusammen unter STEP_H: der Körperradius greift über zwei
+        for rk in (3, 1):
+            self.rk = rk
+            # lokal: y = nach aussen, x = Querrichtung. Tor am Aussenende bei x=2.7..4.7
+            wall("x", A, -W - 0.3, W + 0.3, Z, Z + atop, [(2.7, 4.7, 0.0, 3.2)])
+            wall("y", W, H + 0.3, A - 0.3, Z, Z + atop)
+            wall("y", -W, H + 0.3, A - 0.3, Z, Z + atop)
+            self.B(-W + 0.3, H + 0.3, W - 0.3, A - 0.3 - 2.2, Z, Z + cz, INA_WOOD_D)    # Massiv unter der Galerieebene
+            self.B(-W, H + 0.3, W, A + 0.3, Z + atop, Z + atop + 0.3, INA_WOOD_D, mm=False)
+            x0 = 2.7
+            for i in range(n_st):
+                self.B(x0 - (i + 1) * tread, A - 2.5, x0 - i * tread, A - 0.3, Z - 0.5, Z + (i + 1) * rise, INA_WOOD, mm=False)
+            xe = x0 - n_st * tread
+            self.B(-W + 0.3, A - 2.5, xe, A - 0.3, Z, Z + cz, INA_WOOD, mm=False)       # Treppenkopf
+        self.rk = 0
+        # Galerie: 3 m breiter Umgang mit Geländer. Innenkante bei +-7
+        cw = H - 0.3 - S["catwalk_w"]
+        t = Z + cz
+        step = 3.0
+        for rk in range(4):
+            self.rk = rk
+            a = -H + 0.3
+            while a < H - 0.3 - 0.01:
+                b = min(a + step, H - 0.3)
+                self.B(a, cw, b, H - 0.3, t - 0.3, t, INA_WOOD, mm=False)
+                a = b
+            self.B(-cw - 0.35, cw - 0.35, cw + 0.35, cw, t + 0.92, t + 1.14, INA_RED, mm=False)     # Handlauf (fest)
+            self.B(-cw - 0.35, cw - 0.35, cw + 0.35, cw, t + 0.05, t + 0.35, INA_WOOD_D, mm=False)  # untere Leiste
+            for k in range(-7, 8):                             # Stäbe nur zur Zierde, Sicht und Schussfeld bleiben frei
+                ca_ = (k * cw / 7.0, cw - 0.17)
+                for _ in range(rk):
+                    ca_ = (-ca_[1], ca_[0])
+                _ina_obox(self.groups["beam_red"], None, ca_[0] + self.C, ca_[1] + self.C, t + 0.63, 0.1, 0.1, 0.6, 0.0)
+        self.rk = 0
+        # Decke der Halle
+        a = -H - 0.3
+        while a < H + 0.3 - 0.01:
+            b = min(a + 5.15, H + 0.3)
+            c = -H - 0.3
+            while c < H + 0.3 - 0.01:
+                d = min(c + 5.15, H + 0.3)
+                self.B(a, c, b, d, Z + top, Z + top + 0.3, INA_WOOD_D, mm=False)
+                c = d
+            a = b
+        # Rote Eckpfosten aussen
+        for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+            for px, py in ((H + 0.35, W + 0.35), (W + 0.35, A + 0.35), (W + 0.35, H + 0.35), (A + 0.35, W + 0.35)):
+                self.B(sx * px - 0.4, sy * py - 0.4, sx * px + 0.4, sy * py + 0.4, Z - 0.2, Z + atop, INA_RED)
+        self.make_facade()
+        self.make_buddhas()
+        self.make_roof()
+        for rk, (ox, oy) in ((0, (0.0, A + 0.42)), (2, (0.0, -A - 0.42)), (3, (A + 0.42, -3.7)), (1, (-A - 0.42, 3.7))):
+            # Torrahmen: Pfosten und Sturz
+            ang = rk * math.pi / 2
+            half = 2.0 if rk % 2 == 0 else 1.15
+            dx_, dy_ = math.cos(ang), math.sin(ang)
+            for s_ in (-1, 1):
+                _ina_obox(self.groups["beam_red"], None, ox + self.C + dx_ * s_ * half, oy + self.C + dy_ * s_ * half, Z + 1.65, 0.3, 0.2, 3.3, ang)
+            _ina_obox(self.groups["beam_red"], None, ox + self.C, oy + self.C, Z + 3.42, 2 * half + 0.9, 0.24, 0.4, ang)
+        for x, y, z, _zone in cfg.torches():                   # Halterungen
+            g = self.groups["iron"]
+            wx, wy = x + self.C, y + self.C
+            _ina_obox(g, None, wx, wy, z - 0.35, 0.12, 0.12, 0.7, 0.0)
+            _ina_obox(g, None, wx, wy, z + 0.02, 0.3, 0.3, 0.12, 0.0)
+
+    def make_facade(self):
+        """Ständerwerk und Riegel als Zierde vor den Wänden (ohne Kollision): macht aus den Holzkisten japanische Fassaden."""
+        S, Z, C = self.cfg.SHRINE, self.cfg.Z_FLOOR, self.C
+        H, A, W, top = S["halls"], S["arm"], S["arm_half"], S["arm_top"]
+        dark, red = self.groups["beam"], self.groups["beam_red"]
+
+        def rot(x, y, rk):
+            for _ in range(rk):
+                x, y = -y, x
+            return x + C, y + C
+        for rk in range(4):
+            wx, wy = rot(0, A + 0.38, rk)
+            ang = rk * math.pi / 2
+            for zz, zh, grp in ((3.42, 0.34, red), (7.75, 0.3, dark), (0.22, 0.34, dark)):
+                _ina_obox(grp, None, wx, wy, Z + zz, 2 * W + 1.0, 0.14, zh, ang)
+            for k in (-4.1, -2.0, 2.0, 4.1):
+                vx, vy = rot(k, A + 0.36, rk)
+                _ina_obox(dark, None, vx, vy, Z + top / 2, 0.26, 0.14, top, ang)
+            for zz, grp in ((3.42, red), (7.75, dark)):        # Seiten der Arme
+                for sgn in (-1, 1):
+                    vx, vy = rot(sgn * (W + 0.38), (H + A) / 2, rk)
+                    _ina_obox(grp, None, vx, vy, Z + zz, 0.14, A - H + 0.8, 0.3, ang)
+            for u in (-H + 2.2, H - 2.2):                      # Obergaden der Halle über den Armdächern
+                vx, vy = rot(u, H + 0.38, rk)
+                _ina_obox(red, None, vx, vy, Z + 10.2, 0.3, 0.14, 2.8, ang)
+            vx, vy = rot(0, H + 0.38, rk)
+            _ina_obox(dark, None, vx, vy, Z + 11.45, 2 * H + 1.0, 0.14, 0.3, ang)
+            # Hallenwand innen: Riegel unter der Galerie
+            vx, vy = rot(0, H - 0.36, rk)
+            _ina_obox(red, None, vx, vy, Z + 9.0, 2 * H - 0.8, 0.1, 0.24, ang)
+
+    def make_buddhas(self):
+        S, Z = self.cfg.SHRINE, self.cfg.Z_FLOOR
+        C = self.C
+        for x, y in S["buddhas"]:
+            self.buddha(x + C, y + C, Z, S["buddha_h"] / 10.5, math.atan2(-y, -x) - math.pi / 2)
+            self.B(x - 1.5, y - 1.5, x + 1.5, y + 1.5, Z, Z + 3.0, INA_WOOD, vis=False)
+            self.B(x - 1.2, y - 1.2, x + 1.2, y + 1.2, Z + 3.0, Z + 7.6, INA_WOOD, vis=False)
+            self.B(x - 0.85, y - 0.85, x + 0.85, y + 0.85, Z + 7.6, Z + S["buddha_h"], INA_WOOD, vis=False)
+
+    def buddha(self, wx, wy, z, k, rot):
+        """Sitzender Buddha (Blick lokal +y) aus Ellipsoiden: Lotussockel, Beine, Rumpf, Arme, Kopf, Heiligenschein."""
+        g = self.groups["gold"]
+        ca, sa = math.cos(rot), math.sin(rot)
+
+        def ell(lx, ly, lz, rx, ry, rz, rings=7, sides=12):
+            cx, cy = wx + (lx * ca - ly * sa) * k, wy + (lx * sa + ly * ca) * k
+            def pt(th, ph):
+                ex, ey = math.sin(th) * math.cos(ph) * rx * k, math.sin(th) * math.sin(ph) * ry * k
+                return (cx + ex * ca - ey * sa, cy + ex * sa + ey * ca, z + (lz + math.cos(th) * rz) * k)
+            for i in range(rings):
+                t0, t1 = math.pi * i / rings, math.pi * (i + 1) / rings
+                for j in range(sides):
+                    p0, p1 = 6.2832 * j / sides, 6.2832 * (j + 1) / sides
+                    a_, b_, c_, d_ = pt(t1, p0), pt(t1, p1), pt(t0, p1), pt(t0, p0)
+                    if i == 0:
+                        g.tri(a_, b_, c_)
+                    elif i == rings - 1:
+                        g.tri(a_, c_, d_)
+                    else:
+                        g.quad(a_, b_, c_, d_)
+        _ina_lathe(g, wx, wy, z, [(k * q[0], k * q[1]) for q in ((1.72, 0), (1.8, 0.35), (1.42, 0.62), (1.72, 0.85), (1.6, 1.05), (0.0, 1.06))], 18)
+        ell(0, 0.25, 1.75, 1.72, 1.32, 0.72)                 # Beine
+        ell(0, -0.05, 4.0, 1.12, 0.84, 2.45)                 # Rumpf
+        ell(0, -0.05, 5.75, 1.34, 0.86, 0.72)                # Schultern
+        for s in (-1, 1):
+            ell(s * 1.26, 0.02, 4.75, 0.40, 0.42, 1.28, 6, 8)      # Oberarm
+            ell(s * 0.86, 0.62, 3.18, 0.34, 0.74, 0.34, 6, 8)      # Unterarm
+            ell(s * 0.84, -0.02, 8.05, 0.10, 0.17, 0.48, 5, 6)     # Ohr
+        ell(0, 1.05, 2.72, 0.54, 0.36, 0.22, 5, 8)           # Hände im Schoss
+        ell(0, 0, 6.95, 0.42, 0.42, 0.55, 5, 10)             # Hals
+        ell(0, 0.03, 8.1, 0.76, 0.80, 0.98)                  # Kopf
+        ell(0, -0.02, 9.02, 0.70, 0.72, 0.36, 5, 12)         # Haar
+        ell(0, -0.02, 9.42, 0.34, 0.34, 0.40, 5, 10)         # Scheitelbuckel
+        # Heiligenschein hinter dem Kopf
+        hx, hy = wx + sa * 1.05 * k, wy - ca * 1.05 * k
+        n = 18
+        for i in range(n):
+            a0, a1 = 6.2832 * i / n, 6.2832 * (i + 1) / n
+            for ro, ri in ((2.15, 1.72), (1.72, 0.0)):
+                q = [(hx + ca * rr * math.cos(an) * k, hy + sa * rr * math.cos(an) * k, z + (8.0 + rr * math.sin(an)) * k)
+                     for rr, an in ((ro, a0), (ro, a1), (ri, a1), (ri, a0))]
+                g.quad(*q)
+                g.quad(q[3], q[2], q[1], q[0])
+
+    def make_roof(self):
+        """Dächer: zwei gekreuzte Satteldächer über den Armen, darüber ein Walmdach bis zur Gesamthöhe 14 m.
+        Begehbar (Dach-Bit), fliegende Spieler landen darauf."""
+        S, Z, C = self.cfg.SHRINE, self.cfg.Z_FLOOR, self.C
+        rg, gg, coll = self.groups["roof"], self.groups["gable"], self.coll
+        ze, zr = Z + S["arm_top"] + 0.1, Z + 11.2       # Traufe, First der Arme
+        L, w = S["arm"] + 1.7, S["arm_half"] + 1.8
+
+        def face(a, b, c, d):
+            pts = [(p[0] + C, p[1] + C, p[2]) for p in (a, b, c, d)]
+            rg.quad(*pts)
+            rg.quad(pts[3], pts[2], pts[1], pts[0])
+            coll.quad(*pts, kind=6)
+
+        def gable(a, b, c):
+            pts = [(p[0] + C, p[1] + C, p[2]) for p in (a, b, c)]
+            gg.tri(*pts)
+            gg.tri(pts[2], pts[1], pts[0])
+
+        for flip in (False, True):
+            def P(u, v, z):
+                return (v, u, z) if flip else (u, v, z)
+            for q0, q1 in ((-L, -9.8), (9.8, L)):              # nur über den Armen: die Halle hat ihre eigene Decke
+                face(P(-w, q0, ze), P(0, q0, zr), P(0, q1, zr), P(-w, q1, ze))
+                face(P(w, q1, ze), P(0, q1, zr), P(0, q0, zr), P(w, q0, ze))
+            gable(P(-S["arm_half"], -L + 0.5, ze), P(S["arm_half"], -L + 0.5, ze), P(0, -L + 0.5, zr - 0.2))
+            gable(P(-S["arm_half"], L - 0.5, ze), P(S["arm_half"], L - 0.5, ze), P(0, L - 0.5, zr - 0.2))
+        zb, zm, za = Z + S["hall_top"] + 0.2, Z + 12.9, Z + S["height"] - 0.2
+        for a, b, c, d in (((-12.5, -12.5), (12.5, -12.5), (6.5, -6.5), (-6.5, -6.5)),
+                           ((12.5, -12.5), (12.5, 12.5), (6.5, 6.5), (6.5, -6.5)),
+                           ((12.5, 12.5), (-12.5, 12.5), (-6.5, 6.5), (6.5, 6.5)),
+                           ((-12.5, 12.5), (-12.5, -12.5), (-6.5, -6.5), (-6.5, 6.5))):
+            face((a[0], a[1], zb - 0.6), (b[0], b[1], zb - 0.6), (c[0], c[1], zm), (d[0], d[1], zm))
+            face((d[0], d[1], zm), (c[0], c[1], zm), (0.0, 0.0, za), (0.0, 0.0, za))
+
+    # ------------------------------------------------------------ Torii
+    def torii(self, x, y, ang, scale=1.0):
+        """Tor quer zum Weg: Pfosten als Quader (fest), Balken als gedrehte Teile. ang = Richtung des Wegs."""
+        C = self.C
+        z = self.h(x, y)
+        px, py = -math.sin(ang), math.cos(ang)
+        half = 2.75 * scale
+        top = z + 4.9 * scale
+        for s in (-1, 1):
+            qx, qy = x + px * s * half, y + py * s * half
+            gz = self.h(qx, qy)
+            self.B(qx - 0.2, qy - 0.2, qx + 0.2, qy + 0.2, gz - 0.8, top, INA_RED, mm=False)
+        wx, wy = x + C, y + C
+        rot = ang + math.pi / 2
+        _ina_obox(self.groups["torii"], self.coll, wx, wy, z + 3.95 * scale, 6.6 * scale, 0.3, 0.32, rot)
+        _ina_obox(self.groups["torii"], self.coll, wx, wy, z + 4.85 * scale, 7.4 * scale, 0.5, 0.32, rot)
+        _ina_obox(self.groups["torii_cap"], None, wx, wy, z + 5.1 * scale, 8.2 * scale, 0.72, 0.2, rot)
+
+    def make_torii(self):
+        cfg = self.cfg
+        for key, ln in self.lines.items():
+            n = len(ln)
+            for a, b in cfg.TORII_SPANS:
+                pos, end = a * n * 1.5, b * n * 1.5            # Meter entlang des Wegs
+                while pos < end:
+                    i = min(n - 2, int(pos / 1.5))
+                    x, y = ln[i]
+                    dx, dy = ln[i + 1][0] - x, ln[i + 1][1] - y
+                    self.torii(x, y, math.atan2(dy, dx))
+                    pos += self.rng.uniform(*cfg.TORII_GAP)
+            x, y = ln[-14]                                     # grosses Tor am Fuss der Plattform
+            dx, dy = ln[-13][0] - x, ln[-13][1] - y
+            self.torii(x, y, math.atan2(dy, dx), 1.2)
+
+    # ------------------------------------------------------------ Altäre
+    def jizo(self, x, y):
+        C = self.C
+        z = self.h(x, y)
+        _ina_lathe(self.groups["statue"], x + C, y + C, z - 0.1,
+                   [(0.36, 0), (0.34, 0.75), (0.2, 0.95), (0.24, 1.15), (0.2, 1.32), (0.02, 1.4)], 8)
+        _ina_lathe(self.groups["bib"], x + C, y + C, z + 0.62, [(0.37, 0), (0.25, 0.3)], 8)
+        self.B(x - 0.34, y - 0.34, x + 0.34, y + 0.34, z - 0.3, z + 1.3, INA_MOSS, vis=False)
+
+    def fox(self, x, y, ang):
+        """Fuchsstatue (Kitsune) auf Sockel."""
+        C = self.C
+        z = self.h(x, y) + 0.9
+        self.B(x - 0.55, y - 0.55, x + 0.55, y + 0.55, z - 1.3, z, INA_STONE, mm=False)
+        g = self.groups["statue"]
+        wx, wy = x + C, y + C
+        _ina_lathe(g, wx, wy, z, [(0.28, 0), (0.24, 0.5), (0.16, 0.95), (0.19, 1.15), (0.14, 1.32), (0.02, 1.38)], 8)
+        fx, fy = math.cos(ang), math.sin(ang)
+        _ina_obox(g, None, wx + fx * 0.14, wy + fy * 0.14, z + 1.2, 0.14, 0.34, 0.12, ang + math.pi / 2)
+        for s in (-1, 1):
+            ex, ey = wx - fy * s * 0.1, wy + fx * s * 0.1
+            g.tri((ex - 0.06, ey - 0.06, z + 1.3), (ex + 0.06, ey + 0.06, z + 1.3), (ex, ey, z + 1.58), (0.0, 0.0, 1.0))
+            g.tri((ex + 0.06, ey + 0.06, z + 1.3), (ex - 0.06, ey - 0.06, z + 1.3), (ex, ey, z + 1.58), (0.0, 0.0, 1.0))
+        self.B(x - 0.28, y - 0.28, x + 0.28, y + 0.28, z, z + 1.3, INA_MOSS, vis=False)
+
+    def hokora(self, x, y, ang):
+        """Kleiner Holzschrein auf Steinsockel; der Sockel ist Deckung."""
+        z = self.h(x, y)
+        self.B(x - 1.5, y - 1.5, x + 1.5, y + 1.5, z - 0.6, z + 1.0, INA_STONE)
+        self.B(x - 0.9, y - 0.9, x + 0.9, y + 0.9, z + 1.0, z + 2.4, INA_WOOD)
+        C = self.C
+        rg = self.groups["roof"]
+        a, t = 1.35, z + 3.3
+        c = [(x + C + dx, y + C + dy, z + 2.4) for dx, dy in ((-a, -a), (a, -a), (a, a), (-a, a))]
+        ap = (x + C, y + C, t)
+        for i in range(4):
+            rg.tri(c[i], c[(i + 1) % 4], ap)
+
+    def make_altars(self):
+        for ax, ay in self.cfg.ALTARS:
+            ang = math.atan2(-ay, -ax)
+            self.hokora(ax - math.cos(ang) * 3.0, ay - math.sin(ang) * 3.0, ang)
+            lx, ly = -math.sin(ang), math.cos(ang)
+            for s in (-1, 1):
+                self.fox(ax + lx * s * 3.2, ay + ly * s * 3.2, ang)
+                self.jizo(ax + lx * s * 5.4 + math.cos(ang) * 1.6, ay + ly * s * 5.4 + math.sin(ang) * 1.6)
+                self.jizo(ax + lx * s * 6.4 - math.cos(ang) * 1.2, ay + ly * s * 6.4 - math.sin(ang) * 1.2)
+
+    # ------------------------------------------------------------ Wald
+    def make_forest(self):
+        cfg, rng = self.cfg, random.Random(77)
+        R = cfg.WALKABLE_R - 2.0
+        self.trees, self.rocks, self.plants = [], [], []
+
+        def free(x, y, keep):
+            if max(abs(x), abs(y)) < cfg.PLAZA_HALF + 5.0:
+                return False
+            if self.open.get((int(round(x / 3.0)), int(round(y / 3.0))), 99.0) < keep:
+                return False
+            if any(math.hypot(x - a, y - b) < 10.0 for a, b in cfg.ALTARS):
+                return False
+            return not any(math.hypot(x - a, y - b) < 7.0 for a, b in cfg.SPAWN_NODES + cfg.SPAWN_EXTRA)
+
+        placed = []
+        for _ in range(9000):
+            if len(placed) >= 660:
+                break
+            a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
+            x, y = math.cos(a) * r, math.sin(a) * r
+            bamboo = _ina_noise(x * 1.4 + 40, y * 1.4 - 25) > 0.35
+            gap = 4.0 if bamboo else 7.5
+            if not free(x, y, cfg.PATH_HW + 2.5) or any(abs(x - p[0]) < gap and abs(y - p[1]) < gap and math.hypot(x - p[0], y - p[1]) < gap for p in placed):
+                continue
+            placed.append((x, y))
+            self.trees.append([x + self.C, y + self.C, rng.uniform(1.0, 1.25) if bamboo else rng.uniform(1.7, 3.0)])
+        for _ in range(3000):
+            if len(self.rocks) >= 130:
+                break
+            a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
+            x, y = math.cos(a) * r, math.sin(a) * r
+            if free(x, y, cfg.PATH_HW + 1.5):
+                self.rocks.append([x + self.C, y + self.C, rng.uniform(0.6, 1.9)])
+        for _ in range(6000):
+            if len(self.plants) >= 1400:
+                break
+            a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
+            x, y = math.cos(a) * r, math.sin(a) * r
+            if free(x, y, cfg.PATH_HW + 0.8):
+                self.plants.append([x + self.C, y + self.C, self.h(x, y), 1, rng.uniform(0.6, 1.2)])
+
+    def make_points(self):
+        cfg, C = self.cfg, self.C
+        for x, y in cfg.SPAWN_NODES + cfg.SPAWN_EXTRA:
+            self.spawns.append([x + C, y + C])
+            self.spawn_z.append(self.h(x, y) + 0.05)
+        for it in cfg.CRATES:
+            self.crates.append([it[0] + C, it[1] + C])
+        for x, y, hd in cfg.VEHICLES:
+            self.vehicles.append([x + C, y + C, hd])
+
+
+_INA_DATA = None
+
+
+def inari_data():
+    """Baut die Karte beim ersten Aufruf (danach aus dem Speicher)."""
+    global _INA_DATA
+    if _INA_DATA is None:
+        b = _InaBuilder()
+        cfg = MapConfigInariSanctuary
+        roads = []
+        for ln, hw, kind in [(q, cfg.PATH_HW, "cobble") for q in b.lines.values()] + [(q, cfg.SIDE_HW, "dirt") for q in b.side_lines]:
+            for p, q in zip(ln[::6], ln[6::6] + [ln[-1]]):
+                roads.append((p[0] + b.C, p[1] + b.C, q[0] + b.C, q[1] + b.C, hw, kind))
+        _INA_DATA = dict(raw={
+            "format": MAP_FORMAT, "name": cfg.NAME, "author": "Polybash", "size": cfg.SIZE, "steep": True,
+            "keep": {"castle": False, "runway": False, "tunnels": False}, "ponds": [], "rocks": b.rocks, "trees": b.trees,
+            "blocks": b.blocks, "houses": [], "towers": [], "ruins": [], "spawns": b.spawns, "spawn_z": b.spawn_z, "crates": b.crates,
+            "turrets": [], "vehicles": b.vehicles, "pads": [], "plants": b.plants},
+            coll=(b.coll.v, b.coll.t, b.coll.k), render=[g.out() for g in b.groups.values() if g.t], open=b.open, roads=roads,
+            heights=b.heights, n=b.n)
+    return _INA_DATA
+
+
+def inari_mapdata():
+    """Fertige Kartendaten (wie sanitize_map) für World und Darstellung."""
+    d = inari_data()
+    raw = dict(d["raw"])
+    m = sanitize_map(raw)
+    cfg = MapConfigInariSanctuary
+    m["mesh"] = dict(coll=d["coll"], render=d["render"], photo=None)
+    m["inari"] = True
+    m["tree_style"] = "inari"
+    m["sun"] = cfg.LIGHT_FOREST["sun_dir"]
+    m["zone_z"] = cfg.Z_FLOOR
+    m["nav_roof"] = cfg.SHRINE["height"]             # die Halle ist höher als andere Räume: Monster sollen trotzdem Türen suchen
+    m["roads"] = d["roads"]
+    return m
+
+
+def _ina_light(p, d):
+    """Eingebackenes Licht je Eckpunkt: (rot, grün, blau). Ersetzt in Mesh.tri die Sonne der anderen Karten.
+    Aussen kaltes Dämmerlicht und schwache Sonne durchs Blätterdach, innen warme Grundhelligkeit; dazu die Fackeln."""
+    cfg = MapConfigInariSanctuary
+    F, S = cfg.LIGHT_FOREST, cfg.LIGHT_SHRINE
+    C = cfg.HALF
+    x, y, z = p[0] - C, p[1] - C, p[2]
+    r2 = x * x + y * y
+    inside = r2 < 500.0 and cfg.in_shrine(x, y) and cfg.Z_FLOOR - 1.2 <= z <= cfg.Z_FLOOR + 12.0
+    if inside:
+        a = S["ambient"]
+        fr, fg, fb = a[0], a[1], a[2]
+    else:
+        e, a = F["exposure"], F["ambient"]
+        open_ = _INA_DATA["open"].get((int(round(x / 3.0)), int(round(y / 3.0))), 30.0)
+        sky = 1.0 - smoothstep(4.0, 14.0, open_)                        # Lichtungen über den Wegen
+        plaza = 1.0 - smoothstep(34.0, 60.0, max(abs(x), abs(y)))
+        sky = max(sky, plaza)
+        dapple = 0.5 + 0.5 * math.sin(x * 0.31 - y * 0.27) * math.sin(x * 0.13 + y * 0.19 + 1.0)
+        can = F["canopy"] * (0.4 + 1.2 * dapple) + (0.85 - F["canopy"]) * sky
+        g = F["sun_gain"] * d * can
+        c = F["sun_col"]
+        k = e * (0.92 + 0.5 * sky)
+        fr, fg, fb = a[0] * k + c[0] * g, a[1] * k + c[1] * g, a[2] * k + c[2] * g
+    if r2 < 2800.0:
+        T = _INA_TORCH
+        tr = S["torch_r"]
+        tr2 = tr * tr
+        col = S["torch_col"]
+        gain = S["torch_gain"]
+        for tx, ty, tz, zone in T:
+            if (zone == "in") != inside:
+                continue
+            dd = (x - tx) ** 2 + (y - ty) ** 2 + (z - tz) ** 2
+            if dd < tr2:
+                k = (1.0 - dd / tr2) ** 2 * gain
+                fr += col[0] * k
+                fg += col[1] * k
+                fb += col[2] * k
+    return fr, fg, fb
+
+
+_INA_TORCH = MapConfigInariSanctuary.torches()
+
+
+def inari_cedar(m, x, y, z, r, rng):
+    """Hohe, dunkle Zeder: langer Stamm, Äste erst weit oben. Gibt die Höhe zurück."""
+    h = rng.uniform(15.0, 23.0)
+    prism(m, x, y, z - 0.4, 0.42 + r * 0.06, h * 0.86, 7, (0.25, 0.19, 0.15), rng, taper=0.25)
+    m.mat = "leaves"
+    n = 5
+    for i in range(n):
+        t = i / (n - 1.0)
+        zz = z + h * (0.40 + 0.46 * t)
+        rr = (r + 1.5) * (1.05 - 0.72 * t)
+        g = rng.uniform(0.82, 1.1)
+        cone(m, x, y, zz, rr, h * 0.26, 7, (0.13 * g, 0.24 * g, 0.20 * g), rng, 0.18)
+    m.mat = None
+    return h
+
+
+def inari_bamboo(m, x, y, z, r, rng):
+    """Bambusgruppe: dünne Halme, oben lockeres Laub. Gibt die Höhe zurück."""
+    h = 0.0
+    for _ in range(9):
+        a, d = rng.uniform(0, 6.283), rng.uniform(0.0, 1.5) * r
+        bx, by = x + math.cos(a) * d, y + math.sin(a) * d
+        hh = rng.uniform(7.0, 11.5)
+        h = max(h, hh)
+        g = rng.uniform(0.85, 1.1)
+        prism(m, bx, by, z - 0.3, 0.07, hh, 4, (0.36 * g, 0.47 * g, 0.20 * g), rng, taper=0.5)
+        m.mat = "leaves"
+        for k in range(2):
+            blob(m, bx + rng.uniform(-0.4, 0.4), by + rng.uniform(-0.4, 0.4), z + hh * (0.82 + 0.13 * k), 1.0, 1.0, 0.8,
+                 (0.27 * g, 0.40 * g, 0.17 * g), rng, jitter=0.3, subdiv=0)
+        m.mat = None
+    return h
+
+
+def inari_long_shadow(mesh, world, x, y, h, w, alpha=0.34):
+    """Lange, flach liegende Baumschatten (tiefe Sonne): Streifen auf dem Gelände, gegen die Sonne gerichtet."""
+    alt = max(0.15, SUN[2])
+    l = min(26.0, h * alt / math.sqrt(1.0 - alt * alt) * 2.0 + 8.0)
+    dx, dy = norm((-SUN[0], -SUN[1], 0.0))[:2]
+    px, py = -dy * w, dx * w
+    seg = 4
+    col0, col1 = (0.0, 0.0, 0.0, alpha), (0.0, 0.0, 0.0, 0.0)
+    for k in range(seg):
+        t0, t1 = k / seg, (k + 1) / seg
+        pts = []
+        for t, s in ((t0, -1), (t0, 1), (t1, 1), (t1, -1)):
+            qx, qy = x + dx * l * t + px * s * (1 - 0.5 * t), y + dy * l * t + py * s * (1 - 0.5 * t)
+            pts.append((qx, qy, world.surface_height(qx, qy) + 0.09))
+        c0 = mix(col0, col1, t0)
+        c1 = mix(col0, col1, t1)
+        ref = (x, y, pts[0][2] - 5.0)
+        mesh.tri(pts[0], pts[1], pts[2], (c0, c0, c1), ref, mat="blob", uv=((0.5, 0.0), (0.5, 1.0), (0.5, 1.0)))
+        mesh.tri(pts[0], pts[2], pts[3], (c0, c1, c1), ref, mat="blob", uv=((0.5, 0.0), (0.5, 1.0), (0.5, 0.0)))
+
+
+def inari_preview():
+    """Vorschaubild fürs Setup-Menü: Draufsicht in 16:9 (Breite, Höhe, RGB-Bytes)."""
+    d = inari_data()
+    n, cfg = 192, MapConfigInariSanctuary
+    w2 = n * 16 // 9
+    x0 = (w2 - n) // 2
+    out = bytearray(bytes((22, 24, 28)) * (w2 * n))
+    sc = cfg.SIZE / n
+    H, op = d["heights"], d["open"]
+    for py in range(n):
+        for px in range(n):
+            x, y = (px + 0.5) * sc - cfg.HALF, cfg.HALF - (py + 0.5) * sc
+            i, j = int(round(x / 3.0)), int(round(y / 3.0))
+            z = H.get((i, j), 0.0)
+            lit = 0.8 + 0.09 * (H.get((i - 1, j), z) - H.get((i + 1, j), z) + H.get((i, j - 1), z) - H.get((i, j + 1), z))
+            if math.hypot(x, y) > cfg.WALKABLE_R + 3.0:
+                col = (0.26, 0.27, 0.30)
+            elif max(abs(x), abs(y)) <= cfg.PLAZA_HALF:
+                col = (0.62, 0.60, 0.55)
+            elif op.get((i, j), 99.0) <= 3.0:
+                col = (0.60, 0.58, 0.52)
+            else:
+                col = (0.13, 0.24, 0.20) if _ina_noise(x * 0.5, y * 0.5) > -0.6 else (0.18, 0.30, 0.16)
+            if cfg.in_shrine(x, y, -1.0):
+                col = (0.70, 0.22, 0.13) if abs(abs(x) - abs(y)) > 1.0 else (0.32, 0.30, 0.34)
+            k = (py * w2 + x0 + px) * 3
+            out[k:k + 3] = bytes(int(min(1.0, max(0.0, c * lit)) * 255) for c in col)
+    return w2, n, bytes(out)
+
+
+class InariSceneHooks:
+    """Laufzeit-Teil der Karte. nodes: die NodePath-Haken für Gelände, Instanzen, Kollision (Debug) und Lichter.
+    update() blendet Nebel und Figurenhelligkeit je nach Standort und lässt die Fackeln flackern."""
+
+    def __init__(self, game, world):
+        self.game = game
+        self.cfg = cfg = MapConfigInariSanctuary
+        self.root = game.render.attachNewNode("inari")
+        self.nodes = {"heightmap": game.land_np, "instances": game.town_np, "lights": self.root.attachNewNode("lichter"),
+                      "collision_debug": self.root.attachNewNode("kollision_debug")}
+        self.nodes["collision_debug"].hide()
+        found = game.town_np.find("**/inari_schrein") if game.town_np is not None else None
+        self.shrine = found if found is not None and not found.isEmpty() else None
+        self.w = 0.0                                    # 0 = Wald, 1 = im Schrein
+        self.t = 0.0
+        self.flames = []
+        self.dyn = []
+        self.build_flames()
+        if cfg.DYNAMIC_LIGHTS:
+            self.attach_dynamic_lights()
+        F = cfg.LIGHT_FOREST
+        game.setBackgroundColor(*F["fog_col"])
+        if game.sky_root is not None:
+            game.sky_root.setColorScale(F["sky_scale"][0], F["sky_scale"][1], F["sky_scale"][2], 1)
+            for c in game.sky_root.findAllMatches("sonne"):
+                c.setPos(*(v * SKY_RADIUS * 0.9 for v in SUN))
+                c.setColorScale(1.0, 0.6, 0.35, 0.7)
+        for np_ in (game.land_np, game.town_np):
+            if np_ is not None:
+                np_.setColorScaleOff(1)
+        self.apply(0.0)
+
+    def build_flames(self):
+        g = self.game
+        tex = get_tex("glow")
+        C = self.cfg.HALF
+        for i, (x, y, z, _zone) in enumerate(self.cfg.torches()):
+            cards = []
+            for size, col in ((1.5, (1.0, 0.55, 0.18, 0.75)), (0.55, (1.0, 0.85, 0.5, 1.0))):
+                cm = CardMaker("flamme")
+                cm.setFrame(-1, 1, -1, 1)
+                n = self.nodes["lights"].attachNewNode(cm.generate())
+                n.setPos(x + C, y + C, z + 0.28)
+                n.setScale(size)
+                n.setBillboardPointEye()
+                if tex is not None:
+                    n.setTexture(tex)
+                n.setTransparency(TransparencyAttrib.MAlpha)
+                n.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd, ColorBlendAttrib.OIncomingAlpha, ColorBlendAttrib.OOne))
+                n.setDepthWrite(False)
+                n.setLightOff()
+                n.setFogOff()
+                n.setColorScaleOff(1)
+                n.setColorScale(*col)
+                n.setBin("fixed", 5)
+                cards.append((n, size))
+            self.flames.append((x + C, y + C, i * 1.7, cards))
+
+    def attach_dynamic_lights(self):
+        """Haken für echte Fackeln: PointLights in der Halle, die ersten als Spots mit Schatten. Aus, solange
+        DYNAMIC_LIGHTS False ist: jede schattenwerfende Lampe zeichnet die Szene ein weiteres Mal."""
+        from panda3d.core import PointLight, Spotlight, PerspectiveLens
+        g, cfg, C = self.game, self.cfg, self.cfg.HALF
+        col = cfg.LIGHT_SHRINE["torch_col"]
+        target = self.shrine if self.shrine is not None else g.town_np
+        for i, (x, y, z, zone) in enumerate([t for t in cfg.torches() if t[3] == "in"][:6]):
+            if i < cfg.DYNAMIC_SHADOW_LIGHTS:
+                ln = Spotlight(f"fackel{i}")
+                ln.setLens(PerspectiveLens())
+                ln.getLens().setFov(110)
+                ln.setShadowCaster(True, 1024, 1024)
+            else:
+                ln = PointLight(f"fackel{i}")
+            ln.setColor((col[0], col[1], col[2], 1))
+            ln.setAttenuation((1, 0, 0.02))
+            n = self.nodes["lights"].attachNewNode(ln)
+            n.setPos(x + C, y + C, z)
+            n.lookAt(C, C, cfg.Z_FLOOR)
+            target.setLight(n)
+            self.dyn.append((n, ln, col))
+        target.setShaderAuto()
+
+    def apply(self, w):
+        F, S = self.cfg.LIGHT_FOREST, self.cfg.LIGHT_SHRINE
+        g = self.game
+        fc = mix(F["fog_col"], S["fog_col"], w)
+        dens = F["fog_dens"] + (S["fog_dens"] - F["fog_dens"]) * w
+        if g.fog is not None:
+            g.fog.setColor(*fc)
+            g.fog_dens = dens
+            g.fog.setExpDensity(dens / max(0.01, g.view_pct / 100.0))
+        g.setBackgroundColor(*fc)
+        a = mix(F["actor_scale"], S["actor_scale"], w)
+        g.render.setColorScale(a[0], a[1], a[2], 1)
+
+    def update(self, dt):
+        g = self.game
+        self.t += dt
+        cp = g.camera.getPos(g.render)
+        C, cfg = self.cfg.HALF, self.cfg
+        x, y = cp[0] - C, cp[1] - C
+        inside = cfg.in_shrine(x, y) and cp[2] < cfg.Z_FLOOR + 12.5 and cp[2] > cfg.Z_FLOOR - 1.0
+        goal = 1.0 if inside else 0.0
+        if abs(goal - self.w) > 0.002:
+            self.w += (goal - self.w) * min(1.0, dt * 3.0)
+            self.apply(self.w)
+        t = self.t
+        fl = self.cfg.LIGHT_SHRINE["flicker"]
+        pulse = 0.5 * math.sin(t * 7.3) + 0.3 * math.sin(t * 13.1 + 1.0) + 0.2 * math.sin(t * 23.0 + 2.0)
+        if self.shrine is not None:
+            k = 1.0 + fl * pulse
+            self.shrine.setColorScale(k, k * (1.0 - 0.3 * fl * pulse), k * (1.0 - 0.6 * fl * pulse), 1)
+        for fx, fy, ph, cards in self.flames:
+            if abs(fx - cp[0]) > 90.0 or abs(fy - cp[1]) > 90.0:
+                continue
+            s = 1.0 + 0.16 * math.sin(t * 9.0 + ph) + 0.09 * math.sin(t * 17.0 + ph * 2.0)
+            for n, size in cards:
+                n.setScale(size * s)
+        for n, ln, col in self.dyn:
+            k = 1.0 + fl * pulse
+            ln.setColor((col[0] * k, col[1] * k, col[2] * k, 1))
+
+    def destroy(self):
+        g = self.game
+        self.root.removeNode()
+        g.render.clearColorScale()
+        g.setBackgroundColor(*SKY)
+        if g.sky_root is not None:
+            g.sky_root.clearColorScale()
+            for c in g.sky_root.findAllMatches("sonne"):
+                c.setPos(*(v * SKY_RADIUS * 0.9 for v in SUN0))
+                c.clearColorScale()
+
+
 class World:
     GRID = 10.0   # Rastergrösse für die Kugel-Kollision
     loot_cats = LOOT_CATS + ("gadget",)   # was Monster und Kisten hergeben: Waffen, Nahkampf, Granaten, Ausrüstung, Aufsätze, Gadgets
@@ -5748,6 +6869,7 @@ class World:
         if mapdata is None:
             raise ValueError("Keine Karte angegeben (Standardkarte: maps/polytown.ptmap)")
         set_world_size(mapdata.get("size", MAP_WORLD))   # vor allem anderen: Grösse dieser Karte
+        set_world_sun(mapdata.get("sun"))
         rng = random.Random(seed)
         self.map = mapdata                   # bereinigte Kartendatei (sanitize_map, Polytown-.ptmap oder Minecraft-.mcmap)
         self.mc = mapdata.get("mc") if mapdata else None      # Minecraft-Welt (.mcmap) oder None
@@ -5795,7 +6917,7 @@ class World:
         self.follow_boxes = []   # 9a: Quader, die als Ganzes auf die Geländehöhe gesetzt werden (Sandsäcke)
         self.moats = []   # (mx, my, a, o0, o1, o2, o3, Tiefe): Wassergraben um das Quadrat mx±a (Abstände o* vom Quadrat)
         self.dams = []    # (x0, y0, x1, y1): Brücken/Dämme - hier ist der Graben überbrückt
-        self.roads = []   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
+        self.roads = list(mapdata.get("roads") or ())   # (x0, y0, x1, y1, Halbbreite, Art): Wege und Strassen
         self.vis = []     # Datensätze für die Darstellung (Häuser, Brücken, Fahnen ...), siehe build_scene
         self.vehicles = []
         self.grenades = []
@@ -6147,7 +7269,7 @@ class World:
         for b in mp.get("blocks") or ():
             if b.get("za") is not None:                       # absolute Höhen 
                 zb = b["zb"] if b.get("zb") is not None else b["za"] - 6.0
-                self.add_box(b["x0"], b["y0"], b["x1"], b["y1"], zb, b["za"], b["c"], b["mm"])
+                self.add_box(b["x0"], b["y0"], b["x1"], b["y1"], zb, b["za"], b["c"], b["mm"], b.get("vis", True))
                 continue
             gz = self.height((b["x0"] + b["x1"]) / 2, (b["y0"] + b["y1"]) / 2)
             self.add_box(b["x0"], b["y0"], b["x1"], b["y1"], gz - 2.5, gz + b["h"], b["c"], b["mm"])
@@ -7180,7 +8302,7 @@ class World:
     # ------------------------------------------------------------ 13f: Wegsuche in Gebäude
     def indoor(self, x, y, z):
         """13f: liegt (x, y) mit Fusshöhe z unter einem Dach (Decke höchstens NAV_ROOF_H m darüber)?"""
-        return self.ceiling_at(x, y, z) < z + NAV_ROOF_H
+        return self.ceiling_at(x, y, z) < z + self.map.get("nav_roof", NAV_ROOF_H)
 
     def nav_free(self, x, y, z, r):
         """13f: kann ein Monster mit Radius r bei (x, y) mit Fusshöhe z stehen (Wände aus Quadern und Kartennetz,
@@ -14168,6 +15290,11 @@ def mat_for_color(col):
     return "plaster"
 
 
+_MATC[tuple(round(c, 3) for c in INA_RED)] = "plaster"       # Inari: Zinnoberrot ohne Ziegelmuster
+_MATC[tuple(round(c, 3) for c in INA_STONE)] = "stone"
+_MATC[tuple(round(c, 3) for c in INA_MOSS)] = "stone"
+
+
 # ------------------------------------------------------------ Polygon-Mesh
 class Mesh:
     """Sammelt Dreiecke mit eingebackener Beleuchtung (flat shading) und automatischen Texturkoordinaten.
@@ -14218,7 +15345,11 @@ class Mesh:
                 d = max(0.0, nd[k]) if nd else d0
                 kd = DIFFUSE * d
                 f = vk[k] if vk else 1.0              # warmes Sonnenlicht, kühles Umgebungslicht
-                fr, fg, fb = (AMBIENT * 0.94 + kd * 1.07) * f, (AMBIENT + kd) * f, (AMBIENT * 1.07 + kd * 0.9) * f
+                if BAKE_LIGHT is not None:
+                    fr, fg, fb = BAKE_LIGHT(p, d)
+                    fr, fg, fb = fr * f, fg * f, fb * f
+                else:
+                    fr, fg, fb = (AMBIENT * 0.94 + kd * 1.07) * f, (AMBIENT + kd) * f, (AMBIENT * 1.07 + kd * 0.9) * f
             else:
                 fr = fg = fb = 1.0
             self.vw.addData3(*p)
@@ -16144,6 +17275,16 @@ def build_ctf_flag(col, scale=1.0, base=True):
 def build_scene(world, progress=None):
     """Baut Gelände, Bäume, Felsen, Gebäude (ein Mesh) und das Wasser (zweites Mesh).
     extra = [Lampen, Gras, Schattenflächen, zweite Wasserschicht]."""
+    global BAKE_LIGHT
+    inari = bool(world.map and world.map.get("inari"))
+    BAKE_LIGHT = _ina_light if inari else None
+    try:
+        return _build_scene(world, progress, inari)
+    finally:
+        BAKE_LIGHT = None
+
+
+def _build_scene(world, progress, inari):
     pg = progress or (lambda f, t: None)
     rng = random.Random(world.seed + 1)
     m = Mesh()
@@ -16351,6 +17492,14 @@ def build_scene(world, progress=None):
             blob(m, p.x, p.y, p.z + r * 0.25, r, r * rng.uniform(0.8, 1.2), r * 0.7,
                  (g, g, g + 0.03), rng, jitter=0.25, subdiv=2, moss=0.55, mat="rock")
             decal_disc(shadows, world, p.x - SUN[0] * r * 0.3, p.y - SUN[1] * r * 0.3, r * 1.5, 0.42)
+        elif p.kind == "tree" and inari:                  # Zedern (grosser Radius) und Bambus (kleiner Radius)
+            cm_ = chunk(p.x, p.y)
+            if p.base_r < 1.5:
+                h = inari_bamboo(cm_, p.x, p.y, p.z, p.base_r, rng)
+                inari_long_shadow(shadows, world, p.x, p.y, h * 0.5, 1.5, 0.22)
+            else:
+                h = inari_cedar(cm_, p.x, p.y, p.z, p.base_r, rng)
+                inari_long_shadow(shadows, world, p.x, p.y, h, 2.2)
         elif p.kind == "tree" and world.map and world.map.get("tree_style") == "tropic":
             if rng.random() < 0.55:
                 palm(m, p.x, p.y, p.z, rng.uniform(6.5, 10.5), rng)
@@ -16387,7 +17536,7 @@ def build_scene(world, progress=None):
         return gcells[k]
 
     def free_spot(x, y, clear):
-        if dev or not (2 < x < WORLD - 2 and 2 < y < WORLD - 2):
+        if dev or inari or not (2 < x < WORLD - 2 and 2 < y < WORLD - 2):      # Inari: Bodenpflanzen stehen in der Karte
             return None
         if world.voids and world.in_void(x, y):
             return None
@@ -16478,12 +17627,16 @@ def build_scene(world, progress=None):
             reed_at(px_ + math.cos(aa_) * rr_, py_ + math.sin(aa_) * rr_, 1.7)
 
     pg(0.82, "Gebäude werden errichtet ...")
+    shrine_m = Mesh()
     # --- Gebäude (Burg, Türme, Häuser, Treppen, Deckung)
     for b in world.boxes:
         if not b.vis:
             continue
         cx_, cy_ = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
-        box(m, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
+        tm_ = m
+        if inari:                                       # in Blöcken (Sichtfeld); der Schrein extra, er flackert
+            tm_ = chunk(cx_, cy_) if math.hypot(cx_ - CENTER, cy_ - CENTER) > 26.0 else shrine_m
+        box(tm_, cx_, cy_, (b.z0 + b.z1) / 2, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.col, rng,
             mat=mat_for_color(b.col))
         dx, dy = b.x1 - b.x0, b.y1 - b.y0
         gz = world.surface_height(cx_, cy_)
@@ -16597,24 +17750,27 @@ def build_scene(world, progress=None):
     if world.mode == "koth":
         fill, edge = Mesh(alpha=0.16, lit=False), Mesh(alpha=0.9, lit=False)
         n, zc = 72, (CENTER, CENTER)
-        below = (CENTER, CENTER, -5.0)
+        zb_ = (world.map or {}).get("zone_z", 0.0)        # Zone liegt auf dem Boden der Karte (Inari: im Schrein)
+        below = (CENTER, CENTER, zb_ - 5.0)
 
         def zp(r, a, z=0.08):
-            return (zc[0] + math.cos(a) * r, zc[1] + math.sin(a) * r, z)
+            return (zc[0] + math.cos(a) * r, zc[1] + math.sin(a) * r, zb_ + z)
 
         for i in range(n):
             a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
-            fill.tri((zc[0], zc[1], 0.07), zp(ZONE_R, a0, 0.07), zp(ZONE_R, a1, 0.07),
+            fill.tri((zc[0], zc[1], zb_ + 0.07), zp(ZONE_R, a0, 0.07), zp(ZONE_R, a1, 0.07),
                      (1.0, 0.85, 0.2), ref=below)
             for qa, qb, qc in ((zp(ZONE_R - 0.5, a0), zp(ZONE_R, a0), zp(ZONE_R, a1)),
                                (zp(ZONE_R - 0.5, a0), zp(ZONE_R, a1), zp(ZONE_R - 0.5, a1))):
                 edge.tri(qa, qb, qc, (1.0, 0.85, 0.15), ref=below)
         for i in range(8):
             px, py, _pz = zp(ZONE_R - 0.25, 2 * math.pi * i / 8)
-            box(edge, px, py, 1.6, 0.25, 0.25, 3.2, (1.0, 0.85, 0.15))
+            if not inari:                                 # Inari: die Zone geht durch Wände, nur der Ring am Boden
+                box(edge, px, py, zb_ + 1.6, 0.25, 0.25, 3.2, (1.0, 0.85, 0.15))
         zone = [fill.node("zone_fill"), edge.node("zone_ring")]
     extra = [lamps.node("lamps"), [c.node("grass") for c in gcells.values()], shadows.node("decals"), w2.node("water2"),
-             winds.nodes(), flags, [c_.node("block") for c_ in chunks.values()], spins]
+             winds.nodes(), flags, [c_.node("block") for c_ in chunks.values()] + ([shrine_m.node("inari_schrein")] if inari else []),
+             spins]
     return m.node("land"), w.node("water"), zone, extra
 
 
@@ -16627,7 +17783,7 @@ def sky_color(d):
     """Himmelsfarbe in Richtung d (normiert): Dunst am Horizont, tiefes Blau oben, warmer Schein zur Sonne."""
     t = max(0.0, d[2]) ** 0.55
     col = mix(SKY, SKY_ZENITH, t)
-    glow = max(0.0, dot(d, SUN)) ** 6
+    glow = max(0.0, dot(d, SUN0)) ** 6
     return mix(col, (1.0, 0.9, 0.7), min(0.55, glow * 0.55 * (1.0 - 0.6 * t)))
 
 
@@ -22186,6 +23342,8 @@ def map_preview_rgb(key):
     try:
         if key == "dev":
             return json_map_preview(DEV_MAP_PATH)                 # v50: Testgelände
+        if key == "inari":
+            return inari_preview()
         if isinstance(key, str):
             ent = MAP_PREVIEWS.get(key)
             if ent is None:
@@ -25736,7 +26894,7 @@ def synth_sounds():
     return out
 
 
-STONE_MATS = ("metal", "concrete")          # Netz-Karten: diese Render-Gruppen klingen nach Stein, alles andere nach Gras
+STONE_MATS = ("metal", "concrete", "cobble")          # Netz-Karten: diese Render-Gruppen klingen nach Stein, alles andere nach Gras
 
 
 def _stone_grid(world):
@@ -25768,6 +26926,8 @@ def _stone_grid(world):
 def surface_kind(world, x, y, z):
     """'wood' (Holzboden), 'hard' (Stein, Metall, Treppe, Deckung) oder 'grass' (alles andere)."""
     if getattr(world, "cm", None) is not None:             # Netz-Karte: Material des Dreiecks unter den Füssen
+        if world.map.get("inari") and z > world.surface_height(x, y) + 0.1:
+            return "wood" if math.hypot(x - CENTER, y - CENTER) < 22.0 else "hard"    # Schrein, Stufen
         for a, b, c, det in _stone_grid(world).get((int(x // 4), int(y // 4)), ()):
             l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / det
             l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / det
@@ -122237,6 +123397,8 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         if not p:
             return "Standard" + ("" if self.map_list else "  (Ordner 'maps' leer)")
+        if p == INARI_MAP_PATH:
+            return INARI_MAP_NAME
         if p == DEV_MAP_PATH:
             return DEV_MAP_NAME + "  (Sandbox, Dev-Menü F1)"
         n = next((n for n, q in self.map_list if q == p), os.path.basename(p))
@@ -122260,6 +123422,7 @@ class Game(ShowBase):
     def setup_entries(self):
         """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown."""
         ents = [(STD_MAP_NAME, None, "Standardkarte", "polytown"),
+                (INARI_MAP_NAME, INARI_MAP_PATH, "Wald und Tempel, 3-5 Spieler", "inari"),
                 (DEV_MAP_NAME, DEV_MAP_PATH, "Dev-Sandbox, Menü mit F1", "dev")]     # v50: eingebautes Testgelände
         for name, path in self.map_list:
             if path.lower().endswith(".mcmap"):
@@ -122439,7 +123602,7 @@ class Game(ShowBase):
 
     def open_setup(self, for_mode):
         self.map_list = list_maps()
-        if self.cfg.get("map") not in [p for _n, p in self.map_list] + [DEV_MAP_PATH]:
+        if self.cfg.get("map") not in [p for _n, p in self.map_list] + [DEV_MAP_PATH, INARI_MAP_PATH]:
             self.cfg["map"] = None
         self.setup_for = for_mode
         self.map_page = 0
@@ -123759,6 +124922,9 @@ class Game(ShowBase):
             self.ctf_ui = None
         self.sfx.silence()
         self.teardown_hq()
+        if getattr(self, "inari_hooks", None) is not None:
+            self.inari_hooks.destroy()
+            self.inari_hooks = None
         keepers = [n for n in (self.sky_root, self.vignette) if n is not None]
         for parent, keep in self._keep:
             for ch in list(parent.getChildren()):
@@ -123890,6 +125056,8 @@ class Game(ShowBase):
         p = self.cfg.get("map")
         if not p:
             return STD_MAP_NAME
+        if p == INARI_MAP_PATH:
+            return INARI_MAP_NAME
         if p == DEV_MAP_PATH:
             return DEV_MAP_NAME
         return next((n for n, q in self.map_list if q == p), os.path.splitext(os.path.basename(p))[0])
@@ -124005,6 +125173,9 @@ class Game(ShowBase):
                 try:
                     if path == DEV_MAP_PATH:                   # v50: Testgelände - aus dem Code, übers Netz nur die Kennung
                         raw = dict(DEV_MAP_STUB)
+                        mapdata = sanitize_map(raw)
+                    elif path == INARI_MAP_PATH:               # eingebaute Karte, übers Netz nur die Kennung
+                        raw = dict(INARI_MAP_STUB)
                         mapdata = sanitize_map(raw)
                     elif path.lower().endswith(".mcmap"):
                         mapdata, raw = mc_mapdata(path)
@@ -124170,6 +125341,7 @@ class Game(ShowBase):
         self.apply_view()                                          # Sichtweite aus den Einstellungen
         self.build_vignette()
         self.apply_gfx()
+        self.inari_hooks = InariSceneHooks(self, world) if world.map and world.map.get("inari") else None
 
         self.loading_step(0.92, "Oberfläche wird aufgebaut ...")
         self.build_crates()
@@ -128959,7 +130131,7 @@ class Game(ShowBase):
             cm = CardMaker("sonne")
             cm.setFrame(-1, 1, -1, 1)
             card = root.attachNewNode(cm.generate())
-            card.setPos(*(v * SKY_RADIUS * 0.9 for v in SUN))
+            card.setPos(*(v * SKY_RADIUS * 0.9 for v in SUN0))
             card.setScale(scale)
             card.setBillboardPointEye()
             tg = get_tex("glow")
@@ -131277,6 +132449,8 @@ class Game(ShowBase):
         if NOISE_DEBUG:
             self.update_noise_debug()
         self.update_gfx(dt)
+        if getattr(self, "inari_hooks", None) is not None:
+            self.inari_hooks.update(dt)
         self.update_hud(dt)
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()

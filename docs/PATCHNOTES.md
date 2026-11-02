@@ -2,6 +2,24 @@
 
 Neueste Änderungen oben.
 
+## Neue Karte: Inari Temple Sanctuary (Robin, 2026-11-03)
+Eingebaute Karte, im Setup-Menü wählbar, alle Modi. NET_VERSION 56 -> 57: Mitspieler brauchen denselben Stand (übers Netz geht nur die Kennung, jeder Rechner baut die Karte aus dem Code). Ausgelegt auf 3-5 Spieler. Polytown und die übrigen Karten bleiben unverändert.
+
+- **400 x 400 m**, rund 118.000 m² begehbar, vom Rand (z 0) nichtlinear ansteigend zur Plattform (z 18). Aussen ein Felsring.
+- **Vier gewundene Steinwege** von den Spawn-Enden zur Mitte. Nord und Süd enden als Rampen (Fahrzeuge kommen auf die Plattform), Ost und West an Treppen (nur zu Fuss). Acht Altäre im Wald, an je zwei Nebenwegen.
+- **Torii-Tunnel** auf allen Hauptwegen, Abstand 2-4 m: Pfosten sind Deckung, ein grosses Tor am Fuss der Plattform.
+- **Wald**: Zedern, Bambusdickichte, Felsen, Farne. Altäre mit Hokora, Jizo und Fuchsstatuen als Deckung.
+- **Schrein** (Kreuz, 30 x 30 m, 14 m hoch): Halle mit vier Buddhas bis unters Dach. Nord und Süd führen über einen Windfang mit Sichtschutz zum Hallenboden. Ost und West führen über Treppenhäuser nur auf die 3 m breite Galerie, in der Halle gibt es keine Treppe nach oben. Runter kommt man über das Geländer (5 m, kein Fallschaden).
+- **Zwei Lichtwelten**: Wald kalt und dunkel mit tiefer Sonne, langen Baumschatten und dichtem Nebel; im Schrein warmes Fackellicht. Nebel, Hintergrund und Figurenhelligkeit blenden beim Betreten um. Fackeln und Schreinlicht flackern.
+- **King of the Hill**: die Zone liegt in der Halle, der Ring reicht durch die Wände.
+
+Grenzen:
+- **Gelände ist nicht verformbar**, das kann das Spiel nicht. `STATIC_STONE` und `DEFORMABLE_EARTH` sind nur Oberflächen-Merker in der Konfiguration.
+- **Fackellicht ist eingebacken** (keine Laufzeit-Lichter, keine Echtzeit-Schatten). `DYNAMIC_LIGHTS` schaltet echte Lichter mit Schatten zu: läuft, kostet im Software-Test aber das Zweieinhalbfache der Bildzeit, und das Licht fällt nicht auf Figuren. Deshalb aus.
+- **Monster** finden den Weg in die Halle nicht immer zuverlässig, im Test schaffte es eines von dreien. Die Galerie erreichten sie im Test nicht.
+
+Technik: `MapConfigInariSanctuary` (alle Daten, Koordinaten ab Kartenmitte), `_InaBuilder`, `inari_mapdata`, `InariSceneHooks` (NodePath-Haken, Nebel, Flackern), `_ina_light` über den neuen Haken `BAKE_LIGHT` in `Mesh.tri`. Neu für alle Karten nutzbar: Kartenschlüssel `sun`, `zone_z`, `nav_roof`, `roads`, Quader mit `vis: 0`.
+
 ## Polytown: durchgehender Höhen- und Distanzdunst, keine sichtbare Kartengrenze (Robin, 2026-11-02)
 Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung).
 
