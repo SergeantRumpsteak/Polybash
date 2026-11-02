@@ -6,7 +6,7 @@ Neueste Änderungen oben.
 Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung). F9-Test auf echter Grafikkarte im Zentrum: Bündelung 33 -> 56,6 FPS.
 
 Bündelung (`pt_merged_nodes`, beim Laden):
-- Statt 32-m-Blöcken je Zustand eine Geometrie: 96-m-Zellen auf der Spielfläche, 256-m-Zellen für Berge und Grenzwald (`PT_MERGE_*`). Karte 1.559 -> 261 Geoms, vom Rand zum Zentrum insgesamt 1.262 -> 446 Geoms.
+- Statt 32-m-Blöcken je Zustand eine Geometrie: 96-m-Zellen auf der Spielfläche, 256-m-Zellen für Berge und Grenzwald (`PT_MERGE_*`). Karte 1.559 -> rund 320 Geoms (der Test nutzte 261, Durchsichtiges bleibt jetzt getrennt), vom Rand zum Zentrum insgesamt 1.262 -> 446 Geoms.
 - Durchsichtiges bleibt in 32-m-Blöcken, damit es richtig sortiert wird.
 - **Index-LOD entfernt**: brachte auf echter Hardware nichts und passt nicht zu den grossen Zellen. Dafür zeichnet die Karte mehr Dreiecke (Blick nach aussen rund 240.000 statt 52.000), bei der Software-Messung ohne Zeitverlust.
 
