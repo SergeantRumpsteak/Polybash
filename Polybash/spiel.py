@@ -163,7 +163,7 @@ from panda3d.core import (AmbientLight, AntialiasAttrib, Camera, CardMaker, Colo
                           NodePath, PerspectiveLens, PNMImage, Point2, Point3, RenderState, Texture,
                           TextureAttrib, TextureStage, TextNode, TransparencyAttrib, Vec3, Quat,
                           WindowProperties, loadPrcFileData)
-from panda3d.core import ClockObject, GeomVertexArrayFormat, InternalName, LightAttrib, LODNode, CullBinManager, BitMask32, PythonCallbackObject
+from panda3d.core import ClockObject, Shader, Vec4, GeomVertexArrayFormat, InternalName, LightAttrib, LODNode, CullBinManager, BitMask32, PythonCallbackObject
 
 # Konfiguration muss VOR dem Erzeugen des Fensters passieren
 
@@ -489,14 +489,13 @@ SMOKE_BUCKETS = 2        # v57: Schornsteinrauch - jedes Bild nur jeder 2. Schor
 # v59: Polytown wird beim Laden gebündelt (nur Darstellung): je grober Zelle und Zustand eine Geometrie, statt 32-m-Blöcken.
 PT_MERGE_INNER = 3       # Blöcke je Zelle auf der Spielfläche (96 m)
 PT_MERGE_OUTER = 8       # Blöcke je Zelle ausserhalb (256 m: Berge, Grenzwald)
-# v59: Sichtweite auf Polytown: ab PT_VIEW_ONSET m wird die Spielfläche in den Himmel ausgeblendet, ab PT_VIEW_FAR m ist sie weg
-# und ihre Zellen werden gar nicht mehr gezeichnet. Berge und Grenzwald bleiben sichtbar. Regler "Sichtweite" und Zoom skalieren das.
-PT_VIEW_ONSET = 130.0
-PT_VIEW_FAR = 200.0
-PT_VIEW_ZOOM = 1.25      # ab dieser Vergrösserung (Zielen, Zielfernrohr) wächst die Sichtweite mit dem Zoom
-PT_VIEW_MARGIN = 20.0    # m Rand je Zelle (Teile ragen über die Zelle hinaus)
-PT_VIEW_MOVE = 4.0       # m Kamerabewegung, bis die Zellen neu geprüft werden
-PT_OUTER_FOG = 0.005     # Nebeldichte der Berge (wie bisher)
+# v60: Polytown-Dunst: ein einziger Höhen- und Distanznebel für die ganze Welt, unabhängig von Spielfläche und Laufgrenze.
+# Dichte fällt mit der Höhe (PT_FOG_H): Täler liegen im Dunst, Grate stehen als weiche Silhouetten dagegen.
+PT_FOG_DIST = 0.0021     # Dichte am Boden (1/m)
+PT_FOG_AIR = 0.0014      # Grunddunst auch in der Höhe (1/m): färbt ferne Gipfel bläulich
+PT_FOG_H = 50.0          # m: alle so viele Höhenmeter fällt die Bodendichte auf ein Drittel
+PT_FOG_MAX = 0.88        # höchstens so viel Dunst: Gipfel verschwinden nie ganz
+PT_FAR = 900.0           # m: Kamera-Sichtgrenze, auch die fernsten Grate bleiben im Bild
 MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
 
 SHADOW_R = 90.0          # m: Blob-Schatten von Monstern nur bis zu dieser Entfernung zur Kamera (Titan & Co.: weiter)
@@ -14669,6 +14668,47 @@ def _pt_states():
             3: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone), LightAttrib.makeAllOff())}
 
 
+PT_FOG_VS = """#version 120
+attribute vec4 p3d_Vertex;
+attribute vec4 p3d_Color;
+attribute vec2 p3d_MultiTexCoord0;
+uniform mat4 p3d_ModelViewProjectionMatrix;
+uniform mat4 p3d_ModelMatrix;
+uniform mat4 p3d_ViewMatrixInverse;
+varying vec4 col;
+varying vec2 uv;
+varying vec3 ray;
+varying float eye_z;
+void main() {
+    gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
+    col = p3d_Color;
+    uv = p3d_MultiTexCoord0;
+    vec3 eye = p3d_ViewMatrixInverse[3].xyz;
+    ray = (p3d_ModelMatrix * p3d_Vertex).xyz - eye;
+    eye_z = eye.z;
+}
+"""
+
+PT_FOG_FS = """#version 120
+uniform sampler2D p3d_Texture0;
+uniform vec4 p3d_ColorScale;
+uniform vec4 pt_fog;     // Bodendichte, Grunddunst, Höhenskala, Obergrenze
+uniform vec3 pt_haze;
+varying vec4 col;
+varying vec2 uv;
+varying vec3 ray;
+varying float eye_z;
+void main() {
+    vec4 c = col * texture2D(p3d_Texture0, uv) * p3d_ColorScale;
+    float d = length(ray);
+    float k = ray.z / pt_fog.z;
+    float along = abs(k) > 0.001 ? (1.0 - exp(-k)) / k : 1.0;  // mittlere Dichte entlang des Sichtstrahls
+    float t = d * (pt_fog.y + pt_fog.x * exp(-max(eye_z, 0.0) / pt_fog.z) * along);
+    gl_FragColor = vec4(mix(c.rgb, pt_haze, min(1.0 - exp(-t * t), pt_fog.w)), c.a);
+}
+"""
+
+
 def pt_merged_nodes(pt, progress=None):
     """v59: Darstellung bündeln: je Zelle (PT_MERGE_*) und Zustand eine Geometrie mit 32-Bit-Indizes. Durchsichtiges bleibt in
     32-m-Blöcken, damit es richtig sortiert wird. Rückgabe: Liste von GeomNodes namens pt_<zelle x>_<zelle y>_<blöcke je zelle>."""
@@ -14779,6 +14819,11 @@ class PerfBench:
         far0 = g.camLens.getFar()
         tex = lambda on: g.render.setTextureOff(1000) if on else g.render.clearTexture()
 
+        def nofog(on):
+            (g.render.setFogOff(1000) if on else g.render.setFog(g.fog))
+            if getattr(g, "pt_fog_on", False):
+                g.pt_fog_input(0.0 if on else 100.0 / g.view_pct)
+
         def sound(on):
             g.sfx.muted = on
             (g.disableAllAudio if on else g.enableAllAudio)()
@@ -14793,9 +14838,8 @@ class PerfBench:
               ("Ohne Monster", lambda on: self.mask_nodes(mobs(), on)),
               ("Ohne Rauch/Zone/Wasser", lambda on: self.mask_nodes(extra, on)),
               ("Ohne Texturen", tex),
-              ("Ohne Nebel", lambda on: g.render.setFogOff(1000) if on else g.render.setFog(g.fog)),
+              ("Ohne Nebel", nofog),
               ("Sichtweite 160 m", lambda on: g.camLens.setFar(160.0 if on else far0)),
-              ("Sichtweite ohne Grenze", lambda on: setattr(g, "sight_boost", 5.0 if on else 1.0)),
               ("Rendern nach Zustand statt vorn-nach-hinten",
                lambda on: bins.setBinType(ob, CullBinManager.BT_state_sorted if on else CullBinManager.BT_front_to_back)),
               ("Antialias-Attribut aus", lambda on: g.render.setAntialias(AntialiasAttrib.MNone if on else (AntialiasAttrib.MAuto if MSAA_START else AntialiasAttrib.MNone)))]
@@ -123579,10 +123623,10 @@ class Game(ShowBase):
             return
         f = self.view_pct / 100.0
         self.camLens.setNearFar(0.1, self.far_base * max(1.0, f))
-        if getattr(self, "sight_cells", None):
-            self.sight_scale = 0.0                         # v59: Polytown: apply_sight setzt den Nebel
-            return
         self.fog.setExpDensity(self.fog_dens / f)
+        if getattr(self, "pt_fog_on", False):
+            self.fog.setMode(Fog.MExponentialSquared)
+            self.pt_fog_input(1.0 / f)
 
     def set_view_pct(self, v):
         self.view_pct = int(v)
@@ -124122,7 +124166,7 @@ class Game(ShowBase):
         fog.setExpDensity(0.004 if world.mc else (0.0018 if world.dev else (0.005 if WORLD > 250 else MTN_FOG)))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
-        self.sight_setup(fog)
+        self.pt_fog_setup(fog)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
         self.build_vignette()
         self.apply_gfx()
@@ -130625,51 +130669,31 @@ class Game(ShowBase):
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
     # ------------------------------------------------------------ Darstellung
-    def sight_setup(self, fog):
-        """v59: Polytown: Spielfläche blendet per Linearnebel aus, Berge behalten ihren eigenen Nebel, Zellen hinter der Sicht entfallen."""
-        self.sight_cells, self.sight_key, self.sight_far = [], None, 0.0
-        if not getattr(self.world, "pt", None) or self.town_np is None:
+    def pt_fog_setup(self, fog):
+        """v60: Polytown: Dunst per Shader auf Karte und drehenden Teilen; alles andere (Figuren, Kisten) nutzt den normalen
+        Nebel mit gleicher Kurve am Boden. Scheitert der Shader, bleibt der normale Nebel für alles."""
+        self.pt_fog_on = bool(getattr(self.world, "pt", None)) and self.town_np is not None
+        if not self.pt_fog_on:
             return
-        far_fog = Fog("nebel_fern")
-        far_fog.setColor(*SKY)
-        far_fog.setExpDensity(PT_OUTER_FOG)
-        for c in self.town_np.getChildren():
-            m = re.fullmatch(r"pt_(-?\d+)_(-?\d+)_(\d+)", c.getName())
-            if m is None:
-                continue
-            i, j, n = (int(v) for v in m.groups())
-            if n == PT_MERGE_OUTER:
-                c.setFog(far_fog)
-            else:
-                b = 32.0 * n
-                self.sight_cells.append((c, i * b - PT_VIEW_MARGIN, j * b - PT_VIEW_MARGIN,
-                                         (i + 1) * b + PT_VIEW_MARGIN, (j + 1) * b + PT_VIEW_MARGIN))
-        self.sight_scale = 0.0
-        self.sight_at = None
+        fog.setExpDensity(PT_FOG_DIST + PT_FOG_AIR)
+        fog.setMode(Fog.MExponentialSquared)
+        self.fog_dens, self.far_base = PT_FOG_DIST + PT_FOG_AIR, PT_FAR
+        try:
+            if not self.win.getGsg().getSupportsBasicShaders():
+                return
+            sh = Shader.make(Shader.SL_GLSL, PT_FOG_VS, PT_FOG_FS)
+            self.town_np.setShaderInput("pt_haze", Vec3(*SKY))
+            self.pt_fog_input(1.0)
+            for c in self.town_np.getChildren():
+                if c.getName().startswith("pt_"):
+                    c.setShader(sh)
+                    c.setFogOff()
+        except Exception as e:
+            print("Dunst-Shader nicht verfügbar:", e)
 
-    def apply_sight(self):
-        """Sichtweite aus Regler und Zoom setzen; Zellen nur neu prüfen, wenn sich etwas geändert hat."""
-        if not self.sight_cells:
-            return
-        z = math.tan(math.radians(self.fov_base) * 0.5) / max(math.tan(math.radians(self.fov_cur) * 0.5), 1e-4)
-        f = self.view_pct / 100.0 * (z if z >= PT_VIEW_ZOOM else 1.0) * getattr(self, "sight_boost", 1.0)
-        cp = self.camera.getPos(self.render)
-        cx, cy = cp[0], cp[1]
-        new_f = abs(f - self.sight_scale) > 0.01
-        if new_f:
-            self.sight_scale = f
-            self.sight_far = PT_VIEW_FAR * f
-            self.fog.setLinearRange(PT_VIEW_ONSET * f, self.sight_far)
-        at = self.sight_at
-        if new_f or at is None or (cx - at[0]) ** 2 + (cy - at[1]) ** 2 > PT_VIEW_MOVE * PT_VIEW_MOVE:
-            self.sight_at = (cx, cy)
-            r2 = self.sight_far * self.sight_far
-            for c, x0, y0, x1, y1 in self.sight_cells:
-                dx, dy = max(x0 - cx, 0.0, cx - x1), max(y0 - cy, 0.0, cy - y1)
-                if dx * dx + dy * dy > r2:
-                    c.hide()
-                else:
-                    c.show()
+    def pt_fog_input(self, k):
+        """Dichte des Dunsts: k = Faktor (Sichtweiten-Regler 1 / Anteil, 0 = kein Dunst)."""
+        self.town_np.setShaderInput("pt_fog", Vec4(PT_FOG_DIST * k, PT_FOG_AIR * k, PT_FOG_H, PT_FOG_MAX))
 
     def update_views(self, dt, mdx, mdy):
         pl, world = self.player, self.world
@@ -130681,7 +130705,6 @@ class Game(ShowBase):
         target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) * (self.fov_base / FOV) if pl.ads else self.fov_base
         self.fov_cur += (target - self.fov_cur) * min(1.0, 14 * dt)
         self.camLens.setFov(self.fov_cur)
-        self.apply_sight()
         self.gun_lens.setAspectRatio(self.getAspectRatio())
         self.ads_t += ((1.0 if pl.ads else 0.0) - self.ads_t) * min(1.0, 14 * dt)
         self.death_t = min(1.0, self.death_t + dt * 1.5) if pl.hp <= 0 else 0.0
@@ -131258,8 +131281,7 @@ class Game(ShowBase):
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
         self.mcull_frame = getattr(self, "mcull_frame", 0) + 1
-        cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame,
-                       far=getattr(self, "sight_far", 0.0))   # v58, v59
+        cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame)   # v58
 
     def update_objects(self, dt):
         """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
@@ -133278,7 +133300,7 @@ def mob_draw_key(m):
     return (n, m.hp) if n is not None else None
 
 
-def cull_mob_views(views, world, cam, render, lens, frame, stats=None, far=0.0):
+def cull_mob_views(views, world, cam, render, lens, frame, stats=None):
     """v58: Monster-Culling (MOB_CULL_PAD, MOB_OCC_*): nach dem Setzen der Kamera, vor dem Zeichnen. Ausserhalb des
     Sichtkegels oder (gestaffelt geprüft) hinter Wänden -> Modell aus (hide) und keine Animation mehr; kommt es wieder
     in Frage, wird es im selben Bild eingeblendet und neu gezeichnet. Nur Darstellung."""
@@ -133294,7 +133316,6 @@ def cull_mob_views(views, world, cam, render, lens, frame, stats=None, far=0.0):
     ch, sh, cv, sv = math.cos(ah), math.sin(ah), math.cos(av), math.sin(av)
     occ_on = MOB_OCC_ON and not world.eye_in_occluder(ex, ey, ez)   # Flugkamera steckt in einer Wand: nicht verdecken
     eye = (ex, ey, ez)
-    far2 = far * far
     n2, f2, mv2 = MOB_OCC_NEAR * MOB_OCC_NEAR, MOB_OCC_FAR * MOB_OCC_FAR, MOB_OCC_MOVE * MOB_OCC_MOVE
     for m, v in views.items():
         if v is None:
@@ -133305,8 +133326,7 @@ def cull_mob_views(views, world, cam, render, lens, frame, stats=None, far=0.0):
         zc = dx * fx + dy * fy + dz * fz                   # Kameraraum: vorwärts / rechts / oben
         xc = dx * rx + dy * ry + dz * rz
         yc = dx * ux + dy * uy + dz * uz
-        hide = (zc < -R or abs(xc) * ch - zc * sh > R or abs(yc) * cv - zc * sv > R
-                or (far2 > 0.0 and dx * dx + dy * dy > far2))   # v59: hinter der Sichtweite
+        hide = (zc < -R or abs(xc) * ch - zc * sh > R or abs(yc) * cv - zc * sv > R)
         if hide:
             v.occ_at = None                                # kommt es zurück ins Bild: sofort neu prüfen
             if stats is not None:

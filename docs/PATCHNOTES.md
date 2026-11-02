@@ -2,6 +2,18 @@
 
 Neueste Änderungen oben.
 
+## Polytown: durchgehender Höhen- und Distanzdunst, keine sichtbare Kartengrenze (Robin, 2026-11-02)
+Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung).
+
+- **Fehler behoben**: Spielfläche und Berge hatten seit dem letzten Patch zwei verschiedene Nebel. Das gab eine harte Kante, die im Westen und Süden an der Laufgrenze lag, im Osten und Norden 20 m dahinter im Wald.
+- **Ein einziger Dunst für die ganze Welt** (Shader `PT_FOG_VS/FS`): hängt nur von Abstand und Höhe ab, die Laufgrenze ist unsichtbar. Täler liegen im Dunst, Grate und Gipfel stehen als weiche, bläuliche Silhouetten gegen den Himmel und verschwinden nie ganz (`PT_FOG_MAX`).
+- **Nahe Bergketten und Baumreihe bleiben klar**: rund 2 % Dunst auf 50 m, die volle Dichte kommt erst tief im Gebirge.
+- **Kamera-Sichtgrenze 450 -> 900 m**: ferne Grate wurden vorher abgeschnitten.
+- **Sichtweiten-Grenze von 200 m entfernt**: Sie vertrug sich nicht mit dem durchgehenden Dunst und brachte kaum Leistung. Regler "Sichtweite" macht den Dunst dichter oder dünner.
+- Figuren und Kisten nutzen weiter den normalen Nebel mit gleicher Kurve am Boden. Ohne Shader-Unterstützung gilt dieser Nebel für alles.
+
+Zum Nachjustieren: `PT_FOG_DIST`, `PT_FOG_AIR`, `PT_FOG_H`, `PT_FOG_MAX`, `PT_FAR`. Technik: `Game.pt_fog_setup`, `Game.pt_fog_input`; `sight_setup`, `apply_sight` und `PT_VIEW_*` entfallen.
+
 ## Polytown gebündelt, Sichtweite 200 m mit freien Bergen (Robin, 2026-11-02)
 Gilt für alle Modi. NET_VERSION bleibt 56 (nur eigene Darstellung). F9-Test auf echter Grafikkarte im Zentrum: Bündelung 33 -> 56,6 FPS.
 
