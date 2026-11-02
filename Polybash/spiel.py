@@ -486,14 +486,17 @@ MOB_OCC_THIN = 0.12      # m: dünnere Quader verdecken nicht (Glas, Fensterattr
 MOB_OCC_NARROW = 1.2     # m: schmalere Quader verdecken nicht (Stämme, Pfosten, Masten: der Quader ist breiter als das Bild)
 SMOKE_BUCKETS = 2        # v57: Schornsteinrauch - jedes Bild nur jeder 2. Schornstein (Rauch steigt langsam: 30 Hz reichen)
 
-# v59: Polytown-LOD (nur Darstellung, jeder Rechner selbst): weiter als PT_LOD_DIST m von der Blockmitte werden Dreiecke unter
-# PT_LOD_AREA m² nicht gezeichnet (dieselben Eckpunkte, zweite Indexliste; Kollision unberührt). Durchsichtiges und Leuchtendes
-# bleibt immer vollständig. Ab Vergrösserung PT_LOD_ZOOM (Zielen, Zielfernrohr, Geschütz) ist das LOD aus.
-PT_LOD_ON = True
-PT_LOD_DIST = 80.0
-PT_LOD_AREA = 0.05
-PT_LOD_ZOOM = 1.25
-PT_LOD_OFF_SCALE = 0.001       # Panda multipliziert den Abstand damit: klein = alles zählt als nah
+# v59: Polytown wird beim Laden gebündelt (nur Darstellung): je grober Zelle und Zustand eine Geometrie, statt 32-m-Blöcken.
+PT_MERGE_INNER = 3       # Blöcke je Zelle auf der Spielfläche (96 m)
+PT_MERGE_OUTER = 8       # Blöcke je Zelle ausserhalb (256 m: Berge, Grenzwald)
+# v59: Sichtweite auf Polytown: ab PT_VIEW_ONSET m wird die Spielfläche in den Himmel ausgeblendet, ab PT_VIEW_FAR m ist sie weg
+# und ihre Zellen werden gar nicht mehr gezeichnet. Berge und Grenzwald bleiben sichtbar. Regler "Sichtweite" und Zoom skalieren das.
+PT_VIEW_ONSET = 130.0
+PT_VIEW_FAR = 200.0
+PT_VIEW_ZOOM = 1.25      # ab dieser Vergrösserung (Zielen, Zielfernrohr) wächst die Sichtweite mit dem Zoom
+PT_VIEW_MARGIN = 20.0    # m Rand je Zelle (Teile ragen über die Zelle hinaus)
+PT_VIEW_MOVE = 4.0       # m Kamerabewegung, bis die Zellen neu geprüft werden
+PT_OUTER_FOG = 0.005     # Nebeldichte der Berge (wie bisher)
 MOB_SEP_CELL = 4.0       # m: Mindest-Zellgrösse des Rasters, mit dem sich Monster gegenseitig wegschieben (separate_mobs)
 
 SHADOW_R = 90.0          # m: Blob-Schatten von Monstern nur bis zu dieser Entfernung zur Kamera (Titan & Co.: weiter)
@@ -14666,35 +14669,37 @@ def _pt_states():
             3: RenderState.make(CullFaceAttrib.make(CullFaceAttrib.MCullNone), LightAttrib.makeAllOff())}
 
 
-def pt_merged_node(pt, inner=3, outer=8):
-    """v59: Testbündel für PerfBench: je grober Zelle und Zustand eine Geometrie (32-Bit-Indizes), statt 32-m-Blöcken.
-    inner/outer = Zellgrösse in Blöcken innerhalb/ausserhalb der Spielfläche."""
+def pt_merged_nodes(pt, progress=None):
+    """v59: Darstellung bündeln: je Zelle (PT_MERGE_*) und Zustand eine Geometrie mit 32-Bit-Indizes. Durchsichtiges bleibt in
+    32-m-Blöcken, damit es richtig sortiert wird. Rückgabe: Liste von GeomNodes namens pt_<zelle x>_<zelle y>_<blöcke je zelle>."""
+    pg = progress or (lambda f, t: None)
     cells = {}
     for g in pt["groups"]:
         if g.get("sp") or g["nv"] <= 0 or g["ni"] <= 0:
             continue
         i, j = g.get("k") or (0, 0)
-        n = inner if 0 <= i <= 9 and 0 <= j <= 9 else outer
+        n = 1 if g["c"] == 2 else (PT_MERGE_INNER if 0 <= i <= 9 and 0 <= j <= 9 else PT_MERGE_OUTER)
         cells.setdefault((g["c"], g.get("tx"), i // n, j // n, n), []).append(g)
-    states, root = _pt_states(), NodePath("pt_buendel")
-    nodes = {}
-    for (c, tx, ci, cj, n), gl in cells.items():
+    states, nodes = _pt_states(), {}
+    for q, ((c, tx, ci, cj, n), gl) in enumerate(cells.items()):
+        if q % 20 == 0:
+            pg(q / max(1, len(cells)), "Polytown wird aufgebaut ...")
         off, idx = 0, array("I")
         for g in gl:
             a = array("H")
             a.frombytes(g["I"])
             idx.extend([v + off for v in a])
             off += g["nv"]
-        m = {"nv": off, "ni": len(idx), "I32": True, "I": idx.tobytes(), "tx": tx,
-             "P": b"".join(g["P"] for g in gl), "N": b"".join(g["N"] for g in gl), "C": b"".join(g["C"] for g in gl),
-             "UV": b"".join(g["UV"] for g in gl) if gl[0].get("UV") else None}
-        geom = _pt_geom(m)
+        geom = _pt_geom({"nv": off, "ni": len(idx), "I32": True, "I": idx.tobytes(), "tx": tx,
+                         "P": b"".join(g["P"] for g in gl), "N": b"".join(g["N"] for g in gl),
+                         "C": b"".join(g["C"] for g in gl), "UV": b"".join(g["UV"] for g in gl) if gl[0].get("UV") else None})
+        if geom is None:
+            continue
         node = nodes.get((ci, cj, n))
         if node is None:
-            node = nodes[(ci, cj, n)] = GeomNode("b_%d_%d_%d" % (ci, cj, n))
-            root.attachNewNode(node)
+            node = nodes[(ci, cj, n)] = GeomNode("pt_%d_%d_%d" % (ci, cj, n))
         node.addGeom(geom, _pt_state(states[c], tx))
-    return root
+    return list(nodes.values())
 
 
 class PerfBench:
@@ -14708,11 +14713,6 @@ class PerfBench:
         self.sec = {}
         self.head = self.scene_info()
         g.toast("Leistungstest läuft: stehen bleiben, Maus nicht bewegen (ca. 45 s)", (1.0, 0.85, 0.3), 5.0)
-        self.merged = None
-        if getattr(g.world, "pt", None):
-            self.merged = pt_merged_node(g.world.pt)
-            self.merged.reparentTo(g.render)
-            self.merged.hide()
         self.dr = g.camNode.getDisplayRegion(0)
         self.steps = self.make_steps()
         ClockObject.getGlobalClock().setMode(ClockObject.MNormal)   # Grenze aus: sonst misst man die Grenze
@@ -14750,8 +14750,9 @@ class PerfBench:
         g = self.g
         gsg = g.win.getGsg()
         p = g.win.getProperties()
-        lods = sum(1 for c in g.town_np.getChildren() if isinstance(c.node(), LODNode)) if g.town_np is not None else 0
-        return [f"Polybash {VERSION}, Karte: {'Polytown' if getattr(g.world, 'pt', None) else 'andere'}, LOD-Bloecke: {lods}",
+        cells = g.town_np.findAllMatches("**/+GeomNode") if g.town_np is not None else []
+        geoms = sum(c.node().getNumGeoms() for c in cells)
+        return [f"Polybash {VERSION}, Karte: {'Polytown' if getattr(g.world, 'pt', None) else 'andere'}, Karten-Geoms: {geoms}",
                 f"Grafik: {gsg.getDriverVendor()} / {gsg.getDriverRenderer()} / {gsg.getDriverVersion()}",
                 f"Fenster: {p.getXSize()} x {p.getYSize()}, Vollbild: {p.getFullscreen()}, Rahmen: {g.win.getFbProperties()}",
                 f"MSAA-Einstellung: {g.msaa}, Sichtweite: {g.view_pct} %, FOV: {g.fov_base}, FPS-Grenze: {g.fps_limit}, Netz: {g.net_mode}",
@@ -14767,7 +14768,6 @@ class PerfBench:
         bins = CullBinManager.getGlobalPtr()
         ob = bins.findBin("opaque")
         cb = PythonCallbackObject(lambda data: None)
-        map_kids = [c for c in g.town_np.getChildren() if c.getName().startswith("pt_") and c.getName() != "pt_spin"] if g.town_np is not None else []
         mobs = lambda: [v.root for v in g.mob_views.values() if v is not None]
         extra = []
         if g.town_np is not None:
@@ -14783,10 +14783,6 @@ class PerfBench:
             g.sfx.muted = on
             (g.disableAllAudio if on else g.enableAllAudio)()
 
-        def buendel(on):
-            for c in map_kids:
-                (c.hide if on else c.show)()
-            (self.merged.show if on else self.merged.hide)()
         st = [("Basis", None),
               ("Ohne Karte", lambda on: (g.town_np.hide if on else g.town_np.show)()),
               ("3D zeichnen uebersprungen (nur CPU)", lambda on: self.dr.setDrawCallback(cb) if on else self.dr.clearDrawCallback()),
@@ -14799,12 +14795,10 @@ class PerfBench:
               ("Ohne Texturen", tex),
               ("Ohne Nebel", lambda on: g.render.setFogOff(1000) if on else g.render.setFog(g.fog)),
               ("Sichtweite 160 m", lambda on: g.camLens.setFar(160.0 if on else far0)),
-              ("LOD aus", lambda on: g.camNode.setLodScale(PT_LOD_OFF_SCALE if on else 1.0)),
+              ("Sichtweite ohne Grenze", lambda on: setattr(g, "sight_boost", 5.0 if on else 1.0)),
               ("Rendern nach Zustand statt vorn-nach-hinten",
                lambda on: bins.setBinType(ob, CullBinManager.BT_state_sorted if on else CullBinManager.BT_front_to_back)),
               ("Antialias-Attribut aus", lambda on: g.render.setAntialias(AntialiasAttrib.MNone if on else (AntialiasAttrib.MAuto if MSAA_START else AntialiasAttrib.MNone)))]
-        if self.merged is not None:
-            st.append(("Karte stark gebuendelt (viel weniger Drawcalls)", buendel))
         st.append(("Basis (Kontrolle)", None))
         return st
 
@@ -14859,8 +14853,6 @@ class PerfBench:
         if 0 <= self.i < len(self.steps) and not ok and self.steps[self.i][1] is not None:
             self.steps[self.i][1](False)
         self.unwrap()
-        if self.merged is not None:
-            self.merged.removeNode()
         g.apply_fps()
         g.perf_bench = None
         if not ok:
@@ -14881,55 +14873,6 @@ class PerfBench:
         print("\n".join(out))
 
 
-def _pt_far_geom(g, geom):
-    """v59: Geom für die Ferne: dieselben Eckpunkte, ohne Dreiecke unter PT_LOD_AREA. None = nichts fällt weg (Original nehmen)."""
-    P, I = array("f"), array("H")
-    P.frombytes(g["P"])
-    I.frombytes(g["I"])
-    lim = 4.0 * PT_LOD_AREA * PT_LOD_AREA                  # |Kreuzprodukt|² = (2 x Fläche)²
-    keep = array("H")
-    add = keep.extend
-    for a, b, c in zip(I[0::3], I[1::3], I[2::3]):
-        a3, b3, c3 = a * 3, b * 3, c * 3
-        ax, ay, az = P[a3], P[a3 + 1], P[a3 + 2]
-        ux, uy, uz = P[b3] - ax, P[b3 + 1] - ay, P[b3 + 2] - az
-        vx, vy, vz = P[c3] - ax, P[c3 + 1] - ay, P[c3 + 2] - az
-        nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
-        if nx * nx + ny * ny + nz * nz >= lim:
-            add((a, b, c))
-    if len(keep) == len(I) or not keep:
-        return None if keep else False                     # False = in der Ferne gar nichts zu zeichnen
-    prim = GeomTriangles(Geom.UHStatic)
-    prim.setIndexType(Geom.NTUint16)
-    prim.modifyVertices(len(keep))
-    arr = prim.modifyVertices()
-    data = keep.tobytes()
-    try:
-        arr.modifyHandle().copyDataFrom(data)
-    except Exception:                                      # ältere/andere Panda3D-Fassung: Pufferzugriff
-        memoryview(arr).cast("B")[:] = data
-    far = Geom(geom.getVertexData())
-    far.addPrimitive(prim)
-    return far
-
-
-def _pt_lod_nodes(chunks, fars, reduced):
-    """v59: Blöcke, in denen etwas wegfällt, werden zum LODNode (nah alles, fern ohne Kleinteile); der Rest bleibt, wie er ist."""
-    out = []
-    for k, node in chunks.items():
-        if k not in reduced:
-            out.append(node)
-            continue
-        lod = LODNode("pt_lod_%d_%d" % k)
-        lod.setCenter(node.getBounds().getCenter())
-        lod.addChild(node)
-        lod.addSwitch(PT_LOD_DIST, 0.0)
-        lod.addChild(fars[k])
-        lod.addSwitch(1e6, PT_LOD_DIST)
-        out.append(lod)
-    return out
-
-
 SMOKE_PUFFS = 14             # Puffs je rauchendem Schornstein
 SMOKE_PERIOD = 10.0          # Sekunden, bis ein Puff aufgestiegen und verblasst ist
 
@@ -14943,48 +14886,25 @@ def _pt_state(base, tx):
 
 
 def build_pt_scene(world, progress=None):
-    """Polytown aus Blender: eine Geometrie je 32-m-Block und Klasse (0 opak, 1 zweiseitig, 2 durchsichtig, 3 leuchtend).
+    """Polytown aus Blender: gebündelte Zellen (pt_merged_nodes), Klassen 0 opak, 1 zweiseitig, 2 durchsichtig, 3 leuchtend.
     Licht steckt in den Vertexfarben (wie Mesh); die Normalen dienen den Echtzeit-Schatten. Rückgabe wie build_scene:
     Land (leer), Wasser (leer), Zone, extra - alles Sichtbare hängt als 'Stadt' in extra[6], drehende Teile in extra[7]."""
-    pg = progress or (lambda f, t: None)
     pt = world.pt
     states = _pt_states()
-    chunks, spins = {}, []
-    fars, reduced = {}, set()                              # v59: Fern-Geometrie je Block (siehe PT_LOD_*)
-    gl = pt["groups"]
-    for n, g in enumerate(gl):
-        if n % 60 == 0:
-            pg(n / max(1, len(gl)), "Polytown wird aufgebaut ...")
-        geom = _pt_geom(g)
+    spins = []
+    for g in pt["groups"]:
+        sp = g.get("sp")
+        geom = _pt_geom(g) if sp else None
         if geom is None:
             continue
-        sp = g.get("sp")
-        if sp:
-            node = GeomNode("pt_spin")
-            node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
-            spins.append({"node": node, "x": sp["x"], "y": sp["y"], "z": sp["z"], "h0": sp["h0"], "speed": sp["speed"],
-                          "roll": bool(sp.get("roll"))})
-            continue
-        k = tuple(g.get("k") or (0, 0))
-        node = chunks.get(k)
-        if node is None:
-            node = chunks[k] = GeomNode("pt_%d_%d" % k)
-        state = _pt_state(states[g["c"]], g.get("tx"))
-        node.addGeom(geom, state)
-        far = _pt_far_geom(g, geom) if PT_LOD_ON and g["c"] in (0, 1) else None
-        if far is not None:
-            reduced.add(k)
-        if far is not False:
-            fnode = fars.get(k)
-            if fnode is None:
-                fnode = fars[k] = GeomNode("pt_fern")
-            fnode.addGeom(far if far is not None else geom, state)
-        elif k not in fars:
-            fars[k] = GeomNode("pt_fern")
+        node = GeomNode("pt_spin")
+        node.addGeom(geom, _pt_state(states[g["c"]], g.get("tx")))
+        spins.append({"node": node, "x": sp["x"], "y": sp["y"], "z": sp["z"], "h0": sp["h0"], "speed": sp["speed"],
+                      "roll": bool(sp.get("roll"))})
     zone = []
     if world.mode == "koth":
         zone = _koth_zone()
-    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], _pt_lod_nodes(chunks, fars, reduced), spins,
+    extra = [GeomNode("leer1"), [], GeomNode("leer2"), GeomNode("leer3"), [], [], pt_merged_nodes(pt, progress), spins,
              [tuple(q) for q in (pt["meta"].get("smoke") or [])]]
     return GeomNode("leer_land"), GeomNode("leer_wasser"), zone, extra
 
@@ -123658,8 +123578,11 @@ class Game(ShowBase):
         if self.fog is None:
             return
         f = self.view_pct / 100.0
-        self.fog.setExpDensity(self.fog_dens / f)
         self.camLens.setNearFar(0.1, self.far_base * max(1.0, f))
+        if getattr(self, "sight_cells", None):
+            self.sight_scale = 0.0                         # v59: Polytown: apply_sight setzt den Nebel
+            return
+        self.fog.setExpDensity(self.fog_dens / f)
 
     def set_view_pct(self, v):
         self.view_pct = int(v)
@@ -124199,6 +124122,7 @@ class Game(ShowBase):
         fog.setExpDensity(0.004 if world.mc else (0.0018 if world.dev else (0.005 if WORLD > 250 else MTN_FOG)))          # Minecraft-Karte: weite Sicht über das Meer
         self.render.setFog(fog)
         self.fog, self.fog_dens, self.far_base = fog, fog.getExpDensity(), max(450.0, WORLD * 1.5)
+        self.sight_setup(fog)
         self.apply_view()                                          # Sichtweite aus den Einstellungen
         self.build_vignette()
         self.apply_gfx()
@@ -130701,13 +130625,51 @@ class Game(ShowBase):
         return ADS_Z.get(w.name, ADS_Z_DEFAULT)
 
     # ------------------------------------------------------------ Darstellung
-    def apply_lod_zoom(self):
-        """v59: Mit Vergrösserung (Zielen, Zielfernrohr, Geschütz) kein LOD: die Ferne zeigt volle Details."""
-        off = (math.tan(math.radians(self.fov_base) * 0.5)
-               >= PT_LOD_ZOOM * math.tan(math.radians(self.fov_cur) * 0.5))
-        if off != getattr(self, "lod_zoom_off", False):
-            self.lod_zoom_off = off
-            self.camNode.setLodScale(PT_LOD_OFF_SCALE if off else 1.0)
+    def sight_setup(self, fog):
+        """v59: Polytown: Spielfläche blendet per Linearnebel aus, Berge behalten ihren eigenen Nebel, Zellen hinter der Sicht entfallen."""
+        self.sight_cells, self.sight_key, self.sight_far = [], None, 0.0
+        if not getattr(self.world, "pt", None) or self.town_np is None:
+            return
+        far_fog = Fog("nebel_fern")
+        far_fog.setColor(*SKY)
+        far_fog.setExpDensity(PT_OUTER_FOG)
+        for c in self.town_np.getChildren():
+            m = re.fullmatch(r"pt_(-?\d+)_(-?\d+)_(\d+)", c.getName())
+            if m is None:
+                continue
+            i, j, n = (int(v) for v in m.groups())
+            if n == PT_MERGE_OUTER:
+                c.setFog(far_fog)
+            else:
+                b = 32.0 * n
+                self.sight_cells.append((c, i * b - PT_VIEW_MARGIN, j * b - PT_VIEW_MARGIN,
+                                         (i + 1) * b + PT_VIEW_MARGIN, (j + 1) * b + PT_VIEW_MARGIN))
+        self.sight_scale = 0.0
+        self.sight_at = None
+
+    def apply_sight(self):
+        """Sichtweite aus Regler und Zoom setzen; Zellen nur neu prüfen, wenn sich etwas geändert hat."""
+        if not self.sight_cells:
+            return
+        z = math.tan(math.radians(self.fov_base) * 0.5) / max(math.tan(math.radians(self.fov_cur) * 0.5), 1e-4)
+        f = self.view_pct / 100.0 * (z if z >= PT_VIEW_ZOOM else 1.0) * getattr(self, "sight_boost", 1.0)
+        cp = self.camera.getPos(self.render)
+        cx, cy = cp[0], cp[1]
+        new_f = abs(f - self.sight_scale) > 0.01
+        if new_f:
+            self.sight_scale = f
+            self.sight_far = PT_VIEW_FAR * f
+            self.fog.setLinearRange(PT_VIEW_ONSET * f, self.sight_far)
+        at = self.sight_at
+        if new_f or at is None or (cx - at[0]) ** 2 + (cy - at[1]) ** 2 > PT_VIEW_MOVE * PT_VIEW_MOVE:
+            self.sight_at = (cx, cy)
+            r2 = self.sight_far * self.sight_far
+            for c, x0, y0, x1, y1 in self.sight_cells:
+                dx, dy = max(x0 - cx, 0.0, cx - x1), max(y0 - cy, 0.0, cy - y1)
+                if dx * dx + dy * dy > r2:
+                    c.hide()
+                else:
+                    c.show()
 
     def update_views(self, dt, mdx, mdy):
         pl, world = self.player, self.world
@@ -130719,7 +130681,7 @@ class Game(ShowBase):
         target = (38.0 if pl.mount >= 0 else self.ads_fov(pl, w, sight)) * (self.fov_base / FOV) if pl.ads else self.fov_base
         self.fov_cur += (target - self.fov_cur) * min(1.0, 14 * dt)
         self.camLens.setFov(self.fov_cur)
-        self.apply_lod_zoom()
+        self.apply_sight()
         self.gun_lens.setAspectRatio(self.getAspectRatio())
         self.ads_t += ((1.0 if pl.ads else 0.0) - self.ads_t) * min(1.0, 14 * dt)
         self.death_t = min(1.0, self.death_t + dt * 1.5) if pl.hp <= 0 else 0.0
@@ -131296,7 +131258,8 @@ class Game(ShowBase):
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
         self.mcull_frame = getattr(self, "mcull_frame", 0) + 1
-        cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame)   # v58
+        cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame,
+                       far=getattr(self, "sight_far", 0.0))   # v58, v59
 
     def update_objects(self, dt):
         """Granaten, am Boden liegende Waffen, Fahrzeuge und Effekte darstellen."""
@@ -133315,7 +133278,7 @@ def mob_draw_key(m):
     return (n, m.hp) if n is not None else None
 
 
-def cull_mob_views(views, world, cam, render, lens, frame, stats=None):
+def cull_mob_views(views, world, cam, render, lens, frame, stats=None, far=0.0):
     """v58: Monster-Culling (MOB_CULL_PAD, MOB_OCC_*): nach dem Setzen der Kamera, vor dem Zeichnen. Ausserhalb des
     Sichtkegels oder (gestaffelt geprüft) hinter Wänden -> Modell aus (hide) und keine Animation mehr; kommt es wieder
     in Frage, wird es im selben Bild eingeblendet und neu gezeichnet. Nur Darstellung."""
@@ -133331,6 +133294,7 @@ def cull_mob_views(views, world, cam, render, lens, frame, stats=None):
     ch, sh, cv, sv = math.cos(ah), math.sin(ah), math.cos(av), math.sin(av)
     occ_on = MOB_OCC_ON and not world.eye_in_occluder(ex, ey, ez)   # Flugkamera steckt in einer Wand: nicht verdecken
     eye = (ex, ey, ez)
+    far2 = far * far
     n2, f2, mv2 = MOB_OCC_NEAR * MOB_OCC_NEAR, MOB_OCC_FAR * MOB_OCC_FAR, MOB_OCC_MOVE * MOB_OCC_MOVE
     for m, v in views.items():
         if v is None:
@@ -133341,7 +133305,8 @@ def cull_mob_views(views, world, cam, render, lens, frame, stats=None):
         zc = dx * fx + dy * fy + dz * fz                   # Kameraraum: vorwärts / rechts / oben
         xc = dx * rx + dy * ry + dz * rz
         yc = dx * ux + dy * uy + dz * uz
-        hide = (zc < -R or abs(xc) * ch - zc * sh > R or abs(yc) * cv - zc * sv > R)
+        hide = (zc < -R or abs(xc) * ch - zc * sh > R or abs(yc) * cv - zc * sv > R
+                or (far2 > 0.0 and dx * dx + dy * dy > far2))   # v59: hinter der Sichtweite
         if hide:
             v.occ_at = None                                # kommt es zurück ins Bild: sofort neu prüfen
             if stats is not None:
