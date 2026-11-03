@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 57         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 58         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 220               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -5805,11 +5805,18 @@ class MapConfigInariSanctuary:
 
     # Licht (Spezifikation, Abschnitt 3). exposure: das Spiel hat keine Tonwerte, Bilder aus Vertexfarben brauchen mehr Grund.
     LIGHT_FOREST = dict(ambient=(0.15, 0.18, 0.25, 1.0), exposure=2.3, sun_col=(1.0, 0.72, 0.50), sun_gain=0.9,
-                        sun_dir=(-0.62, -0.74, 0.27), canopy=0.16, fog_col=(0.16, 0.19, 0.25), fog_dens=0.0105,
+                        sun_dir=(-0.62, -0.74, 0.27), canopy=0.16, fog_col=(0.16, 0.19, 0.25), fog_dens=0.100,
                         sky_scale=(0.22, 0.24, 0.29), actor_scale=(0.66, 0.70, 0.84))
     LIGHT_SHRINE = dict(ambient=(0.27, 0.20, 0.15, 1.0), exposure=1.0, torch_col=(1.0, 0.6, 0.2, 1.0), torch_r=10.0,
-                        torch_gain=0.62, flicker=0.06, fog_col=(0.19, 0.12, 0.07), fog_dens=0.0030,
+                        torch_gain=0.62, flicker=0.06, fog_col=(0.19, 0.12, 0.07), fog_dens=0.0060,
                         actor_scale=(1.0, 0.84, 0.66))
+    LIGHT_PLAZA = dict(fog_col=(0.17, 0.19, 0.24), fog_dens=0.0125)    # Nebelkurve: exp(-(Dichte * Abstand)^2), Wald: 5 % bei 17 m
+    FOG_CEIL = (14.0, 42.0)                 # Höhennebel: von so hoch über dem Boden an dünnt er aus, oben ist er weg
+    CELL_CULL = 62.0                        # Waldblöcke weiter weg werden im Nebel gar nicht gezeichnet
+    FIRE = dict(ring_r=1.7, ring_h=0.7, light_z=1.6, col=(1.0, 0.45, 0.1, 1.0), base_intensity=1.0, jitter=0.15, radius=9.5,
+                bake_r=15.0, bake_gain=0.40, sparks=26)
+    BRUSH_KEEP = 2.0                        # so weit neben dem Weg beginnt das Unterholz
+    BRUSH_SPEED, BRUSH_VEH_MAX = 0.62, 6.0  # Tempo im Unterholz: Anteil zu Fuss, Höchsttempo im Wagen (m/s)
     DYNAMIC_LIGHTS = False                  # Echtzeit-Fackeln mit Schatten (teuer, das Spiel zeichnet sonst ohne Lichtquellen)
     DYNAMIC_SHADOW_LIGHTS = 2               # so viele der Echtzeit-Lichter werfen Schatten
 
@@ -5839,6 +5846,15 @@ class MapConfigInariSanctuary:
         a, b = abs(x), abs(y)
         h, arm, w = 9.75 - m, 14.75 - m, 4.75 - m
         return (a <= h and b <= h) or (a <= arm and b <= w) or (b <= arm and a <= w)
+
+    @classmethod
+    def in_brush(cls, x, y):
+        """Steht (x, y) relativ zur Mitte abseits der Wege im Unterholz?"""
+        if max(abs(x), abs(y)) < cls.PLAZA_HALF + 6.0 or x * x + y * y > (cls.WALKABLE_R + 4.0) ** 2:
+            return False
+        if cls.PATH_HW + cls.BRUSH_KEEP > _INA_DATA["open"].get((int(round(x / cls.GRID)), int(round(y / cls.GRID))), 99.0):
+            return False
+        return not any(abs(x - a) < 10.0 and abs(y - b) < 10.0 for a, b in cls.ALTARS)
 
     @classmethod
     def surface_at(cls, x, y):
@@ -5983,7 +5999,7 @@ class _InaBuilder:
             "torii": ("wood", (1.45, 0.34, 0.20)), "torii_cap": ("wood", (0.28, 0.25, 0.25)), "gold": ("plaster", (1.05, 0.80, 0.42)),
             "statue": ("stone", (0.92, 0.92, 0.88)), "bib": ("wood", (1.3, 0.25, 0.18)), "roof": ("roof", (0.52, 0.54, 0.60)),
             "gable": ("wood", (0.75, 0.48, 0.30)), "iron": ("metal", (0.35, 0.33, 0.32)),
-            "beam": ("wood", (0.42, 0.30, 0.24)), "beam_red": ("plaster", (1.3, 0.34, 0.2))}.items()}
+            "beam": ("wood", (0.42, 0.30, 0.24)), "beam_red": ("plaster", (1.3, 0.34, 0.2)), "ring": ("rock", (0.86, 0.82, 0.76))}.items()}
         self.rk = 0                                        # Vierteldrehungen für den Schreinbau
         self.lines = {k: _ina_spline(v) for k, v in cfg.PATHS.items()}
         self.side_lines = self.make_side_paths()
@@ -6278,6 +6294,7 @@ class _InaBuilder:
                 self.B(sx * px - 0.4, sy * py - 0.4, sx * px + 0.4, sy * py + 0.4, Z - 0.2, Z + atop, INA_RED)
         self.make_facade()
         self.make_buddhas()
+        self.make_fire_pit()
         self.make_roof()
         for rk, (ox, oy) in ((0, (0.0, A + 0.42)), (2, (0.0, -A - 0.42)), (3, (A + 0.42, -3.7)), (1, (-A - 0.42, 3.7))):
             # Torrahmen: Pfosten und Sturz
@@ -6323,6 +6340,14 @@ class _InaBuilder:
             # Hallenwand innen: Riegel unter der Galerie
             vx, vy = rot(0, H - 0.36, rk)
             _ina_obox(red, None, vx, vy, Z + 9.0, 2 * H - 0.8, 0.1, 0.24, ang)
+
+    def make_fire_pit(self):
+        """Steinring der Feuerstelle in der Mitte der Halle (Glut, Funken und Licht entstehen zur Laufzeit)."""
+        F, Z, C = self.cfg.FIRE, self.cfg.Z_FLOOR, self.C
+        r, h = F["ring_r"], F["ring_h"]
+        _ina_lathe(self.groups["ring"], C, C, Z, [(r + 0.15, 0.0), (r + 0.1, h * 0.6), (r - 0.05, h), (r - 0.4, h), (r - 0.5, h * 0.45), (0.0, h * 0.45)], 16)
+        q = r * 0.92
+        self.B(-q, -q, q, q, Z, Z + h, INA_STONE, vis=False, mm=False)
 
     def make_buddhas(self):
         S, Z = self.cfg.SHRINE, self.cfg.Z_FLOOR
@@ -6510,32 +6535,44 @@ class _InaBuilder:
                 return False
             return not any(math.hypot(x - a, y - b) < 7.0 for a, b in cfg.SPAWN_NODES + cfg.SPAWN_EXTRA)
 
-        placed = []
-        for _ in range(9000):
-            if len(placed) >= 660:
+        placed = {}
+        for _ in range(40000):
+            if len(self.trees) >= 1650:
                 break
             a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
             x, y = math.cos(a) * r, math.sin(a) * r
             bamboo = _ina_noise(x * 1.4 + 40, y * 1.4 - 25) > 0.35
-            gap = 4.0 if bamboo else 7.5
-            if not free(x, y, cfg.PATH_HW + 2.5) or any(abs(x - p[0]) < gap and abs(y - p[1]) < gap and math.hypot(x - p[0], y - p[1]) < gap for p in placed):
+            gap = 2.5 if bamboo else 4.7
+            if not free(x, y, cfg.PATH_HW + 2.5):
                 continue
-            placed.append((x, y))
+            ci, cj = int(x // 5), int(y // 5)
+            if any(math.hypot(x - q[0], y - q[1]) < gap for i in range(ci - 1, ci + 2) for j in range(cj - 1, cj + 2)
+                   for q in placed.get((i, j), ())):
+                continue
+            placed.setdefault((ci, cj), []).append((x, y))
             self.trees.append([x + self.C, y + self.C, rng.uniform(1.0, 1.25) if bamboo else rng.uniform(1.7, 3.0)])
-        for _ in range(3000):
-            if len(self.rocks) >= 130:
+        for _ in range(6000):
+            if len(self.rocks) >= 325:
                 break
             a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
             x, y = math.cos(a) * r, math.sin(a) * r
             if free(x, y, cfg.PATH_HW + 1.5):
                 self.rocks.append([x + self.C, y + self.C, rng.uniform(0.6, 1.9)])
-        for _ in range(6000):
-            if len(self.plants) >= 1400:
+        for _ in range(12000):
+            if len(self.plants) >= 3500:
                 break
             a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
             x, y = math.cos(a) * r, math.sin(a) * r
             if free(x, y, cfg.PATH_HW + 0.8):
                 self.plants.append([x + self.C, y + self.C, self.h(x, y), 1, rng.uniform(0.6, 1.2)])
+        self.brush = []                                    # Unterholz: nimmt die Sicht, Kollision nicht (dafür langsam)
+        for _ in range(16000):
+            if len(self.brush) >= 4200:
+                break
+            a, r = rng.uniform(0, 6.283), R * math.sqrt(rng.random())
+            x, y = math.cos(a) * r, math.sin(a) * r
+            if free(x, y, cfg.PATH_HW + cfg.BRUSH_KEEP):
+                self.brush.append((x + self.C, y + self.C, self.h(x, y), rng.uniform(1.0, 1.7)))
 
     def make_points(self):
         cfg, C = self.cfg, self.C
@@ -6567,6 +6604,7 @@ def inari_data():
             "blocks": b.blocks, "houses": [], "towers": [], "ruins": [], "spawns": b.spawns, "spawn_z": b.spawn_z, "crates": b.crates,
             "turrets": [], "vehicles": b.vehicles, "pads": [], "plants": b.plants},
             coll=(b.coll.v, b.coll.t, b.coll.k), render=[g.out() for g in b.groups.values() if g.t], open=b.open, roads=roads,
+            shrine={id(b.groups[k].v) for k in ("gold", "beam", "beam_red", "iron", "ring")}, brush=b.brush, trees=b.trees, rocks=b.rocks, plants=b.plants,
             heights=b.heights, n=b.n)
     return _INA_DATA
 
@@ -6577,7 +6615,11 @@ def inari_mapdata():
     raw = dict(d["raw"])
     m = sanitize_map(raw)
     cfg = MapConfigInariSanctuary
-    m["mesh"] = dict(coll=d["coll"], render=d["render"], photo=None)
+    m["mesh"] = dict(coll=d["coll"], render=d["render"], photo=None, shrine=d["shrine"])
+    m["trees"] = [tuple(t) for t in d["trees"]]          # über den Grenzen der Editor-Karten: der Wald ist Teil dieser Karte
+    m["rocks"] = [tuple(t) for t in d["rocks"]]
+    m["plants"] = [tuple(t) for t in d["plants"]]
+    m["brush"] = d["brush"]
     m["inari"] = True
     m["tree_style"] = "inari"
     m["sun"] = cfg.LIGHT_FOREST["sun_dir"]
@@ -6611,6 +6653,14 @@ def _ina_light(p, d):
         c = F["sun_col"]
         k = e * (0.92 + 0.5 * sky)
         fr, fg, fb = a[0] * k + c[0] * g, a[1] * k + c[1] * g, a[2] * k + c[2] * g
+    if inside:                                                          # Feuerstelle: Grundschein, das Flackern kommt zur Laufzeit
+        Fi = cfg.FIRE
+        dd = r2 + (z - cfg.Z_FLOOR - Fi["light_z"]) ** 2
+        if dd < Fi["bake_r"] ** 2:
+            k = (1.0 - dd / Fi["bake_r"] ** 2) ** 2 * Fi["bake_gain"]
+            fr += Fi["col"][0] * k
+            fg += Fi["col"][1] * k
+            fb += Fi["col"][2] * k
     if r2 < 2800.0:
         T = _INA_TORCH
         tr = S["torch_r"]
@@ -6635,7 +6685,7 @@ _INA_TORCH = MapConfigInariSanctuary.torches()
 def inari_cedar(m, x, y, z, r, rng):
     """Hohe, dunkle Zeder: langer Stamm, Äste erst weit oben. Gibt die Höhe zurück."""
     h = rng.uniform(15.0, 23.0)
-    prism(m, x, y, z - 0.4, 0.42 + r * 0.06, h * 0.86, 7, (0.25, 0.19, 0.15), rng, taper=0.25)
+    prism(m, x, y, z - 0.4, 0.42 + r * 0.06, h * 0.86, 5, (0.25, 0.19, 0.15), rng, taper=0.25)
     m.mat = "leaves"
     n = 5
     for i in range(n):
@@ -6643,15 +6693,38 @@ def inari_cedar(m, x, y, z, r, rng):
         zz = z + h * (0.40 + 0.46 * t)
         rr = (r + 1.5) * (1.05 - 0.72 * t)
         g = rng.uniform(0.82, 1.1)
-        cone(m, x, y, zz, rr, h * 0.26, 7, (0.13 * g, 0.24 * g, 0.20 * g), rng, 0.18)
+        cone(m, x, y, zz, rr, h * 0.26, 6, (0.13 * g, 0.24 * g, 0.20 * g), rng, 0.18)
+    for _ in range(4):                                  # Moosbärte hängen von den unteren Ästen
+        a, d = rng.uniform(0, 6.283), rng.uniform(1.4, r + 1.3)
+        vx, vy = x + math.cos(a) * d, y + math.sin(a) * d
+        top = z + h * 0.42
+        low = top - rng.uniform(2.5, 6.0)
+        w = rng.uniform(0.14, 0.3)
+        wx, wy = -math.sin(a) * w, math.cos(a) * w
+        c0, c1 = (0.26, 0.31, 0.20), (0.40, 0.47, 0.29)
+        p0, p1, p2 = (vx - wx, vy - wy, top), (vx + wx, vy + wy, top), (vx + 0.15, vy + 0.1, low)
+        m.tri(p0, p1, p2, (c0, c0, c1), mat="leaves")
+        m.tri(p1, p0, p2, (c0, c0, c1), mat="leaves")
     m.mat = None
     return h
+
+
+def inari_brush(m, x, y, z, s, rng):
+    """Dichtes Unterholz: bis zur Augenhöhe, nimmt die Sicht."""
+    m.mat = "leaves"
+    for _ in range(4):
+        a, d = rng.uniform(0, 6.283), rng.uniform(0.3, 1.1) * s
+        g = rng.uniform(0.8, 1.15)
+        rr = rng.uniform(0.75, 1.1) * s
+        blob(m, x + math.cos(a) * d, y + math.sin(a) * d, z + rng.uniform(0.45, 0.85) * s, rr, rr * rng.uniform(0.8, 1.2), 0.72 * s,
+             (0.12 * g, 0.23 * g, 0.13 * g), rng, jitter=0.42, subdiv=0)
+    m.mat = None
 
 
 def inari_bamboo(m, x, y, z, r, rng):
     """Bambusgruppe: dünne Halme, oben lockeres Laub. Gibt die Höhe zurück."""
     h = 0.0
-    for _ in range(9):
+    for _ in range(6):
         a, d = rng.uniform(0, 6.283), rng.uniform(0.0, 1.5) * r
         bx, by = x + math.cos(a) * d, y + math.sin(a) * d
         hh = rng.uniform(7.0, 11.5)
@@ -6659,9 +6732,8 @@ def inari_bamboo(m, x, y, z, r, rng):
         g = rng.uniform(0.85, 1.1)
         prism(m, bx, by, z - 0.3, 0.07, hh, 4, (0.36 * g, 0.47 * g, 0.20 * g), rng, taper=0.5)
         m.mat = "leaves"
-        for k in range(2):
-            blob(m, bx + rng.uniform(-0.4, 0.4), by + rng.uniform(-0.4, 0.4), z + hh * (0.82 + 0.13 * k), 1.0, 1.0, 0.8,
-                 (0.27 * g, 0.40 * g, 0.17 * g), rng, jitter=0.3, subdiv=0)
+        blob(m, bx + rng.uniform(-0.4, 0.4), by + rng.uniform(-0.4, 0.4), z + hh * 0.86, 1.3, 1.3, 1.5,
+             (0.27 * g, 0.40 * g, 0.17 * g), rng, jitter=0.3, subdiv=0)
         m.mat = None
     return h
 
@@ -6728,6 +6800,7 @@ class InariSceneHooks:
         self.nodes = {"heightmap": game.land_np, "instances": game.town_np, "lights": self.root.attachNewNode("lichter"),
                       "collision_debug": self.root.attachNewNode("kollision_debug")}
         self.nodes["collision_debug"].hide()
+        self.amb_np = None
         found = game.town_np.find("**/inari_schrein") if game.town_np is not None else None
         self.shrine = found if found is not None and not found.isEmpty() else None
         self.w = 0.0                                    # 0 = Wald, 1 = im Schrein
@@ -6735,6 +6808,20 @@ class InariSceneHooks:
         self.flames = []
         self.dyn = []
         self.build_flames()
+        self.build_fire()
+        g_fog = game.fog
+        if g_fog is not None:
+            g_fog.setMode(Fog.MExponentialSquared)
+        self.cells = []                                 # Blöcke des Walds: (Knoten, x, y, Radius), Abstand = Sichtgrenze im Nebel
+        if game.town_np is not None:
+            for c in game.town_np.findAllMatches("block"):
+                b = c.getBounds()
+                if not b.isEmpty():
+                    q = b.getCenter()
+                    self.cells.append((c, q[0], q[1], b.getRadius()))
+        self.cell_t = 0.0
+        self.fog_key = None
+        self.f = 1.0                                    # 1 = dichter Waldnebel um die Kamera, 0 = frei
         if cfg.DYNAMIC_LIGHTS:
             self.attach_dynamic_lights()
         F = cfg.LIGHT_FOREST
@@ -6775,6 +6862,126 @@ class InariSceneHooks:
                 cards.append((n, size))
             self.flames.append((x + C, y + C, i * 1.7, cards))
 
+    def build_fire(self):
+        """Feuerstelle: Glutbett, Flammen, Funken und das flackernde Licht. Eine PointLight wirkt nur auf den Schrein
+        (ohne Schatten, je Eckpunkt berechnet): das Spiel zeichnet sonst ohne Lichtquellen, die weisse AmbientLight lässt
+        das eingebackene Licht unverändert."""
+        from panda3d.core import PointLight
+        g, cfg = self.game, self.cfg
+        F, C, Z = cfg.FIRE, cfg.HALF, cfg.Z_FLOOR
+        self.fire_rng = random.Random()                 # nur Darstellung: darf nicht den Zufall der Welt stören
+        par = self.nodes["lights"]
+        ember = Mesh(lit=False)
+        rng = random.Random(11)
+        rin = F["ring_r"] - 0.42
+        zb = Z + F["ring_h"] * 0.5
+        n = 22
+        for ring_ in range(4):
+            r0, r1 = rin * ring_ / 4.0, rin * (ring_ + 1) / 4.0
+            for i in range(n):
+                a0, a1 = 6.2832 * i / n, 6.2832 * (i + 1) / n
+                c0 = rng.choice(((1.0, 0.62, 0.14), (1.0, 0.34, 0.06), (0.62, 0.12, 0.03), (0.22, 0.07, 0.04)))
+                c1 = rng.choice(((1.0, 0.4, 0.08), (0.75, 0.16, 0.04), (0.28, 0.08, 0.04)))
+                pts = [(C + math.cos(a) * r, C + math.sin(a) * r, zb + rng.uniform(0.0, 0.1)) for a, r in ((a0, r0), (a1, r0), (a1, r1), (a0, r1))]
+                ember.tri(pts[0], pts[3], pts[2], (c0, c1, c1))
+                ember.tri(pts[0], pts[2], pts[1], (c0, c1, c0))
+        self.ember = par.attachNewNode(ember.node("glut"))
+        self.ember.setLightOff()
+        self.ember.setFogOff()
+        self.ember.setColorScaleOff(1)
+        self.fire_cards = []
+        tex = get_tex("glow")
+
+        def card(size, col, parent=None):
+            cm = CardMaker("feuer")
+            cm.setFrame(-1, 1, -1, 1)
+            k = (parent or par).attachNewNode(cm.generate())
+            k.setBillboardPointEye()
+            if tex is not None:
+                k.setTexture(tex)
+            k.setTransparency(TransparencyAttrib.MAlpha)
+            k.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd, ColorBlendAttrib.OIncomingAlpha, ColorBlendAttrib.OOne))
+            k.setDepthWrite(False)
+            k.setLightOff()
+            k.setFogOff()
+            k.setColorScaleOff(1)
+            k.setColorScale(*col)
+            k.setScale(size)
+            k.setBin("fixed", 5)
+            return k
+        for i, (dz, size, col) in enumerate(((0.55, 2.3, (1.0, 0.38, 0.08, 0.8)), (1.1, 1.6, (1.0, 0.55, 0.14, 0.85)), (1.75, 1.0, (1.0, 0.72, 0.3, 0.7)))):
+            k = card(size, col)
+            k.setPos(C, C, zb + dz)
+            self.fire_cards.append((k, size, zb + dz, i * 2.1))
+        self.sparks = []
+        for i in range(F["sparks"]):
+            k = card(0.075, (1.0, 0.62, 0.2, 1.0))
+            k.hide()
+            self.sparks.append([k, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, self.fire_rng.uniform(0.0, 2.0)])    # Knoten, Ort, Tempo, Alter, Dauer
+        amb = AmbientLight("schrein_grund")
+        amb.setColor((1, 1, 1, 1))
+        self.amb_np = par.attachNewNode(amb)
+        self.fire_light = PointLight("feuerstelle")
+        self.fire_np = par.attachNewNode(self.fire_light)
+        self.fire_np.setPos(C, C, Z + F["light_z"])
+        self.fire_i = F["base_intensity"]
+        self.fire_r = F["radius"]
+        self.set_fire(self.fire_i, self.fire_r)
+        if self.shrine is not None:
+            self.shrine.setLight(self.amb_np)
+            self.shrine.setLight(self.fire_np)
+        self.fire_prev = time.time()
+        g.taskMgr.add(self.fire_task, "inari_feuer")
+
+    def set_fire(self, intensity, radius):
+        c = self.cfg.FIRE["col"]
+        self.fire_light.setColor((c[0] * intensity, c[1] * intensity, c[2] * intensity, 1))
+        self.fire_light.setAttenuation((1.0, 0.0, 2.2 / (radius * radius)))
+
+    def fire_task(self, task):
+        """Flackern: Helligkeit und Reichweite bekommen je Bild kleine Zufallsschwankungen (base_intensity +- jitter),
+        leicht geglättet. Dazu steigen Funken aus der Glut. Task.cont: läuft, bis destroy die Aufgabe entfernt."""
+        F = self.cfg.FIRE
+        now = time.time()
+        dt = min(0.1, now - self.fire_prev)
+        self.fire_prev = now
+        r_ = self.fire_rng
+        goal_i = F["base_intensity"] + r_.uniform(-F["jitter"], F["jitter"])
+        goal_r = F["radius"] * (1.0 + r_.uniform(-F["jitter"], F["jitter"]))
+        k = min(1.0, dt * 30.0)
+        self.fire_i += (goal_i - self.fire_i) * k
+        self.fire_r += (goal_r - self.fire_r) * k
+        self.set_fire(self.fire_i, self.fire_r)
+        v = 0.86 + (self.fire_i - F["base_intensity"]) * 0.9
+        self.ember.setColorScale(v, v, v, 1)
+        cp = self.game.camera.getPos(self.game.render)
+        C, Z = self.cfg.HALF, self.cfg.Z_FLOOR
+        near = abs(cp[0] - C) < 45.0 and abs(cp[1] - C) < 45.0
+        for c, size, z0, ph in self.fire_cards:
+            c.setScale(size * (1.0 + (self.fire_i - 1.0) * 1.1 + 0.08 * math.sin(now * 11.0 + ph)))
+            c.setZ(z0 + 0.1 * math.sin(now * 7.0 + ph))
+        for sp in self.sparks:
+            if not near:
+                sp[0].hide()
+                continue
+            sp[7] += dt
+            if sp[7] >= sp[8]:                          # neuer Funke aus der Glut
+                a, d = r_.uniform(0, 6.283), r_.uniform(0.0, F["ring_r"] - 0.5)
+                sp[1:7] = [C + math.cos(a) * d, C + math.sin(a) * d, Z + F["ring_h"] * 0.6,
+                           r_.uniform(-0.5, 0.5), r_.uniform(-0.5, 0.5), r_.uniform(2.2, 5.0)]
+                sp[7], sp[8] = 0.0, r_.uniform(0.7, 2.0)
+                sp[0].show()
+            sp[4] += r_.uniform(-3.0, 3.0) * dt         # Funken torkeln in der Hitze
+            sp[5] += r_.uniform(-3.0, 3.0) * dt
+            sp[6] -= 0.7 * dt
+            sp[1] += sp[4] * dt
+            sp[2] += sp[5] * dt
+            sp[3] += sp[6] * dt
+            sp[0].setPos(sp[1], sp[2], sp[3])
+            fade = 1.0 - sp[7] / sp[8]
+            sp[0].setColorScale(1.0, 0.45 + 0.35 * fade, 0.12, fade)
+        return task.cont
+
     def attach_dynamic_lights(self):
         """Haken für echte Fackeln: PointLights in der Halle, die ersten als Spots mit Schatten. Aus, solange
         DYNAMIC_LIGHTS False ist: jede schattenwerfende Lampe zeichnet die Szene ein weiteres Mal."""
@@ -6800,14 +7007,23 @@ class InariSceneHooks:
         target.setShaderAuto()
 
     def apply(self, w):
-        F, S = self.cfg.LIGHT_FOREST, self.cfg.LIGHT_SHRINE
+        """Nebel und Figurenfarbe für die Kamera: w = im Schrein, self.f = im dichten Waldnebel. Die Dichte hängt nicht am
+        Sichtweiten-Regler: sonst sähe im Wald weiter, wer ihn hochdreht."""
+        cfg = self.cfg
+        F, S, P = cfg.LIGHT_FOREST, cfg.LIGHT_SHRINE, cfg.LIGHT_PLAZA
         g = self.game
-        fc = mix(F["fog_col"], S["fog_col"], w)
-        dens = F["fog_dens"] + (S["fog_dens"] - F["fog_dens"]) * w
+        out_c = mix(P["fog_col"], F["fog_col"], self.f)
+        fc = mix(out_c, S["fog_col"], w)
+        d0 = P["fog_dens"] + (F["fog_dens"] - P["fog_dens"]) * self.f
+        dens = d0 + (S["fog_dens"] - d0) * w
+        key = (round(w, 3), round(self.f, 3))
         if g.fog is not None:
             g.fog.setColor(*fc)
             g.fog_dens = dens
-            g.fog.setExpDensity(dens / max(0.01, g.view_pct / 100.0))
+            g.fog.setExpDensity(dens)
+        if key == self.fog_key:
+            return
+        self.fog_key = key
         g.setBackgroundColor(*fc)
         a = mix(F["actor_scale"], S["actor_scale"], w)
         g.render.setColorScale(a[0], a[1], a[2], 1)
@@ -6820,9 +7036,25 @@ class InariSceneHooks:
         x, y = cp[0] - C, cp[1] - C
         inside = cfg.in_shrine(x, y) and cp[2] < cfg.Z_FLOOR + 12.5 and cp[2] > cfg.Z_FLOOR - 1.0
         goal = 1.0 if inside else 0.0
-        if abs(goal - self.w) > 0.002:
-            self.w += (goal - self.w) * min(1.0, dt * 3.0)
-            self.apply(self.w)
+        self.w += (goal - self.w) * min(1.0, dt * 3.0)
+        over = cp[2] - g.world.height(cp[0], cp[1])     # Höhennebel: über den Wipfeln wird es klar
+        goal_f = smoothstep(46.0, 78.0, max(abs(x), abs(y))) * (1.0 - smoothstep(cfg.FOG_CEIL[0], cfg.FOG_CEIL[1], over))
+        self.f += (goal_f - self.f) * min(1.0, dt * 2.5)
+        self.apply(self.w)
+        if g.sky_root is not None:                      # im Dickicht nur Nebel, der Himmel kommt erst auf Lichtung und Plattform
+            if self.f > 0.55 or self.w > 0.5:
+                g.sky_root.hide()
+            else:
+                g.sky_root.show()
+        self.cell_t -= dt
+        if self.cell_t <= 0.0:
+            self.cell_t = 0.2
+            lim = cfg.CELL_CULL
+            for c, qx, qy, rad in self.cells:
+                if self.f > 0.8 and math.hypot(qx - cp[0], qy - cp[1]) - rad > lim:
+                    c.hide()
+                else:
+                    c.show()
         t = self.t
         fl = self.cfg.LIGHT_SHRINE["flicker"]
         pulse = 0.5 * math.sin(t * 7.3) + 0.3 * math.sin(t * 13.1 + 1.0) + 0.2 * math.sin(t * 23.0 + 2.0)
@@ -6841,10 +7073,16 @@ class InariSceneHooks:
 
     def destroy(self):
         g = self.game
+        g.taskMgr.remove("inari_feuer")
+        if self.shrine is not None:
+            self.shrine.clearLight()
         self.root.removeNode()
         g.render.clearColorScale()
         g.setBackgroundColor(*SKY)
+        if g.fog is not None:
+            g.fog.setMode(Fog.MExponential)
         if g.sky_root is not None:
+            g.sky_root.show()
             g.sky_root.clearColorScale()
             for c in g.sky_root.findAllMatches("sonne"):
                 c.setPos(*(v * SKY_RADIUS * 0.9 for v in SUN0))
@@ -13275,6 +13513,8 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
         pl.moving = True
     elif pl.moving:
         speed = RUN if (run and pl.crouch < 0.3) else WALK     # geduckt kein Rennen
+        if world.map.get("inari") and pl.z < world.surface_height(pl.x, pl.y) + 0.5 and MapConfigInariSanctuary.in_brush(pl.x - CENTER, pl.y - CENTER):
+            speed *= MapConfigInariSanctuary.BRUSH_SPEED       # Unterholz bremst
         if pl.ads:
             speed *= 0.6
         speed *= 1.0 - (1.0 - CROUCH_SPEED) * pl.crouch
@@ -13514,6 +13754,9 @@ def drive(v, throttle, steer, brake, dt, world):
     if brake:
         sp *= math.exp(-5.0 * dt)
     sp = clampf(sp, -VEH_REV, VEH_MAX)
+    if world.map.get("inari") and MapConfigInariSanctuary.in_brush(v.x - CENTER, v.y - CENTER):
+        lim_ = MapConfigInariSanctuary.BRUSH_VEH_MAX            # Unterholz: nur Schritttempo
+        sp = clampf(sp, -lim_, lim_)
     if abs(sp) < 0.05 and throttle == 0:
         sp = 0.0
     v.heading -= steer * VEH_TURN * dt * clampf(sp / 5.0, -1.0, 1.0)
@@ -17288,6 +17531,7 @@ def _build_scene(world, progress, inari):
     pg = progress or (lambda f, t: None)
     rng = random.Random(world.seed + 1)
     m = Mesh()
+    shrine_m = Mesh()
     ponds = world.ponds
     dev = getattr(world, "dev", False)              # v50: Testgelände (Graubox, kein Gras)
     shc = {}
@@ -17440,6 +17684,7 @@ def _build_scene(world, progress, inari):
         set_photo(ph["jpg"] if ph else None, ph["map"] if ph else None)
         photo_ok = bool(ph) and photo_tex() is not None
         pm = ph["map"] if ph else None
+        shr_ids = world.map["mesh"].get("shrine") or ()    # Inari: Teile, die das Feuer mitbeleuchtet
         for mat, tint, rv, rn, rt in world.map["mesh"]["render"]:
             use_ph = mat == "photo" and photo_ok
             if mat == "photo" and not photo_ok:
@@ -17466,9 +17711,9 @@ def _build_scene(world, progress, inari):
                         col = (0.60, 0.62, 0.66)
                     cols.append(jc(tuple(min(1.0, c_ * t_) for c_, t_ in zip(col, tint)), rng, 0.02))
                     nds.append(dot(norm(vn), SUN))
-                m.tri(a, b, c, cols, mat=("dirt" if (mat == "grass" and n[2] < 0.7) else mat), nd=nds)
+                (shrine_m if id(rv) in shr_ids else m).tri(a, b, c, cols, mat=("dirt" if (mat == "grass" and n[2] < 0.7) else mat), nd=nds)
         prng = random.Random(4242)
-        for px_, py_, pz_, pk_, ps_ in world.map.get("plants") or []:
+        for px_, py_, pz_, pk_, ps_ in (() if inari else world.map.get("plants") or ()):
             plant(m, px_, py_, pz_, pk_, ps_, prng)
 
     shadows = Mesh(lit=False)
@@ -17483,14 +17728,20 @@ def _build_scene(world, progress, inari):
             c_ = chunks[k_] = Mesh()
         return c_
 
+    if inari:                                          # Bodenbewuchs in Blöcken: weit Entferntes fällt im Nebel weg
+        for px_, py_, pz_, pk_, ps_ in world.map.get("plants") or ():
+            plant(chunk(px_, py_), px_, py_, pz_, pk_, ps_, rng)
+        for bx_, by_, bz_, bs_ in world.map.get("brush") or ():
+            inari_brush(chunk(bx_, by_), bx_, by_, bz_, bs_, rng)
+
     pg(0.45, "Bäume und Felsen werden gesetzt ...")
     # --- Bäume und Felsen
     for p in world.props:
         if p.kind == "rock":
             r = p.base_r
             g = rng.uniform(0.46, 0.62)
-            blob(m, p.x, p.y, p.z + r * 0.25, r, r * rng.uniform(0.8, 1.2), r * 0.7,
-                 (g, g, g + 0.03), rng, jitter=0.25, subdiv=2, moss=0.55, mat="rock")
+            blob(chunk(p.x, p.y) if inari else m, p.x, p.y, p.z + r * 0.25, r, r * rng.uniform(0.8, 1.2), r * 0.7,
+                 (g, g, g + 0.03), rng, jitter=0.25, subdiv=1 if inari else 2, moss=0.55, mat="rock")
             decal_disc(shadows, world, p.x - SUN[0] * r * 0.3, p.y - SUN[1] * r * 0.3, r * 1.5, 0.42)
         elif p.kind == "tree" and inari:                  # Zedern (grosser Radius) und Bambus (kleiner Radius)
             cm_ = chunk(p.x, p.y)
@@ -17627,7 +17878,6 @@ def _build_scene(world, progress, inari):
             reed_at(px_ + math.cos(aa_) * rr_, py_ + math.sin(aa_) * rr_, 1.7)
 
     pg(0.82, "Gebäude werden errichtet ...")
-    shrine_m = Mesh()
     # --- Gebäude (Burg, Türme, Häuser, Treppen, Deckung)
     for b in world.boxes:
         if not b.vis:
@@ -20351,6 +20601,91 @@ TOMA_YEEHAW = True         # ... und ruft beim Überflug "Yeehaw!" ...
 TOMA_YEEHAW_U = 0.45       # ... wenn die Rakete so weit (Anteil des Countdowns) geflogen ist
 
 TOMA_YEEHAW_VOL = 0.75
+
+def build_ninja_rider():
+    """Inari: surfender Ninja (Low-Poly) in Raketen-Koordinaten: steht seitlich auf der Rakete, Knie gebeugt. Linke Hand hält
+    drei Shuriken wie gefächerte Spielkarten, rechte das gezogene Katana. -> (root, Arm mit Katana, Stirnband-Enden)"""
+    rng = random.Random(78)
+    root = NodePath("ninja_reiter")
+    m = Mesh()
+    cloth, cloth2, band, skin, steel = (0.10, 0.10, 0.13), (0.16, 0.16, 0.20), (0.74, 0.12, 0.10), (0.86, 0.68, 0.54), (0.80, 0.83, 0.88)
+
+    def limb(mesh, a, b, w, col):
+        """Vierkant von a nach b (Breite w)."""
+        d = norm(sub(b, a))
+        u = norm(cross(d, (0.31, 0.17, 0.93) if abs(d[2]) < 0.9 else (1.0, 0.0, 0.0)))
+        v = cross(d, u)
+        corners = [(u[0] * s1 + v[0] * s2, u[1] * s1 + v[1] * s2, u[2] * s1 + v[2] * s2) for s1, s2 in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        ca = [add(a, tuple(c * w / 2 for c in q)) for q in corners]
+        cb = [add(b, tuple(c * w / 2 for c in q)) for q in corners]
+        ref = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+        for i in range(4):
+            j = (i + 1) % 4
+            mesh.tri(ca[i], ca[j], cb[j], col, ref)
+            mesh.tri(ca[i], cb[j], cb[i], col, ref)
+        mesh.tri(cb[0], cb[1], cb[2], col, ref)
+        mesh.tri(cb[0], cb[2], cb[3], col, ref)
+        mesh.tri(ca[0], ca[1], ca[2], col, ref)
+        mesh.tri(ca[0], ca[2], ca[3], col, ref)
+
+    hip = (0.0, -0.01, 0.17)
+    for fy, kx, col in ((0.13, 0.05, cloth), (-0.15, -0.05, cloth2)):           # gegrätschte Surf-Haltung: Füsse längs der Rakete
+        foot, knee = (0.0, fy, 0.012), (kx, fy * 0.82, 0.105)
+        limb(m, hip, knee, 0.045, col)
+        limb(m, knee, foot, 0.04, col)
+        limb(m, (0.0, fy - 0.035, 0.008), (0.0, fy + 0.045, 0.008), 0.032, (0.06, 0.06, 0.07))
+    chest = (0.02, 0.015, 0.285)
+    limb(m, hip, chest, 0.085, cloth)
+    limb(m, (0.0, -0.01, 0.185), (0.005, -0.008, 0.2), 0.092, band)             # Schärpe
+    limb(m, chest, (0.022, 0.02, 0.315), 0.035, skin)                           # Hals
+    hd = (0.025, 0.024, 0.35)
+    box(m, hd[0], hd[1], hd[2], 0.07, 0.07, 0.075, cloth, rng)
+    box(m, hd[0], hd[1] + 0.034, hd[2] + 0.006, 0.058, 0.006, 0.018, skin)      # Sehschlitz
+    box(m, hd[0], hd[1] + 0.039, hd[2] + 0.006, 0.042, 0.003, 0.006, (0.04, 0.04, 0.05))
+    box(m, hd[0], hd[1], hd[2] + 0.024, 0.075, 0.075, 0.014, band)              # Stirnband
+    sh_l = (-0.055, 0.01, 0.285)
+    el_l, ha_l = (-0.135, 0.06, 0.255), (-0.205, 0.12, 0.30)                    # linker Arm nach vorn, Sterne aufgefächert
+    limb(m, sh_l, el_l, 0.036, cloth2)
+    limb(m, el_l, ha_l, 0.032, cloth2)
+    box(m, ha_l[0], ha_l[1], ha_l[2], 0.03, 0.03, 0.03, skin)
+    for k, ang in enumerate((-32.0, 0.0, 32.0)):                                # drei Shuriken wie Spielkarten
+        a = math.radians(ang)
+        cx_, cz_ = ha_l[0] - math.sin(a) * 0.075, ha_l[2] + math.cos(a) * 0.075
+        sy_ = ha_l[1] + 0.006 * k
+        for tip in range(4):
+            t0 = a + tip * math.pi / 2 + 0.3
+            tipx, tipz = cx_ + math.cos(t0) * 0.058, cz_ + math.sin(t0) * 0.058
+            bx0, bz0 = cx_ + math.cos(t0 + 0.78) * 0.017, cz_ + math.sin(t0 + 0.78) * 0.017
+            bx1, bz1 = cx_ + math.cos(t0 - 0.78) * 0.017, cz_ + math.sin(t0 - 0.78) * 0.017
+            for pa, pb, pc in (((cx_, sy_, cz_), (bx1, sy_, bz1), (tipx, sy_, tipz)), ((cx_, sy_, cz_), (tipx, sy_, tipz), (bx0, sy_, bz0))):
+                m.tri(pa, pb, pc, steel)
+                m.tri(pa, pc, pb, steel)
+    root.attachNewNode(m.node("ninja"))
+    arm = root.attachNewNode("arm_katana")                                      # rechter Arm schwingt um die Schulter
+    arm.setPos(0.095, 0.01, 0.285)
+    a = Mesh()
+    el_r, ha_r = (0.075, 0.0, 0.055), (0.095, 0.03, 0.135)
+    limb(a, (0, 0, 0), el_r, 0.036, cloth2)
+    limb(a, el_r, ha_r, 0.032, cloth2)
+    box(a, ha_r[0], ha_r[1], ha_r[2], 0.03, 0.03, 0.03, skin)
+    limb(a, (ha_r[0] - 0.008, ha_r[1] - 0.008, ha_r[2] - 0.05), (ha_r[0] + 0.006, ha_r[1] + 0.006, ha_r[2] + 0.04), 0.016, (0.08, 0.06, 0.08))   # Griff
+    tip_b = (ha_r[0] + 0.03, ha_r[1] - 0.12, ha_r[2] + 0.34)
+    guard = (ha_r[0] + 0.006, ha_r[1] + 0.003, ha_r[2] + 0.04)
+    limb(a, (guard[0] - 0.03, guard[1], guard[2]), (guard[0] + 0.03, guard[1], guard[2]), 0.012, (0.75, 0.62, 0.25))    # Stichblatt
+    limb(a, guard, tip_b, 0.014, steel)
+    arm.attachNewNode(a.node("arm"))
+    tails = root.attachNewNode("stirnband")                                     # lange Enden wehen nach hinten
+    tails.setPos(hd[0], hd[1] - 0.038, hd[2] + 0.024)
+    f = Mesh(lit=False)
+    for L_, zo in ((0.30, 0.008), (0.24, -0.012)):
+        for i in range(4):
+            y0, y1 = -L_ * i / 4, -L_ * (i + 1) / 4
+            dz0, dz1 = 0.012 * math.sin(i * 1.7), 0.012 * math.sin((i + 1) * 1.7)
+            f.tri((0, y0, zo + dz0), (0, y1, zo + dz1), (0, y1, zo + dz1 + 0.016), band)
+            f.tri((0, y0, zo + dz0), (0, y1, zo + dz1 + 0.016), (0, y0, zo + dz0 + 0.016), band)
+    tails.attachNewNode(f.node("band")).setTwoSided(True)
+    return root, arm, tails
+
 
 def build_rodeo_rider():
     """7d: Fiktiver Comic-Rodeo-General (Low-Poly) in Raketen-Koordinaten (Rakete: Spitze +y, Länge ~1, Breite 0,12;
@@ -26461,6 +26796,88 @@ class PlayerView:
 SR = 22050
 
 
+TOMA_WARBEAT_BPM = 168.0    # Inari: Tempo des Kriegstakts
+TOMA_WARBEAT_VOL = 0.34     # Lautstärke unter Sirene und Rakete
+
+
+def war_beat(rng):
+    """Japanischer Kriegstakt als nahtlose Schleife (8 Takte): grosse Taiko (tiefer Schlag), Shime-Daiko (trockene Hochtrommel),
+    Holzklicks auf dem Trommelrand und ein schnelles Shamisen-Riff in der Miyako-bushi-Tonleiter. Die Shamisen ist eine gezupfte
+    Saite (Karplus-Strong) mit Plektrumschlag und dem typischen Schnarren (Sawari). Nachhall läuft in den Schleifenanfang."""
+    tp = 2 * math.pi
+    st = 60.0 / TOMA_WARBEAT_BPM / 2.0                        # Dauer einer Achtel
+    steps = 64
+    tot = int(steps * st * SR)
+    bus = [0.0] * tot
+
+    def put(wave, pos, gain):
+        for i, v in enumerate(wave):
+            bus[(pos + i) % tot] += v * gain
+
+    def drum(dur, f0, f1, k_f, k_a, nz, nk):
+        n, ph, w, lo = int(dur * SR), 0.0, [], 0.0
+        for i in range(n):
+            t = i / SR
+            ph += tp * (f1 + (f0 - f1) * math.exp(-k_f * t)) / SR
+            lo += 0.25 * (rng.uniform(-1, 1) - lo)
+            w.append(math.sin(ph) * math.exp(-k_a * t) + lo * nz * math.exp(-nk * t))
+        return w
+
+    taiko = drum(0.75, 150.0, 62.0, 26.0, 5.5, 2.2, 45.0)
+    taiko_lo = drum(0.9, 110.0, 48.0, 20.0, 4.5, 2.6, 40.0)
+    shime = drum(0.13, 520.0, 330.0, 45.0, 34.0, 1.3, 60.0)
+    ka = drum(0.04, 1500.0, 1100.0, 30.0, 90.0, 0.8, 120.0)
+
+    def shamisen(midi, dur):
+        f = 440.0 * 2 ** ((midi - 69) / 12.0)
+        p = max(2, int(SR / f))
+        d = [rng.uniform(-1, 1) for _ in range(p)]
+        n, w, i, damp = int(dur * SR), [], 0, 0.992
+        for q in range(n):
+            a = d[i % p]
+            b = d[(i + 1) % p]
+            d[i % p] = (a * 0.62 + b * 0.38) * damp
+            i += 1
+            w.append(math.tanh(a * 2.6) * 0.8 + (a - b) * 0.3)    # Sawari: Saite schnarrt am Sattel
+        for q in range(min(n, int(0.012 * SR))):                  # Bachi schlägt aufs Fell
+            w[q] += rng.uniform(-1, 1) * 0.9 * (1.0 - q / (0.012 * SR))
+        return w
+
+    bar_big = (0, 3, 6)                                       # Grundschlag je Takt (Achtel)
+    for b_ in range(8):
+        o = b_ * 8
+        for k_ in bar_big:
+            put(taiko, int((o + k_) * st * SR), 0.95)
+        put(taiko_lo, int((o + 4) * st * SR), 0.7)
+        for k_ in range(0, 8, 2):
+            put(shime, int((o + k_ + 1) * st * SR), 0.34)
+        put(ka, int((o + 5) * st * SR), 0.3)
+        put(ka, int((o + 7) * st * SR), 0.3)
+    for k_ in range(24):                                      # Wirbel vor der Wiederholung
+        put(shime, int((48 + k_ * 0.5 + 8) * st * SR) % tot, 0.2 + 0.018 * k_)
+    for k_ in (56, 58, 60, 61, 62, 63):
+        put(taiko_lo, int(k_ * st * SR), 0.75)
+    D, Eb, G, A, Bb, D5, Eb5 = 62, 63, 67, 69, 70, 74, 75
+    riff_a = [D, D, Eb, D, A, G, Eb, D, D5, Bb, A, G, A, Bb, A, G]         # Sechzehntel
+    riff_b = [A, A, Bb, A, D5, Eb5, D5, Bb, A, G, Eb, G, A, Eb, D, D]
+    song = riff_a + riff_a + riff_b + riff_a
+    note = {}
+    for i, m_ in enumerate(song * 2):
+        if i % 8 == 7 and i % 32 != 31:                       # kleine Atempausen geben dem Riff Biss
+            continue
+        w = note.get(m_)
+        if w is None:
+            w = note[m_] = shamisen(m_, 0.34)
+        put(w, int(i * st * 0.5 * SR), 0.34)
+        if i % 16 == 0:                                       # Oktave unten verstärkt die Takteins
+            w2 = note.get(m_ - 12)
+            if w2 is None:
+                w2 = note[m_ - 12] = shamisen(m_ - 12, 0.42)
+            put(w2, int(i * st * 0.5 * SR), 0.3)
+    peak = max(abs(v) for v in bus) or 1.0
+    return [math.tanh(v / peak * 1.5) * 0.82 for v in bus]
+
+
 def synth_sounds():
     """Alle Geräusche werden beim Start errechnet (keine Audiodateien nötig). Gibt {Name: [Samples -1..1]} zurück."""
     rng = random.Random(7)
@@ -26693,6 +27110,9 @@ def synth_sounds():
     roll = mul(lowpass(noise(tot), 0.5), [0.10 + 0.06 * math.sin(tp * 13.0 * i / SR) ** 2 for i in range(tot)])
     an = lowpass(mix((an, 1.0), (roll, 0.5)), 0.35)
     out["anthem"] = norm([v * min(1.0, (tot - i) / (0.4 * SR)) for i, v in enumerate(an)], 0.8)
+    # Inari: Kampfschrei des Ninjas und eigener Kriegstakt für den Anflug (Eigenkomposition, Schleife)
+    out["kiai"] = norm(voiced(0.16, 300, 420, 420, 2100) + [0.0] * int(0.02 * SR) + voiced(0.5, 520, 300, 800, 1250, 0.2), 0.85)
+    out["warbeat"] = war_beat(rng)
     # 9c: Essen - Biss mit Kauen (knuspriges Knacken, dann dumpfes Kauen) und der grosse Rülpser
     n = int(0.55 * SR)
     ch = [0.0] * n
@@ -121776,7 +122196,7 @@ class Sfx:
     über OpenAL; fehlt eine Audioausgabe, läuft das Spiel ohne Ton weiter."""
 
     POOL = {"step_soft": 5, "step_hard": 5, "pistol": 4, "rifle": 8, "shotgun": 3, "heavy": 3,
-            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "servo": 2, "whistle": 1, "zap": 3, "whiz": 4, "yeehaw": 1,
+            "railgun": 3, "rocket": 3, "explosion": 6, "click": 3, "reload": 2, "servo": 2, "whistle": 1, "zap": 3, "whiz": 4, "yeehaw": 1, "kiai": 1,
             "growl": 3, "growl_deep": 2, "hiss": 2, "mstep": 4, "mstep_heavy": 3, "mstep_giant": 3, "tap": 3,
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
@@ -122484,14 +122904,18 @@ class Sfx:
             ent = self.nuke = [snd, node, 1.0, None]
             elapsed = max(0.0, float(getattr(world, "strike_dur", 0.0)) - float(getattr(world, "strike_t", 0.0)))
             snd.setVolume(TOMA_SIREN_VOL)
-            if TOMA_ANTHEM and "anthem" in self.paths and not self.muted:   # 9b: Hymne leise darunter
-                asnd, anode = self.make("anthem")
-                asnd.setVolume(TOMA_ANTHEM_VOL)
-                ent[3] = (asnd, anode)
+            ninja = bool(getattr(world, "map", None) and world.map.get("inari"))
+            tune, tvol = ("warbeat", TOMA_WARBEAT_VOL) if ninja else ("anthem", TOMA_ANTHEM_VOL)
+            if TOMA_ANTHEM and tune in self.paths and not self.muted:   # 9b: Hymne leise darunter (Inari: Kriegstakt)
+                asnd, anode = self.make(tune)
+                asnd.setVolume(tvol)
+                if ninja:
+                    asnd.setLoop(True)
+                ent[3] = (asnd, anode, tvol)
             for s_ in [snd] + ([ent[3][0]] if ent[3] else []):
                 try:
                     if elapsed > 0.3:
-                        s_.setTime(elapsed)                    # Spät beigetretener Spieler: an der richtigen Stelle einsteigen
+                        s_.setTime(elapsed % max(0.1, s_.length()))    # Spät beigetretener Spieler: an der richtigen Stelle einsteigen
                 except Exception:
                     pass
                 s_.play()
@@ -122507,7 +122931,7 @@ class Sfx:
         ent[2] = v
         snd.setVolume(TOMA_SIREN_VOL * v)
         if anth is not None:
-            anth[0].setVolume(TOMA_ANTHEM_VOL * v)
+            anth[0].setVolume(anth[2] * v)
         if v <= 0.0:
             snd.stop()
             if anth is not None:
@@ -133979,7 +134403,8 @@ class Game(ShowBase):
         gn.setDepthWrite(False)
         self.toma_rider = None
         if TOMA_RIDER:                                    # 7d: Comic-Reiter auf der Rakete
-            rider, arm, flag = build_rodeo_rider()
+            self.toma_ninja = bool(self.world.map and self.world.map.get("inari"))     # Inari: surfender Ninja
+            rider, arm, flag = build_ninja_rider() if self.toma_ninja else build_rodeo_rider()
             rider.reparentTo(rr)
             rider.setPos(0, -0.05, 0.06)
             rider.setScale(TOMA_RIDER_SCALE)
@@ -134022,13 +134447,18 @@ class Game(ShowBase):
             if getattr(self, "toma_rider", None) is not None:   # 7d: Hut schwenken, Flagge wehen lassen
                 tt = time.time()
                 _r, arm, flag = self.toma_rider
-                arm.setR(-35.0 + 40.0 * math.sin(tt * 7.0))
-                arm.setP(15.0 * math.sin(tt * 3.5))
+                if getattr(self, "toma_ninja", False):           # Katana zuckt kampfbereit, der Körper gleicht aus wie auf einer Welle
+                    arm.setR(6.0 * math.sin(tt * 2.3))
+                    arm.setP(9.0 * math.sin(tt * 4.1))
+                    _r.setR(5.0 * math.sin(tt * 1.7))
+                else:
+                    arm.setR(-35.0 + 40.0 * math.sin(tt * 7.0))
+                    arm.setP(15.0 * math.sin(tt * 3.5))
                 flag.setH(10.0 * math.sin(tt * 9.0) + 4.0 * math.sin(tt * 23.0))
                 flag.setShear(0, 0.15 * math.sin(tt * 11.0), 0)
             if TOMA_YEEHAW and not getattr(self, "toma_yeehaw", True) and u >= TOMA_YEEHAW_U:
                 self.toma_yeehaw = True
-                self.sfx.play("yeehaw", None, TOMA_YEEHAW_VOL, 1.0)
+                self.sfx.play("kiai" if getattr(self, "toma_ninja", False) else "yeehaw", None, TOMA_YEEHAW_VOL, 1.0)
             p = self.toma_rocket_pos(u)
             q = self.toma_rocket_pos(min(1.0, u + 0.002)) if u < 0.998 else self.toma_rocket_pos(u)
             if q == p:

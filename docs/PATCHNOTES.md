@@ -2,6 +2,21 @@
 
 Neueste Änderungen oben.
 
+## Inari Temple Sanctuary v2: Feuerstelle, Dickicht, Ninja-Tomahawk (Robin, 2026-11-03)
+Gilt nur für diese Karte. NET_VERSION 57 -> 58 (Karte und Lauftempo geändert, alle brauchen denselben Stand).
+
+- **Feuerstelle** in der Mitte der Halle: Steinring (mit Kollision), glühendes Glutbett, Flammen, aufsteigende Funken. Ein Licht in Amber (`1.0, 0.45, 0.1`) über der Glut lässt Wände, Buddhas und Galerie flackern: Helligkeit und Reichweite schwanken zufällig um +-0,15 (`fire_task`, `Task.cont`).
+- **Wald 2,5-fach**: 1.650 Bäume und Bambusgruppen, 325 Felsen, 3.500 Farne, dazu neu 4.200 Büsche Unterholz und hängende Moosbärte.
+- **Abseits der Wege wird es langsam**: zu Fuss 62 % Tempo (rund 2,5 statt 4 m/s Gehen), im Wagen höchstens 6 m/s. Wege, Plattform und Altäre bleiben frei. Büsche nehmen die Sicht, blockieren aber weder Körper noch Kugeln.
+- **Nebel**: im Wald nur noch rund 5 % Sicht bei 17 m. Er dünnt ab 14 m über dem Boden aus und ist ab 42 m weg. Auf der Plattform und im Schrein bleibt die Sicht frei. Der Sichtweiten-Regler wirkt auf dieser Karte nicht, sonst sähe weiter, wer ihn hochdreht.
+- **Ninja-Tomahawk**: Auf der Rakete surft ein Ninja mit drei gefächerten Shuriken links und Katana rechts. Statt der US-Hymne läuft ein eigener Kriegstakt in Schleife (Taiko, Shime-Daiko, Shamisen-Riff, 168 BPM, 8 Takte). Statt "Yeehaw" ein Kampfschrei. Pfeifen und Düsendröhnen bleiben. Andere Karten behalten Rodeo-Reiter und Hymne.
+
+Leistung: Trotz mehr Bewuchs sank die Bildzeit im Wald (Software-Test: 50 statt rund 80 ms), weil Waldblöcke hinter dem Nebel gar nicht gezeichnet werden (`CELL_CULL`). Plattform und Halle unverändert bei rund 70 ms. Die Karte hat jetzt rund 440.000 Dreiecke im Wald und Schrein.
+
+Grenzen: Die Glut verbrennt niemanden. Monster werden im Unterholz nicht langsamer. Das Feuerlicht wirft keine Schatten.
+
+Technik: `InariSceneHooks.build_fire`, `fire_task`, `set_fire`; `MapConfigInariSanctuary.FIRE`, `LIGHT_PLAZA`, `FOG_CEIL`, `in_brush`; `inari_brush`, `build_ninja_rider`, `war_beat`.
+
 ## Neue Karte: Inari Temple Sanctuary (Robin, 2026-11-03)
 Eingebaute Karte, im Setup-Menü wählbar, alle Modi. NET_VERSION 56 -> 57: Mitspieler brauchen denselben Stand (übers Netz geht nur die Kennung, jeder Rechner baut die Karte aus dem Code). Ausgelegt auf 3-5 Spieler. Polytown und die übrigen Karten bleiben unverändert.
 
