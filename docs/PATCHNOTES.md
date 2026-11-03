@@ -2,6 +2,24 @@
 
 Neueste Änderungen oben.
 
+## Inari Temple Sanctuary: Höhenweg, Sakura, offener Wald (Robin, 2026-11-03)
+Gilt nur für diese Karte. NET_VERSION 58 -> 59. Fest bleiben Schrein, Feuerstelle, Ninja-Tomahawk und Kriegstakt.
+
+- **Kein Tempoverlust mehr** im Gelände, Wald und Unterholz kosten nichts.
+- **Keine Nebelwand mehr**: Nebel nur noch leicht (rund 70 % Sicht auf 100 m), die Düsternis kommt von Kronen und Licht. Der Sichtweiten-Regler wirkt wieder.
+- **Keine Fahrzeuge** auf dieser Karte. Die Rampen Nord und Süd bleiben als Fusswege.
+- **Höhenweg**: rund 1.200 m Steinweg im Fels um die ganze Karte, Winkel 335 Grad (im Süden durch einen Felssturz geschlossen). Höhe schwankt um die Galerie (19,5-27 m), abschnittsweise unregelmässige Stufen.
+- **Nur zwei Aufstiege**: Ost kurz und steil, West länger, an ungleichen Stellen. Die Felswand ist sonst nicht begehbar (im Test an 60 Stellen geprüft, auch mit Springen).
+- **Vier Abbrüche** (3,2-4,4 m): nur mit Anlauf-Sprung zu schaffen, gehend nicht. Bei der kürzesten Lücke (3,2 m) zählt der Absprung, weil sie bergauf liegt.
+- **Sturz** vom Höhenweg endet im Wald: gerechnete Fallhöhe auf 12 m gedeckelt (`FALL_CAP`), also rund 70 Schaden statt sicherem Tod.
+- **Terrassen und Felsbänder** beidseits des Wegs, teils mit Brüstung. Einige Kisten liegen oben.
+- **Zwei Nebenschreine** auf der Plattform, je ein Raum mit einer Tür zur Haupthalle.
+- **Sechs Sakura-Arten** (72 Bäume, Grösse 0,85-1,35): Klippenhänger an den Abbruchkanten, Riesen auf Kuppen, schlanke Wildform, Windbeuge, Hängekirsche, Busch. Alle zufällig gedreht, nur die Klippenhänger zeigen immer ins Tal.
+
+Umbau: Der Felsring folgt jetzt dem Kartenquadrat, weil der Höhenweg sonst ausserhalb der Karte läge. Spawns und Wegenden sind dafür rund 15 m nach innen gerückt.
+
+Technik: `LOOP`, `LOOP_GAPS`, `ASCENTS`, `SESSHA`, `_ina_s`, `_ina_loop_z`, `make_loop`, `make_sessha`, `make_sakura`, `inari_sakura`. Bodenbewuchs liegt in eigenen Blöcken und fällt ab 115 m weg (`DETAIL_CULL`). Kartenschlüssel `fall_cap`.
+
 ## Inari Temple Sanctuary v2: Feuerstelle, Dickicht, Ninja-Tomahawk (Robin, 2026-11-03)
 Gilt nur für diese Karte. NET_VERSION 57 -> 58 (Karte und Lauftempo geändert, alle brauchen denselben Stand).
 
