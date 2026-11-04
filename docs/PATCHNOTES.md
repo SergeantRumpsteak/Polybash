@@ -2,6 +2,22 @@
 
 Neueste Änderungen oben.
 
+## Inari Temple Sanctuary: Saumpfad, neuer Berg, Sakura auf allen Höhen (Robin, 2026-11-04)
+Gilt nur für diese Karte. NET_VERSION 59 -> 60. Fest bleiben Schrein, Feuerstelle, Nebenschreine und Ninja-Tomahawk.
+
+- **Keil-Glitch behoben**: Die Naht der Winkelrechnung lag am Rand des Felssturzes, dort sprang das Gelände um rund 30 m. Sie liegt jetzt mitten im Felssturz, der Hang läuft weich durch.
+- **Kein Kessel mehr**: Der Berg ist neu: wechselnder Hangfuss, Felsrippen, Erdstufen, darüber ein Felsband und die Wand. Gelände im 2-m-Raster statt 3 m. Die Erdstufen sind begehbar, das Felsband nicht. Zum Pfad führen weiter nur die zwei Aufstiege.
+- **Saumpfad statt Steinplatten**: Der Pfad ist jetzt Teil des Geländes, tief in die Wand gekerbt, dadurch gibt es dort keine Nähte und Durchblicke mehr. Breite 2,8-5,4 m, Kurs und Höhe schwanken unregelmässig. Erde, Geröll und Fels gehen ineinander über, dazu Wurzeln und Trittsteine.
+- **Brüstung mit Lücken**: Abschnitte zufälliger Länge: Fels in Hüfthöhe, weggebrochene Stellen, Rutschkegel, die den Pfad verengen. Dazu verkeilte Felsbrocken als hohe Deckung. Es bleibt immer ein Durchgang von mindestens 1,5 m.
+- **Abbrüche**: gleiche Breiten wie bisher, jetzt mit Felskanten. Der Felssturz im Süden sperrt den Ring wirklich.
+- **Bäume geprüft**: Jeder Stamm steht auf einem Boden, der ihn trägt, Abstand zu Felsen und Brüstung ist geprüft. Im Test schwebt oder versinkt keine der 240 Sakura.
+- **240 Sakura statt 72**: einzeln im äusseren Wald, viele auf den Erdstufen, am Felsband und am Pfad, oben im Fels in eigenen Erdtaschen. Am Rand weichen die Zedern kleinen Wildbäumen.
+- **Monster**: Bodenmonster entstehen nur noch im unteren Wald (`MOB_S_MAX`), auch die Bosse, die sich bisher am Rand ausgruben. Das ist neu, eine solche Regel gab es vorher nicht. Drohnen und Harpien fliegen weiter überall.
+
+Entfallen: Terrassen aus Stein (ersetzt durch Felsbrocken, Brüstung und Pfadbreite).
+
+Technik: `_ina_mountain`, `_ina_wob`, `_ina_trail_w`, `_ina_rock`, `make_pockets`, `make_loop`, `make_sakura`, `inari_wild`, `inari_shade_*`, Kartenschlüssel `mob_s_max`.
+
 ## Inari Temple Sanctuary: Höhenweg, Sakura, offener Wald (Robin, 2026-11-03)
 Gilt nur für diese Karte. NET_VERSION 58 -> 59. Fest bleiben Schrein, Feuerstelle, Ninja-Tomahawk und Kriegstakt.
 
