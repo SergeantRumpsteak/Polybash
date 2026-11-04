@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 60         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 61         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 220               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -5784,11 +5784,12 @@ class MapConfigInariSanctuary:
     }
     RAMPS, STAIRS = ("N", "S"), ("E", "W")
     # Höhenweg: Ring um die Karte auf Galeriehöhe des Schreins, in die Felswand geschnitten (Winkel in Grad, 0 = Osten)
-    LOOP = dict(s=184.0, z=23.2, start=-72.0, end=263.0, step=0.3)
-    LOOP_GAPS = ((26.0, 3.6), (112.0, 4.4), (205.0, 4.0), (-40.0, 3.2))    # Abbrüche: Mitte, Breite. Anlauf-Sprung schafft 5,4 m, Gehen 2,9 m
+    LOOP = dict(s=184.0, z=33.0, start=-72.0, end=263.0, step=0.3)
+    LOOP_GAPS = ((26.0, 3.5), (112.0, 3.9), (205.0, 3.7), (-40.0, 3.3))    # Abbrüche: Mitte, Breite. Anlauf-Sprung schafft 5,4 m, Gehen 2,9 m
     MOB_S_MAX = 150.0                       # Bodenmonster entstehen nur im unteren Wald, nie an Hang und Höhenweg
     # Nur zwei Aufstiege, bewusst ungleich: Ost kurz und steil, West länger und flacher
-    ASCENTS = {"E": (((146, -64), (163, -44), (170, -18)), -3.0), "W": (((-134, 32), (-150, 38), (-163, 44), (-171, 52)), 160.0)}
+    ASCENTS = {"E": dict(deg=-3.0, width=25.0, legs=5, first=1), "W": dict(deg=160.0, width=30.0, legs=6, first=-1)}
+    SERP_STEPS, SERP_RISE, SERP_TREAD, SERP_DU = 6, 0.27, 0.333, 5.0    # Steintreppe an jeder Kehre, Abstand der Serpentinen
     TORII_SPANS = ((0.14, 0.34), (0.58, 0.82))   # Abschnitte der Wege (Anteil der Länge) mit Torii-Tunneln
     TORII_GAP = (2.0, 4.0)                  # Abstand der Tore in einem Tunnel
     # Kleine Altäre im Wald: Position, je zwei Nebenwege zu den nächsten Hauptwegen
@@ -5932,6 +5933,20 @@ def _ina_loop_z(a):
     return (MapConfigInariSanctuary.LOOP["z"] + 1.9 * math.sin(3 * a + 0.6) + 1.3 * math.sin(7 * a - 1.1) + 0.7 * math.sin(13 * a + 2.0))
 
 
+def _ina_canopy(x, y):
+    """Höchste Baumspitze unter der Sichtlinie vom tiefsten Punkt des Pfads zur Plattform (x, y relativ zur Mitte).
+    Bäume bleiben darunter, so reicht der Blick vom Pfad auf Tore und Plattform."""
+    cfg = MapConfigInariSanctuary
+    r = math.hypot(x, y)
+    d = math.degrees(math.atan2(y, x))
+    lx, ly = _ina_loop_pt(d)
+    rl = math.hypot(lx, ly)
+    if r >= rl - 6.0:
+        return 1e9
+    eye = cfg.LOOP["z"] - 3.9 + 1.7
+    return cfg.Z_FLOOR + 0.8 + (eye - cfg.Z_FLOOR - 0.8) * max(0.0, r - 30.0) / (rl - 30.0) - 0.6
+
+
 def _ina_foot(a):
     """Fuss des Berghangs: weit unregelmässig, Felsrippen laufen in den Wald hinein."""
     return (160.0 + 5.0 * math.sin(2 * a + 1.0) + 3.5 * math.sin(5 * a - 0.5) + 2.5 * math.sin(11 * a + 2.2)
@@ -5993,10 +6008,10 @@ def _ina_base(x, y):
     R_ = math.hypot(x, y)
     for gd, gw in cfg.LOOP_GAPS:                               # Hangrutsch: Geröllrinne quer durch Pfad und Wand
         da = abs((deg - gd + 180.0) % 360.0 - 180.0) * R_ * 0.01745
-        G = gw / 2.0 + 1.5
-        if da < G + 3.0:
+        G = gw / 2.0 + 0.7
+        if da < G + 1.6:
             zc = _ina_loop_z(a) - 11.0 + (q - L["s"]) * 1.7 + _ina_noise(x * 2.0, y * 2.0) * 0.8
-            k = 1.0 - smoothstep(G, G + 3.0, da)
+            k = 1.0 - smoothstep(G, G + 1.6, da)
             zm = min(zm, zm + (max(z, zc) - zm) * k)
     return zm
 
@@ -6114,10 +6129,11 @@ class _InaBuilder:
         L = cfg.LOOP
         n = int((L["end"] - L["start"]) / 2.0)
         self.loop_line = _ina_spline([_ina_loop_pt(L["start"] + (L["end"] - L["start"]) * i / n) for i in range(n + 1)])
-        self.ascents = {}
-        for key, (pts, deg) in cfg.ASCENTS.items():
-            self.ascents[key] = _ina_spline(list(pts) + [_ina_loop_pt(deg)])
-            q = pts[0]
+        self.ascents, self.serp = {}, {}
+        for key, A in cfg.ASCENTS.items():
+            self.serp[key] = S_ = self.serp_plan(A)
+            self.ascents[key] = S_["line"]
+            q = S_["line"][0]
             ln = min(self.lines.values(), key=lambda l_: min(math.hypot(p[0] - q[0], p[1] - q[1]) for p in l_))
             near = min(ln, key=lambda p: math.hypot(p[0] - q[0], p[1] - q[1]))
             self.side_lines.append(_ina_spline((near, ((near[0] + q[0]) / 2 + 3.0, (near[1] + q[1]) / 2 - 3.0), q)))
@@ -6132,6 +6148,7 @@ class _InaBuilder:
         self.make_torii()
         self.make_altars()
         self.make_loop()
+        self.make_serpentines()
         self.make_sessha()
         self.make_forest()
         self.make_sakura()
@@ -6152,7 +6169,77 @@ class _InaBuilder:
                 out.append(_ina_spline(((ax, ay), (mx, my), q)))
         return out
 
-    def stamp_line(self, ln, hw, ramp=False, stair=False, climb=None):
+    def serp_pt(self, A, t, u):
+        """Punkt im Serpentinen-Band: t längs des Hangs (m), u zum Berg (m, 0 = Pfadmitte)."""
+        L = self.cfg.LOOP
+        R_ = math.hypot(*_ina_loop_pt(A["deg"]))
+        a = math.radians(A["deg"]) + t / R_
+        c, d = math.cos(a), math.sin(a)
+        r = (L["s"] + _ina_wob(a) + u) / (c * c * c * c + d * d * d * d) ** 0.25
+        return r * c, r * d
+
+    def serp_plan(self, A):
+        """Serpentinen: gerade Stücke am Hang, an jeder Kehre eine Steintreppe. Höhen so verteilt, dass oben der Pfad erreicht wird."""
+        cfg = self.cfg
+        N, W = A["legs"], A["width"]
+        ntop = _ina_trail_w(math.radians(A["deg"]))
+        run = cfg.SERP_STEPS * cfg.SERP_TREAD
+        du = cfg.SERP_DU
+        utop = -ntop - 0.2 - run - 1.5
+        us = [utop - (N - 1 - i) * du for i in range(N)]
+        rise = cfg.SERP_STEPS * cfg.SERP_RISE
+        side = A["first"]
+        p0 = self.serp_pt(A, side * W / 2, us[0])
+        z0 = _ina_base(*p0)
+        pend = self.serp_pt(A, side * (-1) ** N * W / 2, utop + 1.5 + run)
+        T = _ina_loop_z(math.atan2(pend[1], pend[0]))
+        lr = (T - z0 - N * rise) / N
+        legs, line = [], [p0]
+        z = z0
+        for i in range(N):
+            s_ = side * (-1) ** i
+            te = -s_ * W / 2
+            legs.append(dict(u=us[i], t0=s_ * W / 2, t1=te, z0=z, z1=z + lr))
+            z += lr + rise
+            for k in range(1, 9):
+                line.append(self.serp_pt(A, s_ * W / 2 + (te - s_ * W / 2) * k / 8.0, us[i]))
+            line.append(self.serp_pt(A, te, us[i] + 2.5))
+            line.append(self.serp_pt(A, te, us[i] + 5.0))
+        return dict(A=A, legs=legs, line=line, us=us, run=run, rise=rise)
+
+    def serp_carve(self):
+        """Kerbt und füllt das Gelände unter den Serpentinen: glatte Stufen im Hang, die Mesh-Stücke liegen knapp darüber."""
+        G, H = self.cfg.GRID, self.heights
+        L = self.cfg.LOOP
+        for S_ in self.serp.values():
+            A = S_["A"]
+            R_ = math.hypot(*_ina_loop_pt(A["deg"]))
+            W = A["width"]
+            pts = [self.serp_pt(A, t, u) for t in (-W / 2 - 6, 0, W / 2 + 6) for u in (S_["us"][0] - 6, 6.0)]
+            i0, i1 = int(min(p[0] for p in pts) / G) - 3, int(max(p[0] for p in pts) / G) + 3
+            j0, j1 = int(min(p[1] for p in pts) / G) - 3, int(max(p[1] for p in pts) / G) + 3
+            for i in range(i0, i1 + 1):
+                for j in range(j0, j1 + 1):
+                    if (i, j) not in H:
+                        continue
+                    x, y = i * G, j * G
+                    a = math.atan2(y, x)
+                    da = (math.degrees(a) - A["deg"] + 180.0) % 360.0 - 180.0
+                    t = math.radians(da) * R_
+                    u = _ina_s(x, y) - L["s"] - _ina_wob(a)
+                    if abs(t) > W / 2 + 3.4:
+                        continue
+                    zz = None
+                    for g in S_["legs"]:
+                        if g["u"] - 1.9 <= u <= g["u"] + 3.1:
+                            f = max(0.0, min(1.0, (t - g["t0"]) / (g["t1"] - g["t0"])))
+                            zz = g["z0"] + (g["z1"] - g["z0"]) * f
+                            if abs(t - g["t1"]) < 3.4 and u > g["u"] + 1.5:    # Treppe: Boden steigt mit
+                                zz = g["z1"] + S_["rise"] * min(1.0, (u - g["u"] - 1.5) / S_["run"])
+                    if zz is not None:
+                        H[(i, j)] = zz - 0.4
+
+    def stamp_line(self, ln, hw, ramp=False, stair=False):
         G = self.cfg.GRID
         rad = hw + 10.0
         k = int(rad / G) + 1
@@ -6164,8 +6251,6 @@ class _InaBuilder:
                 pz += (self.cfg.Z_SHRINE - pz) * (1.0 - smoothstep(0.0, 30.0, left))
             elif stair and left < 16.0:
                 pz = _ina_base(ln[total][0], ln[total][1])
-            elif climb is not None:
-                pz = climb[0] + (climb[1] - climb[0]) * (n / max(1, total))
             ci, cj = int(round(x / G)), int(round(y / G))
             for i in range(ci - k, ci + k + 1):
                 for j in range(cj - k, cj + k + 1):
@@ -6173,12 +6258,9 @@ class _InaBuilder:
                     if d > rad:
                         continue
                     old = self.stamp.get((i, j))
-                    if climb is not None:                  # Aufstieg gewinnt gegen kreuzende Wege, sonst der nächste Punkt der Linie
-                        better = old is None or (d < hw + 3.0 and old[3] != 5.0) or (old[3] == 5.0 and d < old[0])
-                    else:
-                        better = old is None or (old[3] != 5.0 and d - hw < old[0] - old[2])
+                    better = old is None or d - hw < old[0] - old[2]
                     if better:
-                        self.stamp[(i, j)] = (d, pz, hw, 5.0 if climb is not None else 9.0)
+                        self.stamp[(i, j)] = (d, pz, hw, 9.0)
                     if d < self.open.get((i, j), 99.0):
                         self.open[(i, j)] = d
 
@@ -6188,11 +6270,8 @@ class _InaBuilder:
             self.stamp_line(ln, cfg.PATH_HW, key in cfg.RAMPS, key in cfg.STAIRS)
         for ln in self.side_lines:
             self.stamp_line(ln, cfg.SIDE_HW)
-        for key, ln in self.ascents.items():
-            top = _ina_loop_z(math.atan2(ln[-1][1], ln[-1][0])) - 0.1
-            self.stamp_line(ln, 2.2, climb=(_ina_base(*ln[0]), top))
         lp = self.loop_line                                    # Weg als Lichtung (kein Geländeabdruck: die Bank liegt schon im Fels)
-        for x, y in lp[::2]:
+        for x, y in lp[::2] + [p for ln in self.ascents.values() for p in ln]:
             ci, cj = int(round(x / G)), int(round(y / G))
             for i in range(ci - 7, ci + 8):
                 for j in range(cj - 7, cj + 8):
@@ -6211,6 +6290,7 @@ class _InaBuilder:
                 if max(abs(x), abs(y)) <= cfg.PLAZA_HALF:
                     z = cfg.Z_SHRINE
                 self.heights[(i, j)] = z
+        self.serp_carve()
         self.make_pockets()
 
     def make_pockets(self):
@@ -6223,7 +6303,8 @@ class _InaBuilder:
         while deg < L["end"]:
             deg += rng.uniform(1.2, 5.5)
             a = math.radians(deg)
-            near_gap = any(abs((deg - gd + 180.0) % 360.0 - 180.0) < 3.2 for gd, _w in cfg.LOOP_GAPS)
+            near_gap = (any(abs((deg - gd + 180.0) % 360.0 - 180.0) < 3.2 for gd, _w in cfg.LOOP_GAPS)
+                        or any(abs((deg - A_["deg"] + 180.0) % 360.0 - 180.0) < 7.0 for A_ in cfg.ASCENTS.values()))
             up = rng.random() < 0.62
             w = _ina_trail_w(a)
             u = rng.uniform(w + 8.0, w + 24.0) if up else -rng.uniform(w + 3.2, w + 6.5)
@@ -6638,8 +6719,14 @@ class _InaBuilder:
         _ina_obox(self.groups["torii_cap"], None, wx, wy, z + 5.1 * scale, 8.2 * scale, 0.72, 0.2, rot)
 
     def make_torii(self):
+        """Tore nur auf ungestörten Wegstücken: nie an Kreuzungen, Abzweigen oder wo ein anderer Weg nahe liegt."""
         cfg = self.cfg
+        self.gates = 0
         for key, ln in self.lines.items():
+            others = [p for k_, l_ in self.lines.items() if k_ != key for p in l_[::2]] + [p for l_ in self.side_lines for p in l_[::2]]
+
+            def clear(x, y):
+                return not any(abs(x - p[0]) < 11.0 and abs(y - p[1]) < 11.0 and math.hypot(x - p[0], y - p[1]) < 11.0 for p in others)
             n = len(ln)
             for a, b in cfg.TORII_SPANS:
                 pos, end = a * n * 1.5, b * n * 1.5            # Meter entlang des Wegs
@@ -6647,11 +6734,14 @@ class _InaBuilder:
                     i = min(n - 2, int(pos / 1.5))
                     x, y = ln[i]
                     dx, dy = ln[i + 1][0] - x, ln[i + 1][1] - y
-                    self.torii(x, y, math.atan2(dy, dx))
+                    if clear(x, y):
+                        self.torii(x, y, math.atan2(dy, dx))
+                        self.gates += 1
                     pos += self.rng.uniform(*cfg.TORII_GAP)
             x, y = ln[-14]                                     # grosses Tor am Fuss der Plattform
             dx, dy = ln[-13][0] - x, ln[-13][1] - y
-            self.torii(x, y, math.atan2(dy, dx), 1.2)
+            if clear(x, y):
+                self.torii(x, y, math.atan2(dy, dx), 1.2)
 
     # ------------------------------------------------------------ Altäre
     def jizo(self, x, y):
@@ -6678,28 +6768,85 @@ class _InaBuilder:
             g.tri((ex + 0.06, ey + 0.06, z + 1.3), (ex - 0.06, ey - 0.06, z + 1.3), (ex, ey, z + 1.58), (0.0, 0.0, 1.0))
         self.B(x - 0.28, y - 0.28, x + 0.28, y + 0.28, z, z + 1.3, INA_MOSS, vis=False)
 
-    def hokora(self, x, y, ang):
+    def hokora(self, x, y, ang, k=1.0):
         """Kleiner Holzschrein auf Steinsockel; der Sockel ist Deckung."""
         z = self.h(x, y)
-        self.B(x - 1.5, y - 1.5, x + 1.5, y + 1.5, z - 0.6, z + 1.0, INA_STONE)
-        self.B(x - 0.9, y - 0.9, x + 0.9, y + 0.9, z + 1.0, z + 2.4, INA_WOOD)
+        self.B(x - 1.5 * k, y - 1.5 * k, x + 1.5 * k, y + 1.5 * k, z - 0.6, z + 1.0 * k, INA_STONE)
+        self.B(x - 0.9 * k, y - 0.9 * k, x + 0.9 * k, y + 0.9 * k, z + 1.0 * k, z + 2.4 * k, INA_WOOD)
         C = self.C
         rg = self.groups["roof"]
-        a, t = 1.35, z + 3.3
-        c = [(x + C + dx, y + C + dy, z + 2.4) for dx, dy in ((-a, -a), (a, -a), (a, a), (-a, a))]
+        a, t = 1.35 * k, z + 3.3 * k
+        c = [(x + C + dx, y + C + dy, z + 2.4 * k) for dx, dy in ((-a, -a), (a, -a), (a, a), (-a, a))]
         ap = (x + C, y + C, t)
         for i in range(4):
             rg.tri(c[i], c[(i + 1) % 4], ap)
 
+    def v_shrine(self, px, py, d1, d2, hw, k):
+        """Altar in der Spitze einer Weggabel: Füchse vorn, Blick je einen Weg hinunter."""
+        cs = max(-1.0, min(1.0, d1[0] * d2[0] + d1[1] * d2[1]))
+        half = math.acos(cs) / 2.0
+        if half < 0.22:
+            return False
+        bx, by = d1[0] + d2[0], d1[1] + d2[1]
+        bl = math.hypot(bx, by)
+        if bl < 1e-3:
+            return False
+        bx, by = bx / bl, by / bl
+        d = min(13.0, (hw + 1.4) / math.sin(half))
+        cx, cy = px + bx * d, py + by * d
+        G = self.cfg.GRID
+        if self.open.get((int(round(cx / G)), int(round(cy / G))), 99.0) < 2.6:   # dort liegt ein Weg
+            return False
+        self.hokora(cx + bx * 1.8, cy + by * 1.8, math.atan2(by, bx), k)
+        lx, ly = -by, bx
+        for s_, dv in ((1, d1), (-1, d2)):
+            sd = 1 if lx * dv[0] + ly * dv[1] > 0 else -1
+            self.fox(cx + lx * sd * 1.0, cy + ly * sd * 1.0, math.atan2(dv[1], dv[0]))
+        return True
+
+    def jizo_line(self, ln, hw, rng):
+        """Jizo mit rotem Latz als Wegmarken: immer ein Paar, links und rechts des Wegs."""
+        G = self.cfg.GRID
+        i = rng.randrange(8, 22)
+        while i < len(ln) - 8:
+            x, y = ln[i]
+            dx, dy = ln[i + 1][0] - x, ln[i + 1][1] - y
+            l_ = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / l_, dx / l_
+            e = hw + 0.9
+            pts = [(x + nx * e, y + ny * e), (x - nx * e, y - ny * e)]
+            if (all(self.open.get((int(round(a / G)), int(round(b / G))), 99.0) >= e - 1.2 for a, b in pts)
+                    and max(abs(x), abs(y)) > self.cfg.PLAZA_HALF + 5.0):
+                for a, b in pts:
+                    self.jizo(a, b)
+                self.jizo_pairs += 1
+            i += rng.randrange(18, 40)
+
     def make_altars(self):
-        for ax, ay in self.cfg.ALTARS:
-            ang = math.atan2(-ay, -ax)
-            self.hokora(ax - math.cos(ang) * 3.0, ay - math.sin(ang) * 3.0, ang)
-            lx, ly = -math.sin(ang), math.cos(ang)
-            for s in (-1, 1):
-                self.fox(ax + lx * s * 3.2, ay + ly * s * 3.2, ang)
-                self.jizo(ax + lx * s * 5.4 + math.cos(ang) * 1.6, ay + ly * s * 5.4 + math.sin(ang) * 1.6)
-                self.jizo(ax + lx * s * 6.4 - math.cos(ang) * 1.2, ay + ly * s * 6.4 - math.sin(ang) * 1.2)
+        cfg = self.cfg
+        rng = random.Random(6119)
+        self.v_count = self.jizo_pairs = 0
+        k = 0
+        for ax, ay in cfg.ALTARS:                              # Altarplatz: dort gabeln sich zwei Nebenwege
+            l1, l2 = self.side_lines[k], self.side_lines[k + 1]
+            k += 2
+            d1 = norm((l1[7][0] - ax, l1[7][1] - ay, 0.0))[:2]
+            d2 = norm((l2[7][0] - ax, l2[7][1] - ay, 0.0))[:2]
+            self.v_count += 1 if self.v_shrine(ax, ay, d1, d2, cfg.SIDE_HW, 0.72) else 0
+        for ln in self.side_lines[:2 * len(cfg.ALTARS)]:       # Abzweig vom Hauptweg: Gabel Richtung Tal oder Berg
+            px, py = ln[-1]
+            d_s = norm((ln[-9][0] - px, ln[-9][1] - py, 0.0))[:2]
+            main = min(self.lines.values(), key=lambda l_: min(math.hypot(p[0] - px, p[1] - py) for p in l_[::3]))
+            i = min(range(len(main)), key=lambda q: math.hypot(main[q][0] - px, main[q][1] - py))
+            a, b = main[max(0, i - 4)], main[min(len(main) - 1, i + 4)]
+            d_m = norm((b[0] - a[0], b[1] - a[1], 0.0))[:2]
+            if d_s[0] * d_m[0] + d_s[1] * d_m[1] < 0:
+                d_m = (-d_m[0], -d_m[1])
+            self.v_count += 1 if self.v_shrine(px, py, d_s, d_m, cfg.PATH_HW, 0.6) else 0
+        for ln in self.lines.values():
+            self.jizo_line(ln, cfg.PATH_HW, rng)
+        for ln in self.side_lines[:2 * len(cfg.ALTARS)]:
+            self.jizo_line(ln, cfg.SIDE_HW, rng)
 
     # ------------------------------------------------------------ Saumpfad
     def make_loop(self):
@@ -6748,10 +6895,25 @@ class _InaBuilder:
             tx, ty = tx / l_, ty / l_
             ang = math.atan2(ty, tx)
             w = _ina_trail_w(math.atan2(qy, qx))
-            for sgn in (-1, 1):
-                x, y = qx + tx * sgn * (hw_ + 1.6), qy + ty * sgn * (hw_ + 1.6)
-                z = _ina_loop_z(math.atan2(y, x)) + 0.06
-                _ina_obox(self.groups["ledge"], coll, x + C, y + C, z - 0.5, 3.2, 2 * w + 0.6, 1.0, ang, 0)
+            ox, oy = qx / math.hypot(qx, qy), qy / math.hypot(qx, qy)
+            for sgn in (-1, 1):                                # Felsbrocken statt Kanten: unregelmässig, aber genau an der Kante
+                sx_, sy_ = qx + tx * sgn * (hw_ + 2.8), qy + ty * sgn * (hw_ + 2.8)
+                zs_ = _ina_loop_z(math.atan2(sy_, sx_)) - 0.04   # Fels unter den Brocken: hier steht man auch zwischen ihnen sicher
+                _ina_obox(self.groups["ledge"], coll, sx_ + C, sy_ + C, zs_ - 0.6, 4.2, 2 * w + 0.4, 1.2, ang, 0)
+                e = -w - 0.3
+                while e < w + 0.3:
+                    r = rng.uniform(0.95, 1.5)
+                    d_ = hw_ + r * 0.5 + rng.uniform(0.0, 0.2)
+                    x, y = qx + tx * sgn * d_ + ox * e, qy + ty * sgn * d_ + oy * e
+                    z = _ina_loop_z(math.atan2(y, x))
+                    _ina_rock(self.groups["boulder"], coll, x + C, y + C, z - 2.4, z + rng.uniform(0.0, 0.22), r, rng, 8)
+                    self.rocks_on_path.append((x, y, r))
+                    e += r * rng.uniform(1.0, 1.5)
+                for e, h_ in ((-w - 1.5, rng.uniform(0.9, 1.7)), (w + 1.5, rng.uniform(1.0, 2.2))):   # hohe Brocken rahmen die Schlucht
+                    r = rng.uniform(1.0, 1.6)
+                    x, y = qx + tx * sgn * (hw_ + r + 0.2) + ox * e, qy + ty * sgn * (hw_ + r + 0.2) + oy * e
+                    z = _ina_loop_z(math.atan2(y, x))
+                    _ina_rock(self.groups["boulder"], coll, x + C, y + C, z - 3.0, z + h_, r, rng, 9)
         i = 6
         while i < len(ln) - 6:                                 # Brüstung: Abschnitte mit zufälliger Länge und Art
             n = int(rng.uniform(3.0, 17.0) / 1.5) + 1
@@ -6763,7 +6925,7 @@ class _InaBuilder:
                 x, y, a, ox, oy = uv(k)
                 w = _ina_trail_w(a)
                 z = _ina_loop_z(a)
-                if gap_near(x, y, 3.2) or any(math.hypot(x - e_[-1][0], y - e_[-1][1]) < 8.0 for e_ in self.ascents.values()):
+                if gap_near(x, y, 3.2 if kind == "wall" else 10.0) or any(math.hypot(x - e_[-1][0], y - e_[-1][1]) < 6.0 for e_ in self.ascents.values()):
                     pos += 2.0                         # Abbruchkanten und Aufstiege bleiben frei
                     continue
                 if kind == "wall":                             # stehengebliebener Fels: Hüfthöhe für geduckte Schützen
@@ -6800,7 +6962,7 @@ class _InaBuilder:
             k += rng.uniform(14.0, 62.0)
             i = int(min(k, len(ln) - 8))
             x, y, a, ox, oy = uv(i)
-            if gap_near(x, y, 7.0) or any(math.hypot(x - e_[-1][0], y - e_[-1][1]) < 10.0 for e_ in self.ascents.values()):
+            if gap_near(x, y, 10.0) or any(math.hypot(x - e_[-1][0], y - e_[-1][1]) < 10.0 for e_ in self.ascents.values()):
                 continue
             w = _ina_trail_w(a)
             z = _ina_loop_z(a)
@@ -6848,6 +7010,60 @@ class _InaBuilder:
             if not gap_near(x, y, 6.0):
                 w = _ina_trail_w(a)
                 self.terraces.append((x + ox * (w - 0.5), y + oy * (w - 0.5), _ina_loop_z(a), 1, 0.0))
+
+    def make_serpentines(self):
+        """Zwei Aufstiege im Felshang: Wegstücke im Zickzack, an jeder Kehre eine in den Stein gehauene Treppe mit Stützmauern."""
+        cfg, C = self.cfg, self.C
+        rng = random.Random(4471)
+        coll = self.coll
+        stone, tr, rk = self.groups["stone"], self.groups["trail"], self.groups["boulder"]
+        for S_ in self.serp.values():
+            A = S_["A"]
+            legs = S_["legs"]
+            for i, g in enumerate(legs):
+                sg = 1 if g["t1"] > g["t0"] else -1
+                t0, t1 = g["t0"] - sg * 2.0, g["t1"] + sg * 2.0
+                n = max(2, int(abs(t1 - t0) / 2.0))
+
+                def zt(t):
+                    f = max(0.0, min(1.0, (t - g["t0"]) / (g["t1"] - g["t0"])))
+                    return g["z0"] + (g["z1"] - g["z0"]) * f
+                for k in range(n):
+                    ta, tb = t0 + (t1 - t0) * k / n, t0 + (t1 - t0) * (k + 1) / n
+                    za, zb = zt(ta), zt(tb)
+                    a0, a1 = self.serp_pt(A, ta, g["u"] - 1.5), self.serp_pt(A, ta, g["u"] + 1.5)
+                    b0, b1 = self.serp_pt(A, tb, g["u"] - 1.5), self.serp_pt(A, tb, g["u"] + 1.5)
+                    Q = [(a0[0] + C, a0[1] + C, za), (b0[0] + C, b0[1] + C, zb), (b1[0] + C, b1[1] + C, zb), (a1[0] + C, a1[1] + C, za)]
+                    if (Q[1][0] - Q[0][0]) * (Q[3][1] - Q[0][1]) - (Q[1][1] - Q[0][1]) * (Q[3][0] - Q[0][0]) < 0:
+                        Q = [Q[3], Q[2], Q[1], Q[0]]
+                    tr.quad(*Q)
+                    coll.quad(*Q, 0)
+                    drop = cfg.SERP_DU + 2.0                   # Felsfuss zur Talseite, schliesst den Hang unter dem Weg
+                    q0 = (a0[0] + C, a0[1] + C, za)
+                    q1 = (b0[0] + C, b0[1] + C, zb)
+                    S0 = [q0, q1, (q1[0], q1[1], zb - drop), (q0[0], q0[1], za - drop)]
+                    rk.quad(*S0)
+                    rk.quad(S0[3], S0[2], S0[1], S0[0])
+                    if rng.random() < 0.4:                     # niedrige Felskante am Weg, unregelmässig
+                        r_ = rng.uniform(0.4, 0.75)
+                        _ina_rock(rk, coll, a0[0] + C, a0[1] + C, za - 0.6, za + rng.uniform(0.35, 0.8), r_, rng, 6)
+                # Treppe in der Kehre
+                te = g["t1"]
+                out = 1 if te > 0 else -1
+                u0 = g["u"] + 1.5
+                ctr0, ctr1 = self.serp_pt(A, te, u0), self.serp_pt(A, te, u0 + 1.0)
+                ang = math.atan2(ctr1[1] - ctr0[1], ctr1[0] - ctr0[0])
+                for k in range(cfg.SERP_STEPS):
+                    c_ = self.serp_pt(A, te, u0 + (k + 0.5) * cfg.SERP_TREAD)
+                    top = g["z1"] + (k + 1) * cfg.SERP_RISE
+                    low = g["z1"] - 1.2
+                    _ina_obox(stone, coll, c_[0] + C, c_[1] + C, (top + low) / 2, cfg.SERP_TREAD + 0.02, 3.2, top - low, ang, 0)
+                ztop = g["z1"] + S_["rise"]
+                # Stützmauern: aussen durchgehend um die Kehre, innen nur entlang der Treppe
+                m0 = self.serp_pt(A, te + out * 2.2, g["u"] + (S_["run"] + 3.0) / 2)
+                _ina_obox(stone, coll, m0[0] + C, m0[1] + C, (ztop + 1.0 + g["z1"] - 2.0) / 2, S_["run"] + 4.2, 0.55, ztop + 3.0 - g["z1"], ang, 0)
+                m1 = self.serp_pt(A, te - out * 1.85, u0 + S_["run"] / 2)
+                _ina_obox(stone, coll, m1[0] + C, m1[1] + C, (ztop + 0.9 + g["z1"] - 2.0) / 2, S_["run"] - 0.1, 0.45, ztop + 2.9 - g["z1"], ang, 0)
 
     def make_sessha(self):
         """Zwei kleine Nebenschreine auf der Plattform: ein Raum, eine Tür zur Haupthalle hin."""
@@ -6901,8 +7117,13 @@ class _InaBuilder:
                 return False
             return not any(math.hypot(x - q[0], y - q[1]) < q[2] + 0.5 for q in self.rocks_on_path if abs(x - q[0]) < 5.0 and abs(y - q[1]) < 5.0)
 
-        def put(kind, x, y, rot, gap=4.0, hard=True):
-            sc = rng.uniform(lo, hi)
+        tops = (5.0, 10.5, 10.5, 5.0, 7.0, 2.6)
+
+        def fits_view(kind, x, y):
+            return self.h(x, y) + tops[kind] * hi <= _ina_canopy(x, y)
+
+        def put(kind, x, y, rot, gap=4.0, hard=True, sc=None):
+            sc = sc or rng.uniform(lo, hi)
             placed.setdefault((int(x // 10), int(y // 10)), []).append((x, y))
             z = self.h(x, y)
             self.sakura.append((x + C, y + C, z, kind, sc, rot))
@@ -6924,6 +7145,8 @@ class _InaBuilder:
                 continue
             ox, oy = x / math.hypot(x, y), y / math.hypot(x, y)
             kind = rng.choice((1, 2, 3, 3, 5, 4)) if up else rng.choice((0, 0, 3, 5))
+            if not up and not fits_view(kind, x, y):
+                kind = 5
             rot = math.atan2(-oy, -ox) + rng.uniform(-0.6, 0.6) if kind == 0 else rng.uniform(0, 6.283)
             put(kind, x, y, rot, hard=False)
         lp = self.loop_line
@@ -6939,9 +7162,9 @@ class _InaBuilder:
             px, py = x + ox * side * (w + rng.uniform(0.0, 0.5)), y + oy * side * (w + rng.uniform(0.0, 0.5))
             if not clear(px, py, 5.0) or self.slope(px, py) > 1.3 or abs(self.h(px, py) - _ina_loop_z(a)) > 1.0:
                 continue
-            put(rng.choice((5, 5, 2, 4, 3)), px, py, rng.uniform(0, 6.283))
+            put(rng.choice((5, 5, 2, 4, 3)) if side > 0 else rng.choice((5, 5, 3)), px, py, rng.uniform(0, 6.283))
         for _ in range(9000):                                  # Erdstufen zwischen Wald und Felsband
-            if len(self.sakura) >= 190:
+            if len(self.sakura) >= 270:
                 break
             d = rng.uniform(-180.0, 180.0)
             a = math.radians(d)
@@ -6952,9 +7175,13 @@ class _InaBuilder:
             x, y = r * c, r * e
             if self.slope(x, y) > 0.55 or self.open.get((int(round(x / cfg.GRID)), int(round(y / cfg.GRID))), 99.0) < 4.0 or not clear(x, y, 7.5):
                 continue
-            put(rng.choice((2, 3, 3, 4, 5, 5, 1)), x, y, rng.uniform(0, 6.283))
+            kind = rng.choice((2, 3, 3, 4, 5, 5, 1))
+            if not fits_view(kind, x, y):
+                kind = rng.choice((3, 5, 5))
+            if fits_view(kind, x, y):
+                put(kind, x, y, rng.uniform(0, 6.283))
         for _ in range(4000):                                  # einsame Bäume im äusseren Wald
-            if len(self.sakura) >= 240:
+            if len(self.sakura) >= 320:
                 break
             x, y = rng.uniform(-170.0, 170.0), rng.uniform(-170.0, 170.0)
             q = _ina_s(x, y)
@@ -6963,7 +7190,37 @@ class _InaBuilder:
                 continue
             if self.slope(x, y) > 0.5 or self.open.get((int(round(x / cfg.GRID)), int(round(y / cfg.GRID))), 99.0) < 4.0 or not clear(x, y, 16.0):
                 continue
-            put(rng.choice((2, 2, 3, 5, 1, 4)), x, y, rng.uniform(0, 6.283))
+            kind = rng.choice((2, 2, 3, 5, 1, 4))
+            if fits_view(kind, x, y):
+                put(kind, x, y, rng.uniform(0, 6.283))
+        # Gipfel und Grat: dichter Mischwald, je Seite und Ecke zwei bis drei uralte Riesen
+        L = cfg.LOOP
+        base = len(self.sakura)
+        tries = 0
+        while len(self.sakura) - base < 190 and tries < 20000:
+            tries += 1
+            d = rng.uniform(-180.0, 180.0)
+            a = math.radians(d)
+            q = L["s"] + rng.uniform(17.0, 52.0)
+            c, e = math.cos(a), math.sin(a)
+            r = q / (c * c * c * c + e * e * e * e) ** 0.25
+            x, y = r * c, r * e
+            if max(abs(x), abs(y)) > 240.0 or self.slope(x, y) > 1.1 or not clear(x, y, rng.uniform(4.0, 7.0)):
+                continue
+            u_ = rng.random()
+            put(6 if u_ < 0.28 else (7 if u_ < 0.42 else rng.choice((2, 3, 3, 4, 5))), x, y, rng.uniform(0, 6.283), hard=False)
+        for sec in range(8):
+            for _ in range(rng.choice((2, 2, 3))):
+                for _t in range(300):
+                    d = -180.0 + (sec + rng.random()) * 45.0
+                    a = math.radians(d)
+                    q = L["s"] + rng.uniform(16.0, 40.0)
+                    c, e = math.cos(a), math.sin(a)
+                    r = q / (c * c * c * c + e * e * e * e) ** 0.25
+                    x, y = r * c, r * e
+                    if max(abs(x), abs(y)) <= 240.0 and self.slope(x, y) < 1.5 and clear(x, y, 12.0):
+                        put(1, x, y, rng.uniform(0, 6.283), hard=False, sc=rng.uniform(1.9, 2.5))
+                        break
 
     # ------------------------------------------------------------ Wald
     def make_forest(self):
@@ -6976,6 +7233,8 @@ class _InaBuilder:
             if max(abs(x), abs(y)) < cfg.PLAZA_HALF + 5.0 or q > cfg.LOOP["s"] - 7.0:
                 return False
             if q > 140.0 and self.slope(x, y) > 0.6:           # nur auf Boden, der trägt
+                return False
+            if _ina_canopy(x, y) - self.h(x, y) < 4.8:         # direkt unter der Sichtlinie kein Stamm mehr
                 return False
             if self.open.get((int(round(x / cfg.GRID)), int(round(y / cfg.GRID))), 99.0) < keep:
                 return False
@@ -7075,6 +7334,18 @@ def inari_shade_trail(p):
     return mix((0.52, 0.42, 0.31), (0.56, 0.55, 0.52), max(0.0, min(1.0, v)))
 
 
+def inari_ground(x, y):
+    """Reine Geländehöhe (ohne Felsen und Wege auf dem Gelände), relativ zur Kartenmitte."""
+    d = _INA_DATA
+    G = MapConfigInariSanctuary.GRID
+    H, n = d["heights"], d["n"]
+    fx, fy = x / G, y / G
+    i, j = max(-n, min(n - 1, int(math.floor(fx)))), max(-n, min(n - 1, int(math.floor(fy))))
+    tx, ty = fx - i, fy - j
+    a, b, c, e = H[(i, j)], H[(i + 1, j)], H[(i + 1, j + 1)], H[(i, j + 1)]
+    return a + (b - a) * tx + (c - b) * ty if tx >= ty else a + (c - e) * tx + (e - a) * ty
+
+
 def inari_mapdata():
     """Fertige Kartendaten (wie sanitize_map) für World und Darstellung."""
     d = inari_data()
@@ -7159,6 +7430,7 @@ _INA_TORCH = MapConfigInariSanctuary.torches()
 def inari_cedar(m, x, y, z, r, rng):
     """Hohe, dunkle Zeder: langer Stamm, Äste erst weit oben. Gibt die Höhe zurück."""
     h = rng.uniform(15.0, 23.0)
+    h = max(4.5, min(h, _ina_canopy(x - MapConfigInariSanctuary.HALF, y - MapConfigInariSanctuary.HALF) - z))
     prism(m, x, y, z - 0.4, 0.42 + r * 0.06, h * 0.86, 5, (0.25, 0.19, 0.15), rng, taper=0.25)
     m.mat = "leaves"
     n = 5
@@ -7229,11 +7501,15 @@ def inari_sakura(m, x, y, z, kind, sc, rot, rng):
             p1, p2 = (a[0] - w, a[1], a[2]), (a[0] + w, a[1], a[2])
             q1, q2 = (b[0] - w * 0.7, b[1] + w * 0.4, b[2]), (b[0] + w * 0.7, b[1] - w * 0.4, b[2])
             for t_ in ((p1, p2, q2), (p1, q2, q1), (q2, p2, p1), (q1, q2, p1)):
-                m.tri(t_[0], t_[1], t_[2], c0 if k % 2 else c1, mat="leaves")
+                m.tri(t_[0], t_[1], t_[2], c0 if k % 2 else c1, mat="plaster")
             a = b
         _INA_GAIN = None
 
-    if kind == 0:
+    if kind == 6:
+        inari_wild(m, x, y, z, rng)
+    elif kind == 7:
+        inari_cedar(m, x, y, z, 1.9, rng)
+    elif kind == 0:
         tube(((0, 0, -0.5), (0.5, 0, 0.8), (1.8, 0.2, 1.8), (3.4, -0.2, 2.4), (5.0, 0.2, 3.3)), 0.3, 0.09)
         tube(((3.4, -0.2, 2.4), (4.4, -1.3, 3.2)), 0.12, 0.05, 4)
         puff(5.2, 0.3, 3.8, 1.7, n=2)
@@ -7277,7 +7553,7 @@ def inari_sakura(m, x, y, z, kind, sc, rot, rng):
 
 def inari_wild(m, x, y, z, rng):
     """Kleiner Wildbaum am Waldrand: dünner Stamm, heller, lockerer als die Zedern."""
-    h = rng.uniform(5.0, 8.5)
+    h = max(3.5, min(rng.uniform(5.0, 8.5), _ina_canopy(x - MapConfigInariSanctuary.HALF, y - MapConfigInariSanctuary.HALF) - z))
     prism(m, x, y, z - 0.4, 0.17, h * 0.8, 5, (0.28, 0.23, 0.18), rng, taper=0.3)
     m.mat = "leaves"
     g = rng.uniform(0.85, 1.15)
@@ -7307,7 +7583,7 @@ def inari_bamboo(m, x, y, z, r, rng):
     for _ in range(6):
         a, d = rng.uniform(0, 6.283), rng.uniform(0.0, 1.5) * r
         bx, by = x + math.cos(a) * d, y + math.sin(a) * d
-        hh = rng.uniform(7.0, 11.5)
+        hh = max(3.5, min(rng.uniform(7.0, 11.5), _ina_canopy(x - MapConfigInariSanctuary.HALF, y - MapConfigInariSanctuary.HALF) - z))
         h = max(h, hh)
         g = rng.uniform(0.85, 1.1)
         prism(m, bx, by, z - 0.3, 0.07, hh, 4, (0.36 * g, 0.47 * g, 0.20 * g), rng, taper=0.5)
@@ -14149,6 +14425,11 @@ def _step_once(pl, forward, strafe, run, jump, dt, world):
             mesh_steep_block(pl, ox, oy, world)      # Netzkarten: steile Flächen (Felswände) nicht hinaufklettern
         mesh_slide(pl, dt, world)                    # ... und auf ihnen nicht stehen bleiben
     ground = world.floor_at(pl.x, pl.y, pl.z)       # Gelände oder Treppe/Mauer/Dach
+    if world.map.get("inari"):                      # Fels und Geröll sind steil: wer durchrutscht, bleibt trotzdem auf der Karte
+        sh_ = inari_ground(pl.x - CENTER, pl.y - CENTER)
+        if pl.z < sh_ - 0.8:
+            ground = pl.z = sh_
+            pl.vz = max(pl.vz, 0.0)
     if world.ladders and world.on_ladder(pl.x, pl.y, pl.z):      # Leiter: W/Leertaste klettern, Ducken hält, sonst langsam runter
         pl.vz = 2.4 if (forward > 0 or jump) else (0.0 if pl.duck else -2.4)
         pl.z += pl.vz * dt

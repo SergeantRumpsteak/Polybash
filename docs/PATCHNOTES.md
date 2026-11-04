@@ -2,6 +2,20 @@
 
 Neueste Änderungen oben.
 
+## Inari Temple Sanctuary: Serpentinen, Sichtlinien, Gipfelwald, Wegordnung (Robin, 2026-11-04)
+Gilt nur für diese Karte. NET_VERSION 60 -> 61. Fest bleiben Schrein, Feuerstelle, Nebenschreine, Ninja-Tomahawk und die Monster-Regel.
+
+- **Saumpfad höher**: rund 10 m angehoben, jetzt um 33 m (29-37 m). Damit liegt er deutlich über der Galeriehöhe.
+- **Freier Blick zur Mitte**: Bäume bleiben unter der Sichtlinie vom Pfad zur Plattform, zur Mitte hin wird der Wald deshalb niedriger. Rechnerisch ragt von 56 Prüfpositionen auf dem Pfad keine Baumspitze in die Linie zur Plattform.
+- **Gipfel dicht bewachsen**: rund 190 kleine bis mittlere Bäume auf Grat und Bergrücken, dazu in acht Abschnitten je zwei bis drei uralte Riesen. Mehr Sakura an den Hängen, insgesamt jetzt über 500.
+- **Serpentinen statt Rampen**: Die Erdrampen sind weg. Ost: 5 Stücke auf 25 m Breite. West: 6 Stücke auf 30 m. An jeder Kehre eine Steintreppe mit Stützmauern, oben eine letzte Treppe auf den Pfad. Die Wegstücke sind eigene Bauteile, das Gelände ist darunter gekerbt.
+- **Abbrüche mit Felsbrocken**: Die Geröllrinne bleibt, die Blöcke sind durch Brocken ersetzt, dazu höhere Brocken als Rahmen. Unter den Brocken liegt eine flache Felsschicht zum sicheren Landen. Breiten jetzt 3,3-3,9 m.
+- **Torii**: 109 Tore, nur noch auf ungestörten Wegstücken, mindestens 11 m von jedem anderen Weg entfernt.
+- **Statuen**: Jizo stehen als Paare links und rechts der Wege. Füchse und kleine Altäre sitzen in den Spitzen der Weggabeln und schauen die Wege hinunter.
+- **Sicherung**: Wer im Fels durchs Gelände rutscht, wird auf die Oberfläche zurückgesetzt, statt ins Leere zu fallen.
+
+Technik: `_ina_canopy`, `serp_plan`, `serp_carve`, `make_serpentines`, `v_shrine`, `jizo_line`, `inari_ground`; `LOOP_GAPS`, `ASCENTS`, `SERP_*`.
+
 ## Inari Temple Sanctuary: Saumpfad, neuer Berg, Sakura auf allen Höhen (Robin, 2026-11-04)
 Gilt nur für diese Karte. NET_VERSION 59 -> 60. Fest bleiben Schrein, Feuerstelle, Nebenschreine und Ninja-Tomahawk.
 
