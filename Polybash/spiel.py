@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 61         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 62         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -1791,6 +1791,7 @@ KEY_ACTIONS = (
     ("Anzeige", "scoreboard", "Übersicht (halten)", "tab"), ("Anzeige", "bigmap", "Grosse Karte", "m"),
     ("Anzeige", "mm_out", "Minimap heraus", "x"), ("Anzeige", "mm_in", "Minimap hinein", "y"),
     ("Anzeige", "fps", "Bildrate anzeigen", "f3"), ("Anzeige", "fullscreen", "Vollbild", "f11"),
+    ("Anzeige", "skip_vote", "Siegerehrung überspringen (Abstimmung)", "p"),
 )
 KEY_DEFAULTS = {a: k for _g, a, _l, k in KEY_ACTIONS}
 KEY_LABELS = {a: l for _g, a, l, _k in KEY_ACTIONS}
@@ -4852,7 +4853,7 @@ MOB_NAMES = {"grunt": "Grunt", "brute": "Brute", "huntress": "Jägerin", "coloss
              "critter": "Hase", "titan": "Titan", "pdrone": "Spieler-Drohne", "gdrone": "Abwehrdrohne", "harpy": "Harpie"}
 
 
-def end_tabs(koth, ctf=False):
+def end_tabs(koth, ctf=False, data=()):
     """Reiter des Endbildschirms: (Titel, [(Spaltenkopf, Wert(e) -> Zahl/Text, hervorheben?)],
     Ehrentitel, Wert(e) für den Ehrentitel). Neue Statistik = neue Spalte/neuer Reiter hier. ctf = Team-Spalte
     in der Übersicht und Reiter "Flaggen"."""
@@ -4892,6 +4893,32 @@ def end_tabs(koth, ctf=False):
                           ("Im Heli", lambda e: f"{st(e, 'fly'):.0f} m", False),
                           ("Flüge", lambda e: st(e, "flights"), True)],
              "Weltenbummler", lambda e: st(e, "walk") + st(e, "drive") + st(e, "fly"))]
+    names = {str(e["pid"]): e["name"][:10] for e in data}
+
+    def rival(e, killer):
+        """Duell mit dem höchsten Wert: killer=True meine Opfer, sonst wer mich am meisten getötet hat."""
+        best, pts = "-", 0
+        for o in data:
+            if o is e:
+                continue
+            mine, his = st(e, "vs").get(str(o["pid"]), 0) if st(e, "vs") else 0, o["stats"].get("vs", {}).get(str(e["pid"]), 0)
+            v = mine if killer else his
+            if v > pts:
+                best, pts = f"{names[str(o['pid'])]} {mine}:{his}", v
+        return best
+
+    acc = lambda e: f"{100 * st(e, 'gun_hits') / max(1, st(e, 'shots')):.0f} %"             # noqa: E731
+    tabs.insert(1, ("Kampf", [("K/D/A", lambda e: f"{e['kills']}/{e['deaths']}/{st(e, 'assists')}", False),
+                              ("Assists", lambda e: st(e, "assists"), True),
+                              ("Schaden", lambda e: int(st(e, "dmg_dealt")), True),
+                              ("Erlitten", lambda e: int(st(e, "dmg_taken")), False),
+                              ("Kopf", lambda e: st(e, "heads"), True),
+                              ("Treffer", acc, False)],
+                    "Schadenskönig", lambda e: st(e, "dmg_dealt")))
+    tabs.insert(2, ("Rivalen", [("Duelle gewonnen", lambda e: rivals_won(e, data), True),
+                                ("Liebstes Opfer", lambda e: rival(e, True), False),
+                                ("Angstgegner", lambda e: rival(e, False), False)],
+                    "Tyrann", lambda e: rivals_won(e, data)))
     if ctf:                                          # CTF-Werte als eigener Reiter direkt nach der Übersicht
         tabs.insert(1, ("Flaggen", [("Team", team, False),
                                     ("Flaggen geholt", lambda e: st(e, "flag_caps"), True),
@@ -5100,7 +5127,98 @@ def new_stats():
     return {"mob": {k: 0 for k in KINDS}, "crate": {k: 0 for k in CRATE_KINDS}, "buffs": 0, "melee_kills": 0,
             "toma_fired": 0, "toma_kills": 0, "longest": 0.0, "longest_w": -1, "heads": 0, "hits": 0,
             "walk": 0.0, "drive": 0.0, "drives": 0, "fly": 0.0, "flights": 0, "zone_t": 0.0,
-            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0}     # CTF: geholt, zurückgebracht, Träger getötet
+            "flag_caps": 0, "flag_returns": 0, "carrier_kills": 0,     # CTF: geholt, zurückgebracht, Träger getötet
+            "assists": 0, "dmg_dealt": 0.0, "dmg_taken": 0.0, "shots": 0, "gun_hits": 0,        # Abschluss-Tabelle
+            "fall_deaths": 0, "runover_deaths": 0, "self_hits": 0, "gren_kills": 0, "zone_kills": 0, "revenge": 0,
+            "low_hp_t": 0.0, "idle_best": 0.0, "camp_best": 0.0, "camp_kills": 0, "vs": {}}     # Trophäen; vs: Opfer -> Kills
+
+
+def new_track():
+    """Zwischenwerte des Hosts für die Statistik (werden nicht verschickt)."""
+    return {"last_killer": -1, "hurt_by": {}, "camp_a": None, "camp_t": 0.0, "camp_k": 0, "idle_t": 0.0, "look": None}
+
+
+AWARD_CAP = 6               # höchstens so viele Trophäen je Runde (min(3 x Spieler, AWARD_CAP))
+AWARD_BURN_MAX = 3          # höchstens so viele verbrannte Pokale je Zeremonie
+LOW_HP_K = 0.15             # Blei-Magnet: zählt unter diesem Anteil der max. Lebenspunkte
+CAMP_R = 8.0                # m: Wer auf sich hält ...: so weit darf man sich vom Anker entfernen
+CAMP_MIN_KILLS = 2          # ... und so viele Kills braucht es dort
+ASSIST_T, ASSIST_MIN = 10.0, 20.0   # Assist: mindestens so viel Schaden in den letzten Sekunden vor dem Tod
+
+
+def rivals_won(e, data):
+    """Direkte Duelle, die dieser Spieler gewonnen hat (mehr Kills am Gegner als umgekehrt)."""
+    won, mine = 0, e["stats"].get("vs", {})
+    for o in data:
+        if o is not e and mine.get(str(o["pid"]), 0) > o["stats"].get("vs", {}).get(str(e["pid"]), 0):
+            won += 1
+    return won
+
+
+def spray_value(e):
+    """Viele Schüsse bei wenig Treffern: Schüsse x Fehlquote."""
+    st = e["stats"]
+    n = st.get("shots", 0)
+    return round(n * (1.0 - min(1.0, st.get("gun_hits", 0) / n)), 1) if n else 0
+
+
+def _aw(k):
+    return lambda e, _d: e["stats"].get(k, 0)
+
+
+# Schlüssel, Name, Beschreibung, Wert(Spieler, alle), Mindestwert, Gewicht, Gleichstands-Wert, Anzeige des Werts
+AWARDS = (
+    ("fallobst", "Fallobst", "Die meisten Tode durch Stürze", _aw("fall_deaths"), 1, 1.3, None, "{:.0f}x gestürzt"),
+    ("reh", "Das Reh", "Am häufigsten überfahren worden", _aw("runover_deaths"), 1, 1.4, None, "{:.0f}x überfahren"),
+    ("selbst", "Der Selbsttreffer", "Von eigener Granate oder eigenem Tomahawk erwischt", _aw("self_hits"), 1, 1.5, None,
+     "{:.0f}x selbst getroffen"),
+    ("tyrann", "Der Tyrann", "Die meisten Duelle Mann gegen Mann gewonnen", rivals_won, 1, 1.0, None, "{:.0f} Duelle gewonnen"),
+    ("camper", "Wer was auf sich hält ...", "Am längsten die Stellung gehalten und dabei getroffen", _aw("camp_best"), 30.0, 1.1,
+     None, "{:.0f} s auf einem Fleck"),
+    ("granat", "Granat-Mund", "Die meisten Kills mit Splittergranaten", _aw("gren_kills"), 1, 1.0, None, "{:.0f} Granaten-Kills"),
+    ("tuersteher", "Der Türsteher", "Die meisten Kills in der Zone", _aw("zone_kills"), 1, 1.0,
+     lambda e: e["stats"].get("zone_t", 0), "{:.0f} Kills in der Zone"),
+    ("speedy", "Speedy Gonzales", "Die weiteste Strecke der Runde", lambda e, _d: round(
+        sum(e["stats"].get(k, 0) for k in ("walk", "drive", "fly")), 1), 200.0, 0.7, None, "{:.0f} m unterwegs"),
+    ("blei", "Blei-Magnet", "Am längsten unter 15 % Leben überlebt", _aw("low_hp_t"), 5.0, 1.2, None, "{:.0f} s am Abgrund"),
+    ("spray", "Spray & Pray", "Viele Schüsse, wenig Treffer", lambda e, _d: spray_value(e), 50.0, 0.9, None,
+     "{:.0f} Kugeln in die Landschaft"),
+    ("schlaefer", "Der Schläfer", "Die längste Zeit ohne jede Bewegung", _aw("idle_best"), 20.0, 1.2, None, "{:.0f} s geschlafen"),
+    ("rache", "Rache ist süß", "Die meisten Rache-Kills", _aw("revenge"), 1, 1.0, None, "{:.0f} Rache-Kills"),
+    ("sargnagel", "Der Sargnagel", "Der letzte Kill der Runde", lambda e, _d: 1 if e.get("final") else 0, 1, 0.8, None,
+     "Letzter Kill"),
+)
+
+
+def pick_awards(data):
+    """Trophäen der Runde. Bei Gleichstand wird der Pokal verbrannt und zählt nicht aufs Limit, dadurch rückt ein Preis nach.
+    -> [{key, name, text, pids, label, burn}] in der Reihenfolge der Vorführung."""
+    cap = min(3 * len(data), AWARD_CAP)
+    cands = []
+    for key, name, text, val, low, weight, tie, label in AWARDS:
+        vals = [(val(e, data), e) for e in data]
+        top = max((v for v, _e in vals), default=0)
+        if top <= 0 or top < low:
+            continue
+        win = [e for v, e in vals if v == top]
+        if tie is not None and len(win) > 1:
+            t = max(tie(e) for e in win)
+            win = [e for e in win if tie(e) == t]
+        second = max((v for v, _e in vals if v < top), default=0)
+        cands.append((-weight * (2.0 + (top - second) / top), key, name, text, win, label.format(top)))
+    cands.sort(key=lambda c: (c[0], c[1]))
+    out, won, burned = [], 0, 0
+    for _sig, key, name, text, win, label in cands:
+        if won >= cap:
+            break
+        burn = len(win) > 1
+        if burn and burned >= AWARD_BURN_MAX:
+            continue
+        burned += burn
+        won += not burn
+        out.append({"key": key, "name": name, "text": text, "pids": [e["pid"] for e in win], "label": label, "burn": burn})
+    out.sort(key=lambda a: a["key"] == "sargnagel" and not a["burn"])    # der letzte Nagel kommt zum Schluss
+    return out
 
 
 def ctf_summary(p):
@@ -8138,6 +8256,8 @@ class World:
         self.phase = "play"      # play | over (Rangliste wird gezeigt)
         self.lobby = False       # Host-Lobby: alle warten, bis der Host 'Spiel starten' drückt (Zeit und Monster ruhen)
         self.time_left = self.limit
+        self.last_kill, self.cer_on = -1, False
+        self.skip_voters, self.skip_votes = set(), set()
         self.over_t = 0.0
         self.reset_crates()
         self.build_toma_spots()
@@ -8148,6 +8268,8 @@ class World:
         self.team_of = {}        # Spieler-ID -> Team (0/1) - nur im CTF belegt (sonst gilt jeder für sich, allied())
         self.team_score = [0, 0]
         self.flags = []          # Flaggen (beim Mitspieler aus den Snapshots)
+        self.last_kill, self.cer_on = -1, False      # letzter Kill der Runde; läuft die Siegerehrung?
+        self.skip_voters, self.skip_votes = set(), set()
         self.next_fid = 1
         self.ctf_setup_map()     # Flaggenstände und Team-Startpunkte (aus Seed + Karte)
         if self.mode == "ctf":
@@ -9688,11 +9810,14 @@ class World:
         if (not self.ctf_ff and isinstance(attacker, int) and attacker >= 0
                 and attacker != pl.pid and self.allied(attacker, pl.pid)):
             return                                       # Teams (nur wo es welche gibt): Eigenbeschuss aus
+        if attacker == pl.pid and wi in (WI_TOMAHAWK, WI_GRENADE):
+            pl.stats["self_hits"] += 1                   # Trophäe "Der Selbsttreffer"
         instant = dmg >= 9000 or wi in (WI_FALL, WI_TOMAHAWK)   # Sofort-Tode: kein Schutz
         if not instant and wears(pl, "shield") and pl.shield_hp > 0 and wi != WI_FALL:
             absorb = min(pl.shield_hp, dmg)              # Schild fängt zuerst ab
             pl.shield_hp -= absorb
             pl.shield_t = 0.0
+            self.stat_damage(pl, attacker, absorb)
             dmg -= absorb
             if absorb > 0:
                 self.events.append(("shieldhit", pl.pid, round(absorb, 1), self.dmg_src_pid(attacker, pl)))
@@ -9723,11 +9848,79 @@ class World:
         real = min(dmg, pl.hp)                           # v56: Schadens-Log (Death-Screen) - tatsächlich verlorene HP
         pl.hp = max(0.0, pl.hp - dmg)
         pl.since_hurt = 0.0
+        self.stat_damage(pl, attacker, real)
         self.events.append(("player_hurt", dmg, pl.pid, self.dmg_src_pid(attacker, pl), round(real, 1)))
         if pl.hp <= 0:
             self.death_src = self.mob_src(attacker, wi)  # v56: welches Monster / wessen beschworenes Monster
             self.player_died(pl, attacker, wi)
             self.death_src = None
+
+    def stat_damage(self, pl, attacker, amount):
+        """Statistik: erlittener und verursachter Schaden (Schild zählt mit), dazu die Liste für Assists."""
+        pl.stats["dmg_taken"] += amount
+        src = self.dmg_src_pid(attacker, pl)
+        p = self.players.get(src)
+        if p is None or p is pl:
+            return
+        p.stats["dmg_dealt"] += amount
+        hb = pl.track["hurt_by"]
+        old = hb.get(src)
+        fresh = old is not None and old[1] - self.time_left <= ASSIST_T
+        hb[src] = ((old[0] if fresh else 0.0) + amount, self.time_left)
+
+    def stat_kill(self, pl, k, wi):
+        """Statistik beim Tod von pl (k: Schütze, sonst None): Sturz, Duelle, Rache, Assists, letzter Kill."""
+        if wi == WI_FALL:
+            pl.stats["fall_deaths"] += 1
+        mo = (getattr(self, "death_src", None) or (None, -1))[1]
+        c = k if k is not None else self.players.get(mo)          # beschworene Monster/Drohnen zählen für den Besitzer
+        if c is not None and (c is pl or (self.mode == "ctf" and self.allied(c.pid, pl.pid))):
+            c = None
+        hurt, pl.track["hurt_by"] = pl.track["hurt_by"], {}
+        for pid, (amt, t) in hurt.items():
+            q = self.players.get(pid)
+            if q is not None and q is not c and amt >= ASSIST_MIN and t - self.time_left <= ASSIST_T:
+                q.stats["assists"] += 1
+        if c is None:
+            return
+        vs = c.stats["vs"]
+        vs[str(pl.pid)] = vs.get(str(pl.pid), 0) + 1
+        if c.track["last_killer"] == pl.pid:
+            c.stats["revenge"] += 1
+            c.track["last_killer"] = -1
+        pl.track["last_killer"] = c.pid
+        self.last_kill = c.pid
+        if k is None:
+            return
+        if wi == WI_GRENADE:
+            k.stats["gren_kills"] += 1
+        if self.mode == "koth" and k.hp > 0 and self.in_zone(k):
+            k.stats["zone_kills"] += 1
+        k.track["camp_k"] += 1
+
+    def stat_tick(self, pl, dt):
+        """Statistik je Tick für lebende Spieler: kaum Leben, Stellung halten, keine Bewegung."""
+        st, tr = pl.stats, pl.track
+        if pl.hp <= 0:
+            tr["camp_a"], tr["camp_t"], tr["camp_k"], tr["idle_t"] = None, 0.0, 0, 0.0
+            return
+        if pl.hp < pl.max_hp * LOW_HP_K:
+            st["low_hp_t"] += dt
+        a = tr["camp_a"]
+        if a is None or math.hypot(pl.x - a[0], pl.y - a[1]) > CAMP_R:
+            tr["camp_a"], tr["camp_t"], tr["camp_k"] = (pl.x, pl.y), 0.0, 0
+        else:
+            tr["camp_t"] += dt
+            if tr["camp_k"] >= CAMP_MIN_KILLS and tr["camp_t"] > st["camp_best"]:
+                st["camp_best"], st["camp_kills"] = tr["camp_t"], tr["camp_k"]
+        look, old = (pl.heading, pl.pitch), tr["look"]
+        tr["look"] = look
+        if (pl.moving or pl.vehicle >= 0 or pl.heli >= 0 or old is None or abs(look[0] - old[0]) > 0.3
+                or abs(look[1] - old[1]) > 0.3):
+            tr["idle_t"] = 0.0
+        else:
+            tr["idle_t"] += dt
+            st["idle_best"] = max(st["idle_best"], tr["idle_t"])
 
     def dmg_src_pid(self, attacker, pl=None):
         """v56: Spieler, dem ein Treffer zugerechnet wird (Schadens-Log): der Schütze, bei beschworenen Monstern
@@ -9837,6 +10030,7 @@ class World:
             self.events.append(("reward", k.pid))        # Munition für den Schützen
         elif not (k is not None and k is not pl):        # 11: Teamkill - im Killfeed trotzdem mit Namen
             k = None
+        self.stat_kill(pl, k, wi)
         self.events.append(("player_dead", pl.pid))
         mk, mo = getattr(self, "death_src", None) or (None, -1)
         self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi,
@@ -10626,6 +10820,8 @@ class World:
                         continue
                     self.runover[pl.pid] = 0.8
                     self.damage_player(pl, min(100.0, abs(v.speed) * 9.0), v.driver, WI_VEHICLE)
+                    if pl.hp <= 0:
+                        pl.stats["runover_deaths"] += 1     # Trophäe "Das Reh" (WI_VEHICLE allein gilt auch für Explosionen)
                 for m in self.mobs:
                     if (m.state != "dead" and self.runover.get(-m.id, 0.0) <= 0
                             and math.hypot(m.x - v.x, m.y - v.y) < VEH_R + m.radius + 0.3):
@@ -13090,9 +13286,13 @@ class World:
             t = stinger_target(self, eye, dirs[0], STINGER_HOST_CONE, STINGER_RANGE * 1.1, pl.pid)
             if t is not None and not (t[0] == "heli" and getattr(t[2], "driver", -1) == pl.pid):
                 tgt = (t[0], t[1])
+        pl.track["idle_t"] = 0.0                         # wer schiesst, schläft nicht
+        if w.blast_r <= 0:
+            pl.stats["shots"] += len(dirs)               # Trefferquote: eine Kugel je Schrotkorn
         for d in dirs:
             b = Bullet(eye[0], eye[1], eye[2], d[0] * w.speed, d[1] * w.speed, d[2] * w.speed,
                        w.dmg, pl.pid, self.next_bid, pl.cur)
+            b.counted = w.blast_r <= 0
             b.veh_dmg = w.veh_dmg
             b.target = tgt
             self.bullets.append(b)
@@ -13207,6 +13407,9 @@ class World:
                 self.damage_vehicle(who, STINGER_VEH_DMG, b.owner)
             else:
                 self.damage_heli(who, STINGER_HELI_DMG, b.owner)
+        if (getattr(b, "counted", False) and hit in ("mob", "player", "vehicle", "heli")
+                and not (hit == "player" and who.pid == b.owner) and b.owner in self.players):
+            self.players[b.owner].stats["gun_hits"] += 1
         if b.blast_r > 0:                                # Rakete: Explosion kurz vor dem Ziel
             self.explode((hx - d[0] * 0.3, hy - d[1] * 0.3, hz - d[2] * 0.3),
                          b.owner, b.blast_r, b.blast_dmg, b.wi)
@@ -13380,7 +13583,11 @@ class World:
         self.clear_gadgets()
         self.nests = []                                  # v49: Monster-Nester
         self.events.append(("matchend",))
-        self.events.append(("stats", self.match_stats()))   # an alle: Endbildschirm
+        data = self.match_stats()
+        awards = pick_awards(data)
+        self.cer_on = bool(awards)                       # Siegerehrung: Abstimmen dürfen, die jetzt dabei sind
+        self.skip_voters, self.skip_votes = set(self.players), set()
+        self.events.append(("stats", data, awards))      # an alle: Siegerehrung, danach Endbildschirm
 
     def match_stats(self):
         """Rundenstatistik aller Spieler (Reihenfolge = Rangliste) - geht einmal am Rundenende an alle."""
@@ -13388,10 +13595,28 @@ class World:
         for p in self.ranking():
             st = p.stats
             out.append({"pid": p.pid, "name": p.name, "kills": p.kills, "deaths": p.deaths,
-                        "score": round(p.score, 1), "mode": self.mode,
+                        "score": round(p.score, 1), "mode": self.mode, "look": getattr(p, "look", ""),
+                        "final": p.pid == self.last_kill,
                         "team": self.team_of.get(p.pid, -1), "ts": list(self.team_score),
                         "stats": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in st.items()}})
         return out
+
+    def skip_vote(self, pid):
+        """Stimme gegen die Siegerehrung (Host)."""
+        if self.cer_on and pid in self.skip_voters and pid not in self.skip_votes:
+            self.skip_votes.add(pid)
+            self.skip_check()
+
+    def skip_check(self):
+        """Stand melden; echte Mehrheit der noch Verbundenen beendet die Zeremonie."""
+        if not self.cer_on:
+            return
+        live = self.skip_voters & set(self.players)
+        n, need = len(self.skip_votes & live), len(live) // 2 + 1
+        self.events.append(("skipvote", n, need))
+        if live and n >= need:
+            self.cer_on = False
+            self.events.append(("skipdone",))
 
     def players_ready(self):
         """Haben alle Mitspieler (ausser dem Host) 'Bereit' gedrückt? Nur dann darf der Host starten."""
@@ -13433,11 +13658,14 @@ class World:
         if self.mobs_on:
             self.populate_mobs()
         self.phase, self.time_left, self.over_t = "play", self.limit, 0.0
+        self.last_kill, self.cer_on = -1, False
+        self.skip_voters, self.skip_votes = set(), set()
         for pl in list(self.players.values()):
             pl.kills = pl.deaths = 0
             pl.score = 0.0
             pl.death_pos = None
             pl.stats = new_stats()
+            pl.track = new_track()
             pl.ready = False
         self.ctf_balance()                               # 11: Teams (nur im CTF), Flaggen auf Anfang
         self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
@@ -13455,12 +13683,15 @@ class World:
             return
         self.lobby = False
         self.time_left = self.limit
+        self.last_kill, self.cer_on = -1, False
+        self.skip_voters, self.skip_votes = set(), set()
         self.ctf_balance()                               # 11: Teams vor dem ersten Spawn (Basis-Startpunkte)
         self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):
             pl.kills = pl.deaths = 0
             pl.score = 0.0
             pl.stats = new_stats()
+            pl.track = new_track()
             pl.ready = False
             self.respawn_player(pl)
         self.events.append(("newmatch",))
@@ -13554,6 +13785,8 @@ class World:
         for pl in players:
             pl.dead_age = pl.dead_age + dt if pl.hp <= 0 else 0.0
             pl.since_hurt += dt
+            if self.phase == "play" and not self.lobby:
+                self.stat_tick(pl, dt)
             pl.protect = max(0.0, pl.protect - dt)
             if self.regen_rate > 0 and 0 < pl.hp < pl.max_hp and pl.since_hurt > REGEN_DELAY:
                 pl.hp = min(pl.max_hp, pl.hp + self.regen_rate * dt)
@@ -13946,6 +14179,7 @@ class Player:
         self.hold_gad = -1                # Gadget-Art in der Hand (-1 = keins), für die Ansicht der anderen
         self.ready_set = 0.0              # Zeitpunkt der letzten eigenen Änderung (Snapshots überschreiben nicht sofort)
         self.stats = new_stats()          # Rundenstatistik (Host)
+        self.track = new_track()
         self.sb = None                    # Mitspieler: (Monster, Kisten) aus dem Snapshot
         self.team = getattr(world, "team_of", {}).get(pid)   # Team (CTF) oder None
         self.respawn(world, x, y, DEFAULT_LOADOUT)
@@ -26085,6 +26319,7 @@ class HostSession:
                     netlog(f"Host: Spieler pid {c.pid} entfernt ({c.error})")
                     self.world.players.pop(c.pid, None)    # seine Waffen sind einfach weg
                     self.world.clear_gadgets(c.pid)
+                    self.world.skip_check()                # Mehrheit neu rechnen
             else:
                 c.flush()
 
@@ -26297,6 +26532,8 @@ class HostSession:
         elif t == "respawn":
             if w.can_respawn(pl):
                 w.respawn_player(pl)              # Ereignis 'respawn' sagt dem Client, wohin
+        elif t == "skip":                         # Stimme gegen die Siegerehrung
+            w.skip_vote(pl.pid)
         elif t == "ready":                        # 'Bereit' in der Lobby / im Rundenendmenü
             if w.lobby or w.phase == "over":
                 pl.ready = bool(m.get("v"))
@@ -27029,6 +27266,10 @@ class ClientSession:
 
     def send_gear_off(self):
         self.conn.send({"t": "goff"})             # v51: Einzelteile ablegen
+        self.conn.flush()
+
+    def send_skip(self):
+        self.conn.send({"t": "skip"})
         self.conn.flush()
 
     def send_fall(self, dmg):
@@ -123885,6 +124126,787 @@ def default_fullscreen(g):
         set_fullscreen(g, True)
 
 
+# ------------------------------------------------------------ Siegerehrung: Goldpokale (Blick nach -y, Höhe rund 1 m)
+TM_GOLD, TM_DARK, TM_LIGHT = (1.0, 0.74, 0.18), (0.72, 0.47, 0.10), (1.0, 0.90, 0.52)
+TM_STONE = (0.40, 0.40, 0.43)
+
+
+def tm_lathe(m, prof, col, c=(0.0, 0.0), sq=(1.0, 1.0), sides=16):
+    """Drehkörper um die z-Achse: prof = [(Radius, Höhe), ...] von unten nach oben."""
+    for i in range(sides):
+        a0, a1 = 2 * math.pi * i / sides, 2 * math.pi * (i + 1) / sides
+        c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
+        for (r0, z0), (r1, z1) in zip(prof, prof[1:]):
+            p = [(c[0] + r0 * c0 * sq[0], c[1] + r0 * s0 * sq[1], z0), (c[0] + r0 * c1 * sq[0], c[1] + r0 * s1 * sq[1], z0),
+                 (c[0] + r1 * c1 * sq[0], c[1] + r1 * s1 * sq[1], z1), (c[0] + r1 * c0 * sq[0], c[1] + r1 * s0 * sq[1], z1)]
+            ref = (c[0], c[1], (z0 + z1) / 2)
+            m.tri(p[0], p[1], p[2], col, ref)
+            m.tri(p[0], p[2], p[3], col, ref)
+        if prof[0][0] > 0:
+            r, z = prof[0]
+            m.tri((c[0], c[1], z), (c[0] + r * c0 * sq[0], c[1] + r * s0 * sq[1], z), (c[0] + r * c1 * sq[0], c[1] + r * s1 * sq[1], z),
+                  col, (c[0], c[1], z + 1))
+        if prof[-1][0] > 0:
+            r, z = prof[-1]
+            m.tri((c[0], c[1], z), (c[0] + r * c0 * sq[0], c[1] + r * s0 * sq[1], z), (c[0] + r * c1 * sq[0], c[1] + r * s1 * sq[1], z),
+                  col, (c[0], c[1], z - 1))
+
+
+def tm_limb(m, a, b, w0, col, w1=None, sides=8):
+    """Runder Stab von a nach b (Durchmesser w0, am Ende w1)."""
+    w1 = w0 if w1 is None else w1
+    d = norm(sub(b, a))
+    u = norm(cross(d, (0.31, 0.17, 0.93) if abs(d[2]) < 0.9 else (1.0, 0.0, 0.0)))
+    v = cross(d, u)
+    ring_ = lambda p, w: [add(p, tuple(w / 2 * (math.cos(2 * math.pi * i / sides) * u[k] + math.sin(2 * math.pi * i / sides) * v[k])  # noqa: E731
+                                       for k in range(3))) for i in range(sides)]
+    ra, rb = ring_(a, w0), ring_(b, w1)
+    mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+    for i in range(sides):
+        j = (i + 1) % sides
+        m.tri(ra[i], ra[j], rb[j], col, mid)
+        m.tri(ra[i], rb[j], rb[i], col, mid)
+        m.tri(a, ra[i], ra[j], col, mid)
+        m.tri(b, rb[i], rb[j], col, mid)
+
+
+def tm_ball(m, c, r, col, sq=(1.0, 1.0, 1.0), sides=12, rows=8):
+    pts = [[(c[0] + r * sq[0] * math.sin(math.pi * j / rows) * math.cos(2 * math.pi * i / sides),
+             c[1] + r * sq[1] * math.sin(math.pi * j / rows) * math.sin(2 * math.pi * i / sides),
+             c[2] + r * sq[2] * math.cos(math.pi * j / rows)) for i in range(sides)] for j in range(rows + 1)]
+    for j in range(rows):
+        for i in range(sides):
+            k = (i + 1) % sides
+            a, b, d, e = pts[j][i], pts[j][k], pts[j + 1][k], pts[j + 1][i]
+            if j > 0:
+                m.tri(a, b, d, col, c)
+            if j < rows - 1:
+                m.tri(a, d, e, col, c)
+
+
+def tm_base(m, r=0.42):
+    tm_lathe(m, [(r, 0.0), (r, 0.05), (r * 0.9, 0.09), (r * 0.8, 0.12)], TM_STONE)
+
+
+def tm_katana(m, grip, tip):
+    """Dünne Klinge von grip nach tip, mit Stichblatt."""
+    tm_limb(m, grip, tip, 0.04, TM_LIGHT, 0.008, 4)
+    d = norm(sub(tip, grip))
+    g = add(grip, tuple(-c * 0.02 for c in d))
+    tm_limb(m, add(g, tuple(-c * 0.012 for c in d)), add(g, tuple(c * 0.012 for c in d)), 0.11, TM_DARK)
+    tm_limb(m, g, add(g, tuple(-c * 0.22 for c in d)), 0.035, TM_DARK)
+
+
+def tm_hand(m, wrist, up, side, s=1.0):
+    """Offene Hand: Handfläche und vier Finger plus Daumen, die nach up greifen."""
+    palm = add(wrist, tuple(c * 0.09 * s for c in up))
+    tm_ball(m, palm, 0.07 * s, TM_GOLD, (1.0, 0.6, 1.1), 8, 5)
+    for i in range(4):
+        o = (i - 1.5) * 0.034 * s
+        b = add(palm, (side[0] * o, side[1] * o, side[2] * o))
+        mid = add(b, tuple(c * 0.09 * s for c in up))
+        tm_limb(m, b, mid, 0.026 * s, TM_GOLD, 0.022 * s, 5)
+        tm_limb(m, mid, add(mid, (side[0] * o * 0.5, side[1] * o * 0.5 - 0.03 * s, up[2] * 0.07 * s)), 0.022 * s, TM_LIGHT, 0.016 * s, 5)
+    tm_limb(m, palm, add(palm, (side[0] * 0.11 * s, side[1] * 0.11 * s, 0.04 * s)), 0.03 * s, TM_GOLD, 0.02 * s, 5)
+
+
+def _tm_fallobst(m, fx):
+    tm_base(m)
+    tm_ball(m, (0, 0, 0.27), 0.40, TM_GOLD, (1.0, 1.0, 0.40), 18, 10)
+    tm_lathe(m, [(0.33, 0.11), (0.42, 0.13), (0.30, 0.15)], TM_DARK)         # Riss der Aufschlagkante
+    tm_limb(m, (0, 0, 0.40), (0.05, -0.01, 0.56), 0.035, TM_DARK, 0.022, 6)
+    tm_ball(m, (0.13, 0.0, 0.53), 0.09, TM_LIGHT, (1.0, 0.25, 0.5), 8, 5)
+    box(m, 0.0, -0.335, 0.33, 0.13, 0.03, 0.15, TM_DARK)                      # kleiner Grabstein auf der Schale
+    tm_ball(m, (0.0, -0.335, 0.405), 0.065, TM_DARK, (1.0, 0.25, 0.9), 8, 5)
+    box(m, 0.0, -0.353, 0.355, 0.02, 0.004, 0.09, TM_LIGHT)                   # Kreuz
+    box(m, 0.0, -0.353, 0.375, 0.065, 0.004, 0.018, TM_LIGHT)
+
+
+def _tm_reh(m, fx):
+    tm_base(m)
+    for x, y in ((-0.11, -0.2), (0.11, -0.2), (-0.11, 0.2), (0.11, 0.2)):
+        tm_limb(m, (x, y, 0.5), (x * 1.4, y * 1.15, 0.12), 0.07, TM_GOLD, 0.04)
+    tm_ball(m, (0, 0, 0.55), 0.2, TM_GOLD, (0.9, 1.7, 0.95))
+    tm_limb(m, (0, -0.24, 0.62), (0, -0.33, 0.86), 0.12, TM_GOLD, 0.09)
+    tm_ball(m, (0, -0.35, 0.93), 0.125, TM_GOLD, (0.95, 1.2, 0.9))
+    tm_ball(m, (0, -0.48, 0.90), 0.05, TM_DARK)                                # Schnauze
+    for sx in (-1, 1):
+        tm_ball(m, (sx * 0.075, -0.45, 0.975), 0.075, (0.97, 0.95, 0.88), (1.0, 0.6, 1.0))     # Panik-Augen
+        tm_ball(m, (sx * 0.072, -0.495, 0.975), 0.027, (0.03, 0.03, 0.03), (1.0, 0.4, 1.0), 8, 5)
+        tm_limb(m, (sx * 0.1, -0.33, 1.01), (sx * 0.25, -0.31, 1.07), 0.05, TM_GOLD, 0.02)     # Ohren
+        a = (sx * 0.05, -0.34, 1.03)
+        b = (sx * 0.12, -0.34, 1.2)
+        tm_limb(m, a, b, 0.03, TM_LIGHT, 0.018, 5)                             # Geweih
+        tm_limb(m, (sx * 0.09, -0.34, 1.12), (sx * 0.2, -0.36, 1.2), 0.02, TM_LIGHT, 0.012, 5)
+        tm_limb(m, b, (sx * 0.08, -0.38, 1.3), 0.02, TM_LIGHT, 0.01, 5)
+
+
+def _tm_selbst(m, fx):
+    tm_base(m)
+    tm_lathe(m, [(0.34, 0.1), (0.37, 0.28), (0.26, 0.44), (0.11, 0.5), (0.1, 0.6)], TM_GOLD, sq=(1.0, 0.62))
+    tm_ball(m, (0, 0, 0.8), 0.24, TM_GOLD, (0.92, 0.98, 1.15))
+    for sx in (-1, 1):
+        tm_ball(m, (sx * 0.09, -0.21, 0.81), 0.03, TM_DARK, (1.3, 0.5, 0.25), 8, 5)   # zugekniffene Augen
+    tm_ball(m, (0, -0.215, 0.70), 0.035, TM_DARK, (2.0, 0.5, 0.5), 8, 5)
+    tm_limb(m, (0.02, -0.25, 1.05), (0.46, -0.25, 1.56), 0.055, TM_DARK)       # Stiel des Tomahawks
+    fan = [(0.16, 1.15), (-0.08, 1.2), (-0.2, 1.05), (-0.13, 0.9), (0.08, 0.93)]    # Klinge steckt in der Stirn
+    for y in (-0.232, -0.262):
+        for a, b in zip(fan, fan[1:]):
+            m.tri((0.02, y, 1.05), (a[0], y, a[1]), (b[0], y, b[1]), TM_LIGHT, (0.0, -y if y > -0.25 else 0.0, 1.05))
+    fx["smoke"] = [(0.0, -0.3, 1.05), (-0.1, -0.25, 1.0), (0.1, -0.2, 1.05)]
+
+
+def _tm_tyrann(m, fx):
+    tm_base(m, 0.5)
+    box(m, 0, 0.02, 0.27, 0.52, 0.46, 0.14, TM_DARK)
+    box(m, 0, 0.21, 0.63, 0.52, 0.09, 0.62, TM_GOLD)                           # Lehne
+    for sx in (-1, 1):
+        box(m, sx * 0.25, 0.02, 0.44, 0.05, 0.42, 0.05, TM_DARK)
+        for y in (-0.15, 0.16):
+            tm_limb(m, (sx * 0.25, y, 0.12), (sx * 0.25, y, 0.44), 0.05, TM_DARK)
+    rng = random.Random(11)
+    for i in range(9):                                                         # greifende Hände um Lehne und Sitz
+        x = -0.33 + i * 0.0825
+        z = 0.92 + 0.05 * math.cos(i * 1.9)
+        tm_limb(m, (x, 0.22, 0.86), (x, 0.2, z), 0.05, TM_GOLD)
+        tm_hand(m, (x, 0.2, z), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), 0.72 + 0.16 * rng.random())
+    for x in (-0.36, 0.36):
+        for z in (0.34, 0.62):
+            tm_limb(m, (x * 0.9, 0.1, z - 0.05), (x * 1.25, -0.03, z + 0.08), 0.05, TM_GOLD)
+            tm_hand(m, (x * 1.25, -0.03, z + 0.08), norm((x, -0.2, 0.6)), (0.0, 1.0, 0.0), 0.68)
+    tm_katana(m, (-0.3, 0.26, 1.1), (0.34, 0.26, 1.56))                        # gekreuzte Katanas als Krone
+    tm_katana(m, (0.3, 0.26, 1.1), (-0.34, 0.26, 1.56))
+
+
+def _tm_camper(m, fx):
+    tm_base(m, 0.56)
+    f0, f1, b0, b1 = (-0.4, -0.34, 0.12), (0.4, -0.34, 0.12), (-0.4, 0.4, 0.12), (0.4, 0.4, 0.12)
+    tf, tb = (0.0, -0.34, 0.74), (0.0, 0.4, 0.74)
+    for a, b, c, d in ((f0, tf, tb, b0), (f1, tf, tb, b1)):
+        m.tri(a, b, c, TM_GOLD, (0, 0, 0.2))
+        m.tri(a, c, d, TM_GOLD, (0, 0, 0.2))
+    m.tri(b0, b1, tb, TM_DARK, (0, 0, 0.3))
+    for x, c in ((-1, TM_LIGHT), (1, TM_GOLD)):                                 # hochgeschlagene Eingangsklappen
+        p = (x * 0.17, -0.42, 0.14)
+        m.tri(tf, (x * 0.4, -0.34, 0.12), p, c, (x * 0.05, 0.0, 0.3))
+        m.tri(tf, p, (x * 0.4, -0.34, 0.12), c, (x * 0.05, 0.3, 0.3))
+    m.tri((-0.17, -0.335, 0.12), (0.17, -0.335, 0.12), (0.0, -0.335, 0.56), (0.04, 0.03, 0.02), (0, 0, 0.3))
+    tm_limb(m, (0.0, -0.36, 0.72), (0.0, -0.36, 0.86), 0.025, TM_DARK, 0.015, 5)
+    rng = random.Random(4)
+    for _ in range(16):                                                         # Hülsen
+        a, r = rng.uniform(-2.7, -0.4), rng.uniform(0.32, 0.5)
+        p = (math.cos(a) * r, math.sin(a) * r, 0.135)
+        h = rng.uniform(0, 6.28)
+        tm_limb(m, p, add(p, (math.cos(h) * 0.055, math.sin(h) * 0.055, 0.0)), 0.025, TM_LIGHT, None, 6)
+    box(m, -0.02, -0.52, 0.19, 0.3, 0.075, 0.075, TM_DARK)                      # LMG vor dem Zelt
+    tm_limb(m, (0.13, -0.52, 0.2), (0.46, -0.5, 0.2), 0.03, TM_LIGHT, None, 6)
+    tm_limb(m, (-0.17, -0.52, 0.18), (-0.34, -0.52, 0.15), 0.06, TM_GOLD, 0.08, 6)
+    tm_limb(m, (0.32, -0.5, 0.19), (0.36, -0.57, 0.12), 0.02, TM_DARK, None, 5)
+    tm_limb(m, (0.32, -0.5, 0.19), (0.36, -0.43, 0.12), 0.02, TM_DARK, None, 5)
+    tm_lathe(m, [(0.06, 0.13), (0.07, 0.2), (0.06, 0.24)], TM_LIGHT, (-0.02, -0.6))   # Patronentrommel
+
+
+def _tm_granat(m, fx):
+    tm_base(m, 0.46)
+    tm_limb(m, (0, 0.12, 0.1), (0, 0.16, 0.32), 0.26, TM_DARK, 0.2)
+    for sgn, z in ((-1, 0.36), (1, 0.72)):                                      # Unter- und Oberkiefer
+        tm_ball(m, (0, 0.05, z), 0.34, TM_GOLD, (1.0, 1.1, 0.34), 16, 8)
+        for i in range(9):
+            a = math.pi * (1.1 + 0.8 * i / 8)
+            x, y = math.cos(a) * 0.29, 0.05 + math.sin(a) * 0.33
+            tm_limb(m, (x, y, z - sgn * 0.06), (x, y, z - sgn * 0.17), 0.075, TM_LIGHT, 0.045, 5)
+    tm_ball(m, (0, 0.2, 0.54), 0.27, TM_DARK, (0.95, 0.5, 0.7))                 # Rachen
+    tm_limb(m, (0.32, 0.16, 0.38), (0.33, 0.2, 0.74), 0.1, TM_DARK)             # Kiefergelenk
+    tm_limb(m, (-0.32, 0.16, 0.38), (-0.33, 0.2, 0.74), 0.1, TM_DARK)
+    fx["glow"] = (0.0, -0.03, 0.54)
+
+
+def _tm_tuersteher(m, fx):
+    tm_lathe(m, [(0.56, 0.0), (0.54, 0.05), (0.48, 0.1)], (0.27, 0.2, 0.13), sq=(1.1, 0.8))
+    for sx in (-1, 1):
+        tm_limb(m, (sx * 0.33, 0.08, 0.08), (sx * 0.28, 0.08, 0.92), 0.11, TM_GOLD, 0.085, 10)
+        tm_lathe(m, [(0.07, 0.07), (0.075, 0.16), (0.06, 0.17)], TM_DARK, (sx * 0.33, 0.08))
+    box(m, 0, 0.08, 0.72, 0.7, 0.05, 0.06, TM_GOLD)
+    box(m, 0, 0.08, 0.815, 0.09, 0.04, 0.12, TM_LIGHT)
+    box(m, 0, 0.08, 0.895, 0.8, 0.075, 0.07, TM_GOLD)
+    n = 10
+    for i in range(n):                                                          # geschwungener Kasagi
+        x0, x1 = -0.58 + 1.16 * i / n, -0.58 + 1.16 * (i + 1) / n
+        z0, z1 = 0.98 + 0.45 * x0 * x0 * 0.5, 0.98 + 0.45 * x1 * x1 * 0.5
+        box(m, (x0 + x1) / 2, 0.08, (z0 + z1) / 2, x1 - x0 + 0.015, 0.11, 0.07, TM_LIGHT)
+    tm_katana(m, (-0.2, -0.32, 0.62), (0.13, -0.28, 0.07))                      # gekreuzt in der Erde
+    tm_katana(m, (0.2, -0.32, 0.62), (-0.13, -0.28, 0.07))
+
+
+def _tm_speedy(m, fx):
+    tm_base(m, 0.5)
+    hot = (1.0, 0.97, 0.7)
+    for sx, y, tilt in ((-0.19, 0.04, 0.0), (0.19, -0.05, 0.0)):
+        z = 0.13 + tilt
+        tm_lathe(m, [(0.14, z), (0.15, z + 0.045)], hot, (sx, y), (0.85, 2.05), 16)     # leuchtende Sohle
+        tm_ball(m, (sx, y - 0.1, z + 0.1), 0.11, TM_GOLD, (1.0, 1.35, 0.62))    # Vorderfuss
+        tm_lathe(m, [(0.11, z + 0.04), (0.125, z + 0.17), (0.11, z + 0.3), (0.115, z + 0.34)], TM_GOLD, (sx, y + 0.11), (0.95, 1.05))
+        tm_lathe(m, [(0.08, z + 0.33), (0.08, z + 0.34)], (0.1, 0.07, 0.03), (sx, y + 0.11))
+        for i in range(4):                                                      # Schnürung
+            q = y - 0.12 + i * 0.065
+            k = z + 0.16 + i * 0.03
+            tm_limb(m, (sx - 0.07, q, k), (sx + 0.07, q, k), 0.018, TM_LIGHT, None, 5)
+        for i in range(3):                                                      # Streifen
+            tm_limb(m, (sx * 1.6 - 0.0, y + 0.02 + i * 0.06, z + 0.06), (sx * 1.6, y + 0.06 + i * 0.06, z + 0.2), 0.02, TM_LIGHT, None, 5)
+    fx["smoke"] = [(-0.19, 0.3, 0.3), (0.19, 0.2, 0.3), (0.0, 0.36, 0.25)]
+
+
+def _tm_blei(m, fx):
+    tm_base(m)
+    dark = (0.22, 0.12, 0.03)
+    tm_limb(m, (-0.11, 0, 0.12), (-0.13, 0, 0.56), 0.15, TM_GOLD, 0.17)
+    tm_limb(m, (0.11, 0, 0.12), (0.13, 0, 0.56), 0.15, TM_GOLD, 0.17)
+    tm_lathe(m, [(0.17, 0.5), (0.22, 0.72), (0.25, 0.95), (0.18, 1.02)], TM_GOLD, sq=(1.05, 0.72))
+    tm_limb(m, (-0.27, 0, 0.96), (-0.43, -0.02, 0.58), 0.12, TM_GOLD, 0.09)
+    tm_limb(m, (0.27, 0, 0.96), (0.46, -0.02, 1.02), 0.12, TM_GOLD, 0.09)        # zuckender Arm
+    tm_ball(m, (0, 0, 1.2), 0.15, TM_GOLD)
+    rng = random.Random(9)
+    for _ in range(34):                                                          # Einschusslöcher wie beim Käse
+        a = rng.uniform(0.15, 2 * math.pi)
+        z = rng.uniform(0.54, 1.02)
+        c = (math.cos(a) * 0.23, math.sin(a) * 0.17, z)
+        tm_ball(m, c, rng.uniform(0.022, 0.05), dark, (1, 1, 1), 7, 4)
+    for s in ((-0.12, 0.26), (0.11, 0.33), (-0.13, 0.41), (0.13, 0.2)):
+        for sy in (-0.075, 0.075):
+            tm_ball(m, (s[0], sy, s[1]), 0.028, dark, (1, 1, 1), 7, 4)
+    tm_ball(m, (-0.06, -0.135, 1.22), 0.024, dark, (1, 1, 1), 6, 4)
+    tm_ball(m, (0.07, -0.13, 1.15), 0.03, dark, (1, 1, 1), 6, 4)
+
+
+def _tm_spray(m, fx):
+    tm_base(m)
+    tm_limb(m, (-0.05, 0, 0.1), (-0.08, 0, 0.56), 0.05, TM_DARK)
+    box(m, -0.12, 0, 0.6, 0.42, 0.075, 0.1, TM_GOLD)
+    tm_limb(m, (-0.32, 0, 0.6), (-0.56, 0, 0.54), 0.075, TM_DARK, 0.11)           # Schaft
+    tm_limb(m, (0.08, 0, 0.615), (0.43, 0, 0.615), 0.04, TM_LIGHT, None, 8)       # Lauf
+    tm_limb(m, (0.43, 0, 0.615), (0.49, 0, 0.615), 0.06, TM_DARK, None, 8)
+    box(m, -0.03, 0, 0.5, 0.07, 0.06, 0.14, TM_DARK)                              # Magazin
+    box(m, -0.2, 0, 0.5, 0.05, 0.05, 0.12, TM_DARK)
+    box(m, -0.1, 0, 0.675, 0.12, 0.04, 0.05, TM_LIGHT)
+    rng = random.Random(6)
+    for i in range(15):                                                            # Kugeln in jedem Winkel eines 90-Grad-Fächers
+        a = math.radians(-45 + 90 * i / 14)
+        r = 0.2 + 0.09 * (i * 7 % 5)
+        yaw = rng.uniform(-0.35, 0.35)
+        d = (math.cos(a) * math.cos(yaw), math.sin(yaw) * 0.8, math.sin(a))
+        o = (0.49, 0.0, 0.615)
+        p = add(o, tuple(c * r for c in d))
+        tm_limb(m, o, p, 0.006, TM_DARK, None, 4)
+        tm_limb(m, p, add(p, tuple(c * 0.07 for c in d)), 0.03, TM_LIGHT, 0.008, 6)
+
+
+def _tm_schlaefer(m, fx):
+    tm_base(m, 0.5)
+    tm_ball(m, (0, 0.03, 0.42), 0.32, TM_GOLD, (1.05, 0.9, 1.05))                   # zusammengesunken
+    tm_ball(m, (0, -0.19, 0.5), 0.2, TM_LIGHT, (0.95, 0.5, 1.0), 10, 6)
+    tm_ball(m, (0.05, -0.17, 0.82), 0.2, TM_GOLD, (1.0, 0.95, 0.85))                # Kopf, zur Seite geneigt
+    tm_ball(m, (0.05, -0.31, 0.8), 0.13, TM_LIGHT, (1.1, 0.6, 0.8), 10, 6)
+    tm_ball(m, (0.05, -0.385, 0.8), 0.03, TM_DARK, (1.4, 0.7, 0.8), 8, 5)
+    for sx in (-1, 1):
+        tm_limb(m, (0.05 + sx * 0.05, -0.385, 0.85), (0.05 + sx * 0.12, -0.355, 0.84), 0.016, TM_DARK, None, 5)     # geschlossene Augen
+        tm_limb(m, (sx * 0.26, -0.05, 0.62), (sx * 0.3, -0.25, 0.22), 0.1, TM_GOLD, 0.08)
+        tm_limb(m, (sx * 0.3, -0.25, 0.22), (sx * 0.1, -0.34, 0.18), 0.08, TM_GOLD, 0.07)
+        for i in range(3):
+            tm_limb(m, (sx * 0.1, -0.34 - 0.015 * i, 0.18), (sx * 0.0 + sx * 0.01 * i, -0.4, 0.14 + i * 0.03), 0.02, TM_LIGHT, 0.008, 5)
+        tm_limb(m, (sx * 0.2, -0.05, 0.2), (sx * 0.28, -0.32, 0.14), 0.12, TM_GOLD, 0.09)
+    fx["zzz"] = (0.2, -0.2, 1.06)
+
+
+def _tm_fists(m, fx):
+    tm_base(m, 0.5)
+    tm_limb(m, (-0.05, 0.0, 0.1), (0.0, 0.0, 0.32), 0.2, TM_DARK, 0.14)
+    tm_limb(m, (-0.5, 0, 0.3), (-0.14, 0, 0.53), 0.21, TM_GOLD, 0.15, 10)
+    tm_limb(m, (0.5, 0, 0.3), (0.14, 0, 0.53), 0.21, TM_DARK, 0.15, 10)
+    for sx, col, hi in ((-1, TM_GOLD, TM_LIGHT), (1, TM_DARK, TM_GOLD)):
+        tm_ball(m, (sx * 0.1, 0.0, 0.58), 0.17, col, (1.0, 0.75, 0.9))
+        for i in range(4):                                                            # Finger greifen ineinander
+            z = 0.47 + i * 0.075
+            y = -0.13 if sx < 0 else 0.13
+            tm_limb(m, (sx * 0.16, y * 0.7, z), (-sx * 0.1, y * 1.15, z + 0.015), 0.07, hi, 0.06, 7)
+            tm_ball(m, (-sx * 0.1, y * 1.15, z + 0.015), 0.04, hi, (1, 1, 1), 7, 4)
+        tm_limb(m, (sx * 0.1, 0.1 * sx, 0.69), (-sx * 0.02, 0.05 * sx, 0.74), 0.07, hi, 0.05, 7)    # Daumen
+
+
+def _tm_sargnagel(m, fx):
+    iron, soil = (0.25, 0.26, 0.29), (0.25, 0.18, 0.12)
+    tm_lathe(m, [(0.56, 0.0), (0.5, 0.07), (0.3, 0.13), (0.13, 0.16)], soil)
+    tm_lathe(m, [(0.075, 0.1), (0.05, 0.19), (0.17, 0.2), (0.17, 0.25)], iron)        # versenkter Nagelkopf
+    for i in range(7):                                                                 # Risse im Boden
+        a = i * 0.9 + 0.3
+        tm_limb(m, (math.cos(a) * 0.14, math.sin(a) * 0.14, 0.17), (math.cos(a) * 0.48, math.sin(a) * 0.48, 0.08), 0.022, (0.06, 0.04, 0.03), 0.008, 4)
+    box(m, 0.0, 0.0, 0.42, 0.68, 0.32, 0.34, TM_GOLD)                                  # gewaltiger Hammerkopf
+    box(m, 0.0, 0.0, 0.42, 0.72, 0.36, 0.05, TM_LIGHT)
+    tm_limb(m, (-0.34, 0, 0.42), (-0.4, 0, 0.42), 0.34, TM_DARK, 0.3)
+    tm_limb(m, (0.34, 0, 0.42), (0.4, 0, 0.42), 0.34, TM_DARK, 0.3)
+    tm_limb(m, (0, 0, 0.58), (0.28, 0.04, 1.42), 0.08, TM_DARK, 0.065)                 # Stiel
+    tm_limb(m, (0.2, 0.03, 1.18), (0.3, 0.045, 1.48), 0.1, TM_LIGHT, 0.09)
+
+
+TROPHY_MAKERS = {"fallobst": _tm_fallobst, "reh": _tm_reh, "selbst": _tm_selbst, "tyrann": _tm_tyrann, "camper": _tm_camper,
+                 "granat": _tm_granat, "tuersteher": _tm_tuersteher, "speedy": _tm_speedy, "blei": _tm_blei, "spray": _tm_spray,
+                 "schlaefer": _tm_schlaefer, "rache": _tm_fists, "sargnagel": _tm_sargnagel}
+
+
+def build_trophy(key):
+    """Goldpokal -> (Knoten, Effekte). Beim Bauen gilt neutrales Licht, damit er auf dunklen Karten nicht absäuft."""
+    global BAKE_LIGHT
+    keep, BAKE_LIGHT = BAKE_LIGHT, None
+    fx = {}
+    try:
+        m = Mesh()
+        TROPHY_MAKERS[key](m, fx)
+        root = NodePath("pokal_" + key)
+        root.attachNewNode(m.node("gold"))
+    finally:
+        BAKE_LIGHT = keep
+    root.setTwoSided(True)
+    root.setLightOff()
+    return root, fx
+
+
+def ceremony_spot(world):
+    """Bühne -> (x, y, Blickrichtung zur Kamera). Inari: Tempelhof vor dem Schrein, Blick auf Berg und Sakura.
+    Sonst die erste ebene, freie Stelle um die Kartenmitte; notfalls der erste Spawn."""
+    if (getattr(world, "map", None) or {}).get("inari"):
+        return CENTER, CENTER - 25.0, (0.0, 1.0)
+
+    def clear(px, py, z0):
+        return (2.0 < px < WORLD - 2.0 and 2.0 < py < WORLD - 2.0 and abs(world.floor_at(px, py, z0 + 3.0) - z0) <= 1.2
+                and not any(world.in_solid(px, py, 1.0, z0 + h) for h in (0.8, 1.8, 3.0, 5.0)))
+
+    def free(x, y, fx, fy):
+        z0 = world.floor_at(x, y, world.height(x, y) + 2.0)
+        sx, sy = -fy, fx
+        cam = (x + fx * 11.0, y + fy * 11.0)
+        for a in (-5.0, -2.5, 0.0, 2.5, 5.0):               # jede Sichtlinie von der Kamera auf die Bühne muss frei sein
+            for k in range(13):
+                t = k / 12.0
+                b = x + sx * a - fx * 3.0, y + sy * a - fy * 3.0
+                if not clear(cam[0] + (b[0] - cam[0]) * t, cam[1] + (b[1] - cam[1]) * t, z0):
+                    return False
+        return world.los((cam[0], cam[1], z0 + 3.0), (x, y, z0 + 1.5))
+
+    for r in (0.0, 24.0, 40.0, 60.0, 85.0):
+        for i in range(8):
+            a = i * math.pi / 4
+            x, y = CENTER + math.cos(a) * r, CENTER + math.sin(a) * r
+            for fx, fy in ((0.0, -1.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)):
+                if free(x, y, fx, fy):
+                    return x, y, (fx, fy)
+    x, y = world.first_spawn(0)[:2]
+    return x, y, (0.0, -1.0)
+
+
+class Ceremony:
+    """Siegerehrung nach Rundenende, läuft bei jedem Spieler selbst aus den Awards des Hosts. Figuren stehen im Halbkreis auf
+    Steinsockeln, Pokale fallen von oben. Bei Gleichstand wird der Pokal verbrannt, der nächste Preis rückt nach."""
+    INTRO_T, DROP_T, HOLD_T, BURN_T, OUTRO_T = 3.0, 1.0, 3.6, 4.6, 1.2
+
+    def __init__(self, g, data, awards):
+        self.g, self.data, self.awards = g, data, awards
+        self.world = w = g.world
+        self.votes, self.voted, self.done = (0, len(data) // 2 + 1), False, False
+        self.root = g.render.attachNewNode("siegerehrung")
+        self.t, self.idx, self.state = 0.0, -1, "intro"
+        self.trophy, self.fxn, self.flames, self.sparks = None, [], [], []
+        self.placed = {}
+        cx, cy, f = ceremony_spot(w)
+        self.c, self.f, self.s = (cx, cy), f, (-f[1], f[0])
+        self.floor = w.floor_at(cx, cy, w.height(cx, cy, None) + 3.0)
+        n = len(data)
+        self.R = max(3.4, n * 1.0)
+        self.actors = {}
+        rng = random.Random(5)
+        ped = Mesh()
+        tm_lathe(ped, [(0.72, 0.0), (0.68, 0.08), (0.58, 0.14), (0.58, 0.46), (0.68, 0.52)], (0.45, 0.44, 0.46), sides=10)
+        ped_geom = ped.node("sockel")
+        for i, e in enumerate(data):
+            u = 0.0 if n == 1 else (i + 1) // 2 * (1 if i % 2 else -1) / max(1, (n - 1) // 2 + (n - 1) % 2)   # Bester in der Mitte
+            a = math.radians(62.0) * u
+            x = cx + self.s[0] * self.R * math.sin(a) - f[0] * self.R * 0.65 * math.cos(a)
+            y = cy + self.s[1] * self.R * math.sin(a) - f[1] * self.R * 0.65 * math.cos(a)
+            z = w.floor_at(x, y, self.floor + 3.0)
+            base = self.root.attachNewNode("sockel")
+            base.attachNewNode(ped_geom)
+            base.setPos(x, y, z - 0.04)
+            look = soldier_look(e.get("look", ""), e["pid"], e.get("team") if e.get("team") in (0, 1) else None)
+            sol = build_soldier(look)
+            top = z + 0.5
+            sol[0].reparentTo(self.root)
+            sol[0].setPos(x, y, top)
+            h = math.degrees(math.atan2(-(self.cam_wide()[0] - x), self.cam_wide()[1] - y))
+            sol[0].setH(h + rng.uniform(-6, 6))
+            sol[4].hide() if hasattr(sol[4], "hide") else None
+            sol[5].hide() if hasattr(sol[5], "hide") else None
+            tn = TextNode("name")
+            tn.setText(e["name"][:14])
+            tn.setAlign(TextNode.ACenter)
+            tn.setTextColor(1.0, 0.95, 0.8, 1)
+            tn.setShadow(0.05, 0.05)
+            tn.setShadowColor(0, 0, 0, 0.9)
+            if BOLD_FONT is not None:
+                tn.setFont(BOLD_FONT)
+            lab = self.root.attachNewNode(tn)
+            lab.setPos(x, y, top + 2.1)
+            lab.setScale(0.32)
+            lab.setBillboardPointEye()
+            lab.setLightOff()
+            lab.setShaderOff(1)
+            lab.setFogOff(1)
+            lab.setBin("fixed", 30)
+            lab.setDepthTest(False)
+            lab.setDepthWrite(False)
+            self.actors[e["pid"]] = {"pos": (x, y, top), "node": sol[0], "torso": sol[1], "h": h}
+        self.spot = self.build_spot()
+        a2 = g.aspect2d
+        gold, sh = (1.0, 0.82, 0.3, 1), (0.25, 0.1, 0.0, 0.95)
+        self.title = OnscreenText(text="SIEGEREHRUNG", parent=a2, pos=(0, 0.72), scale=0.11, font=BOLD_FONT, fg=gold, shadow=sh, mayChange=True)
+        self.t_name = OnscreenText(text="", parent=a2, pos=(0, -0.62), scale=0.1, font=BOLD_FONT, fg=gold, shadow=sh, mayChange=True)
+        self.t_desc = OnscreenText(text="", parent=a2, pos=(0, -0.72), scale=0.05, fg=(1.0, 0.92, 0.7, 1), shadow=sh, mayChange=True)
+        self.t_who = OnscreenText(text="", parent=a2, pos=(0, -0.82), scale=0.06, font=BOLD_FONT, fg=(1, 1, 1, 1), shadow=sh, mayChange=True)
+        self.t_skip = OnscreenText(text="", parent=a2, pos=(0, 0), scale=0.042, align=TextNode.ARight, fg=(0.9, 0.92, 1, 0.9),
+                                   shadow=(0, 0, 0, 0.9), mayChange=True)
+        self.texts = (self.title, self.t_name, self.t_desc, self.t_who, self.t_skip)
+        self.cam_hidden = [c for c in (g.gun_root,) if not c.isHidden()]     # Waffe in der Hand aus
+        for c in self.cam_hidden:
+            c.hide()
+        self.cam_p = self.cam_wide()
+        self.look_p = self.look_wide()
+        g.camera.setPos(*self.cam_p)
+        g.camera.lookAt(Point3(*self.look_p))
+
+    def cam_wide(self):
+        d = self.R + 5.5
+        x, y = self.c[0] + self.f[0] * d, self.c[1] + self.f[1] * d
+        return x, y, max(self.floor, self.world.floor_at(x, y, self.floor + 3.0)) + 2.6
+
+    def look_wide(self):
+        return self.c[0], self.c[1], self.floor + 1.9
+
+    def build_spot(self):
+        """Dezenter Lichtkegel: heller Boden und durchscheinender Kegel, additiv."""
+        m = Mesh(lit=False)
+        col_b, col_t = (1.0, 0.86, 0.5, 0.10), (1.0, 0.9, 0.6, 0.0)
+        n = 24
+        for i in range(n):
+            a0, a1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+            p0, p1 = (math.cos(a0) * 1.3, math.sin(a0) * 1.3, 0.0), (math.cos(a1) * 1.3, math.sin(a1) * 1.3, 0.0)
+            q0, q1 = (math.cos(a0) * 0.15, math.sin(a0) * 0.15, 11.0), (math.cos(a1) * 0.15, math.sin(a1) * 0.15, 11.0)
+            m.tri(p0, p1, q1, [col_b, col_b, col_t])
+            m.tri(p0, q1, q0, [col_b, col_t, col_t])
+        proto = NodePath(m.node("spot"))
+        proto.setTwoSided(True)
+        proto.setTransparency(TransparencyAttrib.MAlpha)
+        proto.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd, ColorBlendAttrib.OIncomingAlpha, ColorBlendAttrib.OOne))
+        proto.setDepthWrite(False)
+        proto.setBin("fixed", 20)
+        proto.setLightOff()
+        proto.setShaderOff(1)
+        return proto
+
+    def show_spot(self, spots):
+        """Lichtkegel auf die Positionen setzen."""
+        for c in self.root.findAllMatches("spotlicht"):
+            c.removeNode()
+        for p in spots:
+            nd = self.root.attachNewNode("spotlicht")
+            self.spot.instanceTo(nd)
+            nd.setPos(p[0], p[1], p[2])
+
+    def name_of(self, pid):
+        return next((e["name"] for e in self.data if e["pid"] == pid), "?")
+
+    def next_award(self):
+        self.clear_trophy()
+        self.idx += 1
+        self.t = 0.0
+        if self.idx >= len(self.awards):
+            self.state = "outro"
+            self.show_spot([])
+            for t in (self.t_name, self.t_desc, self.t_who):
+                t.setText("")
+            return
+        a = self.awards[self.idx]
+        self.state = "burn" if a["burn"] else "drop"
+        ps = [self.actors[p]["pos"] for p in a["pids"] if p in self.actors] or [(self.c[0], self.c[1], self.floor)]
+        mid = tuple(sum(p[k] for p in ps) / len(ps) for k in range(3))
+        f = self.f
+        off, fw = (0.0, 0.9) if a["burn"] else (0.8, 1.9)  # neben und vor dem Sieger, damit man beide sieht
+        self.goal = (mid[0] + f[0] * fw + self.s[0] * off, mid[1] + f[1] * fw + self.s[1] * off, mid[2] + (0.55 if not a["burn"] else 0.1))
+        self.focus = mid
+        if a["burn"]:                                      # Mitte der Beteiligten, auf dem Boden
+            gz = self.world.floor_at(self.goal[0], self.goal[1], mid[2] + 2.0)
+            self.goal = (self.goal[0], self.goal[1], gz + 0.02)
+        self.show_spot([(p[0], p[1], p[2] - 0.45) for p in ps])
+        self.trophy, fx = build_trophy(a["key"])
+        self.trophy.reparentTo(self.root)
+        self.trophy.setPos(self.goal[0], self.goal[1], self.goal[2] + 16.0)
+        self.trophy.setScale(1.05)
+        self.fx_add(fx)
+        self.g.sfx.play("whistle", None, 0.4, 1.0)
+        self.title.setText("")
+        self.t_name.setText(a["name"])
+        names = ", ".join(self.name_of(p)[:14] for p in a["pids"])
+        self.t_desc.setText(a["text"])
+        self.t_who.setText(f"{names}  -  {a['label']}")
+
+    def fx_add(self, fx):
+        """Kleine bewegte Teile der Pokale: Rauch, Glut, Schlaf-Zzz."""
+        t = self.trophy
+        self.fxn = []
+        for p in fx.get("smoke", ()):
+            for i in range(3):
+                n = t.attachNewNode("rauch")
+                self.g.sphere_np.instanceTo(n)
+                n.setTransparency(TransparencyAttrib.MAlpha)
+                n.setLightOff()
+                self.fxn.append(("smoke", n, p, i / 3.0))
+        if "glow" in fx:
+            m = Mesh(lit=False)
+            tm_ball(m, (0, 0, 0), 0.15, (1.0, 0.35, 0.08))
+            tm_limb(m, (0, 0, 0.14), (0, 0, 0.22), 0.09, (0.8, 0.8, 0.75))
+            tm_limb(m, (0.06, 0, 0.22), (0.15, -0.02, 0.15), 0.02, (0.9, 0.9, 0.85), None, 5)
+            n = t.attachNewNode(m.node("granate"))
+            n.setPos(*fx["glow"])
+            n.setLightOff()
+            self.fxn.append(("glow", n, fx["glow"], 0.0))
+        if "zzz" in fx:
+            for i in range(3):
+                n = t.attachNewNode(self.z_letter())
+                self.fxn.append(("zzz", n, fx["zzz"], i / 3.0))
+
+    @staticmethod
+    def z_letter():
+        m = Mesh()
+        c = TM_LIGHT
+        box(m, 0, 0, 0.08, 0.14, 0.03, 0.03, c)
+        box(m, 0, 0, -0.08, 0.14, 0.03, 0.03, c)
+        tm_limb(m, (0.06, 0, 0.07), (-0.06, 0, -0.07), 0.03, c, None, 5)
+        return m.node("z")
+
+    def fx_update(self):
+        now = time.time()
+        for kind, n, p, ph in self.fxn:
+            if n.isEmpty():
+                continue
+            if kind == "glow":
+                k = 0.75 + 0.4 * abs(math.sin(now * 5.0))
+                n.setColorScale(k, k, k, 1)
+                continue
+            u = (now * (0.5 if kind == "smoke" else 0.33) + ph) % 1.0
+            if kind == "smoke":
+                n.setPos(p[0] + 0.05 * math.sin(u * 8 + ph * 9), p[1], p[2] + u * 0.6)
+                n.setScale(0.03 + u * 0.09)
+                n.setColorScale(1.0, 0.82, 0.4, 0.55 * (1.0 - u))
+            else:
+                n.setPos(p[0] + u * 0.25, p[1], p[2] + u * 0.55)
+                n.setScale(0.6 + u * 0.9)
+                n.setColorScale(1, 1, 1, min(1.0, 3.5 * (1.0 - u)))
+                n.setTransparency(TransparencyAttrib.MAlpha)
+
+    def clear_trophy(self):
+        for n in self.flames:
+            n.removeNode()
+        self.flames = []
+        self.fxn = []
+        if self.trophy is not None and self.state != "keep":
+            self.trophy.removeNode()
+        self.trophy = None
+
+    def park_trophy(self, a):
+        """Gewonnener Pokal bleibt klein neben dem Sockel des Siegers stehen."""
+        pid = a["pids"][0]
+        act = self.actors.get(pid)
+        if act is None or self.trophy is None:
+            return
+        n = self.placed.get(pid, 0)
+        self.placed[pid] = n + 1
+        i = (n % 4) - 1.5
+        f, s = self.f, self.s
+        x, y = act["pos"][0] + f[0] * (1.0 + 0.45 * (n // 4)) + s[0] * i * 0.55, act["pos"][1] + f[1] * (1.0 + 0.45 * (n // 4)) + s[1] * i * 0.55
+        self.trophy.setPos(x, y, self.world.floor_at(x, y, act["pos"][2] + 1.5) + 0.02)
+        self.trophy.setScale(0.48)
+        self.face(self.trophy, 0.0)
+        for _k, nd, _p, _ph in self.fxn:
+            nd.removeNode()
+        self.fxn = []
+        self.trophy = None
+
+    def face(self, n, off):
+        """Vorderseite (-y) zur Kamera drehen."""
+        cam = self.cam_wide()
+        p = n.getPos()
+        n.setH(math.degrees(math.atan2(cam[0] - p[0], -(cam[1] - p[1]))) + off)
+
+    def update(self, dt):
+        g = self.g
+        g.cross.hide()
+        for v in list(g.player_views.values()):
+            v.root.hide()
+        sv = getattr(g, "self_view", None)
+        if sv is not None and getattr(sv, "root", None) is not None:
+            sv.root.hide()
+        for v in g.mob_views.values():
+            mp = v.root.getPos()
+            if math.hypot(mp[0] - self.c[0], mp[1] - self.c[1]) < 20.0:
+                v.root.hide()
+        cw, lw = self.cam_wide(), self.look_wide()
+        self.t += dt
+        if self.done:
+            self.cam_p, self.look_p = cw, lw
+        else:
+            self.step(dt)
+            cam, look = cw, lw
+            if self.state in ("drop", "hold", "burn") and self.t > 0.2:
+                fo = self.focus
+                d = 5.2 + (0.0 if self.state != "burn" else 1.2)
+                x, y = fo[0] + self.f[0] * d + self.s[0] * 0.9, fo[1] + self.f[1] * d + self.s[1] * 0.9
+                z = max(fo[2] + 1.0, self.world.floor_at(x, y, fo[2] + 2.0) + 1.3)
+                cam, look = (x, y, z), (fo[0], fo[1], fo[2] + 1.1)
+            k = min(1.0, dt * 2.2)
+            self.cam_p = tuple(a + (b - a) * k for a, b in zip(self.cam_p, cam))
+            self.look_p = tuple(a + (b - a) * k for a, b in zip(self.look_p, look))
+        g.camera.setPos(*self.cam_p)
+        g.camera.lookAt(Point3(*self.look_p))
+        if not self.done:
+            ratio = max(1.0, g.getAspectRatio() if hasattr(g, "getAspectRatio") else 1.77)
+            self.t_skip.setPos(ratio - 0.04, 0.92)
+            mark = "Stimme abgegeben" if self.voted else f"Taste {key_of('skip_vote')}"
+            self.t_skip.setText(f"Zeremonie überspringen: {self.votes[0]}/{self.votes[1]}   ({mark})")
+
+    def step(self, dt):
+        if self.state == "intro":
+            if self.t >= self.INTRO_T:
+                self.next_award()
+            return
+        if self.state == "outro":
+            if self.t >= self.OUTRO_T:
+                self.finish()
+            return
+        a = self.awards[self.idx]
+        n = self.trophy
+        if self.state == "drop" or self.state == "burn":
+            u = clampf(self.t / self.DROP_T, 0.0, 1.0)
+            if n is not None:
+                z = self.goal[2] + 16.0 * (1.0 - u * u)
+                n.setPos(self.goal[0], self.goal[1], z)
+                self.face(n, (1.0 - u) * 720.0)
+            if self.state == "drop":
+                if u >= 1.0:
+                    self.state, self.t = "hold", 0.0
+                    self.g.sfx.play("thud", None, 0.8, 1.0)
+                    self.burst()
+            else:
+                self.burn_step(a)
+        elif self.state == "hold":
+            if n is not None:
+                self.face(n, 28.0 * math.sin(self.t * 1.3))
+                n.setZ(self.goal[2] + 0.05 * math.sin(self.t * 2.4))
+            if self.t >= self.HOLD_T:
+                self.park_trophy(a)
+                self.next_award()
+                return
+        self.sparks_step(dt)
+        self.fx_update()
+
+    def burst(self):
+        """Goldene Funken beim Aufschlag."""
+        rng = self.g.prng
+        for _ in range(26):
+            nd = self.root.attachNewNode("funke")
+            self.g.sphere_np.instanceTo(nd)
+            nd.setScale(rng.uniform(0.02, 0.05))
+            nd.setColorScale(1.0, 0.8, 0.3, 1)
+            nd.setLightOff()
+            nd.setPos(*self.goal)
+            a, s = rng.uniform(0, 6.28), rng.uniform(1.0, 3.2)
+            self.sparks.append([nd, math.cos(a) * s, math.sin(a) * s, rng.uniform(1.5, 4.5), 0.9])
+
+    def sparks_step(self, dt):
+        keep = []
+        for s in self.sparks:
+            s[4] -= dt
+            if s[4] <= 0:
+                s[0].removeNode()
+                continue
+            s[3] -= 7.0 * dt
+            s[0].setPos(s[0].getX() + s[1] * dt, s[0].getY() + s[2] * dt, s[0].getZ() + s[3] * dt)
+            keep.append(s)
+        self.sparks = keep
+
+    def burn_step(self, a):
+        """Gleichstand: Pokal landet zwischen den Beteiligten und geht in Flammen auf."""
+        t = self.t - self.DROP_T
+        n = self.trophy
+        if t < 0.0:
+            return
+        if not self.flames:
+            self.title.setText("")
+            self.t_name.setText("GLEICHSTAND - POKAL VERBRANNT!")
+            self.t_desc.setText(f"Niemand bekommt \"{a['name']}\". Dafür rückt ein neuer Preis nach.")
+            self.g.sfx.play("gas", None, 0.9, 0.8)
+            for i in range(14):
+                ang = i * 2.39
+                r = 0.06 + 0.42 * math.sqrt(i / 13.0)
+                self.flames.append(gren_flame_node(self.root, (self.goal[0] + math.cos(ang) * r, self.goal[1] + math.sin(ang) * r, self.goal[2]),
+                                                   0.28 + 0.26 * self.g.prng.random()))
+            for f_ in self.flames:
+                f_.setLightOff()
+                f_.setTransparency(TransparencyAttrib.MAlpha)
+        grow = clampf(t / 0.7, 0.0, 1.0) * clampf((self.BURN_T - t) / 0.9, 0.0, 1.0)
+        for f_ in self.flames:
+            flame_flicker(f_)
+            f_.setScale(f_.getScale() * max(0.02, grow))
+        if self.g.prng.random() < 0.12:
+            self.g.smoke_puff((self.goal[0], self.goal[1], self.goal[2] + 0.9), 0.22, 1.6, 0.3)
+        char = clampf((t - 0.5) / 2.3, 0.0, 1.0)
+        if n is not None:
+            k = 1.0 - 0.93 * char
+            n.setColorScale(k, k * (1.0 - 0.2 * char), k * (1.0 - 0.3 * char), 1)
+            n.setScale(1.05 * (1.0 - 0.3 * clampf((t - 2.4) / 1.6, 0.0, 1.0)), 1.05, 1.05 * (1.0 - 0.9 * clampf((t - 2.4) / 1.6, 0.0, 1.0)))
+            n.setH(n.getH() + 0.1)
+        if t >= self.BURN_T:
+            self.next_award()
+
+    def finish(self):
+        """Ende oder Mehrheit fürs Überspringen: Tabelle zeigen, Bühne bleibt dahinter stehen."""
+        g = self.g
+        if self.done:
+            return
+        self.done = True
+        self.state = "keep"
+        self.clear_trophy()
+        for s in self.sparks:
+            s[0].removeNode()
+        self.sparks = []
+        self.show_spot([])
+        for t in self.texts:
+            t.destroy()
+        self.texts = ()
+        g.ceremony = None
+        g.cer_stage = self
+        if g.end is not None:
+            g.end["root"].show()
+
+    def destroy(self):
+        for t in self.texts:
+            t.destroy()
+        self.texts = ()
+        for c in self.cam_hidden:
+            if not c.isEmpty():
+                c.show()
+        self.cam_hidden = []
+        for v in self.g.player_views.values():
+            v.root.show()
+        if not self.root.isEmpty():
+            self.root.removeNode()
+
+
 class Game(ShowBase):
     def titan_hold_fx(self, m):
         """13f: Mörserwurf - der Titan hält den Felsen: vom Greifen am Boden (MORTAR_PICK) bis zum Abwurf. Erst vor den
@@ -124058,6 +125080,7 @@ class Game(ShowBase):
         self.quit_box = None                  # Sicherheitsabfrage beim Beenden (Text + Hintergrund)
         self.menu_picker = None               # Waffenwahl mit Bildern im Menü
         self.end = None                       # Endbildschirm nach Rundenende
+        self.ceremony = self.cer_stage = None  # Siegerehrung (läuft / Bühne bleibt hinter der Tabelle stehen)
         self.end_cfg = None                   # Rundeneinstellungen im Endbildschirm: None | "setup" | "more"
         self.cfg_backup = None
         self.reuse_host = self.reuse_info = None   # Kartenwechsel: bestehende Verbindungen behalten
@@ -127374,7 +128397,7 @@ class Game(ShowBase):
         self.build_minimap()
         self.build_tab_overlay()
 
-    def open_end_screen(self, data):
+    def open_end_screen(self, data, awards=None):
         """Nach Rundenende: eigener Bildschirm im Stil des Hauptmenüs - Siegerpodest, Reiter mit Statistik
         (Maus oder Pfeiltasten / 1-6), Countdown bis zur nächsten Runde. Das Spiel steht so lange still."""
         self.close_end_screen()
@@ -127433,7 +128456,7 @@ class Game(ShowBase):
                          fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9), mayChange=False)
             OnscreenText(text=val, parent=root, pos=(x, 0.3 + h + 0.025), scale=0.035, fg=col + (1,),
                          mayChange=False)
-        tabs = end_tabs(koth, ctf)
+        tabs = end_tabs(koth, ctf, data)
         self.end = {"root": root, "data": data, "tabs": tabs, "tab": 0, "cells": [], "hidden": hidden,
                     "koth": koth, "ctf": ctf, "rects": []}
         labels = [f"{i + 1} {t[0]}" for i, t in enumerate(tabs)]
@@ -127469,6 +128492,14 @@ class Game(ShowBase):
                                                shadow=(0, 0, 0, 0.8), mayChange=True)
         self.show_end_tab(0)
         self.set_capture(False)
+        if awards:                                        # erst die Siegerehrung, die Tabelle danach
+            try:
+                self.ceremony = Ceremony(self, data, awards)
+                root.hide()
+                bg.setColor(0.05, 0.07, 0.11, 0.86)       # die Bühne bleibt im Hintergrund
+            except Exception as ex:                       # eine Zeremonie darf das Rundenende nie blockieren
+                print("Siegerehrung nicht möglich:", ex)
+                self.ceremony = None
 
     def show_end_tab(self, i):
         e = self.end
@@ -127521,6 +128552,8 @@ class Game(ShowBase):
     END_SET_BTN = (-0.36, 0.36, -0.94, -0.76)
 
     def end_click(self):
+        if self.ceremony is not None:
+            return
         p = self.mouse_2d()
         if p is None or self.end is None:
             return
@@ -127559,6 +128592,8 @@ class Game(ShowBase):
             return
         if world.phase == "play":                         # neue Runde hat begonnen
             self.close_end_screen()
+            return
+        if self.ceremony is not None:                     # Tabelle und Knöpfe kommen erst danach
             return
         want = ("fixed", 60) if self.quit_box is not None else ("gui-popup", 0)     # Esc-Menü liegt über dem Endbildschirm
         if e.get("bin") != want:
@@ -127613,6 +128648,12 @@ class Game(ShowBase):
     def close_end_screen(self):
         e = getattr(self, "end", None)
         self.end = None
+        if self.ceremony is not None:
+            self.ceremony.destroy()
+            self.ceremony = None
+        stage, self.cer_stage = self.cer_stage, None
+        if stage is not None:
+            stage.destroy()
         if getattr(self, "end_cfg", None) is not None:
             self.end_cfg = None
             self.slider_drag = False
@@ -132993,7 +134034,13 @@ class Game(ShowBase):
                 if e[1] == self.my_id:
                     self.toast("Buff abgelaufen", (0.85, 0.85, 0.9), 1.5)
             elif kind == "stats":              # Rundenende: Statistik vom Host -> Endbildschirm
-                self.open_end_screen(e[1])
+                self.open_end_screen(e[1], e[2] if len(e) > 2 else None)
+            elif kind == "skipvote":
+                if self.ceremony is not None:
+                    self.ceremony.votes = (e[1], e[2])
+            elif kind == "skipdone":
+                if self.ceremony is not None:
+                    self.ceremony.finish()
             elif kind == "newmatch":
                 if self.net_mode == "client" and self.player is not None:
                     self.player.hp, self.player.prespawn = 0.0, True      # neue Runde: erst Ausrüstung wählen, dann Spawn
@@ -133753,6 +134800,9 @@ class Game(ShowBase):
         self.update_hud(dt)
         self.update_flash()                     # 10e: Blendgranate
         self.place_camera()
+        stage = self.ceremony or self.cer_stage         # Siegerehrung führt die Kamera
+        if stage is not None:
+            stage.update(dt)
         self.mcull_frame = getattr(self, "mcull_frame", 0) + 1
         cull_mob_views(self.mob_views, world, self.cam, self.render, self.camLens, self.mcull_frame)   # v58
 
@@ -134737,7 +135787,8 @@ class Game(ShowBase):
                 "gren_next": (self.on_gren_next, 1), "ability": (self.on_ability,), "inspect": (self.on_inspect,),
                 "heli_flare": (self.on_heli_flare,), "gear_off": (self.on_gear_off,), "duck_toggle": (self.toggle_duck,),
                 "scoreboard": (self.tab_down,), "bigmap": (self.toggle_bigmap,), "mm_out": (self.on_mm_zoom, 1),
-                "mm_in": (self.on_mm_zoom, -1), "fps": (self.toggle_fps,), "fullscreen": (self.toggle_fullscreen,)}
+                "mm_in": (self.on_mm_zoom, -1), "fps": (self.toggle_fps,), "fullscreen": (self.toggle_fullscreen,),
+                "skip_vote": (self.on_skip_vote,)}
         for act, (fn, *a) in acts.items():
             add(KEYS[act], fn, *a)
         add(KEYS["scoreboard"] + "-up", self.tab_up)
@@ -134820,6 +135871,18 @@ class Game(ShowBase):
         self.save_prefs()
         if page is not None:
             page.note(msg)
+
+    def on_skip_vote(self):
+        """Taste gegen die Siegerehrung: jeder hat eine Stimme, der Host zählt."""
+        c = self.ceremony
+        if c is None or c.voted or self.quit_box is not None:
+            return
+        c.voted = True
+        if self.net_mode == "client":
+            if self.client is not None:
+                self.client.send_skip()
+        else:
+            self.world.skip_vote(self.my_id)
 
     def keys_reset(self):
         KEYS.clear()

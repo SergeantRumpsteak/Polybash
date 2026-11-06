@@ -2,6 +2,20 @@
 
 Neueste Änderungen oben.
 
+## Siegerehrung nach der Runde: 13 Goldpokale, verbrannte Pokale, Skip-Abstimmung (Robin, 2026-11-06)
+Gilt für alle Modi und Karten. NET_VERSION 61 -> 62.
+
+- **Siegerehrung**: Nach Rundenende stehen alle Spieler im Halbkreis auf Steinsockeln, der Beste in der Mitte. Inari: Tempelhof vor dem Schrein. Andere Karten: die Bühne sucht sich eine freie, ebene Stelle um die Kartenmitte.
+- **13 Goldpokale**: Fallobst, Das Reh, Der Selbsttreffer, Der Tyrann, Wer was auf sich hält ..., Granat-Mund, Der Türsteher, Speedy Gonzales, Blei-Magnet, Spray & Pray, Der Schläfer, Rache ist süß, Der Sargnagel. Pokale fliegen von oben zum Sieger, dazu Lichtkegel, Funken und goldener Text.
+- **Limit**: Höchstens min(3 x Spieler, 6) Pokale. Gewählt werden die auffälligsten Werte, jeder Pokal hat einen Mindestwert. Der Sargnagel kommt zum Schluss.
+- **Gleichstand**: Der Pokal wird nicht geteilt, sondern fällt zwischen die Beteiligten und verbrennt. Er zählt nicht aufs Limit, dafür rückt ein neuer Preis nach. Höchstens 3 Verbrennungen je Runde. Beim Türsteher entscheidet zuerst die Zonenzeit.
+- **Überspringen**: Taste P (frei belegbar). Echte Mehrheit der Verbundenen, Stand oben rechts. Verlässt jemand das Spiel, wird neu gerechnet.
+- **Der Selbsttreffer** zählt eigene Tomahawks und eigene Splittergranaten. **Blei-Magnet** zählt die Zeit unter 15 % Leben. **Der Türsteher** zählt Kills in der Zone (nur KotH).
+- **Neue Reiter im Endbildschirm**: "Kampf" (K/D/A, Assists, Schaden, Erlitten, Kopfschüsse, Trefferquote) und "Rivalen" (gewonnene Duelle, liebstes Opfer, Angstgegner). Die Bühne bleibt dahinter sichtbar.
+- **Neue Statistik beim Host**: Assists (ab 20 Schaden in den letzten 10 s), Schaden, Schüsse, Kugeltreffer, Stürze, Überfahren, Selbsttreffer, Granaten-Kills, Zonen-Kills, Rache, Zeit mit wenig Leben, Stellung halten, Stillstand, Duell-Matrix, letzter Kill.
+
+Technik: `new_stats`, `new_track`, `AWARDS`, `pick_awards`, `rivals_won`, `stat_damage`, `stat_kill`, `stat_tick`, `skip_vote`, `skip_check`, `Ceremony`, `ceremony_spot`, `build_trophy`, `TROPHY_MAKERS`, Netz: `skip`, `skipvote`, `skipdone`, `stats` mit Awards.
+
 ## Inari Temple Sanctuary: Serpentinen, Sichtlinien, Gipfelwald, Wegordnung (Robin, 2026-11-04)
 Gilt nur für diese Karte. NET_VERSION 60 -> 61. Fest bleiben Schrein, Feuerstelle, Nebenschreine, Ninja-Tomahawk und die Monster-Regel.
 
