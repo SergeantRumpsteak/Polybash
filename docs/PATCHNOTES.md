@@ -2,17 +2,82 @@
 
 Neueste Änderungen oben.
 
-## Tunnelsystem mit Kontrollraum, Fenster, Tooltip-Fix (Sinan, 2026-11-07)
-Gilt für Polytown. NET_VERSION 61 -> 62. Die Karte (`polytown.ptmap`) bleibt unverändert; alles Neue wird beim Laden im Code gebaut, bei Host und Mitspielern gleich.
+## Tunnelsystem mit Kontrollraum, Tomahawk-Schalter, Fenster (Sinan, 2026-11-07)
+Gilt für Polytown. NET_VERSION 66 -> 67. Die Karte (`polytown.ptmap`) bleibt unverändert; alles Neue wird beim Laden im Code gebaut, bei Host und Mitspielern gleich.
 
 - **Tunnelsystem**: 3 m hohe Gänge auf Höhe der Steinbruch-Sohle (z = -9), Beleuchtung durch Deckenlampen. Drei Zugänge: Treppe im Burghof (westlich der Mitte), halb verschütteter Einschnitt unten im Steinbruch-Graben (Geröllhaufen, in der Mitte bleibt ein Weg) und Kellertreppe in einem Haus der Nordschleife (Kreisverkehr Nord). Gelände und Bodenplatten sind an den Treppen aufgeschnitten (Kollision und Darstellung).
 - **Kontrollraum** (14 x 14 m unter dem Burghof): Pult mit Schirmen, Schränke, Kartentisch, Funkgerät. Hier steht der Tomahawk-Startknopf.
 - **Tomahawk-Schalter** im Menü (Weitere Einstellungen, Pause-Menü des Hosts, Taste T): **Kontrollraum** (Standard) / **Oberfläche** (die bisherigen Säulen auf der Kreisstraße) / **Aus**. Bei „Oberfläche“ bleibt der Kontrollraum bestehen, hat aber keine Funktion (Schirme aus, kein Funk). Im Kontrollraum-Modus gibt es keinen Radar-Suchkreis und keinen Lichtstrahl, weil der Ort fest ist. Wird über das CTF-Konfig-Feld `tr` an die Mitspieler gesendet.
 - **Funkgeräusch** („chatter“, steckt noch im Spiel): hörbar im Kontrollraum und davor im Gang, gedämpft durch Wände; nur im Kontrollraum-Modus.
 - **Tomahawk und Untergrund**: Wer in den Gängen steht, ist wie bisher geschützt. Offen zum Himmel (Hoftreppe, Kellertreppe, Einschnitt) trifft der Einschlag auch unten.
-- **Fix Ausrüstungsmenü**: Der Statistik-Tooltip beim Hovern über eine Ausrüstung erscheint jetzt vor dem Fenster statt dahinter.
 - **Fenster in Polytown**: Die Glasscheiben sind durchsichtig (leicht getönt). Je Fenster, fest per Hash: ca. 50 % Glas, 25 % offen (Schüsse gehen durch), 25 % halb mit Holzbrettern vernagelt (unten zu, oben offen). Fenster in der Burg und in Wänden, die auf beiden Seiten zu sind, bleiben wie sie waren. Bei Fenstern in Wänden mit nur einer freien Seite ist dahinter ein kurzes Loch bzw. eine Nische sichtbar, kein echter Raum.
 - **Gadget-Beschreibungen**: Funkbake, Claymore und C4 erwähnen nicht mehr die rechte Maustaste.
+
+## Schalldämpfer wirklich leise, Waffen-Stats im Ausrüstungsmenü vorn (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 65 -> 66.
+
+- **Lärmradius mit Schalldämpfer**: 15 m (vorher 10 m) - zwischen Laufen (10 m) und Sprinten (22 m), statt der 43-84 m eines normalen Schusses. Monster hören den Schuss nur in diesem Umkreis.
+- **Ton bei Mitspielern**: Ein fremder gedämpfter Schuss klang bei Mitspielern bisher voll laut (sie kennen die Aufsätze der anderen nicht). Jetzt erkennt jeder den gedämpften Schuss am Lärmradius vom Host und hört nur das leise, dumpfe "Pfft" (bis etwa 16 m). Etwas leiser als bisher.
+- **Mündungsfeuer** an der fremden Figur mit Schalldämpfer nur noch ein kleiner Blitz (35 %).
+- **Minimap**: Ein gedämpfter Schuss erzeugt keinen roten Lärmkreis und keinen Trichter mehr - ausser du (oder ein Verbündeter) stehst bis 6 m daneben, dann ein kleiner Kreis (4 m). Ohne Schalldämpfer bleibt alles wie gehabt.
+- **Ausrüstungsmenü**: Die Waffen-Stats beim Hovern über eine Waffenkarte lagen hinter dem Ausrüstungsfenster. Alle Maus-Hinweisfelder liegen jetzt in einer eigenen, obersten Ebene: Spielwelt -> Fenster -> Hinweisfeld. Gilt auch für "Loadout konfigurieren"; dort verlor das Fenster nach jeder Slot-Auswahl seine Ebene, das ist ebenfalls behoben.
+
+Technik: `SILENCED_NOISE` (15), `SILENCED_VOL`, `SILENCED_FLASH`, `SILENCED_PING_HEAR`, `SILENCED_PING_R`; `Sfx.shot(sil=...)`, `PlayerView.fire(wi, sil)`, `Game.heard_noise(quiet=...)`, Erkennung im Ereignis `shotpos` über den Lärmradius (kein neues Netzfeld). UI: Bin `UI_TIP_BIN` ("pb_tip", Sortierung 70, nach `fixed` 40, Standard-2D 50 und `gui-popup` 60), `ui_tip_bin`, `LoadoutScreen.new_root`.
+
+## Monster-Reiter in den Match-Einstellungen, Dutt am Hinterkopf (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 64 -> 65.
+
+- **Neuer Reiter "Monster"**: Weitere Einstellungen -> "Monster-Einstellungen" (Knopf mit Kurzstatus, z. B. "An / Mäßig / 7 von 7 Arten"). Auch in den Rundeneinstellungen nach der Runde.
+- **Hauptschalter Monster An/Aus** (Taste M auf dem Reiter): Bei "Aus" sind Dichte und alle Arten-Schalter ausgegraut und nehmen keine Eingaben an. Für die Runde gibt es dann keinen Spawn-Manager, keine Respawn-Warteschlange, keine Bosswellen und keine Monster-KI (die KI-Schleife läuft gar nicht erst).
+- **Dichte**: Wenig, Mäßig, Viel, Gottlos (Tasten 1-4). "Aus" ist jetzt der Hauptschalter; die gewählte Dichte bleibt beim Ausschalten erhalten.
+- **Einzelne Monsterarten** an/abwählen: Zombies, Jägerinnen, Brutes, Harpien, Drohnen, Kolosse, Titanen. Abgewählte Arten spawnen weder beim Rundenstart noch per Respawn oder Bosswelle. Neue Monsterarten erscheinen automatisch in der Liste.
+- **Sicherung**: Sind alle Arten abgewählt, zeigt der Reiter einen Hinweis und der Rundenstart schaltet die Monster ab (Hauptschalter aus).
+- **Netz**: Der Host schickt die abgewählten Arten mit (welcome, cfg, reload).
+- Unverändert: Tasten 1-5 auf "Weitere Einstellungen" (1 = Monster aus), Monster-Zeile im Pausenmenü (respektiert die abgewählten Arten), CTF-Standard Monster aus, Bonushasen unter BONUS, Harpyien gegen Camper unabhängig von der Monster-Einstellung, Nest-Monster und eigene Drohnen.
+- **Dutt** (ohne Kopfbedeckung): sitzt jetzt am Hinterkopf (Übergang Scheitel/Hinterkopf) und steht um 40° nach hinten-oben ab, der Ansatz liegt flach an. Vorher saß er senkrecht wie eine Kerze auf dem Scheitel.
+
+Technik: `MOB_KIND_NAMES`, `MOB_TOGGLE_KINDS`, `mob_off_of`, `mob_all_off`, `calculate_map_spawns(disabled=...)`, `World(mob_off=...)`, `World.mob_off`, `World.set_mob_rules`, Sperre in `World.spawn_mob`, KI/Bosswellen/Warteschlange in `World.update` nur mit Monstern; `MonsterPage`, Menüzustand `setup4`, `end_cfg` "mobs", `Game.mob_master_on` / `mob_off_cfg` / `mob_toggle_master` / `mob_set_density` / `mob_toggle_kind` / `mob_cfg_resolve` / `mob_summary` / `open_mob_page`, cfg-Felder `mob_on` und `mk_off`, Netzfeld `mk`. Dutt zum Nachjustieren: `DUTT_ANCHOR`, `DUTT_PITCH`, `DUTT_PARTS`, `DUTT_TIE` (kopf-lokale Werte, vorherige Position im Kommentar).
+
+## Manhunt statt King, Harpyien gegen Camper (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 62 -> 63.
+
+- **Manhunt** (vorher "Manhunt-King"): Das Wort King ist raus, damit es nicht mit King of the Hill verwechselt wird. Ausgelöst wird er nur noch durch **6 Spieler-Kills ohne eigenen Tod**, sofort, ohne Karenzzeit. Campen löst ihn nicht mehr aus.
+- **Anzeige**: Der Gejagte bekommt "Ein Manhunt wurde auf dich angesetzt." und oben dauerhaft "MANHUNT - Kopfgeld auf dich". Alle anderen sehen oben in der Mitte "Ein Manhunt wurde ausgerufen auf [Name]", solange er läuft (die ersten Sekunden pulsierend).
+- Silhouette alle 10 s für 3 s, goldener Punkt auf der Minimap und Kopfgeld (zwei Buffs, doppelte Dauer) bleiben wie gehabt. Der Manhunt endet mit dem Tod, am Rundenende oder wenn der Host ihn ausschaltet (dann ohne Kopfgeld). Kill-Serien beginnen jede Runde neu.
+- **Schalter**: Weitere Einstellungen -> "Manhunt (Kill-Serien)" An/Aus (Taste M), ausserdem in den Rundeneinstellungen im Pausenmenü (wirkt sofort) und nach der Runde. Standard: an.
+- **Harpyien gegen Camper** (ersetzt die Camp-Bestrafung mit Silhouette): Wer **60 s im 10-m-Umkreis** seines Ankerpunkts bleibt, über dem kreisen 3-4 Harpyien rund 10 m über dem Kopf im Radius 4-5 m und kreischen (3D-Ton aus ihrer Position, für den Camper und alle in der Nähe hörbar). Kein HUD-Text, kein Killfeed, kein Schaden.
+- **Anflug und Abflug**: Die Harpyien stossen aus rund 50 m Höhe in 1,5 s herab und gehen in die Kreisbahn. Wer sich mehr als 10 m vom Anker entfernt, setzt die Zeit zurück; die Harpyien steigen steil auf und verschwinden. Ebenso beim Tod und am Rundenende.
+- **KotH-Zone**: Wer in der Zone steht, campt nicht (Zeit wird sofort zurückgesetzt).
+- Die Harpyien hängen **nicht** an der Monster-Einstellung, sie erscheinen auch bei "Monster aus" und auf dem Testgelände. Erst ab 2 Spielern.
+
+Technik: `World.manhunt_update` / `manhunt_on_death`, `World.camp_update` / `camp_set` / `camp_clear`, `World.manhunt_on`, `Player.hunt` / `hunt_t` / `harpies` / `camp_at` / `camp_t`, Ereignisse `hunt`, `huntping`, `bounty`, `camp` (nur bei Statuswechsel), Snapshot-Feld 32 = Harpyien; `AntiCampManager` (Pool aus 8 Modellen, Kreisbahn aus Spielerposition und Spieler-ID), `Game.hunt_event`, `update_hunt_view`, `anticamp_reset`, `update_anticamp`; Töne `harpy_cry`, `harpy_loop`. Zum Nachjustieren: `MANHUNT_*`, `CAMP_*`.
+
+## Siegerehrung nach der Runde: 13 Goldpokale, verbrannte Pokale, Skip-Abstimmung (Robin, 2026-11-06)
+Gilt für alle Modi und Karten. NET_VERSION 61 -> 62.
+
+- **Siegerehrung**: Nach Rundenende stehen alle Spieler im Halbkreis auf Steinsockeln, der Beste in der Mitte. Inari: Tempelhof vor dem Schrein. Andere Karten: die Bühne sucht sich eine freie, ebene Stelle um die Kartenmitte.
+- **13 Goldpokale**: Fallobst, Das Reh, Der Selbsttreffer, Der Tyrann, Wer was auf sich hält ..., Granat-Mund, Der Türsteher, Speedy Gonzales, Blei-Magnet, Spray & Pray, Der Schläfer, Rache ist süß, Der Sargnagel. Pokale fliegen von oben zum Sieger, dazu Lichtkegel, Funken und goldener Text.
+- **Limit**: Höchstens min(3 x Spieler, 6) Pokale. Gewählt werden die auffälligsten Werte, jeder Pokal hat einen Mindestwert. Der Sargnagel kommt zum Schluss.
+- **Gleichstand**: Der Pokal wird nicht geteilt, sondern fällt zwischen die Beteiligten und verbrennt. Er zählt nicht aufs Limit, dafür rückt ein neuer Preis nach. Höchstens 3 Verbrennungen je Runde. Beim Türsteher entscheidet zuerst die Zonenzeit.
+- **Überspringen**: Taste P (frei belegbar). Echte Mehrheit der Verbundenen, Stand oben rechts. Verlässt jemand das Spiel, wird neu gerechnet.
+- **Der Selbsttreffer** zählt eigene Tomahawks und eigene Splittergranaten. **Blei-Magnet** zählt die Zeit unter 15 % Leben. **Der Türsteher** zählt Kills in der Zone (nur KotH).
+- **Neue Reiter im Endbildschirm**: "Kampf" (K/D/A, Assists, Schaden, Erlitten, Kopfschüsse, Trefferquote) und "Rivalen" (gewonnene Duelle, liebstes Opfer, Angstgegner). Die Bühne bleibt dahinter sichtbar.
+- **Neue Statistik beim Host**: Assists (ab 20 Schaden in den letzten 10 s), Schaden, Schüsse, Kugeltreffer, Stürze, Überfahren, Selbsttreffer, Granaten-Kills, Zonen-Kills, Rache, Zeit mit wenig Leben, Stellung halten, Stillstand, Duell-Matrix, letzter Kill.
+
+Technik: `new_stats`, `new_track`, `AWARDS`, `pick_awards`, `rivals_won`, `stat_damage`, `stat_kill`, `stat_tick`, `skip_vote`, `skip_check`, `Ceremony`, `ceremony_spot`, `build_trophy`, `TROPHY_MAKERS`, Netz: `skip`, `skipvote`, `skipdone`, `stats` mit Awards.
+
+## Inari Temple Sanctuary: Farne statt Büsche, Schrein-Details, Laternen am Anweg (Robin, 2026-11-07)
+Gilt nur für diese Karte. NET_VERSION 63 -> 64. Grundriss, zwei Geschosse, Galerie, Buddhas und Feuerstelle sind unverändert.
+
+- **Keine Büsche mehr**: Die 4.200 blickdichten Büsche sind weg. Dafür rund 1.150 Flecken aus Farnen und hohem Gras, je 3-5 Pflanzen. Geduckt halb versteckt, aber durchsichtig; Kugeln gehen durch, wie vorher bei allem Bewuchs.
+- **Fachwerk**: kräftige dunkle Eckpfosten (statt rot) und schwere Geschossbalken, deren Enden über die Ecken hinausstehen. Felder mit Rahmen und senkrechter Lattung.
+- **Konsolen (Kumimono)**: dreifach gestufte Kragarme unter den Traufen der Arme und unter dem grossen Hallendach.
+- **Dach**: Ziegelreihen auf allen Flächen, Firste und Gratziegel, Firstziegel an den Giebeln. Die Traufen schwingen nach aussen und oben, an den Ecken stärker.
+- **Opferkasten** (Saisenbako) vor den Haupttoren Nord und Süd, hüfthoch, als Deckung nutzbar. Man geht links oder rechts daran vorbei.
+- **Steinlaternen**: 36 bemooste Tōrō auf den letzten rund 40 m jedes Hauptwegs, meist Kasuga-Form, jede dritte Reihe Yukimi (drei Beine, Schirmdach). Die Jizo-Paare beginnen dafür etwas früher.
+- **Wächterfüchse**: am Anfang jeder Laternenreihe ein Fuchspaar, Blick den Weg hinunter, daneben ein kleiner Hokora. Die Füchse und Altäre in den Weggabeln bleiben.
+
+Technik: `make_saisenbako`, `toro`, `make_approach`, `bracket`, Gruppen `tile`, `lantern`, `moss`, `trim`; `inari_brush` entfernt.
 
 ## Inari Temple Sanctuary: Serpentinen, Sichtlinien, Gipfelwald, Wegordnung (Robin, 2026-11-04)
 Gilt nur für diese Karte. NET_VERSION 60 -> 61. Fest bleiben Schrein, Feuerstelle, Nebenschreine, Ninja-Tomahawk und die Monster-Regel.
