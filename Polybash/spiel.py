@@ -27193,6 +27193,18 @@ def netlog(msg):
 _EXC_SEEN = {}
 
 
+_FIRE_DROP = {}
+
+
+def fire_drop_log(pl, why, info=""):
+    """Host: ein Schuss eines Mitspielers wurde verworfen - mit Grund ins Netzlog (je Spieler und Grund höchstens alle 5 s)."""
+    now = time.time()
+    k = (getattr(pl, "pid", -1), why)
+    if now - _FIRE_DROP.get(k, 0.0) >= 5.0:
+        _FIRE_DROP[k] = now
+        netlog(f"Host: Schuss von {getattr(pl, 'name', '?')} (pid {k[0]}) verworfen: {why} {info}")
+
+
 def netlog_exc(tag):
     """Unerwartete Ausnahme im Netzpfad ins Log schreiben (je Ort höchstens 5-mal)."""
     n = _EXC_SEEN.get(tag, 0)
@@ -27732,11 +27744,14 @@ class HostSession:
             idx = m.get("w")
             if (pl.hp <= 0 or w.phase != "play" or not isinstance(idx, int)
                     or not 0 <= idx < len(WEAPONS)):
+                fire_drop_log(pl, "hp/phase/index", f"hp={pl.hp:.0f} phase={w.phase} w={idx}")
                 return
             if pl.stun_t > 0.3:
+                fire_drop_log(pl, "betaeubt", f"stun={pl.stun_t:.1f}")
                 return                            # betäubt: kein Schuss (kleine Toleranz für Laufzeit)
             wp = eff_weapon(idx, att_clean(idx, m.get("a")))   # Schaden/Tempo kommen vom Host (Aufsätze werden geprüft)
             if idx not in pl.slots:
+                fire_drop_log(pl, "Waffe nicht im Slot", f"w={idx} host-slots={list(pl.slots)}")
                 return                            # nur Waffen, die er laut Host wirklich trägt
             dirs = []
             for d in (m.get("d") or [])[:wp.pellets]:
