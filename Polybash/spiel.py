@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 63         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 64         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -6254,7 +6254,8 @@ class _InaBuilder:
             "gable": ("wood", (0.75, 0.48, 0.30)), "iron": ("metal", (0.35, 0.33, 0.32)),
             "beam": ("wood", (0.42, 0.30, 0.24)), "beam_red": ("plaster", (1.3, 0.34, 0.2)), "ring": ("pt_rubble", (1.0, 0.95, 0.88)),
             "trail": ("dirt", (0.74, 0.66, 0.54)), "ledge": ("dirt", (0.95, 0.96, 0.92)), "boulder": ("dirt", (1.08, 1.08, 1.06)),
-            "root": ("bark", (0.42, 0.34, 0.30))}.items()}
+            "root": ("bark", (0.42, 0.34, 0.30)), "tile": ("roof", (0.40, 0.42, 0.48)), "lantern": ("stone", (0.86, 0.86, 0.82)),
+            "moss": ("grass", (0.46, 0.56, 0.36)), "trim": ("wood", (0.30, 0.22, 0.17))}.items()}
         self.rk = 0                                        # Vierteldrehungen für den Schreinbau
         self.loop_rocks = []
         self.lines = {k: _ina_spline(v) for k, v in cfg.PATHS.items()}
@@ -6280,6 +6281,7 @@ class _InaBuilder:
         self.make_shrine()
         self.make_torii()
         self.make_altars()
+        self.make_approach()
         self.make_loop()
         self.make_serpentines()
         self.make_sessha()
@@ -6686,8 +6688,9 @@ class _InaBuilder:
         # Rote Eckpfosten aussen
         for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
             for px, py in ((H + 0.35, W + 0.35), (W + 0.35, A + 0.35), (W + 0.35, H + 0.35), (A + 0.35, W + 0.35)):
-                self.B(sx * px - 0.4, sy * py - 0.4, sx * px + 0.4, sy * py + 0.4, Z - 0.2, Z + atop, INA_RED)
+                self.B(sx * px - 0.48, sy * py - 0.48, sx * px + 0.48, sy * py + 0.48, Z - 0.2, Z + atop + 0.35, INA_WOOD_D)
         self.make_facade()
+        self.make_saisenbako()
         self.make_buddhas()
         self.make_fire_pit()
         self.make_roof()
@@ -6709,7 +6712,7 @@ class _InaBuilder:
         """Ständerwerk und Riegel als Zierde vor den Wänden (ohne Kollision): macht aus den Holzkisten japanische Fassaden."""
         S, Z, C = self.cfg.SHRINE, self.cfg.Z_FLOOR, self.C
         H, A, W, top = S["halls"], S["arm"], S["arm_half"], S["arm_top"]
-        dark, red = self.groups["beam"], self.groups["beam_red"]
+        dark, red, trim = self.groups["beam"], self.groups["beam_red"], self.groups["trim"]
 
         def rot(x, y, rk):
             for _ in range(rk):
@@ -6735,6 +6738,133 @@ class _InaBuilder:
             # Hallenwand innen: Riegel unter der Galerie
             vx, vy = rot(0, H - 0.36, rk)
             _ina_obox(red, None, vx, vy, Z + 9.0, 2 * H - 0.8, 0.1, 0.24, ang)
+            # schwerer Geschossbalken: läuft über die Ecken hinaus, die Enden stehen frei vor (Kibana)
+            vx, vy = rot(0, A + 0.5, rk)
+            _ina_obox(dark, None, vx, vy, Z + 5.0, 2 * W + 2.6, 0.4, 0.42, ang)
+            for sgn in (-1, 1):
+                vx, vy = rot(sgn * (W + 0.5), (H + A) / 2 + 0.6, rk)
+                _ina_obox(dark, None, vx, vy, Z + 5.0, 0.4, A - H + 2.4, 0.42, ang)
+            for u in (-H - 0.55, H + 0.55):                    # Geschossbalken der Halle, über die Hallenecken hinaus
+                vx, vy = rot(u / 2 + (W + 0.5) * (1 if u > 0 else -1) / 2, H + 0.5, rk)
+                _ina_obox(dark, None, vx, vy, Z + 8.45, abs(u) - W + 1.0, 0.4, 0.4, ang)
+            # Felder zwischen den Riegeln: Rahmen und senkrechte Lattung (Koshi), über dem Tor frei
+            for k0, k1 in ((-W, -4.1), (-4.1, -2.0), (2.0, 4.1), (4.1, W)):
+                for zz in (3.9, 7.25):
+                    vx, vy = rot((k0 + k1) / 2, A + 0.33, rk)
+                    _ina_obox(trim, None, vx, vy, Z + zz, k1 - k0 - 0.1, 0.1, 0.1, ang)
+                u = k0 + 0.3
+                while u < k1 - 0.2:
+                    vx, vy = rot(u, A + 0.33, rk)
+                    _ina_obox(trim, None, vx, vy, Z + 5.85, 0.07, 0.08, 2.9, ang)
+                    u += 0.42
+            for sgn in (-1, 1):                                # Seiten der Arme: Lattung zwischen den Riegeln
+                t_ = H + 0.6
+                while t_ < A - 0.3:
+                    vx, vy = rot(sgn * (W + 0.33), t_, rk)
+                    _ina_obox(trim, None, vx, vy, Z + 5.85, 0.08, 0.07, 2.9, ang)
+                    t_ += 0.42
+            # Konsolen (Kumimono): dreifach gestufte Kragsteine aus Holz unter der Traufe, über jedem Pfosten
+            for k in (-W - 0.35, -4.1, -2.0, 2.0, 4.1, W + 0.35):
+                self.bracket(*rot(k, A + 0.35, rk), Z + top - 0.95, ang)
+            for sgn in (-1, 1):
+                for t_ in (H + 1.8, (H + A) / 2 + 0.5):
+                    self.bracket(*rot(sgn * (W + 0.35), t_, rk), Z + top - 0.95, ang + sgn * math.pi / 2)
+            for u in (-H + 0.2, -H / 2, 0.0, H / 2, H - 0.2):  # unter dem grossen Dach der Halle
+                if abs(u) < W + 0.6:
+                    continue
+                self.bracket(*rot(u, H + 0.35, rk), Z + S["hall_top"] - 0.9, ang)
+
+    def make_saisenbako(self):
+        """Opferkasten aus Holz vor den Haupttoren Nord und Süd: oben Latten, die Münzen fallen dazwischen. Hüfthohe Deckung."""
+        Z, C = self.cfg.Z_FLOOR, self.C
+        for sg in (-1, 1):
+            y = sg * 19.6
+            z0 = self.cfg.Z_SHRINE
+            self.B(-1.0, y - 0.5, 1.0, y + 0.5, z0, z0 + 0.95, INA_WOOD_D, mm=False)
+            for k in range(9):                                 # Latten in Querrichtung, leicht dachförmig
+                xx = -0.88 + k * 0.22
+                _ina_obox(self.groups["trim"], None, xx + C, y + C, z0 + 1.0, 0.1, 1.06, 0.1, 0.0)
+            _ina_obox(self.groups["beam_red"], None, C, y + C, z0 + 0.55, 2.06, 1.06, 0.12, 0.0)
+            for sx in (-1, 1):                                 # Füsse
+                _ina_obox(self.groups["trim"], None, sx * 0.9 + C, y + C, z0 + 0.06, 0.2, 1.1, 0.12, 0.0)
+
+    def toro(self, x, y, kind, ang):
+        """Steinlaterne: 0 Kasuga (Sockel, Schaft, Feuerkammer mit Fenstern, geschwungenes Dach, Knauf),
+        1 Yukimi (drei Beine, breites Schirmdach). Oben Moos. Schaft ist fest."""
+        C = self.C
+        z = self.h(x, y)
+        g, mo = self.groups["lantern"], self.groups["moss"]
+        wx, wy = x + C, y + C
+        if kind == 0:
+            _ina_lathe(g, wx, wy, z - 0.2, [(0.48, 0), (0.48, 0.3), (0.36, 0.42), (0.16, 0.5), (0.0, 0.5)], 6)
+            _ina_lathe(g, wx, wy, z + 0.45, [(0.15, 0), (0.13, 1.1), (0.0, 1.1)], 8)
+            _ina_obox(g, None, wx, wy, z + 1.62, 0.66, 0.66, 0.16, ang)
+            for i in range(4):                                 # Feuerkammer: vier Pfosten, dazwischen offen
+                a = ang + math.pi / 4 + i * math.pi / 2
+                _ina_obox(g, None, wx + math.cos(a) * 0.26, wy + math.sin(a) * 0.26, z + 1.95, 0.1, 0.1, 0.5, ang)
+            _ina_obox(g, None, wx, wy, z + 1.95, 0.28, 0.28, 0.32, ang)        # Kammer innen (Lichtloch)
+            r_ = [(0.66, 0.0), (0.6, 0.12), (0.36, 0.3), (0.12, 0.42), (0.0, 0.45)]
+            _ina_lathe(g, wx, wy, z + 2.2, r_, 6)
+            _ina_lathe(mo, wx, wy, z + 2.24, [(0.52, 0.0), (0.33, 0.22), (0.12, 0.36), (0.0, 0.4)], 6)
+            _ina_lathe(g, wx, wy, z + 2.63, [(0.1, 0), (0.12, 0.08), (0.08, 0.2), (0.0, 0.26)], 6)
+            self.B(x - 0.2, y - 0.2, x + 0.2, y + 0.2, z - 0.3, z + 2.2, INA_STONE, vis=False, mm=False)
+        else:
+            for i in range(3):
+                a = ang + i * 2.094
+                lx, ly = wx + math.cos(a) * 0.55, wy + math.sin(a) * 0.55
+                _ina_obox(g, None, (lx + wx) / 2, (ly + wy) / 2, z + 0.42, 0.62, 0.16, 0.16, a + math.pi / 2)
+                _ina_obox(g, None, lx, ly, z + 0.2, 0.18, 0.18, 0.45, a)
+            _ina_lathe(g, wx, wy, z + 0.48, [(0.32, 0), (0.3, 0.2), (0.0, 0.22)], 8)
+            _ina_lathe(g, wx, wy, z + 0.7, [(0.24, 0), (0.24, 0.42), (0.0, 0.42)], 8)
+            _ina_lathe(g, wx, wy, z + 1.1, [(1.05, 0.0), (1.0, 0.1), (0.6, 0.3), (0.2, 0.45), (0.0, 0.48)], 8)
+            _ina_lathe(mo, wx, wy, z + 1.14, [(0.85, 0.0), (0.5, 0.26), (0.0, 0.42)], 8)
+            _ina_lathe(g, wx, wy, z + 1.56, [(0.16, 0), (0.16, 0.18), (0.0, 0.3)], 6)
+            self.B(x - 0.3, y - 0.3, x + 0.3, y + 0.3, z - 0.2, z + 1.2, INA_STONE, vis=False, mm=False)
+
+    def make_approach(self):
+        """Letzte 40 m jedes Hauptwegs: Laternenpaare im Wechsel, am Beginn ein Fuchspaar mit Hokora, Blick den Weg hinunter."""
+        cfg, rng = self.cfg, random.Random(5150)
+        G = cfg.GRID
+        self.lanterns = 0
+        for key, ln in self.lines.items():
+            n = len(ln)
+            others = [p for k_, l_ in self.lines.items() if k_ != key for p in l_[::2]] + [p for l_ in self.side_lines for p in l_[::2]]
+            k = 0
+            for i in range(n - 6, max(0, n - 32), -6):         # alle 9 m ein Paar, im Wechsel Kasuga und Yukimi
+                x, y = ln[i]
+                dx, dy = ln[min(n - 1, i + 1)][0] - x, ln[min(n - 1, i + 1)][1] - y
+                l_ = math.hypot(dx, dy) or 1.0
+                nx, ny = -dy / l_, dx / l_
+                e = cfg.PATH_HW + 1.6
+                for sg in (-1, 1):
+                    px, py = x + nx * sg * e, y + ny * sg * e
+                    if max(abs(px), abs(py)) < cfg.PLAZA_HALF + 1.5:
+                        continue
+                    if any(math.hypot(px - p[0], py - p[1]) < 4.0 for p in others):
+                        continue
+                    self.toro(px, py, 1 if k % 3 == 2 else 0, math.atan2(dy, dx))
+                    self.lanterns += 1
+                k += 1
+            i = max(0, n - 36)                                 # Wächterfüchse am Anfang der Laternenreihe
+            x, y = ln[i]
+            dx, dy = ln[i + 1][0] - x, ln[i + 1][1] - y
+            l_ = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / l_, dx / l_
+            down = math.atan2(-dy, -dx)
+            e = cfg.PATH_HW + 1.3
+            for sg in (-1, 1):
+                self.fox(x + nx * sg * e, y + ny * sg * e, down + sg * 0.25)
+            hx, hy = x + nx * (e + 2.6), y + ny * (e + 2.6)
+            if self.open.get((int(round(hx / G)), int(round(hy / G))), 99.0) > 3.6:
+                self.hokora(hx, hy, down, 0.6)
+
+    def bracket(self, wx, wy, z, ang, k=1.0):
+        """Kumimono: Block, darüber zwei immer weiter auskragende Arme (lokal +y = nach aussen)."""
+        g = self.groups["trim"]
+        ox, oy = -math.sin(ang), math.cos(ang)
+        for i, (lx, ly, lz, out) in enumerate(((0.42, 0.42, 0.28, 0.0), (0.9, 0.34, 0.24, 0.22), (1.35, 0.34, 0.24, 0.44))):
+            _ina_obox(g, None, wx + ox * out * k, wy + oy * out * k, z + (0.14 + i * 0.3) * k, lx * k, (ly + out) * k, lz * k, ang)
+        _ina_obox(self.groups["beam_red"], None, wx + ox * 0.55 * k, wy + oy * 0.55 * k, z + 0.84 * k, 0.32 * k, 0.9 * k, 0.16 * k, ang)
 
     def make_fire_pit(self):
         """Steinring der Feuerstelle in der Mitte der Halle (Glut, Funken und Licht entstehen zur Laufzeit)."""
@@ -6825,6 +6955,60 @@ class _InaBuilder:
                 face(P(w, q1, ze), P(0, q1, zr), P(0, q0, zr), P(w, q0, ze))
             gable(P(-S["arm_half"], -L + 0.5, ze), P(S["arm_half"], -L + 0.5, ze), P(0, -L + 0.5, zr - 0.2))
             gable(P(-S["arm_half"], L - 0.5, ze), P(S["arm_half"], L - 0.5, ze), P(0, L - 0.5, zr - 0.2))
+        tg = self.groups["tile"]
+
+        def W_(p):
+            return (p[0] + C, p[1] + C, p[2])
+
+        def tiles(e0, e1, r0, r1, step=0.62):
+            """Ziegelreihen (Hongawara) von der Traufe e0-e1 zum First r0-r1, leicht über der Dachfläche."""
+            ln_ = math.hypot(e1[0] - e0[0], e1[1] - e0[1])
+            n_ = max(1, int(ln_ / step))
+            nrm = norm(cross(sub(e1, e0), sub(r0, e0)))
+            if nrm[2] < 0:
+                nrm = (-nrm[0], -nrm[1], -nrm[2])
+            for i in range(n_ + 1):
+                t = (i + 0.5) / (n_ + 1)
+                a = tuple(e0[k] + (e1[k] - e0[k]) * t for k in range(3))
+                b = tuple(r0[k] + (r1[k] - r0[k]) * t for k in range(3))
+                lat = norm(cross(sub(b, a), nrm))
+                lat = tuple(v * 0.12 for v in lat)
+                top = tuple(v * 0.1 for v in nrm)
+                a_, b_ = add(a, tuple(v * 0.02 for v in nrm)), add(b, tuple(v * 0.02 for v in nrm))
+                tg.quad(W_(sub(a_, lat)), W_(sub(b_, lat)), W_(add(b_, top)), W_(add(a_, top)))
+                tg.quad(W_(add(a_, top)), W_(add(b_, top)), W_(add(b_, lat)), W_(add(a_, lat)))
+
+        def curl(e0, e1, out, up, up_end):
+            """Traufe schwingt nach aussen und oben (Sori), an den Ecken stärker."""
+            n_ = 8
+            for i in range(n_):
+                t0, t1 = i / n_, (i + 1) / n_
+                q = []
+                for t in (t0, t1):
+                    base = tuple(e0[k] + (e1[k] - e0[k]) * t for k in range(3))
+                    lift = up + (up_end - up) * (2.0 * abs(t - 0.5)) ** 2
+                    q.append((base, (base[0] + out[0], base[1] + out[1], base[2] + lift)))
+                pts = [W_(q[0][0]), W_(q[1][0]), W_(q[1][1]), W_(q[0][1])]
+                rg.quad(*pts)
+                rg.quad(pts[3], pts[2], pts[1], pts[0])
+                fz = 0.28                                      # Stirnbrett unter dem Schwung
+                gg.quad(W_(q[0][1]), W_(q[1][1]), W_((q[1][1][0], q[1][1][1], q[1][1][2] - fz)), W_((q[0][1][0], q[0][1][1], q[0][1][2] - fz)))
+
+        for flip in (False, True):                             # Arme: Ziegel, Schwung an der Traufe, First
+            def P2(u, v, z):
+                return (v, u, z) if flip else (u, v, z)
+            for q0, q1 in ((-L, -9.8), (9.8, L)):
+                for sg in (-1, 1):
+                    tiles(P2(sg * w, q0, ze), P2(sg * w, q1, ze), P2(0, q0, zr), P2(0, q1, zr))
+                    o = P2(sg * 0.9, 0, 0)
+                    curl(P2(sg * w, q0, ze), P2(sg * w, q1, ze), (o[0], o[1]), 0.22, 0.38 if abs(q1) > 10 or abs(q0) > 10 else 0.22)
+                c0, c1 = P2(0, q0, zr), P2(0, q1, zr)
+                mx_, my_ = (c0[0] + c1[0]) / 2, (c0[1] + c1[1]) / 2
+                _ina_obox(tg, None, mx_ + C, my_ + C, zr + 0.18, abs(c1[0] - c0[0]) + 0.4 if flip else 0.5,
+                          abs(c1[1] - c0[1]) + 0.4 if not flip else 0.5, 0.42, 0.0)
+            for end in (-L, L):                                # Firstziegel an den Giebeln (Onigawara)
+                e = P2(0, end, zr)
+                _ina_obox(tg, None, e[0] + C, e[1] + C, zr + 0.45, 0.8, 0.8, 0.8, 0.0)
         zb, zm, za = Z + S["hall_top"] + 0.2, Z + 12.9, Z + S["height"] - 0.2
         for a, b, c, d in (((-12.5, -12.5), (12.5, -12.5), (6.5, -6.5), (-6.5, -6.5)),
                            ((12.5, -12.5), (12.5, 12.5), (6.5, 6.5), (6.5, -6.5)),
@@ -6832,6 +7016,25 @@ class _InaBuilder:
                            ((-12.5, 12.5), (-12.5, -12.5), (-6.5, -6.5), (-6.5, 6.5))):
             face((a[0], a[1], zb - 0.6), (b[0], b[1], zb - 0.6), (c[0], c[1], zm), (d[0], d[1], zm))
             face((d[0], d[1], zm), (c[0], c[1], zm), (0.0, 0.0, za), (0.0, 0.0, za))
+            A3, B3 = (a[0], a[1], zb - 0.6), (b[0], b[1], zb - 0.6)
+            tiles(A3, B3, (d[0], d[1], zm), (c[0], c[1], zm), 0.7)
+            tiles((d[0], d[1], zm), (c[0], c[1], zm), (0.0, 0.0, za), (0.0, 0.0, za), 0.7)
+            mx_, my_ = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+            ln_ = math.hypot(mx_, my_)
+            curl(A3, B3, (mx_ / ln_ * 1.2, my_ / ln_ * 1.2), 0.3, 0.95)
+            for p_, q_ in ((a, d), ((d[0], d[1]), (0.0, 0.0))):  # Gratziegel an den Ecken
+                z0_ = zb - 0.6 if p_ is a else zm
+                z1_ = zm if p_ is a else za
+                mx2, my2 = (p_[0] + q_[0]) / 2, (p_[1] + q_[1]) / 2
+                l2 = math.hypot(q_[0] - p_[0], q_[1] - p_[1])
+                n_ = max(2, int(l2 / 1.2))
+                for i in range(n_):
+                    t = (i + 0.5) / n_
+                    _ina_obox(tg, None, p_[0] + (q_[0] - p_[0]) * t + C, p_[1] + (q_[1] - p_[1]) * t + C,
+                              z0_ + (z1_ - z0_) * t + 0.16, 0.36, 0.36, 0.3, math.atan2(q_[1] - p_[1], q_[0] - p_[0]))
+            ca_ = (a[0] * 1.09, a[1] * 1.09, zb - 0.6 + 0.95)    # Eckziegel hebt sich am Ende des Grats
+            _ina_obox(tg, None, ca_[0] + C, ca_[1] + C, ca_[2], 0.55, 0.55, 0.6, math.atan2(a[1], a[0]))
+        _ina_obox(tg, None, C, C, za + 0.3, 0.6, 0.6, 0.9, 0.0)    # Spitze
 
     # ------------------------------------------------------------ Torii
     def torii(self, x, y, ang, scale=1.0):
@@ -6937,11 +7140,11 @@ class _InaBuilder:
             self.fox(cx + lx * sd * 1.0, cy + ly * sd * 1.0, math.atan2(dv[1], dv[0]))
         return True
 
-    def jizo_line(self, ln, hw, rng):
+    def jizo_line(self, ln, hw, rng, end=8):
         """Jizo mit rotem Latz als Wegmarken: immer ein Paar, links und rechts des Wegs."""
         G = self.cfg.GRID
         i = rng.randrange(8, 22)
-        while i < len(ln) - 8:
+        while i < len(ln) - end:
             x, y = ln[i]
             dx, dy = ln[i + 1][0] - x, ln[i + 1][1] - y
             l_ = math.hypot(dx, dy) or 1.0
@@ -6977,7 +7180,7 @@ class _InaBuilder:
                 d_m = (-d_m[0], -d_m[1])
             self.v_count += 1 if self.v_shrine(px, py, d_s, d_m, cfg.PATH_HW, 0.6) else 0
         for ln in self.lines.values():
-            self.jizo_line(ln, cfg.PATH_HW, rng)
+            self.jizo_line(ln, cfg.PATH_HW, rng, 40)            # das letzte Stück gehört den Laternen
         for ln in self.side_lines[:2 * len(cfg.ALTARS)]:
             self.jizo_line(ln, cfg.SIDE_HW, rng)
 
@@ -7402,18 +7605,28 @@ class _InaBuilder:
             if free(x, y, cfg.PATH_HW + 1.5):
                 self.rocks.append([x + self.C, y + self.C, rng.uniform(0.6, 1.9)])
         for _ in range(12000):
-            if len(self.plants) >= 3500:
+            if len(self.plants) >= 2400:
                 break
             x, y = rng.uniform(-R, R), rng.uniform(-R, R)
             if free(x, y, cfg.PATH_HW + 0.8):
                 self.plants.append([x + self.C, y + self.C, self.h(x, y), 1, rng.uniform(0.6, 1.2)])
-        self.brush = []                                    # Unterholz: nimmt die Sicht, Kollision nicht (dafür langsam)
-        for _ in range(16000):
-            if len(self.brush) >= 4200:
+        self.brush = []                                    # keine Büsche mehr: Farn- und Grasflecken, durchsichtig für Blick und Kugeln
+        self.patches = 0
+        for _ in range(9000):
+            if self.patches >= 1150:
                 break
             x, y = rng.uniform(-R, R), rng.uniform(-R, R)
-            if free(x, y, cfg.PATH_HW + cfg.BRUSH_KEEP):
-                self.brush.append((x + self.C, y + self.C, self.h(x, y), rng.uniform(1.0, 1.7)))
+            if not free(x, y, cfg.PATH_HW + cfg.BRUSH_KEEP):
+                continue
+            self.patches += 1
+            fern = rng.random() < 0.55
+            for _k in range(rng.randrange(3, 6)):              # ein Fleck: mehrere Pflanzen dicht beieinander
+                a, d = rng.uniform(0, 6.283), rng.uniform(0.0, 1.6)
+                px, py = x + math.cos(a) * d, y + math.sin(a) * d
+                if fern:
+                    self.plants.append([px + self.C, py + self.C, self.h(px, py), 1, rng.uniform(1.25, 1.75)])
+                else:
+                    self.plants.append([px + self.C, py + self.C, self.h(px, py), 0, rng.uniform(0.85, 1.15)])
 
     def make_points(self):
         cfg, C = self.cfg, self.C
@@ -18876,8 +19089,6 @@ def _build_scene(world, progress, inari):
     if inari:                                          # Bodenbewuchs in Blöcken: weit Entferntes fällt im Nebel weg
         for px_, py_, pz_, pk_, ps_ in world.map.get("plants") or ():
             plant(detail(px_, py_), px_, py_, pz_, pk_, ps_, rng)
-        for bx_, by_, bz_, bs_ in world.map.get("brush") or ():
-            inari_brush(detail(bx_, by_), bx_, by_, bz_, bs_, rng)
         for sx_, sy_, sz_, sk_, sc_, sr_ in world.map.get("sakura") or ():
             inari_sakura(chunk(sx_, sy_), sx_, sy_, sz_, sk_, sc_, sr_, rng)
 

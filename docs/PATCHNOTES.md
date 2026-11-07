@@ -30,6 +30,19 @@ Gilt für alle Modi und Karten. NET_VERSION 61 -> 62.
 
 Technik: `new_stats`, `new_track`, `AWARDS`, `pick_awards`, `rivals_won`, `stat_damage`, `stat_kill`, `stat_tick`, `skip_vote`, `skip_check`, `Ceremony`, `ceremony_spot`, `build_trophy`, `TROPHY_MAKERS`, Netz: `skip`, `skipvote`, `skipdone`, `stats` mit Awards.
 
+## Inari Temple Sanctuary: Farne statt Büsche, Schrein-Details, Laternen am Anweg (Robin, 2026-11-07)
+Gilt nur für diese Karte. NET_VERSION 63 -> 64. Grundriss, zwei Geschosse, Galerie, Buddhas und Feuerstelle sind unverändert.
+
+- **Keine Büsche mehr**: Die 4.200 blickdichten Büsche sind weg. Dafür rund 1.150 Flecken aus Farnen und hohem Gras, je 3-5 Pflanzen. Geduckt halb versteckt, aber durchsichtig; Kugeln gehen durch, wie vorher bei allem Bewuchs.
+- **Fachwerk**: kräftige dunkle Eckpfosten (statt rot) und schwere Geschossbalken, deren Enden über die Ecken hinausstehen. Felder mit Rahmen und senkrechter Lattung.
+- **Konsolen (Kumimono)**: dreifach gestufte Kragarme unter den Traufen der Arme und unter dem grossen Hallendach.
+- **Dach**: Ziegelreihen auf allen Flächen, Firste und Gratziegel, Firstziegel an den Giebeln. Die Traufen schwingen nach aussen und oben, an den Ecken stärker.
+- **Opferkasten** (Saisenbako) vor den Haupttoren Nord und Süd, hüfthoch, als Deckung nutzbar. Man geht links oder rechts daran vorbei.
+- **Steinlaternen**: 36 bemooste Tōrō auf den letzten rund 40 m jedes Hauptwegs, meist Kasuga-Form, jede dritte Reihe Yukimi (drei Beine, Schirmdach). Die Jizo-Paare beginnen dafür etwas früher.
+- **Wächterfüchse**: am Anfang jeder Laternenreihe ein Fuchspaar, Blick den Weg hinunter, daneben ein kleiner Hokora. Die Füchse und Altäre in den Weggabeln bleiben.
+
+Technik: `make_saisenbako`, `toro`, `make_approach`, `bracket`, Gruppen `tile`, `lantern`, `moss`, `trim`; `inari_brush` entfernt.
+
 ## Inari Temple Sanctuary: Serpentinen, Sichtlinien, Gipfelwald, Wegordnung (Robin, 2026-11-04)
 Gilt nur für diese Karte. NET_VERSION 60 -> 61. Fest bleiben Schrein, Feuerstelle, Nebenschreine, Ninja-Tomahawk und die Monster-Regel.
 
