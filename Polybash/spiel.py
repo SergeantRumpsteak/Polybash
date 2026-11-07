@@ -512,7 +512,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 65         # v65: Monster-Reiter (mk); Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 66         # v66: Schalldämpfer leiser (SILENCED_NOISE 15 = Erkennungsschwelle der Mitspieler); v65: Monster-Reiter (mk); Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -2410,8 +2410,13 @@ def has_buff(p, kind):
 # weit wie sie sehen, ein Schuss weckt ein ganzes Areal. Jede Waffe hat einen Lautstärke-Faktor (Weapon.loud).
 NOISE_CROUCH = 3.0        # geduckt: fast lautlos, nur direkt daneben
 NOISE_WALK = 10.0         # normal laufen: die nähere Umgebung
-SILENCED_NOISE = NOISE_WALK  # v48: Schuss mit Schalldämpfer - höchstens so laut wie ein laufender Spieler
 NOISE_RUN = 22.0          # sprinten: deutlich weiter
+SILENCED_NOISE = 15.0     # v66: Schuss mit Schalldämpfer - Schrittlärm zwischen Laufen (10) und Sprinten (22) statt 60 m
+                          # (v48-v65: = NOISE_WALK); daran erkennen Mitspieler auch einen gedämpften Schuss (Ton, Minimap)
+SILENCED_VOL = (0.4, 0.6) # v66: Lautstärke des gedämpften "Pfft" (eigener Schuss, fremder Schuss; vorher 0,55 / 0,75)
+SILENCED_FLASH = 0.35     # v66: Mündungsfeuer an der fremden Figur mit Schalldämpfer (Anteil der normalen Grösse)
+SILENCED_PING_HEAR = 6.0  # v66: m - gedämpfter Schuss erscheint nur, wenn du (bzw. ein Verbündeter) so nah dran bist
+SILENCED_PING_R = 4.0     # v66: m - kleiner Kreis auf der Minimap dafür (statt Lärmradius, auch unter ENEMY_PING_MIN_R)
 NOISE_SHOT = 60.0         # Schuss (x Weapon.loud: Pistole 0,75 ... Raketenwerfer 1,4)
 NOISE_EXPLOSION = 90.0    # Granate, Rakete, zerstörtes Fahrzeug
 NOISE_TOMAHAWK = 160.0    # Tomahawk-Einschlag
@@ -23901,6 +23906,22 @@ def mod_lines(mods):
 UI_LAYER_WINDOW = 300
 UI_LAYER_MENU = 400
 UI_LAYER_TIP = 480
+# v66: Maus-Hinweisfelder (Waffen-Stats usw.) bekommen einen eigenen Bin, der als allerletztes gezeichnet wird. Grund:
+# "flach" gebaute Seiten (Ausrüstungsmenü/Picker, Setup-Seite, Loadout-Fenster) liegen ohne Bin im Standard-2D-Bin,
+# und den zeichnet Panda3D NACH "fixed" - ein Hinweisfeld in "fixed" 480 lag deshalb hinter dem Ausrüstungsfenster.
+# Reihenfolge der Bins (Sortierung): ... fixed 40, unsorted 50, gui-popup 60 (Endbildschirm), UI_TIP_BIN 70.
+UI_TIP_BIN = "pb_tip"
+UI_TIP_BIN_SORT = 70
+
+
+def ui_tip_bin(np):
+    """v66: np (Hinweisfeld) in den obersten Bin legen; Inhalt in Bau-Reihenfolge, ohne Tiefe."""
+    bm = CullBinManager.getGlobalPtr()
+    if bm.findBin(UI_TIP_BIN) < 0:
+        bm.addBin(UI_TIP_BIN, CullBinManager.BT_fixed, UI_TIP_BIN_SORT)
+    np.setBin(UI_TIP_BIN, 0)
+    np.setDepthTest(False)
+    np.setDepthWrite(False)
 
 
 def ui_raise(parent, first, base):
@@ -24435,9 +24456,7 @@ class Tooltip:
         W = self.W
         H = 0.05 + sum(it[3] for it in self.items)
         self.root = self.parent.attachNewNode("tooltip")
-        self.root.setBin("fixed", UI_LAYER_TIP)          # v55: immer über Fenstern und Menüs (Inhalt in Bau-Reihenfolge)
-        self.root.setDepthTest(False)
-        self.root.setDepthWrite(False)
+        ui_tip_bin(self.root)                            # v66: eigener oberster Bin (vorher "fixed" UI_LAYER_TIP, v55)
         self._card(-0.006, 0.006, W + 0.012, H + 0.012, (0.75, 0.8, 0.88, 1.0))
         self._card(0, 0, W, H, (0.05, 0.06, 0.09, 1.0))
         y = -0.025
@@ -24542,10 +24561,7 @@ class LoadoutScreen:
 
     def __init__(self, game, on_close):
         self.g, self.on_close = game, on_close
-        self.root = game.aspect2d.attachNewNode("loadscreen")
-        self.root.setBin("fixed", UI_LAYER_WINDOW)       # v55: Fenster über dem HUD (Inhalt in Bau-Reihenfolge)
-        self.root.setDepthTest(False)
-        self.root.setDepthWrite(False)
+        self.root = self.new_root()
         self.rects = []                    # (x0, x1, z0, z1, Aktion, Rahmenknoten, Normalfarbe)
         self.texts = []
         self.open_slot = None              # None | "scope" | ("att", Primärwaffe?, Platz)
@@ -24554,6 +24570,15 @@ class LoadoutScreen:
         self.preview = None                # (Hauptwaffe?, Platz, Aufsatz) unter der Maus: wird in den Balken vorgezeigt
         self.tip = Tooltip(game.aspect2d)
         self.build()
+
+    def new_root(self):
+        """Fensterknoten: über dem HUD, Inhalt in Bau-Reihenfolge. v66: auch nach rebuild() - vorher verlor der neue Knoten
+        den Bin, das Fenster rutschte in den Standard-Bin und überdeckte die Hinweisfelder."""
+        root = self.g.aspect2d.attachNewNode("loadscreen")
+        root.setBin("fixed", UI_LAYER_WINDOW)            # v55: Fenster über dem HUD (Inhalt in Bau-Reihenfolge)
+        root.setDepthTest(False)
+        root.setDepthWrite(False)
+        return root
 
     @staticmethod
     def sb(np, n):
@@ -24600,7 +24625,7 @@ class LoadoutScreen:
             t.destroy()
         self.texts = []
         self.root.removeNode()
-        self.root = self.g.aspect2d.attachNewNode("loadscreen")
+        self.root = self.new_root()
         self.rects = []
         self.tips = []
         self.hover_idx = -1
@@ -28074,15 +28099,17 @@ class PlayerView:
             (nd.show if k == wi else nd.hide)()
         self.hl = held_hands(name)[1]
 
-    def fire(self, wi):
-        """Ein Schuss dieses Spielers: Mündungsfeuer blitzt kurz auf, die Waffe schlägt zurück."""
+    def fire(self, wi, sil=False):
+        """Ein Schuss dieses Spielers: Mündungsfeuer blitzt kurz auf, die Waffe schlägt zurück.
+        v66: sil = mit Schalldämpfer - nur ein kleiner Blitz (SILENCED_FLASH)."""
         if not (0 <= wi < len(WEAPONS)):
             return
         self.show_held(wi)
         fl = self.flash.get(wi)
         if fl is not None:
             fl.setR(random.uniform(0, 360))
-            fl.setScale(random.uniform(1.7, 2.6) * (1.5 if WEAPONS[wi].pellets > 1 else 1.0))
+            fl.setScale(random.uniform(1.7, 2.6) * (1.5 if WEAPONS[wi].pellets > 1 else 1.0)
+                        * (SILENCED_FLASH if sil else 1.0))
         self.flash_t = 0.06
         self.kick = 1.0
 
@@ -124306,8 +124333,10 @@ class Sfx:
         self.walk.clear()
 
     # ----- Ereignisse
-    def shot(self, wi, pid, pos=None):
-        """v56: pos = fester Ort (Smart-Decoy: klingt wie die Waffe, nie gedämpft)."""
+    def shot(self, wi, pid, pos=None, sil=None):
+        """v56: pos = fester Ort (Smart-Decoy: klingt wie die Waffe, nie gedämpft).
+        v66: sil = gedämpft (vom Host über den Lärmradius gemeldet); None: aus den eigenen bzw. Host-Aufsätzen. Mitspieler
+        kennen die Aufsätze der anderen nicht - ohne sil klang ein fremder gedämpfter Schuss beim Mitspieler voll laut."""
         g = self.game
         decoy = pos is not None
         pl = None if decoy else g.world.players.get(pid)
@@ -124318,9 +124347,12 @@ class Sfx:
             pos = None if own else (pl.x, pl.y, pl.z + 1.4)
         name = WEAPONS[wi].name if 0 <= wi < len(WEAPONS) else ""
         shooter = pl if pl is not None else (None if decoy else g.player)
-        if shooter is not None and att_silenced(wi, getattr(shooter, "att", {}).get(wi)):
-            # v48: Schalldämpfer - nur ein leises Zischen, das man bloss in der Nähe hört (Sfx.RANGE["silenced"])
-            self.play("silenced", pos, 0.55 if own else 0.75, g.prng.uniform(0.94, 1.06) * SILENCED_PITCH.get(mdl(name), 1.0))
+        if sil is None:
+            sil = shooter is not None and att_silenced(wi, getattr(shooter, "att", {}).get(wi))
+        if sil and not decoy:
+            # v48: Schalldämpfer - nur ein leises, dumpfes Zischen, das man bloss in der Nähe hört (Sfx.RANGE["silenced"])
+            self.play("silenced", pos, SILENCED_VOL[0] if own else SILENCED_VOL[1],
+                      g.prng.uniform(0.94, 1.06) * SILENCED_PITCH.get(mdl(name), 1.0))
             return
         kind, rate = {"Colt ACP": ("pistol", 1.0), "Revolver": ("pistol", 0.78), "Colt M4 Carbine": ("rifle", 1.0),
                       "MP9": ("rifle", 1.3), "Minigun": ("rifle", 1.12),
@@ -131933,13 +131965,17 @@ class Game(ShowBase):
         w = self.world
         return [p for pid, p in w.players.items() if w.allied(self.my_id, pid)]
 
-    def heard_noise(self, src, x, y, z, r):
+    def heard_noise(self, src, x, y, z, r, quiet=False):
         """10h: Ein anderer Spieler (src) macht lauten Lärm bei (x, y, z) mit Radius r. Hört man es (oder ein Verbündeter
         - ENEMY_PING_HEAR_ONLY), erscheint ein grober Kreis auf der Minimap; Mitte zufällig versetzt (der Gegner liegt
-        darin), höchstens alle ENEMY_PING_CD s je Gegner."""
+        darin), höchstens alle ENEMY_PING_CD s je Gegner.
+        v66: quiet = gedämpfter Schuss - nur wer bis SILENCED_PING_HEAR m dran ist, sieht einen kleinen Kreis
+        (SILENCED_PING_R), unabhängig von ENEMY_PING_HEAR_ONLY. Sonst taucht der Schütze nicht auf."""
         w = self.world
         if not ENEMY_PINGS or src is None or src < 0 or w.allied(self.my_id, src) or r <= 0:
             return
+        if quiet:
+            r = min(r, SILENCED_PING_HEAR)
         if not hasattr(self, "enemy_pings"):
             self.intel_reset()
         now = time.time()
@@ -131947,7 +131983,7 @@ class Game(ShowBase):
             return
         if z is None:
             z = w.height(x, y) + 1.0
-        if ENEMY_PING_HEAR_ONLY:
+        if ENEMY_PING_HEAR_ONLY or quiet:
             heard = False
             for p in self.intel_allies():
                 if p.hp <= 0:
@@ -131959,7 +131995,7 @@ class Game(ShowBase):
             if not heard:
                 return
         self.enemy_ping_last[src] = now
-        rr = max(ENEMY_PING_MIN_R, r)
+        rr = SILENCED_PING_R if quiet else max(ENEMY_PING_MIN_R, r)
         a, d = self.prng.uniform(0, 2 * math.pi), rr * ENEMY_PING_OFFSET * math.sqrt(self.prng.random())
         self.enemy_pings.append(dict(pid=src, x=x + math.cos(a) * d, y=y + math.sin(a) * d, r=rr, t0=now,
                                      mm=None, bm=None))
@@ -134452,17 +134488,18 @@ class Game(ShowBase):
                         v.start_reload(e[2])
             elif kind == "shotpos":         # fremder Schuss -> Punkt auf der Minimap
                 if e[1] != self.my_id:
+                    nr_ = e[4] if len(e) > 4 else NOISE_SHOT
+                    sil_ = nr_ <= SILENCED_NOISE + 0.01     # v66: gedämpft (der Host kennt die Aufsätze, Mitspieler nicht)
                     op = self.world.players.get(e[1])
                     if op is not None:
-                        self.sfx.shot(op.cur, e[1])
+                        self.sfx.shot(op.cur, e[1], sil=sil_)
                         v_ = self.player_views.get(e[1])
                         if v_ is not None:          # Mündungsfeuer und Rückstoss an der fremden Figur
-                            v_.fire(op.cur)
-                    self.heard_noise(e[1], e[2], e[3], e[5] if len(e) > 5 else None,
-                                     e[4] if len(e) > 4 else NOISE_SHOT)     # 10h: Lärm-Ping statt rotem Marker
-                    nr_ = e[4] if len(e) > 4 else NOISE_SHOT                 # v56: Trichter (gedämpft: nur im Lärmradius)
-                    self.funnel_event(("p", e[1], "shot"), e[1], e[2], e[3], "shot",
-                                      min(FUNNEL_SHOT_R, nr_) if nr_ <= SILENCED_NOISE + 0.01 else FUNNEL_SHOT_R)
+                            v_.fire(op.cur, sil_)
+                    self.heard_noise(e[1], e[2], e[3], e[5] if len(e) > 5 else None, nr_,   # 10h: Lärm-Ping statt Marker
+                                     quiet=sil_)
+                    self.funnel_event(("p", e[1], "shot"), e[1], e[2], e[3], "shot",      # v56: Trichter
+                                      SILENCED_PING_HEAR if sil_ else FUNNEL_SHOT_R)      # v66: gedämpft nur ganz nah
             elif kind == "lnoise":             # 10h: anderer lauter Lärm eines Spielers (Decoy, Geschütz)
                 self.heard_noise(e[1], e[2], e[3], e[4], e[5])
             elif kind == "lootdbg":            # LOOT_DEBUG: Chancen nach dem Öffnen (nur für den Spieler selbst)

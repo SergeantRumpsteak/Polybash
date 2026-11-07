@@ -2,6 +2,17 @@
 
 Neueste Änderungen oben.
 
+## Schalldämpfer wirklich leise, Waffen-Stats im Ausrüstungsmenü vorn (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 65 -> 66.
+
+- **Lärmradius mit Schalldämpfer**: 15 m (vorher 10 m) - zwischen Laufen (10 m) und Sprinten (22 m), statt der 43-84 m eines normalen Schusses. Monster hören den Schuss nur in diesem Umkreis.
+- **Ton bei Mitspielern**: Ein fremder gedämpfter Schuss klang bei Mitspielern bisher voll laut (sie kennen die Aufsätze der anderen nicht). Jetzt erkennt jeder den gedämpften Schuss am Lärmradius vom Host und hört nur das leise, dumpfe "Pfft" (bis etwa 16 m). Etwas leiser als bisher.
+- **Mündungsfeuer** an der fremden Figur mit Schalldämpfer nur noch ein kleiner Blitz (35 %).
+- **Minimap**: Ein gedämpfter Schuss erzeugt keinen roten Lärmkreis und keinen Trichter mehr - ausser du (oder ein Verbündeter) stehst bis 6 m daneben, dann ein kleiner Kreis (4 m). Ohne Schalldämpfer bleibt alles wie gehabt.
+- **Ausrüstungsmenü**: Die Waffen-Stats beim Hovern über eine Waffenkarte lagen hinter dem Ausrüstungsfenster. Alle Maus-Hinweisfelder liegen jetzt in einer eigenen, obersten Ebene: Spielwelt -> Fenster -> Hinweisfeld. Gilt auch für "Loadout konfigurieren"; dort verlor das Fenster nach jeder Slot-Auswahl seine Ebene, das ist ebenfalls behoben.
+
+Technik: `SILENCED_NOISE` (15), `SILENCED_VOL`, `SILENCED_FLASH`, `SILENCED_PING_HEAR`, `SILENCED_PING_R`; `Sfx.shot(sil=...)`, `PlayerView.fire(wi, sil)`, `Game.heard_noise(quiet=...)`, Erkennung im Ereignis `shotpos` über den Lärmradius (kein neues Netzfeld). UI: Bin `UI_TIP_BIN` ("pb_tip", Sortierung 70, nach `fixed` 40, Standard-2D 50 und `gui-popup` 60), `ui_tip_bin`, `LoadoutScreen.new_root`.
+
 ## Monster-Reiter in den Match-Einstellungen, Dutt am Hinterkopf (Robin, 2026-11-07)
 Gilt für alle Modi und Karten. NET_VERSION 64 -> 65.
 
