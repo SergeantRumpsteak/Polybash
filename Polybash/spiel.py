@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 62         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 63         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -2499,19 +2499,34 @@ FUNNEL_MIN = 0.32         # Mindestlänge (Anteil am Minimap-Radius), damit auch
 FUNNEL_ALPHA = 0.62       # Deckkraft am breiten Ende (Spitze bei dir fast durchsichtig)
 FUNNEL_COL = {"shot": (1.0, 0.36, 0.18), "spot": (1.0, 0.84, 0.22), "by": (1.0, 0.12, 0.12)}   # Decoy = wie Schuss
 
-# --- v56: Manhunt-King (Anti-Camp / High Value Target). Wer zu lange campt oder viele Kills in Folge macht, wird nach
-# einer Karenzzeit King: alle anderen sehen ihn regelmässig kurz als goldene Silhouette. Wer ihn erledigt, kassiert das
-# Kopfgeld: zwei verschiedene zufällige Hasen-Buffs mit KING_BUFF_K-facher Dauer.
-KING = True
-KING_CAMP_R = 10.0        # m: bleibt man in diesem Umkreis ...
-KING_CAMP_T = 60.0        # s: ... so lange, gilt das als Campen (in der KotH-Zone zählt die Zeit nicht)
-KING_STREAK = 6           # Spieler-Kills ohne eigenen Tod
-KING_GRACE = 10.0         # s Karenzzeit: Warnung nur an den Betroffenen; wer beim Campen weiterzieht, entgeht ihr
-KING_PULSE = 10.0         # s: so oft erscheint die Silhouette ...
-KING_SHOW_T = 3.0         # s: ... und so lange (blendet am Ende aus)
-KING_MIN_PLAYERS = 2      # erst ab so vielen Spielern (allein gibt es niemanden, der jagt)
-KING_BUFF_K = 2.0         # Kopfgeld: Buff-Dauer x so viel
-KING_COL = (1.0, 0.80, 0.18)    # Goldgelb der Silhouette
+# --- v57: Manhunt (High Value Target, nur Kill-Serien). Wer MANHUNT_STREAK Spieler-Kills ohne eigenen Tod schafft, auf
+# den wird ein Manhunt angesetzt: alle anderen sehen ihn regelmässig kurz als goldene Silhouette. Wer ihn erledigt,
+# kassiert das Kopfgeld: zwei verschiedene zufällige Hasen-Buffs mit MANHUNT_BUFF_K-facher Dauer. Schalter in den
+# Weiteren Einstellungen (World.manhunt_on). Campen bestraft jetzt das Harpyien-System (CAMP_*), nicht mehr der Manhunt.
+MANHUNT_STREAK = 6        # Spieler-Kills ohne eigenen Tod
+MANHUNT_PULSE = 10.0      # s: so oft erscheint die Silhouette ...
+MANHUNT_SHOW_T = 3.0      # s: ... und so lange (blendet am Ende aus)
+MANHUNT_MIN_PLAYERS = 2   # erst ab so vielen Spielern (allein gibt es niemanden, der jagt)
+MANHUNT_BUFF_K = 2.0      # Kopfgeld: Buff-Dauer x so viel
+MANHUNT_COL = (1.0, 0.80, 0.18)   # Goldgelb der Silhouette und der Anzeige
+
+# --- v57: Harpyien-Anti-Camp. Wer CAMP_T s im Umkreis CAMP_R um seinen Ankerpunkt bleibt, über dem kreisen Harpyien
+# und kreischen (3D-Ton) - kein HUD-Text, kein Schaden, unabhängig von der Monster-Einstellung. Wer sich mehr als CAMP_R
+# vom Anker entfernt (oder die KotH-Zone betritt, dort zählt die Zeit nicht), setzt Anker und Zeit zurück; die Harpyien
+# fliegen ab. Der Host schickt nur Statuswechsel (Ereignis "camp" + Feld im Snapshot), den Flug rechnet jeder selbst.
+CAMP_ON = True
+CAMP_R = 10.0             # m: bleibt man in diesem Umkreis ...
+CAMP_T = 60.0             # s: ... so lange, gilt das als Campen
+CAMP_MIN_PLAYERS = 2      # erst ab so vielen Spielern
+CAMP_HARPIES = (3, 4)     # so viele Harpyien je Camper (fest je Spieler-ID)
+CAMP_ORBIT_H = 10.0       # m über dem Spieler kreisen sie ...
+CAMP_ORBIT_R = (4.0, 5.0) # m: ... in diesem Radius (je Harpie)
+CAMP_ORBIT_T = 6.5        # s für eine Runde
+CAMP_IN_H = 50.0          # m über dem Spieler beginnt der Anflug ...
+CAMP_IN_T = 1.5           # s: ... und so lange dauert er
+CAMP_OUT_T = 2.4          # s: Abflug steil nach oben, dann ausgeblendet
+CAMP_SCALE = 1.6          # Grösse gegenüber der Monster-Harpie (von unten gut zu erkennen)
+CAMP_VOL = 0.85           # Lautstärke des Kreischens (Dauerschleife über dem Schwarm)
 
 # --- v56: Smart-Decoy - ahmt die Waffe des Werfers nach (Kadenz, Pausen, Nachladen, evtl. Kleinwaffe, Fake-Knall)
 DECOY_SEC_P = 0.4         # Chance, dass der Decoy zwischendurch zur Kleinwaffe "wechselt"
@@ -8067,6 +8082,7 @@ class World:
         bonus = bonus if isinstance(bonus, dict) else {}
         self.bonus_crates = bool(bonus.get("crates", True))      # Bonuskisten (Kisten auf der Karte, Titan-Kiste)
         self.bonus_hares = bool(bonus.get("hares", True))        # Bonushasen (Fluchttiere mit Beute)
+        self.manhunt_on = bool(bonus.get("manhunt", True))       # v57: Manhunt bei Kill-Serien (nur der Host wertet aus)
         self.ctf_ff = bool(ctf.get("ff", CTF_FF_DEFAULT))                  # Eigenbeschuss im CTF
         self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # Punktelimit (0 = aus)
         if mob_level is None:
@@ -9173,62 +9189,81 @@ class World:
         Waffenwahl) läuft über das Ereignis 'respawn'."""
         x, y = self.pick_spawn(pl.pid)
         pl.respawn(self, x, y, DEFAULT_LOADOUT)
-        pl.camp_at, pl.camp_t = None, 0.0                # v56: Camp-Messung beginnt neu
+        self.camp_clear(pl)                              # v57: Camp-Messung beginnt neu
         self.events.append(("respawn", pl.pid, round(x, 2), round(y, 2)))
 
-    # ------------------------------------------------------------ v56: Manhunt-King (Anti-Camp / High Value Target)
-    def king_update(self, dt, players):
-        """Campen messen (KING_CAMP_R / KING_CAMP_T, die KotH-Zone zählt nicht) und Kill-Serien prüfen. Erfüllt jemand
-        eine Bedingung, läuft die Karenzzeit KING_GRACE (Warnung nur an ihn; wer beim Campen weiterzieht, entgeht
-        ihr). Danach ist er King bis zu seinem Tod: alle KING_PULSE s geht "kingping" an alle (goldene Silhouette)."""
-        if not KING or self.phase != "play" or getattr(self, "lobby", False):
+    # ------------------------------------------------------------ v57: Manhunt (High Value Target)
+    def manhunt_update(self, dt, players):
+        """Kill-Serien prüfen: Wer MANHUNT_STREAK Spieler-Kills ohne eigenen Tod hat, auf den wird ein Manhunt angesetzt
+        (Ereignis "hunt" an alle). Er bleibt bis zu seinem Tod; alle MANHUNT_PULSE s geht "huntping" an alle (goldene
+        Silhouette). Ausgeschaltet (manhunt_on) oder ausserhalb der Spielphase laufende Manhunts enden ohne Kopfgeld."""
+        live = self.manhunt_on and self.phase == "play" and not getattr(self, "lobby", False)
+        if not live:
+            for pl in players:
+                if pl.hunt:
+                    pl.hunt, pl.hunt_t = 0, 0.0
+                    self.events.append(("hunt", pl.pid, 0))
             return
-        enough = sum(1 for p in players if not p.prespawn) >= KING_MIN_PLAYERS
+        enough = sum(1 for p in players if not p.prespawn) >= MANHUNT_MIN_PLAYERS
         for pl in players:
             if pl.hp <= 0 or pl.prespawn:
                 continue
-            here = (pl.x, pl.y, pl.z)
-            if (pl.camp_at is None or math.dist(here, pl.camp_at) > KING_CAMP_R
-                    or (self.mode == "koth" and self.in_zone(pl))):
-                pl.camp_at, pl.camp_t = here, 0.0
-            else:
-                pl.camp_t += dt
-            if pl.king == 2:
-                pl.king_t -= dt
-                if pl.king_t <= 0:
-                    pl.king_t = KING_PULSE
-                    self.events.append(("kingping", pl.pid, KING_SHOW_T))
-                continue
-            why = "camp" if pl.camp_t >= KING_CAMP_T else ("streak" if pl.streak >= KING_STREAK else "")
-            if pl.king == 1:
-                if not why:                              # weitergezogen: Warnung zurückgenommen
-                    pl.king, pl.king_t = 0, 0.0
-                    self.events.append(("king", pl.pid, 0, "ok"))
-                    continue
-                pl.king_t -= dt
-                if pl.king_t <= 0:
-                    pl.king, pl.king_t, pl.king_why = 2, 0.0, why    # erste Silhouette gleich im nächsten Schritt
-                    self.events.append(("king", pl.pid, 2, why))
-            elif why and enough:
-                pl.king, pl.king_t, pl.king_why = 1, KING_GRACE, why
-                self.events.append(("king", pl.pid, 1, why, KING_GRACE))
+            if pl.hunt:
+                pl.hunt_t -= dt
+                if pl.hunt_t <= 0:
+                    pl.hunt_t = MANHUNT_PULSE
+                    self.events.append(("huntping", pl.pid, MANHUNT_SHOW_T))
+            elif enough and pl.streak >= MANHUNT_STREAK:
+                pl.hunt, pl.hunt_t = 1, 0.0              # erste Silhouette gleich im nächsten Schritt
+                self.events.append(("hunt", pl.pid, 1))
 
-    def king_on_death(self, pl, k):
-        """Tod: Serie und Camp-Messung zurück. War er King und hat ihn ein Gegner erledigt, bekommt der das Kopfgeld:
-        zwei verschiedene zufällige Hasen-Buffs mit KING_BUFF_K-facher Dauer."""
-        pl.streak, pl.camp_at, pl.camp_t = 0, None, 0.0
+    def manhunt_on_death(self, pl, k):
+        """Tod: Serie zurück, Harpyien fliegen ab. Lief ein Manhunt auf ihn und hat ihn ein Gegner erledigt, bekommt der
+        das Kopfgeld: zwei verschiedene zufällige Hasen-Buffs mit MANHUNT_BUFF_K-facher Dauer."""
+        pl.streak = 0
+        self.camp_clear(pl)
         enemy = k is not None and k is not pl and not self.allied(k.pid, pl.pid)
         if enemy:
             k.streak += 1
-        if pl.king:
-            was = pl.king
-            pl.king, pl.king_t = 0, 0.0
-            self.events.append(("king", pl.pid, 0, "dead"))
-            if was == 2 and enemy and k.hp > 0:
+        if pl.hunt:
+            pl.hunt, pl.hunt_t = 0, 0.0
+            self.events.append(("hunt", pl.pid, 0))
+            if enemy and k.hp > 0:
                 kinds = self.mrng.sample(BUFF_KINDS, 2)
-                self.give_buff(k, kinds[0], 1, KING_BUFF_K)
-                self.give_buff(k, kinds[1], 2, KING_BUFF_K)
+                self.give_buff(k, kinds[0], 1, MANHUNT_BUFF_K)
+                self.give_buff(k, kinds[1], 2, MANHUNT_BUFF_K)
                 self.events.append(("bounty", k.pid, pl.pid, kinds[0], kinds[1]))
+
+    # ------------------------------------------------------------ v57: Harpyien-Anti-Camp (Host)
+    def camp_set(self, pl, on):
+        """Status wechseln und genau dann einmal an alle melden (kein Senden je Bild; den Flug rechnet jeder selbst)."""
+        on = 1 if on else 0
+        if pl.harpies != on:
+            pl.harpies = on
+            self.events.append(("camp", pl.pid, on))
+
+    def camp_clear(self, pl):
+        pl.camp_at, pl.camp_t = None, 0.0
+        self.camp_set(pl, 0)
+
+    def camp_update(self, dt, players):
+        """Campen messen: CAMP_T s im Umkreis CAMP_R um den Ankerpunkt -> Harpyien an. Weiter als CAMP_R weg oder in der
+        KotH-Zone -> neuer Anker, Zeit 0, Harpyien ab. Hängt nicht an der Monster-Einstellung."""
+        live = CAMP_ON and self.phase == "play" and not getattr(self, "lobby", False)
+        enough = live and sum(1 for p in players if not p.prespawn) >= CAMP_MIN_PLAYERS
+        for pl in players:
+            if not enough or pl.hp <= 0 or pl.prespawn:
+                self.camp_clear(pl)
+                continue
+            here = (pl.x, pl.y, pl.z)
+            if (pl.camp_at is None or math.dist(here, pl.camp_at) > CAMP_R
+                    or (self.mode == "koth" and self.in_zone(pl))):
+                pl.camp_at, pl.camp_t = here, 0.0
+                self.camp_set(pl, 0)
+                continue
+            pl.camp_t += dt
+            if pl.camp_t >= CAMP_T:
+                self.camp_set(pl, 1)
 
     # ------------------------------------------------------------ 11: Capture the Flag
     def ctf_cfg(self):
@@ -10035,7 +10070,7 @@ class World:
         mk, mo = getattr(self, "death_src", None) or (None, -1)
         self.events.append(("kill", k.pid if k is not None else -1, pl.pid, wi,
                             KINDS.index(mk) if mk in KINDS else -1, mo))      # v56: + Monsterart, Beschwörer
-        self.king_on_death(pl, k)                        # v56: Manhunt-King - Status endet, evtl. Kopfgeld
+        self.manhunt_on_death(pl, k)                     # v57: Manhunt endet, evtl. Kopfgeld; Harpyien fliegen ab
 
     def head_mult(self, wi):
         try:
@@ -11564,7 +11599,7 @@ class World:
 
     def give_buff(self, pl, kind=None, slot=1, k=1.0):
         """Fluchttier erlegt: ein zufälliger Buff (Tempo, Schaden, Tank). v56: slot 2 = zweiter Buff gleichzeitig
-        (Kopfgeld auf den King), k = Faktor auf die Dauer."""
+        (Kopfgeld beim Manhunt), k = Faktor auf die Dauer."""
         if pl is None or pl.hp <= 0:
             return
         if kind is None:
@@ -13578,6 +13613,11 @@ class World:
             if f.state == "carried":
                 f.state, f.carrier = "dropped", -1
         self.phase, self.over_t, self.time_left = "over", OVER_T, 0.0
+        for pl in self.players.values():                 # v57: Manhunt endet ohne Kopfgeld, Harpyien fliegen ab
+            if pl.hunt:
+                pl.hunt, pl.hunt_t = 0, 0.0
+                self.events.append(("hunt", pl.pid, 0))
+            self.camp_clear(pl)
         self.bullets, self.grenades, self.rocks = [], [], []
         self.smokes, self.fires, self.airdrops = [], [], []
         self.clear_gadgets()
@@ -13667,6 +13707,7 @@ class World:
             pl.stats = new_stats()
             pl.track = new_track()
             pl.ready = False
+            pl.streak = 0                                # v57: Kill-Serie (Manhunt) gilt nur innerhalb einer Runde
         self.ctf_balance()                               # 11: Teams (nur im CTF), Flaggen auf Anfang
         self.ctf_reset() if self.mode == "ctf" else self.flags.clear()
         for pl in list(self.players.values()):          # alle wählen erst ihre Ausrüstung und drücken dann auf Spawn
@@ -13809,12 +13850,13 @@ class World:
                 if pl.buff_t <= 0:
                     self.end_buff(pl, 1)
                     self.events.append(("buffend", pl.pid, 1))
-            if pl.buff2 is not None:                     # v56: zweiter Buff (Kopfgeld auf den King)
+            if pl.buff2 is not None:                     # v56: zweiter Buff (Kopfgeld beim Manhunt)
                 pl.buff2_t -= dt
                 if pl.buff2_t <= 0:
                     self.end_buff(pl, 2)
                     self.events.append(("buffend", pl.pid, 2))
-        self.king_update(dt, players)                    # v56: Manhunt-King
+        self.manhunt_update(dt, players)                 # v57: Manhunt (Kill-Serien)
+        self.camp_update(dt, players)                    # v57: Harpyien-Anti-Camp
         self.ctf_update(dt)                              # CTF: Flaggen aufnehmen, tragen, abgeben
         if self.phase == "play":
             self.time_left -= dt
@@ -14269,12 +14311,12 @@ class Player:
         self.stun_t = 0.0                 # Betäubung (Drohne): s
         self.stun_lock = 0.0              # Betäubung + Immunität danach (nur Host): solange keine neue
         self.buff, self.buff_t = None, 0.0   # Buff vom Fluchttier: "speed" | "damage" | "tank", Restzeit
-        self.buff2, self.buff2_t = None, 0.0  # v56: zweiter Buff gleichzeitig (Kopfgeld auf den King)
-        self.king = 0                        # v56: 0 = nichts, 1 = Karenzzeit läuft (Warnung), 2 = King
-        self.king_t = 0.0                    # v56: Restzeit der Karenzzeit bzw. bis zur nächsten Silhouette
-        self.king_why = ""                   # v56: "camp" | "streak"
-        self.camp_t = 0.0                    # v56: Sekunden im Umkreis KING_CAMP_R um camp_at
+        self.buff2, self.buff2_t = None, 0.0  # v56: zweiter Buff gleichzeitig (Kopfgeld beim Manhunt)
+        self.hunt = 0                        # v57: 1 = Manhunt auf diesen Spieler angesetzt
+        self.hunt_t = 0.0                    # v57: Restzeit bis zur nächsten Silhouette
+        self.camp_t = 0.0                    # v57: Sekunden im Umkreis CAMP_R um camp_at (nur Host)
         self.camp_at = None
+        self.harpies = 0                     # v57: 1 = Harpyien kreisen über ihm (Anti-Camp)
         self.streak = 0                      # v56: Spieler-Kills seit dem letzten eigenen Tod
         self.gear = {sl: None for sl in GEAR_SLOTS}   # Ausrüstung je Slot (Index in GEAR)
         self.shield_hp, self.shield_t = 0.0, 99.0   # Schild: Stand, s seit dem letzten Schildschaden (7c: Teile laden ihn)
@@ -25535,6 +25577,9 @@ class MorePage(SetupPage):
     def tm_on(self):
         return bool(self.g.cfg.get("tomahawk", True))
 
+    def mh_on(self):
+        return bool(self.g.bonus_cfg()["manhunt"])       # v57
+
     def bonus_on(self, k):
         """Ankreuzfeld k (0 = Bonuskisten, 1 = Bonushasen) angekreuzt?"""
         return bool(self.g.bonus_cfg()["crates" if k == 0 else "hares"])
@@ -25559,9 +25604,12 @@ class MorePage(SetupPage):
             if tag == "lb":
                 return self.MODE_OFF if off else (self.MODE_ON if on else (self.BTN_H if h else self.BTN))
             return self.DIM if off else (self.YELLOW if on else (Hot.ON if h else Hot.BASE))
-        if tag in ("tf", "tb", "tt"):                      # Tomahawk an / aus
+        if tag in ("tf", "tb", "tt", "hf", "hb", "ht"):    # Tomahawk an / aus, v57: Manhunt an / aus
             k = int(num)
-            on, h = (k == 0) == self.tm_on(), hov == "tm" + num
+            mh = tag[0] == "h"
+            on = (k == 0) == (self.mh_on() if mh else self.tm_on())
+            h = hov == ("mh" if mh else "tm") + num
+            tag = "t" + tag[1]
             if tag == "tf":
                 return self.SEL if on else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
             if tag == "tb":
@@ -25616,12 +25664,16 @@ class MorePage(SetupPage):
             self.text(f"lt{k}", name, x0 + bw / 2, 0.525, 0.048)
             self.hit(f"lv{k}", x0, x0 + bw, 0.497, 0.597, lambda k=k: g.set_cfg("mobs", k))
         self.text(None, "TOMAHAWK", X0, 0.40, 0.034, self.GREY, "l")
-        for k, name in enumerate(("An", "Aus")):
-            x0, x1 = (X0, -0.01) if k == 0 else (0.01, X1)
-            self.rect(f"tf{k}", x0 - 0.008, x1 + 0.008, 0.245, 0.355)
-            self.rect(f"tb{k}", x0, x1, 0.253, 0.347)
-            self.text(f"tt{k}", name, (x0 + x1) / 2, 0.275, 0.05)
-            self.hit(f"tm{k}", x0, x1, 0.253, 0.347, lambda k=k: g.set_cfg("tomahawk", k == 0))
+        self.text(None, "MANHUNT (KILL-SERIEN)", 0.01, 0.40, 0.034, self.GREY, "l")    # v57
+        bw = (X1 - X0 - 0.06 - 0.04) / 4.0
+        for j, (tag, hit, key) in enumerate((("t", "tm", "tomahawk"), ("h", "mh", "mh"))):
+            for k, name in enumerate(("An", "Aus")):
+                x0 = X0 + j * (2 * bw + 0.06) + k * (bw + 0.02)
+                x1 = x0 + bw
+                self.rect(f"{tag}f{k}", x0 - 0.008, x1 + 0.008, 0.245, 0.355)
+                self.rect(f"{tag}b{k}", x0, x1, 0.253, 0.347)
+                self.text(f"{tag}t{k}", name, (x0 + x1) / 2, 0.275, 0.05)
+                self.hit(f"{hit}{k}", x0, x1, 0.253, 0.347, lambda k=k, key=key: g.set_cfg(key, k == 0))
         for key, label, lo, hi, step, ticks, fmt, z in self.SLIDERS:
             self.text(None, label, X0, z, 0.034, self.GREY, "l")
             v = self.value(key)
@@ -25650,12 +25702,14 @@ class MorePage(SetupPage):
         self.rect("b_done", X0, X1, -0.745, -0.66)
         self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
         self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
-        self.text(None, "Tasten:  1-5 = Monster    T = Tomahawk an/aus    Esc = zurück", 0, -0.84, 0.028, self.GREY)
+        self.text(None, "Tasten:  1-5 = Monster    T = Tomahawk an/aus    M = Manhunt an/aus    Esc = zurück", 0, -0.84,
+                  0.028, self.GREY)
 
     # ---- Aktualisieren
     def update(self, force=False):
         c = self.g.cfg
-        key = (self.lvl(), self.tm_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag, self.g.cfg_is_mc(),
+        key = (self.lvl(), self.tm_on(), self.mh_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag,
+               self.g.cfg_is_mc(),
                tuple(self.g.bonus_cfg().values()))
         if force or key != self.key:
             self.key = key
@@ -26573,7 +26627,7 @@ class HostSession:
                         ((p.gadget if p.gad_out and p.hp > 0 else -1) if p.pid == 0 else p.hold_gad),
                         getattr(p, "gren_hold", -1),
                         BUFF_KINDS.index(p.buff2) if p.buff2 in BUFF_KINDS else -1, r1(p.buff2_t),   # v56
-                        int(getattr(p, "king", 0))]
+                        int(getattr(p, "hunt", 0)), int(getattr(p, "harpies", 0))]     # v57: Manhunt, Harpyien
                        for p in w.players.values()],
                 "mb": [[m.id, KINDS.index(m.kind), r2(m.x), r2(m.y), r2(m.z), r1(m.heading),
                         STATES.index(m.state), r1(m.hp), r2(m.speed_now), r2(m.atk_t),
@@ -26867,17 +26921,18 @@ class ClientSession:
             hg = row[27] if len(row) > 27 else -1
             gh = row[28] if len(row) > 28 and isinstance(row[28], int) else -1
             buff = BUFF_KINDS[bi] if isinstance(bi, int) and 0 <= bi < len(BUFF_KINDS) else None
-            b2i = row[29] if len(row) > 29 else -1                                   # v56: zweiter Buff, King
+            b2i = row[29] if len(row) > 29 else -1                                   # v56: zweiter Buff; v57: Manhunt
             buff2 = BUFF_KINDS[b2i] if isinstance(b2i, int) and 0 <= b2i < len(BUFF_KINDS) else None
             b2t = float(row[30]) if len(row) > 30 else 0.0
             kg = row[31] if len(row) > 31 and isinstance(row[31], int) else 0
+            hy = row[32] if len(row) > 32 and isinstance(row[32], int) else 0      # v57: Harpyien (Anti-Camp)
             if pid == self.my_id:
                 self.hp = hp                       # Position bestimmt der Spieler selbst
                 me = w.players.get(pid)
                 if me is not None:
                     me.kills, me.deaths, me.score, me.protect = kl, de, sc, prot
                     me.buff, me.buff_t, me.max_hp = buff, bt, float(mx)
-                    me.buff2, me.buff2_t, me.king = buff2, b2t, kg
+                    me.buff2, me.buff2_t, me.hunt, me.harpies = buff2, b2t, kg, hy
                     me.gear, me.shield_hp = gear, shp      # Ausrüstung und Schild entscheidet der Host
                     me.melee = mel                         # welche Nahkampfwaffe (ziehen tut man selbst)
                     if time.time() - me.ready_set > 0.7:
@@ -26894,7 +26949,7 @@ class ClientSession:
             pl.look = lk if look_valid(lk) else ""
             pl.kills, pl.deaths, pl.score, pl.protect = kl, de, sc, prot
             pl.stun_t, pl.buff, pl.buff_t, pl.max_hp = st, buff, bt, float(mx)
-            pl.buff2, pl.buff2_t, pl.king = buff2, b2t, kg
+            pl.buff2, pl.buff2_t, pl.hunt, pl.harpies = buff2, b2t, kg, hy
             pl.gear, pl.shield_hp, pl.jet_on = gear, shp, jet == 1
             pl.cling = jet == 2
             pl.melee, pl.melee_out = mel, mout
@@ -28229,6 +28284,26 @@ def synth_sounds():
     # Inari: Kampfschrei des Ninjas und eigener Kriegstakt für den Anflug (Eigenkomposition, Schleife)
     out["kiai"] = norm(voiced(0.16, 300, 420, 420, 2100) + [0.0] * int(0.02 * SR) + voiced(0.5, 520, 300, 800, 1250, 0.2), 0.85)
     out["warbeat"] = war_beat(rng)
+    # v57: Harpyien-Anti-Camp - rauer Schrei (Krächzen eines grossen Vogels, eher Kranich/Krähe als Raubvogel) und eine
+    # nahtlose 4-s-Schleife aus mehreren Schreien mit Flügelschlag darunter
+    def cry(dur, f0a, f0b, fa=1250, fb=2700):
+        v_ = voiced(dur, f0a, f0b, fa, fb, 0.45)
+        rough = [0.5 + 0.5 * abs(math.sin(tp * 41.0 * i / SR + 2.2 * math.sin(tp * 6.5 * i / SR))) for i in range(len(v_))]
+        n_ = len(v_)
+        bell = [math.sin(math.pi * i / n_) ** 0.6 for i in range(n_)]
+        return mix((mul(v_, rough), 1.0), (mul(sweep(n_, 3300, 2100, 5), bell), 0.18))
+    out["harpy_cry"] = norm(delay(cry(0.5, 860, 560), 0.09, 0.22), 0.85)
+    n = 4 * SR
+    hl = [0.0] * n
+    for t0_, d_, fa_, fb_, g_ in ((0.10, 0.46, 900, 600, 1.0), (1.25, 0.24, 1050, 820, 0.7), (1.62, 0.38, 760, 520, 0.85),
+                                  (2.85, 0.55, 940, 580, 1.0)):
+        c_ = cry(d_, fa_, fb_)
+        o_ = int(t0_ * SR)
+        for i, v in enumerate(c_):
+            if o_ + i < n:
+                hl[o_ + i] += v * g_
+    flap = mul(lowpass(noise(n), 0.08), [abs(math.sin(math.pi * 2.5 * i / SR)) ** 3 for i in range(n)])   # 10 Schläge
+    out["harpy_loop"] = norm(mix((hl, 1.0), (flap, 0.9)), 0.85)
     # 9c: Essen - Biss mit Kauen (knuspriges Knacken, dann dumpfes Kauen) und der grosse Rülpser
     n = int(0.55 * SR)
     ch = [0.0] * n
@@ -123307,6 +123382,254 @@ def build_supply_crate():
     return root
 
 
+class AntiCampManager:
+    """v57: Harpyien über Campern (nur Darstellung und Ton, kein Schaden, unabhängig von der Monster-Einstellung).
+    Der Host schickt nur, OB über einem Spieler Harpyien kreisen (Player.harpies, Ereignis "camp"); den Flug rechnet jeder
+    Client selbst aus der Spielerposition: Anflug von CAMP_IN_H m herab (CAMP_IN_T s), Kreisen CAMP_ORBIT_H m über dem Kopf
+    im Radius CAMP_ORBIT_R, Abflug steil nach oben (CAMP_OUT_T s) und ausblenden. Die Modelle liegen versteckt in einem
+    Pool (einmal erzeugt, danach nur ein-/ausgeblendet); Layout und Phasen hängen an der Spieler-ID, also überall gleich."""
+    POOL_N = 8                            # zwei Schwärme gleichzeitig ohne Nachbauen
+
+    def __init__(self, game):
+        self.g = game
+        self.free = []                    # versteckte Harpyien
+        self.flocks = {}                  # Spieler-ID -> Schwarm
+        self.rng = random.Random(57)
+        for _ in range(self.POOL_N):
+            b = self.make_bird()
+            if b is None:
+                break
+            self.free.append(b)
+
+    # ---- Pool
+    def make_bird(self):
+        try:
+            root, torso, wl, wr, bar, _fg = build_mob("harpy")
+        except Exception:
+            return None
+        bar.hide()
+        root.reparentTo(self.g.render)
+        root.setScale(CAMP_SCALE)
+        root.setTransparency(TransparencyAttrib.MAlpha)
+        root.hide()
+        return {"np": root, "torso": torso, "wl": wl, "wr": wr, "pos": (0.0, 0.0, 0.0)}
+
+    def take(self):
+        return self.free.pop() if self.free else self.make_bird()
+
+    def give_back(self, b):
+        if b["np"].isEmpty():
+            return
+        b["np"].hide()
+        b["np"].setColorScale(1, 1, 1, 1)
+        self.free.append(b)
+
+    def destroy(self):
+        """Spielende/Neustart: Töne aus, Knoten weg (cleanup_scene hat sie meist schon entfernt)."""
+        for f in self.flocks.values():
+            self.stop_sound(f)
+            for b in f["birds"]:
+                if not b["np"].isEmpty():
+                    b["np"].removeNode()
+        for b in self.free:
+            if not b["np"].isEmpty():
+                b["np"].removeNode()
+        self.flocks, self.free = {}, []
+
+    # ---- Bahn
+    def center(self, pid):
+        """Mitte des Kreises: die gezeichnete Figur (geglättet), sonst die Spielerposition."""
+        g = self.g
+        p = g.world.players.get(pid) if g.world is not None else None
+        if p is None:
+            return None
+        v = g.player_views.get(pid) if pid != g.my_id else None
+        if v is not None and not v.root.isEmpty():
+            q = v.root.getPos(g.render)
+            return (q[0], q[1], q[2])
+        return (p.x, p.y, p.z)
+
+    @staticmethod
+    def orbit(b, c, t):
+        a = t * (2.0 * math.pi / CAMP_ORBIT_T) + b["ph"]
+        z = c[2] + CAMP_ORBIT_H + b["dz"] + 0.5 * math.sin(t * 1.3 + b["ph"] * 2.0)
+        return (c[0] + math.cos(a) * b["r"], c[1] + math.sin(a) * b["r"], z), math.degrees(a)
+
+    @staticmethod
+    def heading_of(dx, dy, old):
+        return math.degrees(math.atan2(-dx, dy)) if dx * dx + dy * dy > 1e-6 else old
+
+    def pose(self, b, t, mode):
+        """Flügel: Sturzflug angelegt, Kreisen mit Schlag und Gleiten, Abflug schneller Schlag mit Nase nach oben."""
+        if mode == "dive":
+            b["torso"].setP(-38.0)
+            b["wl"].setHpr(62.0, 0.0, 12.0)
+            b["wr"].setHpr(-62.0, 0.0, -12.0)
+            return
+        fast = mode == "climb"
+        glide = 1.0 if fast or math.sin(t * 0.5 + b["ph"] * 3.0) > -0.4 else 0.15
+        f_ = 38.0 * math.sin(t * (12.0 if fast else 5.5) + b["ph"] * 5.0) * glide
+        b["torso"].setP(28.0 if fast else 0.0)
+        b["wl"].setHpr(0.0, 0.0, f_)
+        b["wr"].setHpr(0.0, 0.0, -f_)
+
+    # ---- Schwarm an / ab
+    def fly_in(self, pid, c, now):
+        f = self.flocks.get(pid)
+        if f is None:
+            n = CAMP_HARPIES[0] + (pid % (CAMP_HARPIES[1] - CAMP_HARPIES[0] + 1))
+            r_ = random.Random(pid * 7919 + 57)             # gleiches Layout auf allen Rechnern
+            birds = []
+            for i in range(n):
+                b = self.take()
+                if b is None:
+                    break
+                b.update(ph=2.0 * math.pi * i / n + r_.uniform(-0.3, 0.3), r=r_.uniform(*CAMP_ORBIT_R),
+                         dz=r_.uniform(-0.7, 0.7), h=0.0)
+                k_ = 2.5
+                b["pos"] = (c[0] + math.cos(b["ph"]) * b["r"] * k_, c[1] + math.sin(b["ph"]) * b["r"] * k_,
+                            c[2] + CAMP_IN_H + r_.uniform(0.0, 6.0))
+                b["np"].setPos(*b["pos"])
+                b["np"].setColorScale(1, 1, 1, 0)
+                b["np"].show()
+                birds.append(b)
+            f = self.flocks[pid] = {"birds": birds, "snd": None, "cry": 0.4, "vol": 0.0}
+        f["mode"], f["t0"], f["c"] = "in", now, c
+        for b in f["birds"]:
+            b["p0"] = b["pos"]                               # auch mitten im Abflug: von dort wieder herab
+        self.start_sound(f)
+
+    def fly_out(self, f, now):
+        f["mode"], f["t0"] = "out", now
+        for b in f["birds"]:
+            hr = math.radians(b["h"])
+            b["p0"], b["dir"] = b["pos"], (-math.sin(hr), math.cos(hr))
+
+    # ---- Ton
+    def start_sound(self, f):
+        sfx = self.g.sfx
+        if f["snd"] is not None or not sfx.ok or sfx.muted:
+            return
+        try:
+            snd, node = sfx.make("harpy_loop")
+            snd.setLoop(True)
+            snd.setVolume(0.0)
+            snd.play()
+            f["snd"] = (snd, node)
+        except Exception:
+            f["snd"] = None
+
+    def stop_sound(self, f):
+        if f.get("snd") is None:
+            return
+        snd, node = f["snd"]
+        f["snd"] = None
+        try:
+            snd.stop()
+            node.removeNode()
+        except Exception:
+            pass
+
+    def sound(self, f, dt):
+        """Dauerschleife über der Mitte des Schwarms (3D), Lautstärke blendet mit An- und Abflug; dazu ab und zu ein
+        einzelner Schrei von einer der Harpyien."""
+        sfx = self.g.sfx
+        if not sfx.ok or sfx.muted:
+            self.stop_sound(f)
+            return
+        if f["snd"] is None and f["mode"] != "out":
+            self.start_sound(f)
+        bs = f["birds"]
+        if not bs:
+            return
+        mid = tuple(sum(b["pos"][k] for b in bs) / len(bs) for k in range(3))
+        want = CAMP_VOL * f["fade"]
+        f["vol"] += (want - f["vol"]) * min(1.0, dt * 6.0)
+        if f["snd"] is not None:
+            snd, node = f["snd"]
+            vol = f["vol"]
+            if sfx.a3d is None:                              # ohne 3D-Ton: Entfernung von Hand
+                d = math.dist(mid, sfx.cam())
+                lo, hi = sfx.MIN["harpy_loop"], sfx.RANGE["harpy_loop"]
+                vol *= 1.0 if d <= lo else max(0.0, 1.0 - (d - lo) / (hi - lo)) ** 1.6
+            try:
+                node.setPos(*mid)
+                snd.setVolume(max(0.0, min(1.0, vol)))
+                if snd.status() != 2:
+                    snd.play()
+            except Exception:
+                pass
+        f["cry"] -= dt
+        if f["cry"] <= 0 and f["fade"] > 0.3:
+            f["cry"] = self.rng.uniform(1.8, 4.2)
+            b = self.rng.choice(bs)
+            sfx.play("harpy_cry", b["pos"], 0.9 * f["fade"], self.rng.uniform(0.88, 1.15))
+
+    # ---- je Bild
+    def update(self, dt):
+        g = self.g
+        w = g.world
+        if w is None:
+            return
+        now = ClockObject.getGlobalClock().getRealTime()
+        want = {pid for pid, p in w.players.items()
+                if getattr(p, "harpies", 0) and p.hp > 0 and not getattr(p, "prespawn", False)}
+        for pid in want:
+            f = self.flocks.get(pid)
+            if f is None or f["mode"] == "out":
+                c = self.center(pid)
+                if c is not None:
+                    self.fly_in(pid, c, now)
+        for pid, f in self.flocks.items():
+            if f["mode"] != "out" and pid not in want:
+                self.fly_out(f, now)
+        for pid in list(self.flocks):
+            f = self.flocks[pid]
+            t = now - f["t0"]
+            if f["mode"] != "out":
+                c = self.center(pid) or f["c"]
+                f["c"] = c
+            done = False
+            if f["mode"] == "in":
+                s_ = min(1.0, t / CAMP_IN_T)
+                e_ = 1.0 - (1.0 - s_) ** 3                   # schnell herab, sanft in die Kreisbahn
+                f["fade"] = min(1.0, t / 0.4)
+                for b in f["birds"]:
+                    tgt, h_orb = self.orbit(b, c, now)
+                    p0 = b["p0"]
+                    pos = tuple(p0[k] + (tgt[k] - p0[k]) * e_ for k in range(3))
+                    b["h"] = self.heading_of(pos[0] - b["pos"][0], pos[1] - b["pos"][1], b["h"]) if s_ < 0.85 else h_orb
+                    b["pos"] = pos
+                    b["np"].setPosHpr(pos[0], pos[1], pos[2], b["h"], 0.0, -22.0 * s_)
+                    b["np"].setColorScale(1, 1, 1, min(1.0, t / 0.25))
+                    self.pose(b, now, "dive" if s_ < 0.75 else "orbit")
+                if s_ >= 1.0:
+                    f["mode"] = "orbit"
+            elif f["mode"] == "orbit":
+                f["fade"] = 1.0
+                for b in f["birds"]:
+                    b["pos"], b["h"] = self.orbit(b, c, now)
+                    b["np"].setPosHpr(b["pos"][0], b["pos"][1], b["pos"][2], b["h"], 0.0, -22.0)  # legt sich in die Kurve
+                    b["np"].setColorScale(1, 1, 1, 1)
+                    self.pose(b, now, "orbit")
+            else:
+                f["fade"] = max(0.0, 1.0 - t / CAMP_OUT_T)
+                a_ = max(0.0, min(1.0, (CAMP_OUT_T - t) / 0.6))
+                for b in f["birds"]:
+                    p0, (fx, fy) = b["p0"], b["dir"]
+                    b["pos"] = (p0[0] + fx * 7.0 * t, p0[1] + fy * 7.0 * t, p0[2] + 4.0 * t + 14.0 * t * t)
+                    b["np"].setPosHpr(b["pos"][0], b["pos"][1], b["pos"][2], b["h"], 0.0, 0.0)
+                    b["np"].setColorScale(1, 1, 1, a_)
+                    self.pose(b, now, "climb")
+                done = t >= CAMP_OUT_T
+            self.sound(f, dt)
+            if done:
+                self.stop_sound(f)
+                for b in f["birds"]:
+                    self.give_back(b)
+                del self.flocks[pid]
+
+
 class Sfx:
     """Geräusche: Schüsse, Schritte, Explosionen, Helikopter. Positionsabhängig (Lautstärke und Richtung)
     über OpenAL; fehlt eine Audioausgabe, läuft das Spiel ohne Ton weiter."""
@@ -123317,7 +123640,7 @@ class Sfx:
             "squeak": 2, "scan": 2, "charge": 2, "rumble": 2, "buildup": 2, "rip": 1,
             "swoosh": 3, "slash": 3, "bong": 2, "swing": 2, "thud": 2,
             "chew": 2, "burp": 1, "ring": 1, "glass": 3, "pin": 2, "silenced": 4, "minispin": 3, "sonic": 2,
-            "rasp": 2, "giggle": 2, "roar": 1}
+            "rasp": 2, "giggle": 2, "roar": 1, "harpy_cry": 4}
     RANGE = {"step_soft": 28.0, "step_hard": 32.0, "pistol": 160.0, "rifle": 190.0, "shotgun": 170.0,
              "heavy": 260.0, "railgun": 260.0, "rocket": 180.0, "explosion": 320.0, "heli": 260.0,
              "click": 50.0, "reload": 50.0, "servo": 90.0, "whistle": 700.0, "jet": 2500.0, "zap": 80.0, "whiz": 20.0,
@@ -123326,7 +123649,8 @@ class Sfx:
              "rip": 150.0, "whoosh": 45.0, "swoosh": 18.0, "slash": 22.0, "bong": 45.0, "swing": 60.0, "thud": 70.0,
              "falls": WF_RANGE, "chew": 14.0, "burp": PAN_BURP_R, "scrape": 30.0,
              "ring": 9999.0, "fire": 30.0, "gas": 26.0, "plane": 900.0, "glass": 60.0, "pin": 12.0, "silenced": 16.0,
-             "minispin": 40.0, "sonic": 420.0, "rasp": 34.0, "giggle": 30.0, "roar": 160.0}
+             "minispin": 40.0, "sonic": 420.0, "rasp": 34.0, "giggle": 30.0, "roar": 160.0,
+             "harpy_cry": 90.0, "harpy_loop": 75.0}
     MIN = {"step_soft": 3.0, "step_hard": 3.0, "pistol": 12.0, "rifle": 14.0, "shotgun": 14.0,
            "heavy": 20.0, "railgun": 20.0, "rocket": 14.0, "explosion": 30.0, "heli": 18.0,
            "click": 40.0, "reload": 40.0, "servo": 6.0, "whistle": 120.0, "jet": 150.0, "zap": 8.0, "whiz": 6.0,
@@ -123335,7 +123659,8 @@ class Sfx:
            "rip": 30.0, "whoosh": 6.0, "swoosh": 3.0, "slash": 3.0, "bong": 6.0, "swing": 8.0, "thud": 10.0,
            "falls": 6.0, "chew": 2.0, "burp": 4.0, "scrape": 3.0,
            "ring": 9999.0, "fire": 3.0, "gas": 3.0, "plane": 140.0, "glass": 6.0, "pin": 2.0, "silenced": 2.0,
-           "minispin": 3.0, "sonic": 40.0, "rasp": 4.0, "giggle": 3.0, "roar": 25.0}
+           "minispin": 3.0, "sonic": 40.0, "rasp": 4.0, "giggle": 3.0, "roar": 25.0,
+           "harpy_cry": 10.0, "harpy_loop": 12.0}
 
     def __init__(self, game):
         self.game = game
@@ -125066,7 +125391,7 @@ class Game(ShowBase):
         self.loadout = list(DEFAULT_LOADOUT) + [ATT_NONE, ATT_NONE, SC_IRON]   # [Hauptwaffe, Kleinwaffe, Gadget, Visier, Aufsätze Haupt, Aufsätze Klein, v52: Visier Kleinwaffe] für den nächsten Spawn
         self.scopes = dict(DEFAULT_SCOPE)     # gewähltes Visier je Primärwaffe
         self.feed = []                        # Kill-Anzeige (v56: Einträge als dict, siehe feed_add / feed_kill)
-        self.v56_reset()                      # v56: Kill-Log, Flugkamera, King
+        self.v56_reset()                      # v56: Kill-Log, Flugkamera; v57: Manhunt, Harpyien
         self.pings = {}                       # Minimap: Spieler-ID -> (Zeit, x, y) des letzten Schusses
         self.mm_level = 2                     # Minimap-Zoomstufe (Index in MM_LEVELS)
         self.toast_later = None
@@ -125798,10 +126123,12 @@ class Game(ShowBase):
 
     def bonus_cfg(self):
         """Bonuskisten (Kisten auf der Karte, goldene Titan-Kiste) und Bonushasen (Fluchttiere mit Beute) an/aus.
-        Nicht gewählt (None): in allen Modi an. Die Weiteren Einstellungen schalten beides aus und an."""
+        Nicht gewählt (None): in allen Modi an. Die Weiteren Einstellungen schalten beides aus und an.
+        v57: dazu der Manhunt bei Kill-Serien (ebenfalls Standard an)."""
         c = self.cfg
-        bc, bh = c.get("bcr"), c.get("bha")
-        return {"crates": True if bc is None else bool(bc), "hares": True if bh is None else bool(bh)}
+        bc, bh, mh = c.get("bcr"), c.get("bha"), c.get("mh")
+        return {"crates": True if bc is None else bool(bc), "hares": True if bh is None else bool(bh),
+                "manhunt": True if mh is None else bool(mh)}
 
     def world_rules(self):
         """(Spielmodus der Welt, Pistolenstart) aus den Einstellungen. Experimental ist Deathmatch mit Pistolenstart."""
@@ -126005,6 +126332,8 @@ class Game(ShowBase):
         if self.menu_state == "setup2":
             if ch in "tT":
                 self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
+            elif ch in "mM":                              # v57: Manhunt an/aus
+                self.set_cfg("mh", not self.bonus_cfg()["manhunt"])
             return
         if self.menu_state == "setup3":                   # 11: CTF-Regeln
             if ch in "fF":
@@ -126134,6 +126463,7 @@ class Game(ShowBase):
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
         c["bcr"], c["bha"] = bool(w.bonus_crates), bool(w.bonus_hares)
+        c["mh"] = bool(getattr(w, "manhunt_on", True))       # v57
         self.map_list = list_maps()
         if c.get("map") not in [pp for _n, pp in self.map_list]:
             c["map"] = None
@@ -126228,6 +126558,7 @@ class Game(ShowBase):
             w.place_toma()
         b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
         w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
+        w.manhunt_on = b_["manhunt"]                    # v57: Manhunt gilt sofort
         w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc and not w.dev)
         if self.host is not None:
             self.host.send_cfg()
@@ -126989,6 +127320,10 @@ class Game(ShowBase):
                     if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
                         w.place_toma()                         # Säule wieder hochfahren lassen
 
+                def set_manhunt():                          # v57: wirkt sofort (laufende Manhunts enden ohne Kopfgeld)
+                    w.manhunt_on = not w.manhunt_on
+                    self.cfg["mh"] = w.manhunt_on
+
                 def set_bonus(which):
                     if which == "crates":
                         w.bonus_crates = not w.bonus_crates
@@ -127000,6 +127335,7 @@ class Game(ShowBase):
                 items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
                                  lambda k: (set_mobs(k), self.show_pause(kind))),
                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
+                         (f"Manhunt bei Kill-Serien:  {'an' if w.manhunt_on else 'aus'}", do(set_manhunt)),
                          (f"Bonuskisten:  {'an' if w.bonus_crates else 'aus'}   (ab der nächsten Runde)",
                           do(lambda: set_bonus("crates"))),
                          (f"Bonushasen:  {'an' if w.bonus_hares else 'aus'}   (ab der nächsten Runde)",
@@ -127284,7 +127620,7 @@ class Game(ShowBase):
         self.land_np = None
         self.lost_text = None
         self.feed, self.pings = [], {}
-        self.v56_reset()                           # v56: Kill-Log, Flugkamera, King
+        self.v56_reset()                           # v56: Kill-Log, Flugkamera; v57: Manhunt, Harpyien
         self.intel_reset()
         for sp in (self.sp_back, self.sp_pitch, self.sp_roll, self.sp_cam, self.sp_hurt, self.sw_h, self.sw_p):
             sp.x = sp.v = 0.0
@@ -127555,7 +127891,7 @@ class Game(ShowBase):
             world.lobby = True                     # beim Client bis zum ersten Snapshot; danach gilt der Wert des Hosts
         self.refresh_fp_arms()                   # Hände/Ärmel in der Ego-Ansicht im gewählten Aussehen
         self.feed, self.pings = [], {}
-        self.v56_reset()                           # v56: Kill-Log, Flugkamera, King
+        self.v56_reset()                           # v56: Kill-Log, Flugkamera; v57: Manhunt, Harpyien
         self.intel_reset()
         if mode == "client":
             self.client = ClientSession(attempt.conn, world, self.my_id, attempt.extra)
@@ -128297,8 +128633,8 @@ class Game(ShowBase):
                                       shadow=(0, 0, 0, 0.9), mayChange=True)
         self.strike_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.2), scale=0.065,
                                         fg=(1, 0.25, 0.15, 1), shadow=(0, 0, 0, 0.95), mayChange=True)
-        self.king_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.29), scale=0.05,   # v56: King
-                                      fg=KING_COL + (1,), shadow=(0, 0, 0, 0.95), font=BOLD_FONT, mayChange=True)
+        self.hunt_text = OnscreenText(text="", parent=self.a2dTopCenter, pos=(0, -0.29), scale=0.05,   # v57: Manhunt
+                                      fg=MANHUNT_COL + (1,), shadow=(0, 0, 0, 0.95), font=BOLD_FONT, mayChange=True)
         self.build_combat_panel()                         # v56: Combat-Panel des Todesbildschirms
         self._txt = {}
 
@@ -131118,16 +131454,17 @@ class Game(ShowBase):
                 if old[key] is not None:
                     old[key][0].removeNode()
 
-    # ------------------------------------------------------------ v56: Kill-Log, Todes-Sequenz, Combat-Panel, King
+    # ------------------------------------------------------------ v56: Kill-Log, Todes-Sequenz, Combat-Panel, Manhunt
     def v56_reset(self):
-        """Neues Spiel: Kill-/Schadens-Log, Flugkamera, King-Silhouetten (die Knoten räumt cleanup_scene ab)."""
+        """Neues Spiel: Kill-/Schadens-Log, Flugkamera, Manhunt-Silhouetten, Harpyien (die Knoten räumt cleanup_scene ab)."""
         self.kill_log = []                         # [{t, k (Täter/Beschwörer oder -1), v, icon, mk}]
         self.dmg_log = []                          # [(Zeit, Angreifer, Opfer, HP)] - nur mit eigener Beteiligung
         self.dcam = None
         self.self_view = None
-        self.king_show = {}                        # Spieler-ID -> sichtbar bis (Zeit)
-        self.king_sil = {}                         # Spieler-ID -> (Halter, Ziel-Knoten)
-        self.king_warn_until = 0.0
+        self.hunt_show = {}                        # v57: Spieler-ID -> Silhouette sichtbar bis (Zeit)
+        self.hunt_sil = {}                         # Spieler-ID -> (Halter, Ziel-Knoten)
+        self.hunt_since = {}                       # Spieler-ID -> Beginn des Manhunts (Zeit), für die Anzeige oben
+        self.anticamp_reset()                      # v57: Harpyien-Pool neu (die alten Knoten räumt cleanup_scene ab)
         self.jump_block = False
         self.jump_prev = False
         self.hist_open = False
@@ -131348,7 +131685,7 @@ class Game(ShowBase):
         cm2 = CardMaker("cp_bar")
         cm2.setFrame(0, 0.008, -0.66, 0.62)
         bar = root.attachNewNode(cm2.generate())
-        bar.setColor(*KING_COL, 1)
+        bar.setColor(*MANHUNT_COL, 1)
 
         def txt(z, sc, col=(1, 1, 1), x=0.04, align=TextNode.ALeft, font=None):
             kw = {"font": font} if font is not None else {}
@@ -131494,50 +131831,64 @@ class Game(ShowBase):
         self.jump_block = True
         self.do_respawn()
 
-    # --- Manhunt-King (Darstellung)
-    def king_event(self, e):
+    # --- v57: Manhunt (Darstellung)
+    def hunt_event(self, e):
         kind, pid = e[0], e[1]
         now = time.time()
-        if not hasattr(self, "king_show"):
+        if not hasattr(self, "hunt_show"):
             self.v56_reset()
-        if kind == "kingping":
-            self.king_show[pid] = now + (float(e[2]) if len(e) > 2 else KING_SHOW_T)
+        if kind == "huntping":
+            self.hunt_show[pid] = now + (float(e[2]) if len(e) > 2 else MANHUNT_SHOW_T)
             if pid == self.my_id:
-                self.toast("Deine Silhouette ist für alle sichtbar!", KING_COL, 1.6)
+                self.toast("Deine Silhouette ist für alle sichtbar!", MANHUNT_COL, 1.6)
             return
         if kind == "bounty":
             k_, v_ = e[1], e[2]
             self.feed_add(f"{self.pname(k_)} kassiert das Kopfgeld auf {self.pname(v_)}")
             if k_ == self.my_id and len(e) > 4:
                 self.toast(f"KOPFGELD: {BUFF_NAMES.get(e[3], e[3])} + {BUFF_NAMES.get(e[4], e[4])}  (doppelte Dauer)",
-                           KING_COL, 3.5)
+                           MANHUNT_COL, 3.5)
                 self.sfx.ui_click()
             return
-        st = e[2] if len(e) > 2 else 0                   # ("king", Spieler, Zustand, Grund[, Karenzzeit])
-        why = e[3] if len(e) > 3 else ""
+        on = bool(e[2]) if len(e) > 2 else False         # ("hunt", Spieler, 1 = angesetzt / 0 = vorbei)
         p = self.world.players.get(pid)
         if p is not None:
-            p.king = st
-        if st != 2:
-            self.king_show.pop(pid, None)
+            p.hunt = 1 if on else 0
+        if not on:
+            self.hunt_show.pop(pid, None)
+            self.hunt_since.pop(pid, None)
+            return
+        self.hunt_since[pid] = now
         if pid == self.my_id:
-            if st == 1:
-                g_ = float(e[4]) if len(e) > 4 else KING_GRACE
-                self.king_warn_until = now + g_
-                self.toast(("Du campst zu lange - beweg dich, sonst wirst du markiert!" if why == "camp" else
-                            "Kill-Serie! Gleich bist du der King - Kopfgeld auf dich"), (1.0, 0.6, 0.25), 3.0)
-            elif st == 2:
-                self.king_warn_until = 0.0
-                self.toast("DU BIST DER KING - alle sehen regelmässig deine Silhouette", KING_COL, 3.5)
-            elif why == "ok":
-                self.king_warn_until = 0.0
-                self.toast("Markierung abgewendet", (0.7, 1.0, 0.7), 1.8)
-            else:
-                self.king_warn_until = 0.0
-        elif st == 2 and p is not None:
-            self.feed_add(f"{p.name} ist der King - Kopfgeld: 2 Buffs")
+            self.toast("Ein Manhunt wurde auf dich angesetzt.", MANHUNT_COL, 3.5)
 
-    def king_target(self, p):
+    # --- v57: Harpyien-Anti-Camp (Darstellung)
+    def anticamp_reset(self):
+        """Neues Spiel: Harpyien-Pool neu anlegen (Modelle einmal laden, versteckt)."""
+        old = getattr(self, "anticamp", None)
+        if old is not None:
+            old.destroy()
+        try:
+            self.anticamp = AntiCampManager(self)
+        except Exception as e:                             # Darstellung darf nie das Spiel verhindern
+            print("Harpyien nicht verfügbar:", e)
+            self.anticamp = None
+
+    def update_anticamp(self):
+        ac = getattr(self, "anticamp", None)
+        if ac is None:
+            return
+        now = time.time()
+        dt = min(0.1, max(0.0, now - getattr(self, "anticamp_t", now)))
+        self.anticamp_t = now
+        try:
+            ac.update(dt)
+        except Exception as e:
+            print("Harpyien:", e)
+            ac.destroy()
+            self.anticamp = None
+
+    def hunt_target(self, p):
         """Knoten, dessen Silhouette gezeigt wird: Figur, im Heli der Heli, im Wagen der Wagen."""
         w = self.world
         if p.heli >= 0:
@@ -131553,35 +131904,35 @@ class Game(ShowBase):
         v = self.player_views.get(p.pid)
         return v.root if v is not None else None
 
-    def update_king_view(self):
-        """Goldene Silhouette des Kings (durch Wände sichtbar, genaue Haltung - gleiche Figur als Instanz) für die
-        Dauer eines Pings; dazu ein goldener Punkt auf der Minimap. Ausserdem die eigene King-Anzeige."""
-        if not hasattr(self, "king_show"):
+    def update_hunt_view(self):
+        """Goldene Silhouette des Gejagten (durch Wände sichtbar, genaue Haltung - gleiche Figur als Instanz) für die
+        Dauer eines Pings; dazu ein goldener Punkt auf der Minimap. Oben in der Mitte die Manhunt-Anzeige."""
+        if not hasattr(self, "hunt_show"):
             self.v56_reset()
         now, w = time.time(), self.world
-        for pid in list(self.king_sil):
-            until = self.king_show.get(pid, 0.0)
+        for pid in list(self.hunt_sil):
+            until = self.hunt_show.get(pid, 0.0)
             p = w.players.get(pid)
-            tgt = self.king_target(p) if (p is not None and until > now and p.hp > 0) else None
-            hold, old = self.king_sil[pid]
+            tgt = self.hunt_target(p) if (p is not None and until > now and p.hp > 0) else None
+            hold, old = self.hunt_sil[pid]
             if tgt is None or tgt != old or hold.isEmpty():
                 if not hold.isEmpty():
                     hold.removeNode()
-                del self.king_sil[pid]
-        for pid, until in list(self.king_show.items()):
+                del self.hunt_sil[pid]
+        for pid, until in list(self.hunt_show.items()):
             p = w.players.get(pid)
             if until <= now or p is None or p.hp <= 0:
-                self.king_show.pop(pid, None)
+                self.hunt_show.pop(pid, None)
                 continue
             if pid == self.my_id:
                 continue
-            if pid not in self.king_sil:
-                tgt = self.king_target(p)
+            if pid not in self.hunt_sil:
+                tgt = self.hunt_target(p)
                 if tgt is None:
                     continue
-                hold = self.render.attachNewNode("king_sil")
+                hold = self.render.attachNewNode("hunt_sil")
                 tgt.instanceTo(hold)
-                hold.setColor(*KING_COL, 0.6, 1001)
+                hold.setColor(*MANHUNT_COL, 0.6, 1001)
                 hold.setTransparency(TransparencyAttrib.MAlpha, 1001)
                 hold.setDepthTest(False, 1001)
                 hold.setDepthWrite(False, 1001)
@@ -131590,41 +131941,44 @@ class Game(ShowBase):
                 hold.setTextureOff(1001)
                 hold.setFogOff(1001)
                 hold.setShaderOff(1001)
-                self.king_sil[pid] = (hold, tgt)
-            hold = self.king_sil[pid][0]
+                self.hunt_sil[pid] = (hold, tgt)
+            hold = self.hunt_sil[pid][0]
             left = until - now
-            a = min(1.0, (KING_SHOW_T - left) / 0.2, left / 0.6) if left < KING_SHOW_T else 1.0
+            a = min(1.0, (MANHUNT_SHOW_T - left) / 0.2, left / 0.6) if left < MANHUNT_SHOW_T else 1.0
             pulse = 0.82 + 0.18 * math.sin(now * 9.0)
             hold.setColorScale(1, 1, 1, max(0.0, a) * pulse)
         # goldene Punkte auf der Minimap
-        dots = getattr(self, "mm_king", None)
+        dots = getattr(self, "mm_hunt", None)
         if dots is None:
-            dots = self.mm_king = {}
+            dots = self.mm_hunt = {}
         shown = set()
-        for pid in self.king_show:
+        for pid in self.hunt_show:
             p = w.players.get(pid)
             if p is None or pid == self.my_id or not hasattr(self, "mm_dot_factory"):
                 continue
             pp = self.mm_xy(p.x, p.y)
             n = dots.get(pid)
             if n is None or n.isEmpty():
-                n = dots[pid] = self.mm_dot_factory(0.016, KING_COL + (1,))
+                n = dots[pid] = self.mm_dot_factory(0.016, MANHUNT_COL + (1,))
             n.setPos(pp[0], 0, pp[1])
             n.show()
             shown.add(pid)
         for pid, n in list(dots.items()):
             if pid not in shown and not n.isEmpty():
                 n.hide()
-        # eigener Status
-        me = w.players.get(self.my_id)
-        kt = getattr(self, "king_text", None)
-        if kt is not None and me is not None:
-            if me.hp > 0 and getattr(me, "king", 0) == 2:
-                self.set_text(kt, "KING  -  Kopfgeld auf dich")
-                kt.setFg(KING_COL + (0.75 + 0.25 * math.sin(now * 4.0),))
-            elif me.hp > 0 and getattr(me, "king", 0) == 1 and self.king_warn_until > now:
-                self.set_text(kt, f"Markierung in {int(math.ceil(self.king_warn_until - now))} s")
-                kt.setFg((1.0, 0.6, 0.25, 1))
+        # Anzeige oben in der Mitte: eigener Manhunt, sonst die laufenden Manhunts auf andere
+        kt = getattr(self, "hunt_text", None)
+        if kt is not None:
+            me = w.players.get(self.my_id)
+            hunted = [p for p in w.players.values() if getattr(p, "hunt", 0) and p.hp > 0 and not p.prespawn]
+            if me is not None and me.hp > 0 and getattr(me, "hunt", 0):
+                self.set_text(kt, "MANHUNT  -  Kopfgeld auf dich")
+                kt.setFg(MANHUNT_COL + (0.75 + 0.25 * math.sin(now * 4.0),))
+            elif hunted:
+                names = ", ".join(p.name for p in hunted if p.pid != self.my_id)
+                fresh = any(now - self.hunt_since.get(p.pid, 0.0) < 4.0 for p in hunted)
+                self.set_text(kt, f"Ein Manhunt wurde ausgerufen auf {names}" if names else "")
+                kt.setFg(MANHUNT_COL + ((0.75 + 0.25 * math.sin(now * 6.0)) if fresh else 0.8,))
             else:
                 self.set_text(kt, "")
 
@@ -134022,8 +134376,12 @@ class Game(ShowBase):
                 if e[1] == self.my_id:
                     self.toast(f"{GEAR[e[3]].name} sperrt den Slot {GEAR_SLOT_NAMES[GEAR[e[2]].slot]}",
                                (1.0, 0.7, 0.4), 2.0)
-            elif kind in ("king", "kingping", "bounty"):     # v56: Manhunt-King
-                self.king_event(e)
+            elif kind in ("hunt", "huntping", "bounty"):     # v57: Manhunt
+                self.hunt_event(e)
+            elif kind == "camp":                             # v57: Harpyien-Anti-Camp (Statuswechsel)
+                p_ = self.world.players.get(e[1])
+                if p_ is not None and len(e) > 2:
+                    p_.harpies = 1 if e[2] else 0
             elif kind == "shieldhit":
                 if len(e) > 3:                  # v56: Schild-Schaden zählt im Schadens-Log mit
                     self.note_damage(e[3], e[1], e[2])
@@ -134743,7 +135101,8 @@ class Game(ShowBase):
         for pid in [pid for pid in self.player_views if pid not in others]:
             self.player_views.pop(pid).root.removeNode()
         self.update_self_view(dt)                            # v56: eigene Figur in der Todes-Sequenz
-        self.update_king_view()                              # v56: King-Silhouetten
+        self.update_hunt_view()                              # v57: Manhunt-Silhouetten
+        self.update_anticamp()                               # v57: Harpyien über Campern
         self.update_ctf(dt)                                  # 11: Flaggen, Ringe, CTF-HUD
 
         # Partikel (Hülsen, Splitter, Blut): Wurfparabel + Abprallen am Gelände

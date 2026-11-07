@@ -2,6 +2,20 @@
 
 Neueste Änderungen oben.
 
+## Manhunt statt King, Harpyien gegen Camper (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 62 -> 63.
+
+- **Manhunt** (vorher "Manhunt-King"): Das Wort King ist raus, damit es nicht mit King of the Hill verwechselt wird. Ausgelöst wird er nur noch durch **6 Spieler-Kills ohne eigenen Tod**, sofort, ohne Karenzzeit. Campen löst ihn nicht mehr aus.
+- **Anzeige**: Der Gejagte bekommt "Ein Manhunt wurde auf dich angesetzt." und oben dauerhaft "MANHUNT - Kopfgeld auf dich". Alle anderen sehen oben in der Mitte "Ein Manhunt wurde ausgerufen auf [Name]", solange er läuft (die ersten Sekunden pulsierend).
+- Silhouette alle 10 s für 3 s, goldener Punkt auf der Minimap und Kopfgeld (zwei Buffs, doppelte Dauer) bleiben wie gehabt. Der Manhunt endet mit dem Tod, am Rundenende oder wenn der Host ihn ausschaltet (dann ohne Kopfgeld). Kill-Serien beginnen jede Runde neu.
+- **Schalter**: Weitere Einstellungen -> "Manhunt (Kill-Serien)" An/Aus (Taste M), ausserdem in den Rundeneinstellungen im Pausenmenü (wirkt sofort) und nach der Runde. Standard: an.
+- **Harpyien gegen Camper** (ersetzt die Camp-Bestrafung mit Silhouette): Wer **60 s im 10-m-Umkreis** seines Ankerpunkts bleibt, über dem kreisen 3-4 Harpyien rund 10 m über dem Kopf im Radius 4-5 m und kreischen (3D-Ton aus ihrer Position, für den Camper und alle in der Nähe hörbar). Kein HUD-Text, kein Killfeed, kein Schaden.
+- **Anflug und Abflug**: Die Harpyien stossen aus rund 50 m Höhe in 1,5 s herab und gehen in die Kreisbahn. Wer sich mehr als 10 m vom Anker entfernt, setzt die Zeit zurück; die Harpyien steigen steil auf und verschwinden. Ebenso beim Tod und am Rundenende.
+- **KotH-Zone**: Wer in der Zone steht, campt nicht (Zeit wird sofort zurückgesetzt).
+- Die Harpyien hängen **nicht** an der Monster-Einstellung, sie erscheinen auch bei "Monster aus" und auf dem Testgelände. Erst ab 2 Spielern.
+
+Technik: `World.manhunt_update` / `manhunt_on_death`, `World.camp_update` / `camp_set` / `camp_clear`, `World.manhunt_on`, `Player.hunt` / `hunt_t` / `harpies` / `camp_at` / `camp_t`, Ereignisse `hunt`, `huntping`, `bounty`, `camp` (nur bei Statuswechsel), Snapshot-Feld 32 = Harpyien; `AntiCampManager` (Pool aus 8 Modellen, Kreisbahn aus Spielerposition und Spieler-ID), `Game.hunt_event`, `update_hunt_view`, `anticamp_reset`, `update_anticamp`; Töne `harpy_cry`, `harpy_loop`. Zum Nachjustieren: `MANHUNT_*`, `CAMP_*`.
+
 ## Siegerehrung nach der Runde: 13 Goldpokale, verbrannte Pokale, Skip-Abstimmung (Robin, 2026-11-06)
 Gilt für alle Modi und Karten. NET_VERSION 61 -> 62.
 
