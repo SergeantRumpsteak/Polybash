@@ -508,7 +508,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 61         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 62         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -554,6 +554,7 @@ CTF_PTS_MAX = 10         # Punktelimit im Host-Menü: 0 (aus) .. so viele Punkte
 CTF_FF_DEFAULT = False   # Eigenbeschuss (Standard aus)
 CTF_MOBS_DEFAULT = 0     # Monster im CTF: aus
 CTF_TOMA_DEFAULT = True  # Tomahawk im CTF: wie in allen Modi an
+TOMA_ROOM_DEFAULT = True # Polytown: Tomahawk wird im Kontrollraum des Tunnelsystems gestartet (False: Säulen an der Oberfläche)
 HUD_MARGIN = 0.05        # einheitlicher Abstand der HUD-Elemente zum Bildrand
 MC_MODES = ("dm", "experimental")   # Modi, die auf Minecraft-Karten erlaubt sind
 LIMIT_MIN, LIMIT_MAX = 1, 60             # Zeitlimit: Bereich des Sliders in Minuten
@@ -2090,9 +2091,9 @@ SECONDARIES = (0, 4, 5)        # wählbare Kleinwaffen
 LOOT_WEAPONS = (6, 7, 8, 16)   # nur aus Lootkisten (Spezialwaffen)
 GAD_C4, GAD_CLAY, GAD_BEACON = 0, 1, 2
 GADGETS = ("C4", "Claymore", "Funkbake")       # wählbares Gadget (zusätzlich zu Haupt- und Kleinwaffe)
-GAD_INFO = ("3 Ladungen: Rechtsklick klebt sie an Wände, Boden, Fahrzeuge - Linksklick zündet alle",
-            "3 Minen: Rechtsklick stellt sie auf den Boden - wer drüberläuft, ist sofort tot",
-            "3 Baken: Rechtsklick stellt sie auf - zeigt Spieler in der Nähe auf der Minimap. Wer im Wirkungsbereich seiner eigenen Bake steht, wird im Kontrollraum nicht aufgeklärt")
+GAD_INFO = ("3 Ladungen: kleben an Wänden, Boden und Fahrzeugen - Linksklick zündet alle",
+            "3 Minen: liegen auf dem Boden - wer drüberläuft, ist sofort tot",
+            "3 Baken: zeigt Spieler in der Nähe auf der Minimap. Wer im Wirkungsbereich seiner eigenen Bake steht, wird im Kontrollraum nicht aufgeklärt")
 GAD_SHORT = ("3x  kleben und zünden", "3x  Mine: sofort tot", "3x  zeigt Spieler auf der Karte")
 GAD_START = 3                  # Stück pro Leben
 
@@ -3283,6 +3284,733 @@ def pt_rail_boxes():
     return out
 
 
+PT_WIN_T = 0.04                       # Dicke der Fensterscheiben-Quader in der Karte (Blender: stadt.py, fensterschmuck)
+PT_WIN_PLANK = 0.2                    # Brettabstand bei halb zugenagelten Fenstern
+
+
+def pt_window_plan(boxes):
+    """Fenster der Polytown-Häuser: In der Karte sind die Scheiben dunkle, undurchsichtige Quader (0,04 m dick). Hier wird jedes
+    Fenster gefunden, hinter dem die Wand wirklich offen ist (Fensterattrappen in massiven Blöcken bleiben, wie sie sind), und
+    festgelegt - nach der Lage, also bei allen Mitspielern gleich:
+      'glas'    durchsichtige Scheibe: man sieht hindurch, Schüsse bleiben im Glas stecken
+      'offen'   ohne Scheibe: man sieht hindurch und schiesst hindurch (laufen kann man nicht)
+      'bretter' unten mit Brettern zugenagelt (Sicht und Schüsse blockiert), oben offen
+    Ändert die Quader (clip / geteilt) und liefert die Liste für die Darstellung (build_pt_scene)."""
+    def thick(q):
+        return not q.clip and (min(q.x1 - q.x0, q.y1 - q.y0) >= 0.1 or (q.x1 - q.x0) * (q.y1 - q.y0) >= 1.0)
+
+    gr, ga, c = {}, {}, 4.0                   # gr: dicke Quader (Sichtprobe), ga: alle festen Quader (zum Ausschneiden)
+    cands = []
+    for b in boxes:
+        if not b.clip:
+            for i in range(int(b.x0 // c), int(b.x1 // c) + 1):
+                for j in range(int(b.y0 // c), int(b.y1 // c) + 1):
+                    ga.setdefault((i, j), []).append(b)
+        dx, dy, dz = b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0
+        t, ln = min(dx, dy), max(dx, dy)
+        if not b.clip and abs(t - PT_WIN_T) < 0.006 and 0.5 <= ln <= 2.6 and 0.3 <= dz <= 2.6 and b.z0 > -0.5:
+            cands.append(b)
+        if thick(b):
+            for i in range(int(b.x0 // c), int(b.x1 // c) + 1):
+                for j in range(int(b.y0 // c), int(b.y1 // c) + 1):
+                    gr.setdefault((i, j), []).append(b)
+
+    def first_hit(p0, p1, skip):
+        t_min = None
+        for key in seg_cells(p0[0], p0[1], p1[0], p1[1], c):
+            for q in gr.get(key, ()):
+                if q is not skip:
+                    t = seg_box(p0, p1, q)
+                    if t is not None and (t_min is None or t < t_min):
+                        t_min = t
+        return t_min
+
+    plan, extra, cuts = [], [], []
+    for b in cands:
+        ax = 0 if (b.x1 - b.x0) < (b.y1 - b.y0) else 1            # Normalenachse der Scheibe (0 = x, 1 = y)
+        cx, cy, zc = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2
+        ln = (b.y1 - b.y0) if ax == 0 else (b.x1 - b.x0)
+
+        def pt(sg, d, off, z):
+            return (cx + (sg * d if ax == 0 else off), cy + (sg * d if ax == 1 else off), z)
+        blocked = {}
+        for sg in (1, -1):
+            blocked[sg] = any(first_hit(pt(sg, 0.03, off, zc - 0.1), pt(sg, 0.4, off, zc - 0.1), b) is not None
+                              for off in (-0.25 * ln, 0.25 * ln))
+        if blocked[1] and blocked[-1]:
+            continue
+        cut, sd = None, 0
+        if blocked[1] or blocked[-1]:                               # Fensterattrappe in einer geschlossenen Wand: Loch (dünne Wand) oder Nische
+            if abs(cx - CENTER) < 30.0 and abs(cy - CENTER) < 30.0:     # nicht in der Burg
+                continue
+            sd = 1 if blocked[1] else -1
+            near = first_hit(pt(sd, 0.03, 0.0, zc - 0.1), pt(sd, 6.0, 0.0, zc - 0.1), b)
+            near = 0.03 + (0.1 if near is None else near * 5.97)
+            far = near
+            for q in gr.get((int(cx // c), int(cy // c)), ()):         # Rückseite der Wand: grösster Austritt der anschliessenden Quader
+                if q is not b and q.z0 <= zc <= q.z1:
+                    lo_, hi_ = (q.x0, q.x1) if ax == 0 else (q.y0, q.y1)
+                    cc_ = cx if ax == 0 else cy
+                    ov = (q.y0 <= cy <= q.y1) if ax == 0 else (q.x0 <= cx <= q.x1)
+                    if ov:
+                        d0_, d1_ = (lo_ - cc_) * sd, (hi_ - cc_) * sd
+                        d0_, d1_ = min(d0_, d1_), max(d0_, d1_)
+                        if d0_ <= far + 0.05 and d1_ > far:
+                            far = d1_
+            clear = first_hit(pt(sd, far + 0.03, -0.25 * ln, zc - 0.1), pt(sd, far + 1.2, -0.25 * ln, zc - 0.1), None) is None \
+                and first_hit(pt(sd, far + 0.03, 0.25 * ln, zc - 0.1), pt(sd, far + 1.2, 0.25 * ln, zc - 0.1), None) is None
+            if far - near <= 0.8 and clear:
+                depth, kind = far + 0.04, "loch"
+            else:
+                depth, kind = min(near + 1.0, far), "nische"
+            cc_ = cx if ax == 0 else cy
+            n0, n1 = sorted((cc_, cc_ + sd * depth))
+            cut = SimpleNamespace(box=(n0, n1, b.y0, b.y1, b.z0, b.z1) if ax == 0 else (b.x0, b.x1, n0, n1, b.z0, b.z1),
+                                  kind=kind, sd=sd, depth=depth, glass=b)
+        out = -sd if sd else None
+        if out is None:                                             # aussen = die Seite mit mehr freier Strecke
+            reach = []
+            for sg in (1, -1):
+                t = first_hit(pt(sg, 0.03, 0.0, zc - 0.1), pt(sg, 3.0, 0.0, zc - 0.1), b)
+                reach.append(1.0 if t is None else t)
+            out = 1 if reach[0] >= reach[1] else -1
+        h = ((int(cx * 8) * 73856093) ^ (int(cy * 8) * 19349663) ^ (int(b.z0 * 8) * 83492791)) & 0x7FFFFFFF
+        r = h % 100
+        state = "glas" if r < 50 else ("offen" if r < 75 else "bretter")
+        e = SimpleNamespace(ax=ax, out=out, cx=cx, cy=cy, x0=b.x0, x1=b.x1, y0=b.y0, y1=b.y1, z0=b.z0, z1=b.z1,
+                            state=state, n=0, cut=cut)
+        if cut is not None:
+            cuts.append(cut)
+        if state == "offen":
+            b.clip = True
+        elif state == "bretter":
+            n = max(2, min(5, int(0.55 * (b.z1 - b.z0) / PT_WIN_PLANK)))
+            zs = b.z0 + n * PT_WIN_PLANK
+            if zs > b.z1 - 0.15:
+                n = 2
+                zs = b.z0 + (b.z1 - b.z0) * 0.55
+            low = Box(b.x0, b.y0, b.x1, b.y1, b.z0, zs, b.col, False, False)
+            extra.append(low)
+            b.z0 = zs
+            b.clip = True                                           # oben offen: Schüsse gehen durch, Figuren nicht
+            e.n = n
+        plan.append(e)
+    removed, added = set(), []
+    for cut in cuts:                                                # Wand-Kollision um das Loch / die Nische herausschneiden
+        x0, x1, y0, y1, z0, z1 = cut.box
+        for i in range(int(x0 // c), int(x1 // c) + 1):
+            for j in range(int(y0 // c), int(y1 // c) + 1):
+                for q in ga.get((i, j), ()):
+                    if q is cut.glass or id(q) in removed or q.x1 <= x0 or q.x0 >= x1 or q.y1 <= y0 or q.y0 >= y1 or q.z1 <= z0 or q.z0 >= z1:
+                        continue
+                    removed.add(id(q))
+                    for piece in box_cut(q, x0, x1, y0, y1, z0, z1):
+                        added.append(piece)
+                        for i2 in range(int(piece.x0 // c), int(piece.x1 // c) + 1):
+                            for j2 in range(int(piece.y0 // c), int(piece.y1 // c) + 1):
+                                ga.setdefault((i2, j2), []).append(piece)
+    if removed:
+        boxes[:] = [q for q in boxes if id(q) not in removed]
+    boxes.extend(q for q in added if id(q) not in removed)
+    boxes.extend(extra)
+    return plan
+
+
+def box_cut(q, x0, x1, y0, y1, z0, z1):
+    """Quader q ohne den Quader (x0..x1, y0..y1, z0..z1): bis zu sechs Reststücke (gleiche Eigenschaften wie q)."""
+    out = []
+
+    def mk(a0, a1, b0, b1, c0, c1):
+        if a1 - a0 > 1e-4 and b1 - b0 > 1e-4 and c1 - c0 > 1e-4:
+            n = Box(a0, b0, a1, b1, c0, c1, q.col, q.mm, q.vis)
+            n.clip = q.clip
+            out.append(n)
+    cx0, cx1 = max(q.x0, x0), min(q.x1, x1)
+    cy0, cy1 = max(q.y0, y0), min(q.y1, y1)
+    mk(q.x0, cx0, q.y0, q.y1, q.z0, q.z1)                          # links (x)
+    mk(cx1, q.x1, q.y0, q.y1, q.z0, q.z1)                          # rechts (x)
+    mk(cx0, cx1, q.y0, cy0, q.z0, q.z1)                            # davor (y)
+    mk(cx0, cx1, cy1, q.y1, q.z0, q.z1)                            # dahinter (y)
+    mk(cx0, cx1, cy0, cy1, q.z0, max(q.z0, z0))                    # darunter
+    mk(cx0, cx1, cy0, cy1, min(q.z1, z1), q.z1)                    # darüber
+    return out
+
+
+def _pt_ncode(n):
+    """Normale -> 16-Bit-Oktaeder-Code (Gegenstück zu _pt_normals)."""
+    s = abs(n[0]) + abs(n[1]) + abs(n[2]) or 1.0
+    u, v, z = n[0] / s, n[1] / s, n[2] / s
+    if z < 0.0:
+        u, v = (1.0 - abs(v)) * (1.0 if u >= 0 else -1.0), (1.0 - abs(u)) * (1.0 if v >= 0 else -1.0)
+    return (int(round((u + 1.0) * 0.5 * 255)) << 8) | int(round((v + 1.0) * 0.5 * 255))
+
+
+def pt_window_groups(plan):
+    """Darstellung der Fenster: Scheiben (Klasse 2, durchsichtig) und Bretter (Klasse 1, opak zweiseitig) als zusätzliche Gruppen."""
+    acc = {}
+
+    def quad(cls, k, pts, nrm, rgba):
+        a = acc.setdefault((cls, k), {"P": array("f"), "N": array("H"), "C": bytearray(), "I": array("H")})
+        base = len(a["N"])
+        for p in pts:
+            a["P"].extend(p)
+            a["N"].append(_pt_ncode(nrm))
+            a["C"].extend(rgba)
+        a["I"].extend([base, base + 1, base + 2, base, base + 2, base + 3])
+
+    def cell(x, y):
+        return (int(x // 32), int(y // 32))
+
+    for e in plan:
+        ax, sg = e.ax, e.out
+        lo, hi = (e.y0, e.y1) if ax == 0 else (e.x0, e.x1)
+        nrm = (sg, 0.0, 0.0) if ax == 0 else (0.0, sg, 0.0)
+        k = cell(e.cx, e.cy)
+
+        def P(a, z, d):                                             # a = Koordinate entlang der Wand, d = Abstand von der Scheibenebene
+            return (e.cx + sg * d, a, z) if ax == 0 else (a, e.cy + sg * d, z)
+        if e.cut is not None:                                       # Leibung des Lochs / der Nische (von der Scheibenebene nach innen)
+            dep, col_s = e.cut.depth, (96, 90, 82, 255)
+            for aa, nn in ((lo, (0.0, 1.0, 0.0) if ax == 0 else (1.0, 0.0, 0.0)), (hi, (0.0, -1.0, 0.0) if ax == 0 else (-1.0, 0.0, 0.0))):
+                quad(1, k, [P(aa, e.z0, 0.0), P(aa, e.z0, -dep), P(aa, e.z1, -dep), P(aa, e.z1, 0.0)], nn, col_s)
+            for zz, nn in ((e.z0, (0.0, 0.0, 1.0)), (e.z1, (0.0, 0.0, -1.0))):
+                quad(1, k, [P(lo, zz, 0.0), P(hi, zz, 0.0), P(hi, zz, -dep), P(lo, zz, -dep)], nn, col_s)
+            if e.cut.kind == "nische":                              # Rückwand der Nische: dunkler Raum
+                quad(1, k, [P(lo, e.z0, -dep), P(hi, e.z0, -dep), P(hi, e.z1, -dep), P(lo, e.z1, -dep)],
+                     (-nrm[0], -nrm[1], 0.0), (20, 19, 19, 255))
+        if e.state == "glas":
+            quad(2, k, [P(lo, e.z0, 0.0), P(hi, e.z0, 0.0), P(hi, e.z1, 0.0), P(lo, e.z1, 0.0)], nrm, (150, 180, 200, 58))
+        elif e.state == "bretter":
+            zb = e.z0
+            for i in range(e.n):
+                h_ = ((int(e.cx * 10) + i * 31) ^ (int(e.cy * 10) * 7)) % 5
+                a0, a1 = lo - 0.1 - 0.02 * h_, hi + 0.1 + 0.02 * ((h_ * 3) % 5)
+                z0_, z1_ = zb + i * PT_WIN_PLANK + 0.02, zb + i * PT_WIN_PLANK + 0.02 + 0.15
+                col = (104 + 6 * h_, 76 + 4 * h_, 50 + 3 * h_, 255)
+                d0, d1 = 0.03, 0.07
+                for dd, nn in ((d1, nrm), (d0, (-nrm[0], -nrm[1], -nrm[2]))):                  # Vorder- und Rückseite
+                    quad(1, k, [P(a0, z0_, dd), P(a1, z0_, dd), P(a1, z1_, dd), P(a0, z1_, dd)], nn, col)
+                for zz, nn in ((z1_, (0.0, 0.0, 1.0)), (z0_, (0.0, 0.0, -1.0))):                # Ober- und Unterkante
+                    quad(1, k, [P(a0, zz, d0), P(a1, zz, d0), P(a1, zz, d1), P(a0, zz, d1)], nn, col)
+    out = []
+    for (cls, k), a in acc.items():
+        out.append({"c": cls, "nv": len(a["N"]), "ni": len(a["I"]), "k": k, "sp": None, "P": a["P"].tobytes(),
+                    "N": a["N"].tobytes(), "C": bytes(a["C"]), "I": a["I"].tobytes(), "tx": None, "UV": None})
+    return out
+
+
+def _pt_clip(poly, i, val, below):
+    """Konvexes Polygon (Liste von Eckpunkt-Listen) an der Ebene Komponente i = val beschneiden; below: behalte i <= val, sonst i >= val."""
+    out = []
+    n = len(poly)
+    for k in range(n):
+        a, b = poly[k], poly[(k + 1) % n]
+        da, db = (val - a[i]) if below else (a[i] - val), (val - b[i]) if below else (b[i] - val)
+        if da >= 0:
+            out.append(a)
+        if (da >= 0) != (db >= 0):
+            t = da / (da - db)
+            out.append([a[m] + (b[m] - a[m]) * t for m in range(len(a))])
+    return out
+
+
+def pt_carve_windows(groups, plan):
+    """Löcher in die Wandflächen der Karte schneiden (Darstellung): Dreiecke, die senkrecht zur Fensterachse liegen und im Bereich des
+    Lochs/der Nische, verlieren das Rechteck des Fensters (Ränder werden neu eingeteilt, Farben/Texturkoordinaten interpoliert)."""
+    cuts = [e for e in plan if e.cut is not None]
+    if not cuts:
+        return
+    cells = {}
+    for e in cuts:
+        x0, x1, y0, y1, z0, z1 = e.cut.box
+        for i in range(int(x0 // 8) - 1, int(x1 // 8) + 2):
+            for j in range(int(y0 // 8) - 1, int(y1 // 8) + 2):
+                cells.setdefault((i << 12) | j, []).append(e)
+    for g in groups:
+        nv, ni = g["nv"], g["ni"]
+        if ni < 3 or g.get("sp"):
+            continue
+        P = array("f")
+        P.frombytes(g["P"])
+        hit = [((int(x) >> 3) << 12) | (int(y) >> 3) in cells for x, y in zip(P[0::3], P[1::3])]
+        if True not in hit:
+            continue
+        N = array("H")
+        N.frombytes(g["N"])
+        C = bytearray(g["C"])
+        UV = None
+        if g.get("tx") and g.get("UV"):
+            UV = array("f")
+            UV.frombytes(g["UV"])
+        idx = array("H")
+        idx.frombytes(g["I"])
+        keep, add = array("H"), []
+        changed = False
+        for k in range(0, ni - 2, 3):
+            a, b, c3 = idx[k], idx[k + 1], idx[k + 2]
+            done = False
+            if hit[a] and hit[b] and hit[c3]:
+                for e in cells.get(((int(P[3 * a]) >> 3) << 12) | (int(P[3 * a + 1]) >> 3), ()):
+                    ax = e.ax
+                    n_ = (P[3 * a + ax], P[3 * b + ax], P[3 * c3 + ax])
+                    bx = e.cut.box
+                    if max(n_) - min(n_) > 0.004 or n_[0] < bx[2 * ax] - 0.02 or n_[0] > bx[2 * ax + 1] + 0.02:
+                        continue
+                    t = 1 - ax
+                    lo, hi, zl, zh = bx[2 * t], bx[2 * t + 1], bx[4], bx[5]
+                    ts = (P[3 * a + t], P[3 * b + t], P[3 * c3 + t])
+                    zs = (P[3 * a + 2], P[3 * b + 2], P[3 * c3 + 2])
+                    if max(ts) <= lo + 1e-4 or min(ts) >= hi - 1e-4 or max(zs) <= zl + 1e-4 or min(zs) >= zh - 1e-4:
+                        continue
+                    poly = []
+                    for v in (a, b, c3):
+                        poly.append([P[3 * v], P[3 * v + 1], P[3 * v + 2], C[4 * v], C[4 * v + 1], C[4 * v + 2], C[4 * v + 3],
+                                     UV[2 * v] if UV is not None else 0.0, UV[2 * v + 1] if UV is not None else 0.0, float(N[v])])
+                    pieces, rest = [], poly
+                    for (comp, val, below_piece) in ((t, lo, True), (t, hi, False), (2, zl, True), (2, zh, False)):
+                        pieces.append(_pt_clip(rest, comp, val, below_piece))
+                        rest = _pt_clip(rest, comp, val, not below_piece)
+                    for pc in pieces:
+                        if len(pc) < 3:
+                            continue
+                        base = nv + len(add)
+                        for q in pc:
+                            add.append(q)
+                        for m in range(1, len(pc) - 1):
+                            keep.extend((base, base + m, base + m + 1))
+                    changed = done = True
+                    break
+            if not done:
+                keep.extend((a, b, c3))
+        if not changed:
+            continue
+        if nv + len(add) > 65535:                                  # Zu viele Ecken für 16-Bit-Indizes: Gruppe unverändert lassen
+            continue
+        for q in add:
+            P.extend(q[0:3])
+            C.extend(int(max(0, min(255, round(c_)))) for c_ in q[3:7])
+            N.append(int(round(q[9])))
+            if UV is not None:
+                UV.extend(q[7:9])
+        g["P"], g["N"], g["C"], g["I"] = P.tobytes(), N.tobytes(), bytes(C), keep.tobytes()
+        if UV is not None:
+            g["UV"] = UV.tobytes()
+        g["nv"], g["ni"] = nv + len(add), len(keep)
+
+
+def pt_strip_glass(groups, plan):
+    """Die dunklen Scheiben der Karte aus der Darstellung nehmen (Dreiecke, die ganz in einer Scheibe der Liste liegen)."""
+    if not plan:
+        return
+    e_, cells = 0.015, {}
+    for wi, e in enumerate(plan):
+        for i in range(int(e.x0 // 8), int(e.x1 // 8) + 1):
+            for j in range(int(e.y0 // 8), int(e.y1 // 8) + 1):
+                cells.setdefault((i << 12) | j, []).append(wi)
+    for g in groups:
+        nv, ni = g["nv"], g["ni"]
+        if ni < 3 or g.get("sp"):
+            continue
+        P = array("f")
+        P.frombytes(g["P"])
+        xs, ys, zs = P[0::3], P[1::3], P[2::3]
+        hit = [((int(x) >> 3) << 12) | (int(y) >> 3) in cells for x, y in zip(xs, ys)]
+        if True not in hit:
+            continue
+        C = g["C"]
+        wid = {}
+        for v in [i for i, h in enumerate(hit) if h and max(C[4 * i:4 * i + 3]) < 80]:      # nur dunkle Ecken (Glas), nicht die weissen Rahmen
+            x, y, z = xs[v], ys[v], zs[v]
+            for wi in cells[((int(x) >> 3) << 12) | (int(y) >> 3)]:
+                e = plan[wi]
+                if e.x0 - e_ <= x <= e.x1 + e_ and e.y0 - e_ <= y <= e.y1 + e_ and e.z0 - e_ <= z <= e.z1 + e_:
+                    wid[v] = wi
+                    break
+        if not wid:
+            continue
+        idx = array("H")
+        idx.frombytes(g["I"])
+        keep = array("H")
+        for k in range(0, ni - 2, 3):
+            a, b, c = idx[k], idx[k + 1], idx[k + 2]
+            w0 = wid.get(a)
+            if w0 is not None and wid.get(b) == w0 and wid.get(c) == w0:
+                continue
+            keep.extend((a, b, c))
+        if len(keep) != ni:
+            g["I"] = keep.tobytes()
+            g["ni"] = len(keep)
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# Tunnelsystem unter Polytown. Alles wird hier im Code gebaut (die Karte selbst bleibt unverändert): Löcher im Gelände
+# (pt_carve_cm / pt_carve_columns), Kollisionsquader (pt_tunnel_boxes), Darstellung als zusätzliche Gruppen (pt_tunnel_groups).
+# Alles hängt nur von Konstanten ab - Host und Mitspieler bauen dasselbe.
+PT_TZ = -9.0                  # Boden der Gänge (= Sohle des Steinbruchs)
+PT_TH = 3.0                   # lichte Höhe der Gänge
+PT_TS = 0.6                   # Dicke von Boden, Decke und Wänden (Kollision)
+PT_TOPEN = -4.6               # Oberkante der Betonwände im offenen Einschnitt am Steinbruch
+
+
+def pt_tunnel_plan():
+    """Grundriss des Tunnelsystems (Metergitter): begehbare Zellen, Treppenschächte, Kontrollraum, Löcher im Gelände."""
+    c = CENTER
+    cells, open_cells = set(), set()
+
+    def rect(x0, y0, x1, y1, roofless=False):
+        for i in range(int(x0), int(x1)):
+            for j in range(int(y0), int(y1)):
+                cells.add((i, j))
+                if roofless:
+                    open_cells.add((i, j))
+    room = (c - 8, c - 22, c + 6, c - 8)                         # Kontrollraum unter dem Burghof (14 x 14 m)
+    rect(*room)
+    yard = SimpleNamespace(kind="yard", x0=c - 13.0, x1=c - 11.0, y_top=c, y_bot=c - 8.0, n=17, z_top=0.0, rim=0.9)
+    rect(yard.x0, yard.y_bot - 3, yard.x1, yard.y_bot)           # Absatz am Fuss der Hoftreppe
+    rect(yard.x1, yard.y_bot - 3, room[0], yard.y_bot)           # Gang zum Raum (3 m breit)
+    rect(c - 3, 25, c, room[1])                                  # Gang nach Süden zum Steinbruch ...
+    slot = (43, 25, 50, 28)                                      # ... und nach Westen bis in die Grube; offener Einschnitt am Hang
+    rect(43, 25, c - 3, 28)
+    rect(*slot, roofless=True)
+    rect(c - 2, room[3], c + 1, 248)                             # Gang nach Norden zum Keller im Dorf (Kreisverkehr Nord)
+    rect(c, 245, 168, 248)
+    cellar = SimpleNamespace(kind="cellar", x0=166.0, x1=168.0, y_top=256.5, y_bot=248.0, n=17, z_top=0.2, rim=0.0)
+    rect(cellar.x0, 245, cellar.x1, cellar.y_bot)
+    lamps = []                                                    # (x, y) der Deckenlampen
+    for x in (room[0] + 3, (room[0] + room[2]) / 2, room[2] - 3):
+        for y in (room[1] + 3, (room[1] + room[3]) / 2, room[3] - 3):
+            lamps.append((x, y))
+    for x in range(int(yard.x1) + 1, int(room[0]) - 1, 4):
+        lamps.append((x + 0.5, yard.y_bot - 1.5))
+    lamps.append((yard.x0 + 1.0, yard.y_bot - 1.5))
+    for y in range(int(room[1]) - 5, 27, -8):
+        lamps.append((c - 1.5, y + 0.5))
+    for x in range(int(c) - 8, 50, -8):
+        lamps.append((x + 0.5, 26.5))
+    for y in range(int(room[3]) + 5, 245, 8):
+        lamps.append((c - 0.5, y + 0.5))
+    for x in range(int(c) + 4, 166, 8):
+        lamps.append((x + 0.5, 246.5))
+    lamps.append((cellar.x0 + 1.0, 246.5))
+    holes = [(yard.x0, yard.y_bot, yard.x1, yard.y_top, -0.6, 0.6),          # Löcher im Gelände: x0, y0, x1, y1, z0, z1
+             (cellar.x0, cellar.y_bot, cellar.x1, cellar.y_top, -0.6, 0.9),
+             (slot[0], slot[1], slot[2], slot[3], -10.0, -4.0)]
+    console = (room[2] - 2.8, (room[1] + room[3]) / 2.0, PT_TZ)  # Tomahawk-Säule/Knopf vor dem Pult
+    radio = (room[2] - 1.2, (room[1] + room[3]) / 2.0, PT_TZ + 1.4)
+    return SimpleNamespace(cells=cells, open_cells=open_cells, room=room, yard=yard, cellar=cellar, slot=slot,
+                           lamps=lamps, holes=holes, console=console, radio=radio, stairs=(yard, cellar))
+
+
+def pt_tunnel_boxes(plan):
+    """Kollision des Tunnelsystems -> (Hülle, Einrichtung): Boden/Decke/Wände (nur Kollision) und Treppen, Schachtwände, Pult,
+    Geröll ... (Kollision und Darstellung; die Farbe steckt in Box.col)."""
+    hull, deco = [], []
+
+    def add(lst, x0, y0, z0, x1, y1, z1, col=(0.45, 0.45, 0.47)):
+        b = Box(x0, y0, x1, y1, z0, z1, col, False, False)
+        lst.append(b)
+        return b
+    cells, opn = plan.cells, plan.open_cells
+    z0, z1 = PT_TZ, PT_TZ + PT_TH
+    hi = z1 + PT_TS
+    rows = {}
+    for (i, j) in cells:
+        rows.setdefault(j, []).append(i)
+    for j, xs in rows.items():                                   # Boden und Decke: Streifen je Zeile
+        xs.sort()
+        for roof in (False, True):
+            sel = [i for i in xs if not (roof and (i, j) in opn)]
+            if not sel:
+                continue
+            a = sel[0]
+            for p, q in zip(sel, sel[1:] + [None]):
+                if q != p + 1:
+                    if roof:
+                        add(hull, a, j, z1, p + 1, j + 1, hi)
+                    else:
+                        add(hull, a, j, z0 - PT_TS, p + 1, j + 1, z0)
+                    a = q
+    shaft_cells = set()
+    for sh in plan.stairs:
+        for i in range(int(sh.x0), int(sh.x1)):
+            for j in range(int(sh.y_bot), int(math.ceil(sh.y_top))):
+                shaft_cells.add((i, j))
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):            # Wände an jeder Kante zu einer nicht begehbaren Zelle
+        edges = {}
+        for (i, j) in cells:
+            if (i + dx, j + dy) in cells or (i + dx, j + dy) in shaft_cells:
+                continue
+            if (i, j) in opn and (dx, dy) == (-1, 0):
+                continue                                         # Mundloch zur Grube bleibt offen
+            top = PT_TOPEN if (i, j) in opn else hi
+            if dx:
+                edges.setdefault((i + 1 if dx > 0 else i, top), []).append(j)
+            else:
+                edges.setdefault((j + 1 if dy > 0 else j, top), []).append(i)
+        for (e, top), ps in edges.items():
+            ps.sort()
+            a = ps[0]
+            for p, q in zip(ps, ps[1:] + [None]):
+                if q != p + 1:
+                    if dx:
+                        xa, xb = (e, e + PT_TS) if dx > 0 else (e - PT_TS, e)
+                        add(deco if top == PT_TOPEN else hull, xa, a, z0 - PT_TS, xb, p + 1, top, (0.55, 0.55, 0.56))
+                    else:
+                        ya, yb = (e, e + PT_TS) if dy > 0 else (e - PT_TS, e)
+                        add(deco if top == PT_TOPEN else hull, a, ya, z0 - PT_TS, p + 1, yb, top, (0.55, 0.55, 0.56))
+                    a = q
+    for sh in plan.stairs:                                       # Treppen: Stufen und Schachtwände
+        run = (sh.y_top - sh.y_bot) / sh.n
+        for k in range(sh.n):
+            ytop = sh.y_top - run * k
+            ztop = sh.z_top - (sh.z_top - PT_TZ) / (sh.n + 1) * (k + 1)
+            add(deco, sh.x0, ytop - run, PT_TZ - PT_TS, sh.x1, ytop, ztop, (0.40 - 0.004 * k, 0.40 - 0.004 * k, 0.42 - 0.004 * k))
+        top = sh.z_top + sh.rim
+        for (xa, xb) in ((sh.x0 - PT_TS, sh.x0), (sh.x1, sh.x1 + PT_TS)):
+            add(deco, xa, sh.y_bot - PT_TS, PT_TZ - PT_TS, xb, sh.y_top, top, (0.52, 0.52, 0.54))
+        add(deco, sh.x0, sh.y_bot - PT_TS, z1, sh.x1, sh.y_bot, top, (0.52, 0.52, 0.54))   # Fussende über der Decke des Absatzes
+    rx0, ry0, rx1, ry1 = plan.room                               # Kontrollraum: Pult, Schränke, Kartentisch
+    ym = (ry0 + ry1) / 2.0
+    add(deco, rx1 - 1.6, ym - 4.0, z0, rx1, ym + 4.0, z0 + 0.95, (0.20, 0.22, 0.26))
+    add(deco, rx0 + 1.0, ry0, z0, rx0 + 5.0, ry0 + 1.0, z0 + 2.1, (0.25, 0.28, 0.31))
+    add(deco, rx0 + 4.0, ym - 1.5, z0, rx0 + 8.0, ym + 1.5, z0 + 0.9, (0.36, 0.29, 0.20))
+    rng = random.Random(4711)                                    # Geröll im Einschnitt: halb verschüttet, in der Mitte bleibt ein Weg
+    sx0, sy0, sx1, sy1 = plan.slot
+    for k in range(9):
+        for side in (0, 1):
+            x = sx0 + 0.3 + k * 0.78 + rng.uniform(-0.12, 0.12)
+            hgt = max(0.4, rng.uniform(0.9, 2.1) * (1.0 - k / 12.0))
+            ya = sy0 + rng.uniform(0.0, 0.2) if side == 0 else sy1 - 0.8 - rng.uniform(0.0, 0.2)
+            g = rng.uniform(0.40, 0.52)
+            add(deco, x, ya, z0, x + rng.uniform(0.6, 1.0), ya + 0.8, z0 + hgt, (g, g * 0.94, g * 0.86))
+    add(deco, sx0 + 1.6, sy0 + 1.0, z0, sx0 + 3.1, sy1 - 1.0, z0 + 0.45, (0.44, 0.40, 0.34))   # flache Haufen quer über dem Weg
+    add(deco, sx0 + 4.2, sy0 + 1.0, z0, sx0 + 5.4, sy1 - 1.0, z0 + 0.3, (0.47, 0.43, 0.37))
+    return hull, deco
+
+
+class _PtQuads:
+    """Sammelt Vierecke als Gruppen der Karte (Klasse 1 zweiseitig, 2 durchsichtig, 3 leuchtend)."""
+
+    def __init__(self):
+        self.acc = {}
+
+    def quad(self, cls, pts, nrm, rgba):
+        k = (int(pts[0][0] // 32), int(pts[0][1] // 32))
+        n_ = 0
+        while True:
+            a = self.acc.setdefault((cls, k, n_), {"P": array("f"), "N": array("H"), "C": bytearray(), "I": array("H")})
+            if len(a["N"]) + 4 <= 60000:
+                break
+            n_ += 1
+        base = len(a["N"])
+        code = _pt_ncode(nrm)
+        for p in pts:
+            a["P"].extend(p)
+            a["N"].append(code)
+            a["C"].extend(rgba)
+        a["I"].extend((base, base + 1, base + 2, base, base + 2, base + 3))
+
+    def box(self, b, cls=1):
+        r, g, bl = (min(255, int(v * 255)) for v in b.col[:3])
+        faces = (((b.x0, b.y0, b.z1), (b.x1, b.y0, b.z1), (b.x1, b.y1, b.z1), (b.x0, b.y1, b.z1), (0, 0, 1), 1.0),
+                 ((b.x0, b.y0, b.z0), (b.x0, b.y1, b.z0), (b.x1, b.y1, b.z0), (b.x1, b.y0, b.z0), (0, 0, -1), 0.55),
+                 ((b.x0, b.y0, b.z0), (b.x1, b.y0, b.z0), (b.x1, b.y0, b.z1), (b.x0, b.y0, b.z1), (0, -1, 0), 0.8),
+                 ((b.x1, b.y0, b.z0), (b.x1, b.y1, b.z0), (b.x1, b.y1, b.z1), (b.x1, b.y0, b.z1), (1, 0, 0), 0.7),
+                 ((b.x1, b.y1, b.z0), (b.x0, b.y1, b.z0), (b.x0, b.y1, b.z1), (b.x1, b.y1, b.z1), (0, 1, 0), 0.8),
+                 ((b.x0, b.y1, b.z0), (b.x0, b.y0, b.z0), (b.x0, b.y0, b.z1), (b.x0, b.y1, b.z1), (-1, 0, 0), 0.7))
+        for p0, p1, p2, p3, nrm, f in faces:
+            self.quad(cls, (p0, p1, p2, p3), nrm, (int(r * f), int(g * f), int(bl * f), 255))
+
+    def groups(self):
+        out = []
+        for (cls, k, _n), a in self.acc.items():
+            out.append({"c": cls, "nv": len(a["N"]), "ni": len(a["I"]), "k": k, "sp": None, "P": a["P"].tobytes(),
+                        "N": a["N"].tobytes(), "C": bytes(a["C"]), "I": a["I"].tobytes(), "tx": None, "UV": None})
+        return out
+
+
+def pt_tunnel_groups(plan, active=True):
+    """Darstellung des Tunnelsystems: Boden, Decke, Wände (Zellen), Lampen, Einrichtung. active: Kontrollraum in Betrieb (Schirme an)."""
+    q = _PtQuads()
+    cells, opn = plan.cells, plan.open_cells
+    z0, z1 = PT_TZ, PT_TZ + PT_TH
+    FLOOR, ROOF, WALL_LO, WALL_HI = (70, 70, 72, 255), (58, 59, 62, 255), (66, 68, 70, 255), (92, 94, 96, 255)
+    rows = {}
+    for (i, j) in cells:
+        rows.setdefault(j, []).append(i)
+    for j, xs in rows.items():
+        xs.sort()
+        for roof in (False, True):
+            sel = [i for i in xs if not (roof and (i, j) in opn)]
+            if not sel:
+                continue
+            a = sel[0]
+            for p, qn in zip(sel, sel[1:] + [None]):
+                if qn != p + 1:
+                    zz = z1 if roof else z0
+                    q.quad(1, ((a, j, zz), (p + 1, j, zz), (p + 1, j + 1, zz), (a, j + 1, zz)), (0, 0, -1 if roof else 1),
+                           ROOF if roof else FLOOR)
+                    a = qn
+    shaft_cells = set()
+    for sh in plan.stairs:
+        for i in range(int(sh.x0), int(sh.x1)):
+            for j in range(int(sh.y_bot), int(math.ceil(sh.y_top))):
+                shaft_cells.add((i, j))
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        edges = {}
+        for (i, j) in cells:
+            if (i + dx, j + dy) in cells or (i + dx, j + dy) in shaft_cells or (i, j) in opn:
+                continue
+            if dx:
+                edges.setdefault(i + 1 if dx > 0 else i, []).append(j)
+            else:
+                edges.setdefault(j + 1 if dy > 0 else j, []).append(i)
+        for e, ps in edges.items():
+            ps.sort()
+            a = ps[0]
+            for p, qn in zip(ps, ps[1:] + [None]):
+                if qn != p + 1:
+                    for (za, zb, col) in ((z0, z0 + 1.1, WALL_LO), (z0 + 1.1, z1, WALL_HI)):
+                        if dx:
+                            q.quad(1, ((e, a, za), (e, p + 1, za), (e, p + 1, zb), (e, a, zb)), (-dx, 0, 0), col)
+                        else:
+                            q.quad(1, ((a, e, za), (p + 1, e, za), (p + 1, e, zb), (a, e, zb)), (0, -dy, 0), col)
+                    a = qn
+    for (lx, ly) in plan.lamps:                                  # Deckenlampen (leuchten)
+        q.quad(3, ((lx - 0.5, ly - 0.15, z1 - 0.03), (lx + 0.5, ly - 0.15, z1 - 0.03), (lx + 0.5, ly + 0.15, z1 - 0.03),
+                   (lx - 0.5, ly + 0.15, z1 - 0.03)), (0, 0, -1), (255, 236, 190, 255))
+    hull, deco = pt_tunnel_boxes(plan)
+    for b in deco:
+        q.box(b)
+    rx0, ry0, rx1, ry1 = plan.room                               # Schirme am Pult und Lagekarte an der Nordwand
+    ym = (ry0 + ry1) / 2.0
+    on = (70, 210, 130, 255) if active else (26, 30, 34, 255)
+    for k, (ya, yb) in enumerate(((ym - 3.7, ym - 1.4), (ym - 1.0, ym + 1.0), (ym + 1.4, ym + 3.7))):
+        q.quad(3, ((rx1 - 1.0, ya, z0 + 1.1), (rx1 - 1.0, yb, z0 + 1.1), (rx1 - 1.0, yb, z0 + 1.9), (rx1 - 1.0, ya, z0 + 1.9)),
+               (-1, 0, 0), on if k != 1 else ((255, 190, 60, 255) if active else (26, 30, 34, 255)))
+    q.quad(3, ((rx0 + 0.8, ry1 - 0.02, z0 + 0.9), (rx0 + 5.8, ry1 - 0.02, z0 + 0.9), (rx0 + 5.8, ry1 - 0.02, z0 + 2.6),
+               (rx0 + 0.8, ry1 - 0.02, z0 + 2.6)), (0, -1, 0), (40, 120, 180, 255) if active else (28, 32, 36, 255))
+    return q.groups()
+
+
+def _pt_cut_rect(poly, x0, y0, x1, y1):
+    """Polygon (Listen: x, y, ...) ohne das Rechteck (x0..x1, y0..y1) -> Liste von Polygonen (Reststücke)."""
+    out, rest = [], poly
+    for (comp, val, below) in ((0, x0, True), (0, x1, False), (1, y0, True), (1, y1, False)):
+        out.append(_pt_clip(rest, comp, val, below))
+        rest = _pt_clip(rest, comp, val, not below)
+        if len(rest) < 3:
+            break
+    return [p for p in out if len(p) >= 3]
+
+
+def pt_carve_cm(pt, holes):
+    """Löcher in die Kollisionsdreiecke der Karte (Gelände, Böden): alles, was im Rechteck eines Lochs (x0, y0, x1, y1, z0, z1)
+    liegt und nicht steil ist, wird herausgeschnitten. Vor dem Bau des TriMesh aufrufen."""
+    V, Tr, kinds = pt["cmv"], pt["cmt"], pt["kinds"]
+    nv0 = len(V) // 3
+    outT, outK, addV = array("I"), [], array("f")
+    changed = False
+    for t in range(len(Tr) // 3):
+        ia, ib, ic = Tr[3 * t], Tr[3 * t + 1], Tr[3 * t + 2]
+        pa, pb, pc = V[3 * ia:3 * ia + 3], V[3 * ib:3 * ib + 3], V[3 * ic:3 * ic + 3]
+        done = False
+        for (x0, y0, x1, y1, zl, zh) in holes:
+            if (max(pa[0], pb[0], pc[0]) <= x0 or min(pa[0], pb[0], pc[0]) >= x1 or max(pa[1], pb[1], pc[1]) <= y0
+                    or min(pa[1], pb[1], pc[1]) >= y1 or max(pa[2], pb[2], pc[2]) < zl or min(pa[2], pb[2], pc[2]) > zh):
+                continue
+            ux, uy, uz = pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]
+            vx, vy, vz = pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            ln = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if ln < 1e-12 or abs(nz) / ln < 0.3:
+                continue                                         # steile/senkrechte Fläche (Wand): bleibt
+            for pcs in _pt_cut_rect([list(pa), list(pb), list(pc)], x0, y0, x1, y1):
+                base = nv0 + len(addV) // 3
+                for p in pcs:
+                    addV.extend(p[:3])
+                for m in range(1, len(pcs) - 1):
+                    outT.extend((base, base + m, base + m + 1))
+                    outK.append(kinds[t])
+            changed = done = True
+            break
+        if not done:
+            outT.extend((ia, ib, ic))
+            outK.append(kinds[t])
+    if changed:
+        V.extend(addV)
+        pt["cmt"], pt["kinds"] = outT, outK
+
+
+def pt_carve_columns(groups, holes):
+    """Löcher in der Darstellung (wie pt_carve_cm für die Gruppen der Karte, Farben/Texturkoordinaten werden interpoliert)."""
+    cells = {}
+    for h in holes:
+        for i in range(int(h[0] // 8), int(h[2] // 8) + 1):
+            for j in range(int(h[1] // 8), int(h[3] // 8) + 1):
+                cells.setdefault((i << 12) | j, []).append(h)
+    for g in groups:
+        nv, ni = g["nv"], g["ni"]
+        if ni < 3 or g.get("sp") or g.get("I32"):
+            continue
+        P = array("f")
+        P.frombytes(g["P"])
+        hit = [((int(x) >> 3) << 12) | (int(y) >> 3) in cells for x, y in zip(P[0::3], P[1::3])]
+        if True not in hit:
+            continue
+        N = array("H")
+        N.frombytes(g["N"])
+        C = bytearray(g["C"])
+        UV = None
+        if g.get("tx") and g.get("UV"):
+            UV = array("f")
+            UV.frombytes(g["UV"])
+        idx = array("H")
+        idx.frombytes(g["I"])
+        keep, add = array("H"), []
+        changed = False
+        for k in range(0, ni - 2, 3):
+            a, b, c3 = idx[k], idx[k + 1], idx[k + 2]
+            done = False
+            if hit[a] or hit[b] or hit[c3]:
+                pa, pb, pc = P[3 * a:3 * a + 3], P[3 * b:3 * b + 3], P[3 * c3:3 * c3 + 3]
+                for (x0, y0, x1, y1, zl, zh) in holes:
+                    if (max(pa[0], pb[0], pc[0]) <= x0 or min(pa[0], pb[0], pc[0]) >= x1 or max(pa[1], pb[1], pc[1]) <= y0
+                            or min(pa[1], pb[1], pc[1]) >= y1 or max(pa[2], pb[2], pc[2]) < zl or min(pa[2], pb[2], pc[2]) > zh):
+                        continue
+                    ux, uy, uz = pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]
+                    vx, vy, vz = pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]
+                    nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+                    ln = math.sqrt(nx * nx + ny * ny + nz * nz)
+                    if ln < 1e-12 or abs(nz) / ln < 0.3:
+                        continue
+                    poly = []
+                    for v in (a, b, c3):
+                        poly.append([P[3 * v], P[3 * v + 1], P[3 * v + 2], C[4 * v], C[4 * v + 1], C[4 * v + 2], C[4 * v + 3],
+                                     UV[2 * v] if UV is not None else 0.0, UV[2 * v + 1] if UV is not None else 0.0, float(N[v])])
+                    for pcs in _pt_cut_rect(poly, x0, y0, x1, y1):
+                        base = nv + len(add)
+                        add.extend(pcs)
+                        for m in range(1, len(pcs) - 1):
+                            keep.extend((base, base + m, base + m + 1))
+                    changed = done = True
+                    break
+            if not done:
+                keep.extend((a, b, c3))
+        if not changed or nv + len(add) > 65535:
+            continue
+        for qv in add:
+            P.extend(qv[0:3])
+            C.extend(int(max(0, min(255, round(c_)))) for c_ in qv[3:7])
+            N.append(int(round(qv[9])))
+            if UV is not None:
+                UV.extend(qv[7:9])
+        g["P"], g["N"], g["C"], g["I"] = P.tobytes(), N.tobytes(), bytes(C), keep.tobytes()
+        if UV is not None:
+            g["UV"] = UV.tobytes()
+        g["nv"], g["ni"] = nv + len(add), len(keep)
+
+
 def load_ptmap(path):
     """Polytown-Karte laden: {'head', 'meta', 'groups': [...], 'cmv', 'cmt', 'boxes', 'minimap'}.
     Die Darstellung liegt in fertigen Vertex-Feldern (Position float32, Normale 16 Bit, Farbe RGBA mit eingebackenem Licht)."""
@@ -3338,6 +4066,7 @@ def pt_mapdata(path):
     """Kartendaten für World wie sanitize_map, dazu 'mesh' (Gelände-Dreiecke für die Kollision) und 'pt' (die geladene Karte).
     Rückgabe (mapdata, raw); raw ist nur die Kopfzeile - Mitspieler laden die Datei aus ihrem Ordner 'maps'."""
     pt = load_ptmap(path)
+    pt_carve_cm(pt, pt_tunnel_plan().holes)                      # Tunneleingänge: Löcher im Gelände (vor dem Bau des TriMesh)
     meta, V, Tr = pt["meta"], pt["cmv"], pt["cmt"]
     sp = meta.get("spawns") or []
     md = sanitize_map({"format": MAP_FORMAT, "name": "Polytown", "size": meta.get("size", 300.0), "steep": True,
@@ -7950,6 +8679,7 @@ class World:
         self.bonus_crates = bool(bonus.get("crates", True))      # Bonuskisten (Kisten auf der Karte, Titan-Kiste)
         self.bonus_hares = bool(bonus.get("hares", True))        # Bonushasen (Fluchttiere mit Beute)
         self.ctf_ff = bool(ctf.get("ff", CTF_FF_DEFAULT))                  # Eigenbeschuss im CTF
+        self.toma_room = bool(ctf.get("tr", TOMA_ROOM_DEFAULT))             # Tomahawk im Kontrollraum (Polytown) statt an der Oberfläche
         self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # Punktelimit (0 = aus)
         if mob_level is None:
             mob_level = MOB_DEFAULT if spawn_mobs else 0
@@ -8243,7 +8973,23 @@ class World:
             bx_.clip = k >= n_all - nclip
             self.boxes.append(bx_)
         for r_ in pt_rail_boxes():                                          # Geländer der Burgtreppen (Lücken zwischen den Pfosten)
-            self.boxes.append(Box(r_[0], r_[1], r_[3], r_[4], r_[2], r_[5], col, False, False))
+            rb_ = Box(r_[0], r_[1], r_[3], r_[4], r_[2], r_[5], col, False, False)
+            rb_.clip = True                                                 # Schüsse gehen hindurch (nur Figuren fallen nicht hinunter)
+            self.boxes.append(rb_)
+        self.pt_win = pt_window_plan(self.boxes)                            # Fenster: durchsichtig / offen / halb zugenagelt
+        self.pt_tun = pt_tunnel_plan()                                      # Tunnelsystem (Grundriss, Löcher, Kontrollraum)
+        for hx0, hy0, hx1, hy1, _hz0, _hz1 in self.pt_tun.holes[:2]:         # Treppenschächte: dünne Bodenplatten (Burghof, Kellerboden) aufschneiden
+            nb_ = []
+            for q_ in self.boxes:
+                if (q_.x1 > hx0 and q_.x0 < hx1 and q_.y1 > hy0 and q_.y0 < hy1 and q_.z1 - q_.z0 < 1.5
+                        and q_.z1 > -0.2 and q_.z0 < 1.0 and not q_.clip):
+                    nb_.extend(box_cut(q_, hx0, hx1, hy0, hy1, -9.0, 9.0))
+                else:
+                    nb_.append(q_)
+            self.boxes[:] = nb_
+        hull_, deco_ = pt_tunnel_boxes(self.pt_tun)
+        for tb_ in hull_ + deco_:
+            self.boxes.append(tb_)
         for hc in self.helis:                                              # Hubschrauber stehen auf dem Gelände des Pads
             hc.home = (hc.x, hc.y, self.cm.top(hc.x, hc.y) or 0.0, hc.heading)
             hc.reset()
@@ -8264,6 +9010,9 @@ class World:
         m = self.wmask
         if m is None:
             return False
+        tun = getattr(self, "pt_tun", None)
+        if tun is not None and z < PT_TZ + PT_TH + 0.5 and (int(x), int(y)) in tun.cells:
+            return False                                  # im Tunnel unter dem Graben/Teich ist es trocken
         i, j = int(x / self.wm_s), int(y / self.wm_s)
         n = self.wm_n
         if not (0 <= i < n and 0 <= j < n):
@@ -8507,6 +9256,9 @@ class World:
         """Boden für Kugeln, Granaten, Partikel in Höhe z (kennt die Tunnel)."""
         if z < -1.0 and self.in_tunnel(x, y):
             return TUN_Z
+        tun = getattr(self, "pt_tun", None)
+        if tun is not None and z < PT_TZ + PT_TH + 0.5 and (int(x), int(y)) in tun.cells:
+            return PT_TZ                                  # Tunnelsystem Polytown: Boden der Gänge
         if self.cm is not None:
             g = self.cm.below(x, y, z + 0.3)
             return self.height(x, y) if g is None else g
@@ -9111,15 +9863,52 @@ class World:
     # ------------------------------------------------------------ 11: Capture the Flag
     def ctf_cfg(self):
         """Einstellungen des CTF fürs Netz (welcome, cfg, reload)."""
-        return {"ff": 1 if self.ctf_ff else 0, "pl": int(self.score_limit)}
+        return {"ff": 1 if self.ctf_ff else 0, "pl": int(self.score_limit), "tr": 1 if self.toma_room else 0}
 
     def ctf_apply_cfg(self, d):
         if isinstance(d, dict):
             self.ctf_ff = bool(d.get("ff", self.ctf_ff))
+            if "tr" in d:
+                self.set_toma_room(bool(d.get("tr")))
             try:
                 self.score_limit = max(0, min(CTF_PTS_MAX, int(d.get("pl", self.score_limit))))
             except (TypeError, ValueError):
                 pass
+
+    def set_toma_room(self, flag):
+        """Tomahawk-Ort wechseln: Kontrollraum (ein fester Ort im Tunnelsystem) oder die Säulen an der Oberfläche. Beim Mitspieler
+        überschreibt der Host die Säule gleich wieder (Nachricht 'tb')."""
+        flag = bool(flag)
+        if flag == self.toma_room:
+            return
+        self.toma_room = flag
+        if not getattr(self, "toma_spots", None) and not hasattr(self, "toma_idx"):
+            return
+        self.build_toma_spots()
+        self.toma_last, self.toma_sink_idx = -1, -1
+        if self.strike == 1:
+            self.set_toma(-1)
+        elif self.tomahawk_on and self.strike == 0:
+            self.place_toma()
+        else:
+            self.set_toma(-1)
+
+    def radio_src(self):
+        """Wo im Kontrollraum das Funkgerät steht - nur, solange der Raum in Betrieb ist (Raum-Modus, Tomahawk an), sonst None."""
+        tun = getattr(self, "pt_tun", None)
+        if tun is None or not self.toma_room or not self.tomahawk_on:
+            return None
+        return tun.radio
+
+    def tun_open(self, x, y):
+        """Offen zum Himmel: Hoftreppe, Kellertreppe, Einschnitt am Steinbruch (hier trifft der Tomahawk auch unter der Erde)."""
+        tun = getattr(self, "pt_tun", None)
+        if tun is None:
+            return False
+        for hx0, hy0, hx1, hy1, _z0, _z1 in tun.holes:
+            if hx0 - 0.5 <= x <= hx1 + 0.5 and hy0 - 0.5 <= y <= hy1 + 0.5:
+                return True
+        return False
 
     def ctf_setup_map(self):
         """Flaggenstände der beiden Teams (ctf_bases: (x, y, z)) und Startpunkte je Team (ctf_spawns): die beiden am
@@ -11160,17 +11949,17 @@ class World:
             x, y = tx + math.cos(a) * rr, ty + math.sin(a) * rr
             self.events.append(("explosion", (round(x, 2), round(y, 2), round(self.height(x, y) + 1.0, 2)), 9.0))
         for v in list(self.vehicles):
-            if v.hp > 0 and v.z > -1.5 and self.in_strike(v.x, v.y):
+            if v.hp > 0 and (v.z > -1.5 or self.tun_open(v.x, v.y)) and self.in_strike(v.x, v.y):
                 self.destroy_vehicle(v, self.strike_by)
         for hc in self.helis:
             if hc.hp > 0 and self.in_strike(hc.x, hc.y):
                 self.destroy_heli(hc, self.strike_by)
         for pl in list(self.players.values()):
-            if pl.hp > 0 and pl.z > -1.5 and self.in_strike(pl.x, pl.y):
+            if pl.hp > 0 and (pl.z > -1.5 or self.tun_open(pl.x, pl.y)) and self.in_strike(pl.x, pl.y):
                 pl.protect = 0.0
                 self.damage_player(pl, 9999.0, self.strike_by, WI_TOMAHAWK)
         for m in self.mobs:
-            if m.state != "dead" and m.z > -1.5 and self.in_strike(m.x, m.y):
+            if m.state != "dead" and (m.z > -1.5 or self.tun_open(m.x, m.y)) and self.in_strike(m.x, m.y):
                 self.hurt_mob(m, 9999.0, (m.x, m.y, m.z + m.height * 0.5), (0.0, 0.0, 1.0), False, self.strike_by)
 
     def dmg_mult(self, owner):
@@ -12575,6 +13364,11 @@ class World:
         freie, ebene Plätze unter den Startpunkten - weit auseinander und mit TOMA_GROUND_CLEAR Platz zu Wänden und Fahrzeugen."""
         cands = []
         pt = getattr(self, "pt", None)
+        tun = getattr(self, "pt_tun", None)
+        if pt and tun is not None and self.toma_room:    # Kontrollraum: ein fester Ort am Pult (die Säule ist hier der Startknopf)
+            cx, cy, cz = tun.console
+            self.toma_spots = [(round(cx, 2), round(cy, 2), round(float(cz), 3), 90.0)]
+            return
         if pt:                                           # Polytown: feste Orte auf der Kreisstraße (TOMA_SPOTS)
             self.build_toma_spots_fixed()
             if self.toma_spots:
@@ -12712,7 +13506,7 @@ class World:
 
     def update_toma_radar(self):
         """13a (Host): Radar-Stufe aus dem Alter der stehenden Säule; None, solange keine unbenutzte Säule lange genug steht."""
-        if (not TOMA_RADAR or not self.tomahawk_on or self.phase != "play" or self.toma_idx < 0 or self.strike != 0
+        if (not TOMA_RADAR or not self.tomahawk_on or self.toma_room_on() or self.phase != "play" or self.toma_idx < 0 or self.strike != 0
                 or self.toma_age < TOMA_RADAR_START):
             self.toma_radar = None
             return
@@ -12733,6 +13527,10 @@ class World:
             return
         x, y, z, _h = self.toma_spots[i]
         self.button = SimpleNamespace(x=x, y=y, z=z)
+
+    def toma_room_on(self):
+        """Gilt gerade der Kontrollraum-Modus (Polytown mit Tunnelsystem)?"""
+        return bool(self.toma_room) and getattr(self, "pt_tun", None) is not None
 
     def toma_ready(self):
         """Steht eine Säule ganz oben (Knopf benutzbar)?"""
@@ -17165,6 +17963,17 @@ def build_pt_scene(world, progress=None):
     Licht steckt in den Vertexfarben (wie Mesh); die Normalen dienen den Echtzeit-Schatten. Rückgabe wie build_scene:
     Land (leer), Wasser (leer), Zone, extra - alles Sichtbare hängt als 'Stadt' in extra[6], drehende Teile in extra[7]."""
     pt = world.pt
+    plan = getattr(world, "pt_win", None)
+    if plan:                                                          # Fenster: dunkle Scheiben der Karte raus, durchsichtige Scheiben/Bretter dazu
+        pt_strip_glass(pt["groups"], plan)
+        pt_carve_windows(pt["groups"], plan)
+        pt = dict(pt)
+        pt["groups"] = list(pt["groups"]) + pt_window_groups(plan)
+    tun = getattr(world, "pt_tun", None)
+    if tun:                                                           # Tunnelsystem: Löcher im Gelände, Gänge und Kontrollraum dazu
+        pt_carve_columns(pt["groups"], tun.holes)
+        pt = dict(pt)
+        pt["groups"] = list(pt["groups"]) + pt_tunnel_groups(tun, bool(getattr(world, "toma_room", True)))
     states = _pt_states()
     spins = []
     for g in pt["groups"]:
@@ -23871,7 +24680,7 @@ class Tooltip:
         W = self.W
         H = 0.05 + sum(it[3] for it in self.items)
         self.root = self.parent.attachNewNode("tooltip")
-        self.root.setBin("fixed", UI_LAYER_TIP)          # v55: immer über Fenstern und Menüs (Inhalt in Bau-Reihenfolge)
+        self.root.setBin("gui-popup", 900)               # immer über allem: Fenstern, Menüs und dem Endbildschirm ("gui-popup" kommt nach jedem "fixed")
         self.root.setDepthTest(False)
         self.root.setDepthWrite(False)
         self._card(-0.006, 0.006, W + 0.012, H + 0.012, (0.75, 0.8, 0.88, 1.0))
@@ -25301,6 +26110,9 @@ class MorePage(SetupPage):
     def tm_on(self):
         return bool(self.g.cfg.get("tomahawk", True))
 
+    def tm_mode(self):
+        return self.g.toma_mode()
+
     def bonus_on(self, k):
         """Ankreuzfeld k (0 = Bonuskisten, 1 = Bonushasen) angekreuzt?"""
         return bool(self.g.bonus_cfg()["crates" if k == 0 else "hares"])
@@ -25327,7 +26139,7 @@ class MorePage(SetupPage):
             return self.DIM if off else (self.YELLOW if on else (Hot.ON if h else Hot.BASE))
         if tag in ("tf", "tb", "tt"):                      # Tomahawk an / aus
             k = int(num)
-            on, h = (k == 0) == self.tm_on(), hov == "tm" + num
+            on, h = k == self.tm_mode(), hov == "tm" + num
             if tag == "tf":
                 return self.SEL if on else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
             if tag == "tb":
@@ -25382,12 +26194,14 @@ class MorePage(SetupPage):
             self.text(f"lt{k}", name, x0 + bw / 2, 0.525, 0.048)
             self.hit(f"lv{k}", x0, x0 + bw, 0.497, 0.597, lambda k=k: g.set_cfg("mobs", k))
         self.text(None, "TOMAHAWK", X0, 0.40, 0.034, self.GREY, "l")
-        for k, name in enumerate(("An", "Aus")):
-            x0, x1 = (X0, -0.01) if k == 0 else (0.01, X1)
+        bw3 = (X1 - X0 - 0.04) / 3.0
+        for k, name in enumerate(("Kontrollraum", "Oberfläche", "Aus")):     # Kontrollraum: Start im Tunnelsystem, Oberfläche: Säulen auf der Karte
+            x0 = X0 + k * (bw3 + 0.02)
+            x1 = x0 + bw3
             self.rect(f"tf{k}", x0 - 0.008, x1 + 0.008, 0.245, 0.355)
             self.rect(f"tb{k}", x0, x1, 0.253, 0.347)
             self.text(f"tt{k}", name, (x0 + x1) / 2, 0.275, 0.05)
-            self.hit(f"tm{k}", x0, x1, 0.253, 0.347, lambda k=k: g.set_cfg("tomahawk", k == 0))
+            self.hit(f"tm{k}", x0, x1, 0.253, 0.347, lambda k=k: g.set_toma_mode(k))
         for key, label, lo, hi, step, ticks, fmt, z in self.SLIDERS:
             self.text(None, label, X0, z, 0.034, self.GREY, "l")
             v = self.value(key)
@@ -25416,12 +26230,12 @@ class MorePage(SetupPage):
         self.rect("b_done", X0, X1, -0.745, -0.66)
         self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
         self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
-        self.text(None, "Tasten:  1-5 = Monster    T = Tomahawk an/aus    Esc = zurück", 0, -0.84, 0.028, self.GREY)
+        self.text(None, "Tasten:  1-5 = Monster    T = Tomahawk-Start wechseln    Esc = zurück", 0, -0.84, 0.028, self.GREY)
 
     # ---- Aktualisieren
     def update(self, force=False):
         c = self.g.cfg
-        key = (self.lvl(), self.tm_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag, self.g.cfg_is_mc(),
+        key = (self.lvl(), self.tm_on(), c.get("toma_room"), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag, self.g.cfg_is_mc(),
                tuple(self.g.bonus_cfg().values()))
         if force or key != self.key:
             self.key = key
@@ -123746,14 +124560,17 @@ class Sfx:
         Richtung (links/rechts) übernimmt der 3D-Ton; ohne 3D-Ton wird nur die Lautstärke geregelt."""
         world = self.game.world
         b, tp = getattr(world, "button", None), getattr(world, "timer_panel", None)
-        if "chatter" not in self.paths or b is None or tp is None or b.x < -900:
+        room = world.radio_src() if hasattr(world, "radio_src") else None      # Kontrollraum im Tunnelsystem (Polytown)
+        if "chatter" not in self.paths or (room is None and (b is None or tp is None or b.x < -900)):
+            if self.chat is not None and self.chat[0].status() == 2:
+                self.chat[0].stop()
             return
         if self.chat is None:
             snd, node = self.make("chatter")
             snd.setLoop(True)
             self.chat = (snd, node)
         snd, node = self.chat
-        src = ((b.x + tp.x) * 0.5, (b.y + tp.y) * 0.5, (b.z + tp.z) * 0.5 + 1.3)
+        src = tuple(room) if room is not None else ((b.x + tp.x) * 0.5, (b.y + tp.y) * 0.5, (b.z + tp.z) * 0.5 + 1.3)
         node.setPos(*src)
         cam = self.cam()
         d = math.dist(src, cam)
@@ -124026,7 +124843,7 @@ class Game(ShowBase):
         self.ip_text = ""
         self.ip_edited = False
         self.lost_text = None
-        self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
+        self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, toma_room=TOMA_ROOM_DEFAULT, cd=int(STRIKE_CD), regen=REGEN_RATE,
                         resp=RESPAWN_DEFAULT, map=None, ff=CTF_FF_DEFAULT,
                         plim=0, bcr=None, bha=None)   # Host-Einstellungen (ff/plim = CTF: Eigenbeschuss, Punktelimit; bcr/bha = Bonuskisten/-hasen, None = Standard des Modus)
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
@@ -124716,7 +125533,8 @@ class Game(ShowBase):
         """11: CTF-Regeln aus den Host-Einstellungen (für World und Netz)."""
         c = self.cfg
         return {"ff": 1 if c.get("ff") else 0,
-                "pl": max(0, min(CTF_PTS_MAX, int(c.get("plim", 0) or 0)))}
+                "pl": max(0, min(CTF_PTS_MAX, int(c.get("plim", 0) or 0))),
+                "tr": 1 if c.get("toma_room", TOMA_ROOM_DEFAULT) else 0}
 
     def setup_entries(self):
         """Karten der Auswahl: [(Name, Pfad oder None, Untertitel, Bildschlüssel)]. Pfad None = Polytown."""
@@ -124784,6 +125602,18 @@ class Game(ShowBase):
         """(Spielmodus der Welt, Pistolenstart) aus den Einstellungen. Experimental ist Deathmatch mit Pistolenstart."""
         m = self.cfg.get("mode", "koth")
         return ("dm", True) if m == "experimental" else (m, False)
+
+    def toma_mode(self):
+        """Tomahawk-Start laut Einstellung: 0 Kontrollraum, 1 Oberfläche (Säulen auf der Karte), 2 aus."""
+        if not self.cfg.get("tomahawk", True):
+            return 2
+        return 0 if self.cfg.get("toma_room", TOMA_ROOM_DEFAULT) else 1
+
+    def set_toma_mode(self, k):
+        self.cfg["tomahawk"] = k != 2
+        if k != 2:
+            self.cfg["toma_room"] = k == 0
+        self.menu_refresh()
 
     def set_cfg(self, key, v):
         """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus)."""
@@ -124981,7 +125811,7 @@ class Game(ShowBase):
             return
         if self.menu_state == "setup2":
             if ch in "tT":
-                self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
+                self.set_toma_mode((self.toma_mode() + 1) % 3)
             return
         if self.menu_state == "setup3":                   # 11: CTF-Regeln
             if ch in "fF":
@@ -125110,6 +125940,7 @@ class Game(ShowBase):
         c["limit"] = max(LIMIT_MIN, min(LIMIT_MAX, int(round(w.limit / 60.0))))
         c["cd"], c["regen"], c["resp"] = int(w.strike_cd), float(w.regen_rate), int(w.respawn_delay)
         c["tomahawk"] = bool(w.tomahawk_on)
+        c["toma_room"] = bool(w.toma_room)
         c["bcr"], c["bha"] = bool(w.bonus_crates), bool(w.bonus_hares)
         self.map_list = list_maps()
         if c.get("map") not in [pp for _n, pp in self.map_list]:
@@ -125966,6 +126797,15 @@ class Game(ShowBase):
                     if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
                         w.place_toma()                         # Säule wieder hochfahren lassen
 
+                def set_toma_mode(k):
+                    w.tomahawk_on = k != 2
+                    self.cfg["tomahawk"] = w.tomahawk_on
+                    if k != 2:
+                        self.cfg["toma_room"] = k == 0
+                        w.set_toma_room(k == 0)
+                    if w.tomahawk_on and w.toma_idx < 0 and w.strike == 0:
+                        w.place_toma()
+
                 def set_bonus(which):
                     if which == "crates":
                         w.bonus_crates = not w.bonus_crates
@@ -125976,7 +126816,11 @@ class Game(ShowBase):
 
                 items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
                                  lambda k: (set_mobs(k), self.show_pause(kind))),
-                         (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
+                         (RowSpec("Tomahawk", ["Kontrollraum", "Oberfläche", "Aus"],
+                                  (2 if not w.tomahawk_on else (0 if w.toma_room else 1)),
+                                  lambda k: (set_toma_mode(k), self.show_pause(kind)))
+                          if getattr(w, "pt_tun", None) is not None else
+                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk))),
                          (f"Bonuskisten:  {'an' if w.bonus_crates else 'aus'}   (ab der nächsten Runde)",
                           do(lambda: set_bonus("crates"))),
                          (f"Bonushasen:  {'an' if w.bonus_hares else 'aus'}   (ab der nächsten Runde)",
@@ -131056,8 +131900,11 @@ class Game(ShowBase):
                 blink = 0.6 + 0.4 * math.sin(time.time() * 6.0)
                 self.toma_knob.setColorScale(1.0, 1.0, 1.0, 1.0) if ready else self.toma_knob.setColorScale(
                     0.5, 0.5, 0.5, 1.0)
-                self.toma_beam.show()
-                self.toma_beam.setColorScale(1, 1, 1, (0.3 + 0.7 * blink) * hgt if ready else 0.0)
+                if w.toma_room_on():
+                    self.toma_beam.hide()                                      # Kontrollraum: kein Lichtstrahl durch den Boden
+                else:
+                    self.toma_beam.show()
+                    self.toma_beam.setColorScale(1, 1, 1, (0.3 + 0.7 * blink) * hgt if ready else 0.0)
             else:
                 u = max(0.0, min(1.0, w.toma_sink_t / TOMA_SINK_T))
                 hgt = 1.0 - u * u * (3 - 2 * u)

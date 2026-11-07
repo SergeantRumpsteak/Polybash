@@ -2,6 +2,18 @@
 
 Neueste Änderungen oben.
 
+## Tunnelsystem mit Kontrollraum, Fenster, Tooltip-Fix (Sinan, 2026-11-07)
+Gilt für Polytown. NET_VERSION 61 -> 62. Die Karte (`polytown.ptmap`) bleibt unverändert; alles Neue wird beim Laden im Code gebaut, bei Host und Mitspielern gleich.
+
+- **Tunnelsystem**: 3 m hohe Gänge auf Höhe der Steinbruch-Sohle (z = -9), Beleuchtung durch Deckenlampen. Drei Zugänge: Treppe im Burghof (westlich der Mitte), halb verschütteter Einschnitt unten im Steinbruch-Graben (Geröllhaufen, in der Mitte bleibt ein Weg) und Kellertreppe in einem Haus der Nordschleife (Kreisverkehr Nord). Gelände und Bodenplatten sind an den Treppen aufgeschnitten (Kollision und Darstellung).
+- **Kontrollraum** (14 x 14 m unter dem Burghof): Pult mit Schirmen, Schränke, Kartentisch, Funkgerät. Hier steht der Tomahawk-Startknopf.
+- **Tomahawk-Schalter** im Menü (Weitere Einstellungen, Pause-Menü des Hosts, Taste T): **Kontrollraum** (Standard) / **Oberfläche** (die bisherigen Säulen auf der Kreisstraße) / **Aus**. Bei „Oberfläche“ bleibt der Kontrollraum bestehen, hat aber keine Funktion (Schirme aus, kein Funk). Im Kontrollraum-Modus gibt es keinen Radar-Suchkreis und keinen Lichtstrahl, weil der Ort fest ist. Wird über das CTF-Konfig-Feld `tr` an die Mitspieler gesendet.
+- **Funkgeräusch** („chatter“, steckt noch im Spiel): hörbar im Kontrollraum und davor im Gang, gedämpft durch Wände; nur im Kontrollraum-Modus.
+- **Tomahawk und Untergrund**: Wer in den Gängen steht, ist wie bisher geschützt. Offen zum Himmel (Hoftreppe, Kellertreppe, Einschnitt) trifft der Einschlag auch unten.
+- **Fix Ausrüstungsmenü**: Der Statistik-Tooltip beim Hovern über eine Ausrüstung erscheint jetzt vor dem Fenster statt dahinter.
+- **Fenster in Polytown**: Die Glasscheiben sind durchsichtig (leicht getönt). Je Fenster, fest per Hash: ca. 50 % Glas, 25 % offen (Schüsse gehen durch), 25 % halb mit Holzbrettern vernagelt (unten zu, oben offen). Fenster in der Burg und in Wänden, die auf beiden Seiten zu sind, bleiben wie sie waren. Bei Fenstern in Wänden mit nur einer freien Seite ist dahinter ein kurzes Loch bzw. eine Nische sichtbar, kein echter Raum.
+- **Gadget-Beschreibungen**: Funkbake, Claymore und C4 erwähnen nicht mehr die rechte Maustaste.
+
 ## Inari Temple Sanctuary: Serpentinen, Sichtlinien, Gipfelwald, Wegordnung (Robin, 2026-11-04)
 Gilt nur für diese Karte. NET_VERSION 60 -> 61. Fest bleiben Schrein, Feuerstelle, Nebenschreine, Ninja-Tomahawk und die Monster-Regel.
 
