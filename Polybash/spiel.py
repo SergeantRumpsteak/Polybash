@@ -28911,7 +28911,8 @@ class PlayerView:
         if wi not in self.held:
             s_, rg, _lg = HELD_GUN[name]
             hr = SOLDIER_HAND[1]
-            nd = self.gun.attachNewNode(held_gun_geom(wi))
+            nd = self.gun.attachNewNode("held")                           # Träger: Modell(e) hängen darunter (die zweite Baretta darf
+            nd.attachNewNode(held_gun_geom(wi))                           # nicht unter ihrem eigenen GeomNode hängen = Szenengraph-Zyklus)
             nd.setScale(s_)
             nd.setPos(hr[0], hr[1] - s_ * rg[0], hr[2] - s_ * rg[1])
             self.held[wi] = nd
