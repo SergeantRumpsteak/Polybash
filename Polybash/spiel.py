@@ -385,9 +385,10 @@ def spawn_area_factor(map_width=None, map_height=None):
     return max(0.0, w * h) / SPAWN_REF_AREA
 
 
-def calculate_map_spawns(map_width, map_height, density_setting, bonus_hares=True, override_spawns=True):
+def calculate_map_spawns(map_width, map_height, density_setting, bonus_hares=True, override_spawns=True, disabled=()):
     """v55: Ziel-Anzahl je Monsterart für eine Karte. density_setting = Index in MOB_LEVELS (oder direkt der Faktor als
-    float). override_spawns=False (Testgelände, Sonderkarten) erzwingt überall 0. -> {Art: Anzahl}"""
+    float). override_spawns=False (Testgelände, Sonderkarten) erzwingt überall 0. v65: disabled = im Monster-Reiter
+    abgewählte Arten (bekommen 0). -> {Art: Anzahl}"""
     if isinstance(density_setting, float):
         k = density_setting
     else:
@@ -403,6 +404,9 @@ def calculate_map_spawns(map_width, map_height, density_setting, bonus_hares=Tru
     out["drone"] = max(DRONE_MIN, min(DRONE_MAX, int(DRONE_COUNT * fa + 0.5)))
     out["colossus"] = N_COLOSSUS
     out["titan"] = N_TITAN
+    for kind in disabled:                                                 # v65: Monster-Reiter
+        if kind in out:
+            out[kind] = 0
     return out
 
 
@@ -508,7 +512,7 @@ PART_GROUND_STEP = 0.15  # m: Partikel fragen die Geländehöhe erst nach so vie
 
 NET_PORT = 37020         # TCP: Spielverbindung
 DISCOVERY_PORT = 37021   # UDP: Host-Suche im WLAN
-NET_VERSION = 64         # Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
+NET_VERSION = 65         # v65: Monster-Reiter (mk); Protokollversion: nur gleiche Versionen spielen zusammen (10g: 40 - Karte; 10h: 41; 13c: Jet-Strike, 13d: Drohne, 13f: Boss)
 BUILD = 238               # Build-Nummer: zählt der Git-Hook (hooks/pre-commit) bei jedem Commit auf main hoch
 VERSION = f"v{NET_VERSION}.{BUILD}"     # im Hauptmenü unten rechts; gleiche Zahl = gleiche Spielversion
 SNAP_RATE = 30.0         # Snapshots pro Sekunde (Host -> Mitspieler)
@@ -2276,6 +2280,27 @@ MOB_KINDS = {     # hear = Hör-Empfindlichkeit (Faktor auf die Lärmradien)
 
 
 TEMP_MOBS = tuple(k for k, v in MOB_KINDS.items() if v.get("temp"))   # 10e: keine Monster (kein Respawn, keine Beute)
+
+# v65: Monster-Reiter (Weitere Einstellungen > Monster). Diese Arten kann der Host einzeln an- und abwählen: alle Einträge
+# aus MOB_KINDS ausser Hilfs-/Spielerdrohnen (temp) und den Fluchttieren (Bonushasen, eigener Schalter unter BONUS).
+# Neue Monsterart: in MOB_KINDS eintragen und hier einen Anzeigenamen geben (ohne Namen erscheint sie mit ihrem Schlüssel).
+MOB_KIND_NAMES = {"grunt": "Zombies", "huntress": "Jägerinnen", "brute": "Brutes", "harpy": "Harpien",
+                  "drone": "Drohnen", "colossus": "Kolosse", "titan": "Titanen"}
+MOB_TOGGLE_KINDS = (tuple(k for k in MOB_KIND_NAMES if k in MOB_KINDS)
+                    + tuple(k for k, v in MOB_KINDS.items()
+                            if k not in MOB_KIND_NAMES and not v.get("temp") and k != "critter"))
+
+
+def mob_off_of(v):
+    """v65: abgewählte Monsterarten aus einer Einstellung / Netznachricht (Liste) -> frozenset gültiger Arten."""
+    if not isinstance(v, (list, tuple, set, frozenset)):
+        return frozenset()
+    return frozenset(k for k in v if k in MOB_TOGGLE_KINDS)
+
+
+def mob_all_off(off):
+    """v65: True, wenn keine einzige wählbare Monsterart mehr übrig ist (dann gibt es keine Monster)."""
+    return all(k in off for k in MOB_TOGGLE_KINDS)
 
 # 13b: Titan-Spezialfähigkeit: Er steigt über Objekte, die nicht höher als seine Beine sind (Modell: Beine = 0,75 x
 # Grösse, also 0,75 x 7 = 5,25 m) und frei stehen (nichts liegt darauf - eine Hauswand unter einem Dach also nicht):
@@ -8290,8 +8315,10 @@ class World:
     loot_cats = LOOT_CATS + ("gadget",)   # was Monster und Kisten hergeben: Waffen, Nahkampf, Granaten, Ausrüstung, Aufsätze, Gadgets
 
     def __init__(self, seed=SEED, spawn_mobs=True, mode="koth", limit=600.0, strike_cd=STRIKE_CD, regen=REGEN_RATE,
-                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None, exp=False):
+                 respawn=RESPAWN_DEFAULT, mapdata=None, mob_level=None, tomahawk=True, ctf=None, bonus=None, exp=False,
+                 mob_off=None):
         ctf = ctf if isinstance(ctf, dict) else {}
+        self.mob_off = mob_off_of(mob_off)   # v65: im Monster-Reiter abgewählte Arten (spawnen nie, auch nicht nach)
         bonus = bonus if isinstance(bonus, dict) else {}
         self.bonus_crates = bool(bonus.get("crates", True))      # Bonuskisten (Kisten auf der Karte, Titan-Kiste)
         self.bonus_hares = bool(bonus.get("hares", True))        # Bonushasen (Fluchttiere mit Beute)
@@ -8300,7 +8327,7 @@ class World:
         self.score_limit = max(0, min(CTF_PTS_MAX, int(ctf.get("pl", 0) or 0)))   # Punktelimit (0 = aus)
         if mob_level is None:
             mob_level = MOB_DEFAULT if spawn_mobs else 0
-        spawn_mobs = bool(spawn_mobs) and mob_level > 0
+        spawn_mobs = bool(spawn_mobs) and mob_level > 0 and not mob_all_off(self.mob_off)   # v65: keine Art übrig = aus
         if mapdata is None:
             raise ValueError("Keine Karte angegeben (Standardkarte: maps/polytown.ptmap)")
         set_world_size(mapdata.get("size", MAP_WORLD))   # vor allem anderen: Grösse dieser Karte
@@ -9644,12 +9671,25 @@ class World:
                 break
 
     # ------------------------------------------------------------ Mobs
+    def set_mob_rules(self, level, off=None):
+        """v65 (Host): Monsterdichte und abgewählte Arten setzen. Monster gibt es nur mit Dichte > 0, auf normalen
+        Karten und mit mindestens einer gewählten Art. Gilt ab dem nächsten Rundenstart (populate_mobs)."""
+        if off is not None:
+            self.mob_off = mob_off_of(off)
+        self.mob_level = max(0, min(len(MOB_LEVELS) - 1, int(level)))
+        self.mobs_on = self.mob_level > 0 and not self.mc and not self.dev and not mob_all_off(self.mob_off)
+        if not self.mobs_on:
+            self.pending.clear()                                     # keine Nachzügler, keine Bosswellen
+            self.boss_wave.clear()
+        return self.mobs_on
+
     def populate_mobs(self):
         """v55: Rundenstart - Anzahl je Art aus calculate_map_spawns (Flächen-Skalierung), Drohnen und Titanen im Ring."""
         self.drone_off = None                                        # Drohnen-Sektoren je Runde neu ausrichten
         lvl = max(0, min(len(MOB_LEVELS) - 1, self.mob_level))
         ok = self.mobs_on and not self.mc and not self.dev          # Testgelände / Minecraft: nie Monster
-        cnt = calculate_map_spawns(WORLD, WORLD, lvl, bonus_hares=self.bonus_hares, override_spawns=ok)
+        cnt = calculate_map_spawns(WORLD, WORLD, lvl, bonus_hares=self.bonus_hares, override_spawns=ok,
+                                   disabled=self.mob_off)           # v65: abgewählte Arten
         made = dict.fromkeys(cnt, 0)
         ta = self.mrng.uniform(0, 2 * math.pi)                       # Titanen: gegenüberliegende Hälften
         for kind in ("grunt", "brute", "huntress", "colossus", "drone", "harpy", "critter", "titan"):
@@ -9699,6 +9739,8 @@ class World:
         """avoid: Liste von (x, y), von denen das neue Monster mind. min_dist entfernt sein soll. 13f: edge = am Kartenrand
         (BOSS_EDGE_BAND), buddelt sich aus dem Boden (dig_t, Ereignis 'bossdig'). v55: ring = ((r0, r1), a0, a1) - Ring-
         Sektor um die Kartenmitte (Polytown-Meter, ring_scale); Drohnen immer im DRONE_RING (drone_ring)."""
+        if kind in self.mob_off:
+            return False                                 # v65: im Monster-Reiter abgewählt - egal woher der Spawn kommt
         if kind == "drone" and self.drones_alive() >= self.drone_cap():
             return False                                 # v54: harte Obergrenze, egal woher der Spawn kommt
         if kind == "drone" and ring is None and not edge:
@@ -14000,15 +14042,19 @@ class World:
                 d.lock = max(0.0, d.lock - dt)
         self.auto_pickup(players)                        # v54: bekannte Granaten/Gadgets im Vorbeilaufen
         self.update_noise(dt, players)
+        # v65: Monster aus (Monster-Reiter) und keine eigenen Drohnen/Nest-Monster unterwegs: keine Monster-KI, keine
+        # Trennung, keine Respawn-Warteschlange, keine Bosswellen - dann kostet die Monsterlogik keine Rechenzeit.
+        mob_ai = bool(self.mobs)
         self.nav_clock += dt                             # 13f: Wegsuche: Uhr und Rechenzeit je Bild
         self.mob_dt += dt
         if last_sub:                                     # v59: Monster-KI einmal je Bild, sonst verdoppelt sie sich unter 29 FPS
             self.nav_ms = NAV_MS                         # (Wegsuch-Budget gilt damit von selbst je Bild)
-            self.update_mobs_staggered(self.mob_dt, players)   # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
+            if mob_ai:
+                self.update_mobs_staggered(self.mob_dt, players)   # 12: nahe/aktive Monster jedes Bild, ferne im Leerlauf gestaffelt
             self.mob_dt = 0.0
         if self.rocks:
             self.update_rocks(dt)
-        if last_sub:
+        if last_sub and mob_ai:
             self.separate_mobs()
         for pl in players:
             self.push_player(pl)
@@ -14024,13 +14070,17 @@ class World:
                 continue
             if m.kind in BOSS_KINDS:                     # 13f: Bosse kommen nur im Zyklus ihrer Art wieder
                 continue
-            self.pending.append([RESPAWN_T, m.kind])
+            if self.mobs_on and m.kind not in self.mob_off:     # v65: abgewählte Arten kommen nicht wieder
+                self.pending.append([RESPAWN_T, m.kind])
         avoid = [(p.x, p.y) for p in players if p.hp > 0] or [(CENTER, CENTER)]
-        self.update_boss_waves(dt, avoid)
+        if self.mobs_on:                                 # v65: Monster aus - keine Bosswellen
+            self.update_boss_waves(dt, avoid)
         for e in self.pending[:]:
             e[0] -= dt
             if e[0] <= 0:
-                if e[1] == "drone" and self.drones_alive() >= self.drone_cap():
+                if not self.mobs_on or e[1] in self.mob_off:
+                    self.pending.remove(e)                       # v65: Monster aus / Art abgewählt
+                elif e[1] == "drone" and self.drones_alive() >= self.drone_cap():
                     self.pending.remove(e)                       # 9b/v54: nie mehr als drone_cap() Drohnen
                 elif self.spawn_mob(e[1], avoid, 45.0):
                     self.pending.remove(e)
@@ -20117,6 +20167,20 @@ PCOL_NAMES = tuple(n for names, _c in PCOL_BASE for n in names)
 PCOL = tuple(c for _n, cols in PCOL_BASE for c in cols)
 PCOL_DEFAULT = (9, 0, 3, 6, 24, 10, 12, 18)  # v53: Standardfarbe je Spieler-Nummer (Blau, Rot, Grün, Gelb, Lila, ...)
 PCOL_OLD = (9, 9, 0, 3, 6, 24, 10, 12, 18)   # v53: alter Look-Code (bis v52) "Teamfarbe" -> neuer Palettenindex
+# v65: Dutt (Messy Bun) ohne Kopfbedeckung - sitzt am Hinterkopf (Übergang Scheitel-/Hinterhauptbein) und steht schräg
+# nach hinten-oben ab, statt wie eine Kerze auf dem Scheitel. Die Haare werden ins Kopf-Mesh gebacken (kein eigener Node):
+# Koordinaten sind kopf-lokal wie im ganzen Modell (x = seitlich, y + = Gesicht / y - = Hinterkopf, z = Höhe in m; die
+# Schädeldecke liegt bei z 1,04, die Hinterkopf-Oberfläche bei z 1,005 auf y -0,10). Zum Feinjustieren nur diese Werte:
+#   DUTT_ANCHOR: Ansatzpunkt (y, z) auf der Kopfoberfläche, leicht in die Haarschale versenkt.
+#                vorher (bis v64): Knoten-Mitte (y -0,040, z 1,085) - senkrecht über dem Scheitel.
+#   DUTT_PITCH:  Neigung der Dutt-Achse aus der Senkrechten nach hinten in Grad (entspricht Pitch -40°; sinnvoll 35-45).
+#   DUTT_PARTS:  (Abstand des Mittelpunkts vom Ansatz entlang der Achse, Radius quer, Radius längs) in m für
+#                Ansatz und Knoten; DUTT_TIE: Haargummi von / bis (Abstand entlang der Achse) und Radius.
+DUTT_ANCHOR = (-0.096, 1.004)
+DUTT_PITCH = 40.0
+DUTT_PARTS = ((0.012, 0.034, 0.022),      # Ansatz (flach am Kopf)
+              (0.058, 0.046, 0.040))      # Knoten
+DUTT_TIE = (0.026, 0.036, 0.030)
 LOOK_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"   # v53: ein Zeichen je Eintrag (bis zu 36 Auswahlen)
 # Aussehen des Charakters: je Eintrag (Schlüssel, Bezeichnung, Auswahl). Der Look-Code ist eine Zeichenfolge
 # (ein Zeichen je Eintrag, LOOK_CHARS) - klein genug, um ihn im Netzwerk mitzuschicken. Neue Einträge nur hinten anhängen.
@@ -20608,12 +20672,25 @@ def _soldier_meshes(L):
 
     if frisur != 1:
         scalp(kopf in (2, 3, 4) and frisur != 4)                       # Kurz/Lang/Dutt: anliegende Haarschale
-    if frisur == 3:                                                                             # Dutt (Top-Knot)
-        if kopf == 4:
-            ell(tm, (0, -0.030, 1.050), 0.034, 0.034, 0.030, hair, rng)                        # Ansatz
-            ell(tm, (0, -0.040, 1.085), 0.046, 0.046, 0.040, hair, rng)                        # Knoten
-            loft(tm, [(0, -0.034, 1.058), (0, -0.036, 1.068)], [0.030, 0.030], [0.030, 0.030], DK, None, None, None,
-                 (False, False), 0.0, 10)                                                       # Haargummi
+    if frisur == 3:                                                                             # Dutt (Messy Bun)
+        if kopf == 4:                     # v65: am Hinterkopf, um DUTT_PITCH nach hinten gekippt (Werte: DUTT_* oben)
+            pa = math.radians(DUTT_PITCH)
+            dax = (0.0, -math.sin(pa), math.cos(pa))                                            # Achse: hinten-oben
+            ay, az = DUTT_ANCHOR
+
+            def dutt_at(s_):
+                return (0.0, ay + dax[1] * s_, az + dax[2] * s_)
+
+            for off, r_q, r_l in DUTT_PARTS:                                                    # Ansatz, Knoten
+                c_ = dutt_at(off)
+                cs, rs = [], []
+                for k in range(7):                                                              # Ellipsoid entlang der Achse
+                    a_ = -math.pi / 2 + math.pi * k / 6
+                    cs.append((c_[0], c_[1] + dax[1] * r_l * math.sin(a_), c_[2] + dax[2] * r_l * math.sin(a_)))
+                    rs.append(r_q * math.cos(a_))
+                loft(tm, cs, rs, rs, hair, rng, None, None, (False, False), 0.02)
+            loft(tm, [dutt_at(DUTT_TIE[0]), dutt_at(DUTT_TIE[1])], [DUTT_TIE[2]] * 2, [DUTT_TIE[2]] * 2, DK, None, None,
+                 None, (False, False), 0.0, 10)                                                 # Haargummi
         else:                                                                                   # unter Helm/Hut: tief
             ell(tm, (0, -0.100, 0.872), 0.038, 0.034, 0.034, hair, rng)
     if frisur == 4:                                                                             # Afro
@@ -25806,15 +25883,13 @@ class MorePage(SetupPage):
         hov = self.hover
         mc = self.g.cfg_is_mc()
         tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
-        if tag in ("lf", "lb", "lt"):                      # Monsterstufe
-            k = int(num)
-            on, h = k == self.lvl(), hov == "lv" + num
-            off = mc and k > 0
-            if tag == "lf":
-                return self.SEL if on and not off else (self.HOV if h and not off else (0.0, 0.0, 0.0, 0.0))
-            if tag == "lb":
-                return self.MODE_OFF if off else (self.MODE_ON if on else (self.BTN_H if h else self.BTN))
-            return self.DIM if off else (self.YELLOW if on else (Hot.ON if h else Hot.BASE))
+        if i in ("mpb", "mpt", "mps"):                     # v65: Knopf zum Monster-Reiter
+            h = hov == "mobpage"
+            if i == "mpb":
+                return self.MODE_OFF if mc else (self.BTN_H if h else self.BTN)
+            if i == "mpt":
+                return self.DIM if mc else (Hot.ON if h else Hot.BASE)
+            return self.DIM if (mc or not self.g.mob_master_on()) else self.YELLOW
         if tag in ("tf", "tb", "tt", "hf", "hb", "ht"):    # Tomahawk an / aus, v57: Manhunt an / aus
             k = int(num)
             mh = tag[0] == "h"
@@ -25866,14 +25941,10 @@ class MorePage(SetupPage):
         self.text("title", "Weitere Einstellungen", 0, 0.80, 0.075, (1.0, 0.78, 0.3, 1.0))
         self.text(None, "MONSTER" + (("   (Testgelände: Monster per F1-Menü)" if g.cfg_is_dev() else "   (auf Minecraft-Karten gibt es keine)")
                                  if g.cfg_is_mc() else ""), X0, 0.64, 0.034, self.GREY, "l")
-        n = len(MOB_LEVELS)
-        bw = (X1 - X0 - 0.02 * (n - 1)) / n
-        for k, (name, _f) in enumerate(MOB_LEVELS):
-            x0 = X0 + k * (bw + 0.02)
-            self.rect(f"lf{k}", x0 - 0.008, x0 + bw + 0.008, 0.49, 0.605)
-            self.rect(f"lb{k}", x0, x0 + bw, 0.497, 0.597)
-            self.text(f"lt{k}", name, x0 + bw / 2, 0.525, 0.048)
-            self.hit(f"lv{k}", x0, x0 + bw, 0.497, 0.597, lambda k=k: g.set_cfg("mobs", k))
+        self.rect("mpb", X0, X1, 0.497, 0.597)                  # v65: eigener Reiter (Hauptschalter, Dichte, Arten)
+        self.text("mpt", "Monster-Einstellungen  >", X0 + 0.03, 0.532, 0.048, al="l")
+        self.text("mps", g.mob_summary(), X1 - 0.03, 0.534, 0.036, al="r")
+        self.hit("mobpage", X0, X1, 0.497, 0.597, g.open_mob_page)
         self.text(None, "TOMAHAWK", X0, 0.40, 0.034, self.GREY, "l")
         self.text(None, "MANHUNT (KILL-SERIEN)", 0.01, 0.40, 0.034, self.GREY, "l")    # v57
         bw = (X1 - X0 - 0.06 - 0.04) / 4.0
@@ -25913,14 +25984,14 @@ class MorePage(SetupPage):
         self.rect("b_done", X0, X1, -0.745, -0.66)
         self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
         self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
-        self.text(None, "Tasten:  1-5 = Monster    T = Tomahawk an/aus    M = Manhunt an/aus    Esc = zurück", 0, -0.84,
+        self.text(None, "Tasten:  1-5 = Monster (1 = aus)    T = Tomahawk an/aus    M = Manhunt an/aus    Esc = zurück", 0, -0.84,
                   0.028, self.GREY)
 
     # ---- Aktualisieren
     def update(self, force=False):
         c = self.g.cfg
         key = (self.lvl(), self.tm_on(), self.mh_on(), c["cd"], c["regen"], c["resp"], self.hover, self.g.slider_drag,
-               self.g.cfg_is_mc(),
+               self.g.cfg_is_mc(), self.g.mob_summary(),
                tuple(self.g.bonus_cfg().values()))
         if force or key != self.key:
             self.key = key
@@ -25946,12 +26017,146 @@ class MorePage(SetupPage):
             self.nodes[key + "_val"].setText(fmt(v))
         for k in (0, 1):
             self.nodes[f"kv{k}"].setText("An" if self.bonus_on(k) else "Aus")
+        if "mps" in self.nodes:
+            self.nodes["mps"].setText(self.g.mob_summary())
 
     def follow(self, key, mx):
         _k, _l, lo, hi, step = self.sl[key][:5]
         t = max(0.0, min(1.0, (mx - self.SL0) / (self.SL1 - self.SL0)))
         v = round((lo + t * (hi - lo)) / step) * step
         self.g.set_cfg(key, int(v) if key != "regen" else float(v))
+
+
+class MonsterPage(SetupPage):
+    """v65: Reiter "Monster" der Weiteren Einstellungen. Hauptschalter (monsters_enabled), Dichte (Wenig .. Gottlos) und
+    ein Schalter je Monsterart (MOB_TOGGLE_KINDS, wächst mit neuen Arten von selbst). Hauptschalter aus: Dichte und Arten
+    sind ausgegraut und nehmen keine Eingaben an (Game.mob_set_density / mob_toggle_kind prüfen das). Sind alle Arten
+    abgewählt, schaltet der Rundenstart die Monster ab (Game.mob_cfg_resolve)."""
+    COLS = 2                                         # Arten-Schalter je Zeile
+
+    # ---- Zustand
+    def on(self):
+        return self.g.mob_master_on()
+
+    def kind_on(self, kind):
+        return kind not in self.g.mob_off_cfg()
+
+    def style(self, i):
+        hov, mc = self.hover, self.g.cfg_is_mc()
+        on = self.on()
+        tag, num = i.rstrip("0123456789"), i[len(i.rstrip("0123456789")):]
+        if tag in ("sf", "sb", "st"):                       # Hauptschalter An (0) / Aus (1)
+            k = int(num)
+            sel, h = (k == 0) == on, hov == "ms" + num and not mc
+            if tag == "sf":
+                return self.SEL if sel and not mc else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
+            if tag == "sb":
+                return self.MODE_OFF if mc else (self.MODE_ON if sel else (self.BTN_H if h else self.BTN))
+            return self.DIM if mc else (self.YELLOW if sel else (Hot.ON if h else Hot.BASE))
+        if tag in ("df", "db", "dt"):                       # Dichte 1..4
+            k = int(num)
+            sel = on and k == mob_level_of(self.g.cfg.get("mobs"))
+            h = on and hov == "md" + num
+            if tag == "df":
+                return self.SEL if sel else (self.HOV if h else (0.0, 0.0, 0.0, 0.0))
+            if tag == "db":
+                return self.MODE_OFF if not on else (self.MODE_ON if sel else (self.BTN_H if h else self.BTN))
+            return self.DIM if not on else (self.YELLOW if sel else (Hot.ON if h else Hot.BASE))
+        if tag in ("ab", "ax", "ak", "at", "av"):           # Arten (Ankreuzfelder)
+            kind = MOB_TOGGLE_KINDS[int(num)]
+            k_on, h = self.kind_on(kind), on and hov == "mk" + num
+            if tag == "ab":
+                return self.MODE_OFF if not on else (self.BTN_H if h else self.BTN)
+            if tag == "ax":
+                return (0.62, 0.68, 0.75, 1.0) if on else (0.30, 0.33, 0.37, 1.0)
+            if tag == "ak":
+                return (self.YELLOW if on else (0.45, 0.40, 0.30, 1.0)) if k_on else (0.05, 0.07, 0.10, 1.0)
+            if tag == "at":
+                return self.DIM if not on else (Hot.ON if h else Hot.BASE)
+            return self.DIM if not on else (self.YELLOW if k_on else self.DIM)
+        if i == "warn":
+            return (1.0, 0.45, 0.30, 1.0)
+        if i.startswith(("b_", "t_")):
+            h = hov == "btn_" + i[2:]
+            return (self.BTN_H if h else self.BTN) if i[0] == "b" else (Hot.ON if h else Hot.BASE)
+        return self.WHITE
+
+    def warn_text(self):
+        if self.g.cfg_is_mc():
+            return ("Testgelände: Monster per F1-Menü" if self.g.cfg_is_dev() else
+                    "Auf Minecraft-Karten gibt es keine Monster")
+        if self.on() and mob_all_off(self.g.mob_off_cfg()):
+            return "Keine Art gewählt: beim Rundenstart werden die Monster abgeschaltet"
+        return ""
+
+    # ---- Layout (nur rect/text/hit)
+    def layout(self):
+        g, X0, X1 = self.g, self.X0, self.X1
+        self.text("title", "Monster", 0, 0.80, 0.075, (1.0, 0.78, 0.3, 1.0))
+        self.text(None, "MONSTER", X0, 0.64, 0.034, self.GREY, "l")
+        bw = (X1 - X0 - 0.02) / 2.0
+        for k, name in enumerate(("An", "Aus")):
+            x0 = X0 + k * (bw + 0.02)
+            x1 = x0 + bw
+            self.rect(f"sf{k}", x0 - 0.008, x1 + 0.008, 0.49, 0.605)
+            self.rect(f"sb{k}", x0, x1, 0.497, 0.597)
+            self.text(f"st{k}", name, (x0 + x1) / 2, 0.525, 0.05)
+            self.hit(f"ms{k}", x0, x1, 0.497, 0.597,
+                     lambda k=k: g.mob_toggle_master() if (k == 0) != g.mob_master_on() else None)
+        self.text(None, "DICHTE", X0, 0.40, 0.034, self.GREY, "l")
+        levels = list(enumerate(MOB_LEVELS))[1:]                        # "Aus" ist der Hauptschalter
+        n = len(levels)
+        bw = (X1 - X0 - 0.02 * (n - 1)) / n
+        for j, (k, (name, _f)) in enumerate(levels):
+            x0 = X0 + j * (bw + 0.02)
+            x1 = x0 + bw
+            self.rect(f"df{k}", x0 - 0.008, x1 + 0.008, 0.245, 0.355)
+            self.rect(f"db{k}", x0, x1, 0.253, 0.347)
+            self.text(f"dt{k}", name, (x0 + x1) / 2, 0.275, 0.046)
+            self.hit(f"md{k}", x0, x1, 0.253, 0.347, lambda k=k: g.mob_set_density(k))
+        self.text(None, "MONSTERARTEN", X0, 0.16, 0.034, self.GREY, "l")
+        cw = (X1 - X0 - 0.02 * (self.COLS - 1)) / self.COLS
+        for i, kind in enumerate(MOB_TOGGLE_KINDS):
+            r, col = divmod(i, self.COLS)
+            x0 = X0 + col * (cw + 0.02)
+            x1 = x0 + cw
+            z1 = 0.11 - r * 0.112
+            z0 = z1 - 0.09
+            zm = (z0 + z1) / 2
+            self.rect(f"ab{i}", x0, x1, z0, z1)
+            self.rect(f"ax{i}", x0 + 0.03, x0 + 0.115, zm - 0.027, zm + 0.027)
+            self.rect(f"ak{i}", x0 + 0.039, x0 + 0.106, zm - 0.018, zm + 0.018)
+            self.text(f"at{i}", MOB_KIND_NAMES.get(kind, kind), x0 + 0.15, zm - 0.013, 0.044, al="l")
+            self.text(f"av{i}", "An" if self.kind_on(kind) else "Aus", x1 - 0.03, zm - 0.013, 0.044, al="r")
+            self.hit(f"mk{i}", x0, x1, z0, z1, lambda kind=kind: g.mob_toggle_kind(kind))
+        self.text("warn", self.warn_text(), 0, -0.585, 0.036)
+        self.rect("b_done", X0, X1, -0.745, -0.66)
+        self.text("t_done", "Fertig   (Esc)", 0, -0.717, 0.052)
+        self.hit("btn_done", X0, X1, -0.745, -0.66, g.on_escape)
+        self.text(None, "Tasten:  M = Monster an/aus    1-4 = Dichte    Esc = zurück", 0, -0.84, 0.028, self.GREY)
+
+    # ---- Aktualisieren
+    def update(self, force=False):
+        g = self.g
+        key = (self.on(), g.cfg.get("mobs"), tuple(sorted(g.mob_off_cfg())), self.hover, g.cfg_is_mc())
+        if force or key != self.key:
+            self.key = key
+            self.sync()
+
+    def sync(self):
+        for i, nd in self.nodes.items():
+            if i == "title":
+                continue
+            col = self.style(i)
+            if i in self.txts:
+                nd.setFg(col)
+            else:
+                nd.setColor(*col)
+        for i, kind in enumerate(MOB_TOGGLE_KINDS):
+            if f"av{i}" in self.nodes:
+                self.nodes[f"av{i}"].setText("An" if self.kind_on(kind) else "Aus")
+        if "warn" in self.nodes:
+            self.nodes["warn"].setText(self.warn_text())
 
 
 def plim_label(v):
@@ -26296,6 +26501,7 @@ class JoinAttempt:
         self.mode = "koth"
         self.limit = 600.0
         self.mobs_on = True
+        self.mob_off = frozenset()     # v65: abgewählte Monsterarten des Hosts
         self.tomahawk = True
         self.map_raw = None            # Kartendatei des Hosts (None = Standardkarte)
         self.extra = []                # Nachrichten, die schon nach dem welcome eintrafen
@@ -26324,6 +26530,7 @@ class JoinAttempt:
                         self.mode = m.get("mode") if m.get("mode") in MODES else "koth"
                         self.limit = clampf(float(m.get("limit", 600)), 30.0, 7200.0)
                         self.mobs_on = bool(m.get("mobs", 1))
+                        self.mob_off = mob_off_of(m.get("mk"))
                         self.tomahawk = bool(m.get("tomahawk", 1))
                         self.map_raw = m.get("map") if isinstance(m.get("map"), dict) else None
                         self.exp = bool(m.get("exp"))
@@ -26504,6 +26711,7 @@ class HostSession:
     def cfg_msg(self):
         w = self.world
         return {"t": "cfg", "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
+                "mk": sorted(w.mob_off),                              # v65: abgewählte Monsterarten
                 "tomahawk": 1 if w.tomahawk_on else 0, "cd": w.strike_cd, "regen": w.regen_rate, "ctf": w.ctf_cfg()}
 
     def send_cfg(self):
@@ -26535,7 +26743,7 @@ class HostSession:
             c.last_rx = time.time()
             c.send({"t": "reload", "id": c.pid, "seed": world.seed, "props": world.prop_count(),
                     "mode": world.mode, "limit": world.limit, "mobs": 1 if world.mobs_on else 0,
-                    "tomahawk": 1 if world.tomahawk_on else 0, "ctf": world.ctf_cfg(),
+                    "mk": sorted(world.mob_off), "tomahawk": 1 if world.tomahawk_on else 0, "ctf": world.ctf_cfg(),
                     "exp": 1 if world.exp else 0, "map": getattr(world, "map_raw", None)})
             c.flush()
         netlog(f"Host: Welt gewechselt (Karte {'eigene' if getattr(world, 'map_raw', None) else 'Standard'}, "
@@ -26614,7 +26822,7 @@ class HostSession:
             c.pid = pid
             netlog(f"Host: hello von '{name}' v{m.get('v')} -> pid {pid}, sende welcome")
             c.send({"t": "welcome", "id": pid, "seed": w.seed, "props": w.prop_count(),
-                    "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0,
+                    "mode": w.mode, "limit": w.limit, "mobs": 1 if w.mobs_on else 0, "mk": sorted(w.mob_off),
                     "tomahawk": 1 if w.tomahawk_on else 0, "ctf": w.ctf_cfg(), "exp": 1 if w.exp else 0,
                     "map": getattr(w, "map_raw", None)})
             return
@@ -27079,6 +27287,8 @@ class ClientSession:
                     w.mode = m["mode"]
                 w.limit = clampf(float(m.get("limit", w.limit)), 30.0, 7200.0)
                 w.mobs_on = bool(m.get("mobs", w.mobs_on))
+                if "mk" in m:
+                    w.mob_off = mob_off_of(m["mk"])              # v65: Monster-Reiter des Hosts
                 w.tomahawk_on = bool(m.get("tomahawk", w.tomahawk_on))
                 w.strike_cd = float(m.get("cd", w.strike_cd))
                 w.regen_rate = float(m.get("regen", w.regen_rate))
@@ -125586,7 +125796,9 @@ class Game(ShowBase):
         self.lost_text = None
         self.cfg = dict(mode="koth", limit=10, mobs=MOB_DEFAULT, tomahawk=True, cd=int(STRIKE_CD), regen=REGEN_RATE,
                         resp=RESPAWN_DEFAULT, map=None, ff=CTF_FF_DEFAULT,
-                        plim=0, bcr=None, bha=None)   # Host-Einstellungen (ff/plim = CTF: Eigenbeschuss, Punktelimit; bcr/bha = Bonuskisten/-hasen, None = Standard des Modus)
+                        plim=0, bcr=None, bha=None,
+                        mob_on=True, mk_off=[])   # v65: Monster-Reiter: Hauptschalter, abgewählte Arten
+                                      # Host-Einstellungen (ff/plim = CTF: Eigenbeschuss, Punktelimit; bcr/bha = Bonuskisten/-hasen, None = Standard des Modus)
         self.name_back = "main"               # wohin "Weiter" im Namensmenü führt
         self.map_list = []                    # gefundene Kartendateien (Name, Pfad)
         self.dead_since = None                # Zeitpunkt des eigenen Todes (Anzeige der Wartezeit)
@@ -125873,10 +126085,10 @@ class Game(ShowBase):
         self.set_capture(False)
         if getattr(self, "vignette", None) is not None:
             self.vignette.hide()
-        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "char", "set_keys"))
+        self.menu_background(title=state not in ("loadout", "loadconf", "setup2", "setup3", "setup4", "char", "set_keys"))
         self.menu_items.append(OnscreenText(text=f"Spieler: {self.my_name}", pos=(-1.2, -0.94), scale=0.045,
                                             fg=(0.7, 0.8, 0.9, 1), align=TextNode.ALeft, mayChange=False))
-        if state not in ("loadout", "loadconf", "setup2"):
+        if state not in ("loadout", "loadconf", "setup2", "setup4"):
             self.menu_items.append(OnscreenText(text=f"Polybash Alpha  {VERSION}", pos=(1.2, -0.94), scale=0.045,
                                                 fg=(0.7, 0.8, 0.9, 1), align=TextNode.ARight, mayChange=False))
         self.menu_refresh()
@@ -125923,7 +126135,7 @@ class Game(ShowBase):
             c = self.cfg
             mc = self.cfg_is_mc()
             spec = [("Weitere Einstellungen", None),
-                    (("Monster:  per F1-Menü  (Testgelände)" if self.cfg_is_dev() else "Monster:  aus  (Minecraft-Karte)") if mc else f"Monster:  {'an' if c['mobs'] else 'aus'}", dig(1)),
+                    (("Monster:  per F1-Menü  (Testgelände)" if self.cfg_is_dev() else "Monster:  aus  (Minecraft-Karte)") if mc else f"Monster:  {'an' if self.mob_master_on() else 'aus'}", dig(1)),
                     (f"Tomahawk-Abklingzeit:  {strike_cd_label(c['cd'])}", dig(2)),
                     (f"Gesundheit regeneriert:  {regen_label(c['regen'])}", dig(3)),
                     (f"Respawn-Zeit:  {respawn_label(c['resp'])}", dig(4)),
@@ -125961,10 +126173,10 @@ class Game(ShowBase):
             else:
                 self.setup_page.update()
             return
-        if self.menu_state in ("setup2", "setup3"):       # Weitere Einstellungen / 11: CTF-Regeln
+        if self.menu_state in ("setup2", "setup3", "setup4"):   # Weitere Einstellungen / 11: CTF-Regeln / v65: Monster
             if self.setup_page is None or self.menu_last is None:
                 self.menu_last = (self.menu_state, self.menu_msg)
-                self.setup_page = MorePage(self) if self.menu_state == "setup2" else CtfPage(self)
+                self.setup_page = {"setup2": MorePage, "setup4": MonsterPage}.get(self.menu_state, CtfPage)(self)
             else:
                 self.setup_page.update()
             return
@@ -126347,11 +126559,77 @@ class Game(ShowBase):
         return ("dm", True) if m == "experimental" else (m, False)
 
     def set_cfg(self, key, v):
-        """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus)."""
+        """Einstellung der Weiteren-Seite setzen (Monsterstufe, Tomahawk, Zahlen, Bonus).
+        v65: "mobs" 0 (Stufe "Aus", Taste 1) schaltet den Monster-Hauptschalter aus und behält die gewählte Dichte."""
         if key == "mobs" and self.cfg_is_mc():
+            return
+        if key == "mobs":
+            if mob_level_of(v) <= 0:
+                self.cfg["mob_on"] = False
+            else:
+                self.cfg["mobs"], self.cfg["mob_on"] = mob_level_of(v), True
+            self.menu_refresh()
             return
         self.cfg[key] = v
         self.menu_refresh()
+
+    # ------------------------------------------------------------ v65: Monster-Reiter
+    def mob_master_on(self):
+        """Hauptschalter (monsters_enabled): an, eine Dichte > 0 gewählt und keine Minecraft-Karte/Testgelände."""
+        c = self.cfg
+        return bool(c.get("mob_on", True)) and mob_level_of(c.get("mobs")) > 0 and not self.cfg_is_mc()
+
+    def mob_off_cfg(self):
+        """Abgewählte Monsterarten (frozenset)."""
+        return mob_off_of(self.cfg.get("mk_off"))
+
+    def mob_toggle_master(self):
+        if self.cfg_is_mc():
+            return
+        c = self.cfg
+        if self.mob_master_on():
+            c["mob_on"] = False
+        else:
+            c["mob_on"] = True
+            if mob_level_of(c.get("mobs")) <= 0:          # z. B. CTF-Standard (Dichte 0): sinnvolle Dichte vorgeben
+                c["mobs"] = MOB_DEFAULT
+        self.menu_refresh()
+
+    def mob_set_density(self, k):
+        """Dichte 1..4 (Wenig .. Gottlos); gesperrt, solange der Hauptschalter aus ist."""
+        if not self.mob_master_on():
+            return
+        self.cfg["mobs"] = max(1, min(len(MOB_LEVELS) - 1, int(k)))
+        self.menu_refresh()
+
+    def mob_toggle_kind(self, kind):
+        """Einzelne Monsterart an/aus; gesperrt, solange der Hauptschalter aus ist."""
+        if not self.mob_master_on() or kind not in MOB_TOGGLE_KINDS:
+            return
+        off = set(self.mob_off_cfg())
+        off ^= {kind}
+        self.cfg["mk_off"] = sorted(off)                  # neue Liste (cfg_backup ist eine flache Kopie)
+        self.menu_refresh()
+
+    def mob_cfg_resolve(self):
+        """Beim Match-Start: (Dichte für die Welt, abgewählte Arten). Sicherung gegen leere Spawns: Hauptschalter an,
+        aber alle Arten abgewählt -> Hauptschalter für diese Runde aus (Dichte 0)."""
+        off = self.mob_off_cfg()
+        if self.mob_master_on() and mob_all_off(off):
+            self.cfg["mob_on"] = False
+            netlog("Monster: alle Arten abgewählt - Monster werden für diese Runde abgeschaltet")
+        return (mob_level_of(self.cfg["mobs"]) if self.mob_master_on() else 0), off
+
+    def mob_summary(self):
+        """Kurztext für den Knopf auf der Weiteren-Seite."""
+        if self.cfg_is_mc():
+            return "keine Monster auf dieser Karte"
+        if not self.mob_master_on():
+            return "Aus"
+        n_on = sum(1 for k in MOB_TOGGLE_KINDS if k not in self.mob_off_cfg())
+        if n_on == 0:
+            return "keine Art gewählt - beim Start aus"
+        return f"An  /  {MOB_LEVELS[mob_level_of(self.cfg['mobs'])][0]}  /  {n_on} von {len(MOB_TOGGLE_KINDS)} Arten"
 
     def slider_follow(self):
         m = self.mouse_2d()
@@ -126478,6 +126756,8 @@ class Game(ShowBase):
             elif self.end_cfg == "more":
                 if 1 <= d <= len(MOB_LEVELS):
                     self.set_cfg("mobs", d - 1)
+            elif self.end_cfg == "mobs":                 # v65: Monster-Reiter: 1-4 = Dichte
+                self.mob_set_density(d)
             else:
                 self.show_end_tab(d - 1)
             return
@@ -126530,6 +126810,8 @@ class Game(ShowBase):
             elif st == "setup2":
                 if 1 <= d <= len(MOB_LEVELS):
                     self.set_cfg("mobs", d - 1)
+            elif st == "setup4":                       # v65: Monster-Reiter: 1-4 = Dichte
+                self.mob_set_density(d)
         elif self.mode == "play":
             if self.player.hp <= 0:
                 if not self.world.exp:             # Experimental: keine Ausrüstungswahl (Start mit der Pistole)
@@ -126545,6 +126827,10 @@ class Game(ShowBase):
                 self.set_cfg("tomahawk", not self.cfg.get("tomahawk", True))
             elif ch in "mM":                              # v57: Manhunt an/aus
                 self.set_cfg("mh", not self.bonus_cfg()["manhunt"])
+            return
+        if self.menu_state == "setup4":                   # v65: Monster-Reiter
+            if ch in "mM":
+                self.mob_toggle_master()
             return
         if self.menu_state == "setup3":                   # 11: CTF-Regeln
             if ch in "fF":
@@ -126600,6 +126886,8 @@ class Game(ShowBase):
             self.begin_game(self.setup_for)
         elif st == "setup2":
             self.show_menu("setup")
+        elif st == "setup4":                         # v65: Monster-Reiter
+            self.show_menu("setup2")
         elif st == "join":
             ip = self.current_ip().strip()
             if not ip:
@@ -126693,7 +126981,16 @@ class Game(ShowBase):
         self.menu_items.append(Deco(bg))
         self.menu_last = (self.end_cfg, "")
         self.setup_page = (EndSetupPage(self) if self.end_cfg == "setup" else
-                           CtfPage(self) if self.end_cfg == "ctf" else MorePage(self))
+                           CtfPage(self) if self.end_cfg == "ctf" else
+                           MonsterPage(self) if self.end_cfg == "mobs" else MorePage(self))
+
+    def open_mob_page(self):
+        """v65: Monster-Reiter öffnen (Hauptmenü-Setup oder Rundeneinstellungen im Endbildschirm)."""
+        if getattr(self, "end_cfg", None) is not None:
+            self.end_cfg = "mobs"
+            self.end_cfg_show()
+        else:
+            self.show_menu("setup4")
 
     def end_cfg_more(self):
         self.end_cfg = "more"
@@ -126706,7 +127003,10 @@ class Game(ShowBase):
 
     def end_cfg_back(self):
         self.ctf_gate = None
-        if self.end_cfg in ("more", "ctf"):
+        if self.end_cfg == "mobs":                         # v65: Monster-Reiter -> Weitere Einstellungen
+            self.end_cfg = "more"
+            self.end_cfg_show()
+        elif self.end_cfg in ("more", "ctf"):
             self.end_cfg = "setup"
             self.end_cfg_show()
         else:
@@ -126748,7 +127048,7 @@ class Game(ShowBase):
         if c.get("map") != getattr(w, "map_path", None):
             self.reload_world()
             return
-        lvl = mob_level_of(c["mobs"])
+        lvl, moff = self.mob_cfg_resolve()                  # v65: Monster-Reiter (mit Sicherung: keine Art = aus)
         mode, wexp = self.world_rules()
         if wexp != w.exp:                               # Regelsatz gewechselt (Experimental <-> andere): Welt neu aufbauen
             self.reload_world()
@@ -126770,7 +127070,7 @@ class Game(ShowBase):
         b_ = self.bonus_cfg()                           # Bonuskisten/-hasen: gelten ab der nächsten Runde
         w.bonus_crates, w.bonus_hares = b_["crates"], b_["hares"]
         w.manhunt_on = b_["manhunt"]                    # v57: Manhunt gilt sofort
-        w.mob_level, w.mobs_on = lvl, (lvl > 0 and not w.mc and not w.dev)
+        w.set_mob_rules(lvl, moff)                      # v65: gilt ab der nächsten Runde (Spawns beim Rundenstart)
         if self.host is not None:
             self.host.send_cfg()
         netlog(f"Host: Rundeneinstellungen geändert (Modus {w.mode}, {w.limit / 60:.0f} min, Monster {w.mob_level})")
@@ -126789,7 +127089,8 @@ class Game(ShowBase):
             att = SimpleNamespace(conn=cs.conn, extra=[], my_id=cs.my_id, seed=int(m["seed"]), props=int(m["props"]),
                                   mode=m.get("mode") if m.get("mode") in MODES else "koth",
                                   limit=clampf(float(m.get("limit", 600)), 30.0, 7200.0),
-                                  mobs_on=bool(m.get("mobs", 1)), tomahawk=bool(m.get("tomahawk", 1)),
+                                  mobs_on=bool(m.get("mobs", 1)), mob_off=mob_off_of(m.get("mk")),
+                                  tomahawk=bool(m.get("tomahawk", 1)),
                                   ctf=m.get("ctf") if isinstance(m.get("ctf"), dict) else {}, exp=bool(m.get("exp")),
                                   map_raw=m.get("map") if isinstance(m.get("map"), dict) else None, host="",
                                   close=lambda: cs.conn.close("abgebrochen"))
@@ -127062,6 +127363,8 @@ class Game(ShowBase):
             self.end_cfg_back()                    # Rundeneinstellungen: Weitere -> Seite 1 -> Abbrechen
         elif self.mode == "menu" and self.menu_state == "quit":
             self.show_menu(getattr(self, "quit_back", None) or "main")
+        elif self.mode == "menu" and self.menu_state == "setup4":
+            self.show_menu("setup2")                   # v65: Monster-Reiter -> Weitere Einstellungen
         elif self.mode == "menu" and self.menu_state in ("setup2", "setup3"):
             self.ctf_gate = None
             self.show_menu("setup")
@@ -127516,14 +127819,15 @@ class Game(ShowBase):
                     self.cfg["resp"] = int(v)
 
                 def set_mobs(k):
-                    w.mob_level = int(k)
-                    w.mobs_on = w.mob_level > 0 and not w.mc and not w.dev
+                    w.set_mob_rules(int(k), self.mob_off_cfg())  # v65: abgewählte Arten bleiben abgewählt
                     w.mobs.clear()
                     w.pending.clear()
                     w.dev_ready = False                        # v50: Testgelände - Showroom wieder aufstellen
                     if w.mobs_on:
                         w.populate_mobs()
-                    self.cfg["mobs"] = w.mob_level
+                    self.set_cfg("mobs", int(k))               # 0 = Hauptschalter aus, sonst Dichte + an
+                    if self.host is not None:
+                        self.host.send_cfg()                   # v65: Mitspieler sehen den neuen Stand
 
                 def set_tomahawk():
                     w.tomahawk_on = not w.tomahawk_on
@@ -127543,7 +127847,7 @@ class Game(ShowBase):
                         w.bonus_hares = not w.bonus_hares
                         self.cfg["bha"] = w.bonus_hares
 
-                items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level,
+                items = [RowSpec("Monster", [nm for nm, _f in MOB_LEVELS], w.mob_level if w.mobs_on else 0,
                                  lambda k: (set_mobs(k), self.show_pause(kind))),
                          (f"Tomahawk:  {'an' if w.tomahawk_on else 'aus'}", do(set_tomahawk)),
                          (f"Manhunt bei Kill-Serien:  {'an' if w.manhunt_on else 'aus'}", do(set_manhunt)),
@@ -128030,7 +128334,7 @@ class Game(ShowBase):
             self.loading_step(0.08, "Welt wird erzeugt ...")
             world = World(attempt.seed, spawn_mobs=False, mode=attempt.mode, limit=attempt.limit, mapdata=mapdata,
                           tomahawk=getattr(attempt, "tomahawk", True), ctf=getattr(attempt, "ctf", None),
-                          exp=bool(getattr(attempt, "exp", False)))
+                          exp=bool(getattr(attempt, "exp", False)), mob_off=getattr(attempt, "mob_off", None))
             if attempt.props != world.prop_count():
                 attempt.close()
                 netlog(f"Client: Weltprüfung fehlgeschlagen: Host {attempt.props} Props, lokal {world.prop_count()}")
@@ -128067,9 +128371,9 @@ class Game(ShowBase):
                     self.show_menu("setup", f"Polytown (polytown.ptmap) nicht ladbar: {e}")
                     return
             self.loading_step(0.08, "Welt wird erzeugt ...")
-            lvl = mob_level_of(self.cfg["mobs"])
+            lvl, moff = self.mob_cfg_resolve()                 # v65: Monster-Reiter (mit Sicherung: keine Art = aus)
             wmode, wexp = self.world_rules()
-            world = World(SEED, spawn_mobs=lvl > 0, mode=wmode,
+            world = World(SEED, spawn_mobs=lvl > 0, mode=wmode, mob_off=moff,
                           limit=self.cfg["limit"] * 60.0, strike_cd=self.cfg["cd"], regen=self.cfg["regen"],
                           respawn=self.cfg["resp"], mapdata=mapdata, mob_level=lvl,
                           tomahawk=bool(self.cfg.get("tomahawk", True)), ctf=self.ctf_cfg_dict(), bonus=self.bonus_cfg(),

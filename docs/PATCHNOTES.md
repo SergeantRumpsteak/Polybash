@@ -2,6 +2,20 @@
 
 Neueste Änderungen oben.
 
+## Monster-Reiter in den Match-Einstellungen, Dutt am Hinterkopf (Robin, 2026-11-07)
+Gilt für alle Modi und Karten. NET_VERSION 64 -> 65.
+
+- **Neuer Reiter "Monster"**: Weitere Einstellungen -> "Monster-Einstellungen" (Knopf mit Kurzstatus, z. B. "An / Mäßig / 7 von 7 Arten"). Auch in den Rundeneinstellungen nach der Runde.
+- **Hauptschalter Monster An/Aus** (Taste M auf dem Reiter): Bei "Aus" sind Dichte und alle Arten-Schalter ausgegraut und nehmen keine Eingaben an. Für die Runde gibt es dann keinen Spawn-Manager, keine Respawn-Warteschlange, keine Bosswellen und keine Monster-KI (die KI-Schleife läuft gar nicht erst).
+- **Dichte**: Wenig, Mäßig, Viel, Gottlos (Tasten 1-4). "Aus" ist jetzt der Hauptschalter; die gewählte Dichte bleibt beim Ausschalten erhalten.
+- **Einzelne Monsterarten** an/abwählen: Zombies, Jägerinnen, Brutes, Harpien, Drohnen, Kolosse, Titanen. Abgewählte Arten spawnen weder beim Rundenstart noch per Respawn oder Bosswelle. Neue Monsterarten erscheinen automatisch in der Liste.
+- **Sicherung**: Sind alle Arten abgewählt, zeigt der Reiter einen Hinweis und der Rundenstart schaltet die Monster ab (Hauptschalter aus).
+- **Netz**: Der Host schickt die abgewählten Arten mit (welcome, cfg, reload).
+- Unverändert: Tasten 1-5 auf "Weitere Einstellungen" (1 = Monster aus), Monster-Zeile im Pausenmenü (respektiert die abgewählten Arten), CTF-Standard Monster aus, Bonushasen unter BONUS, Harpyien gegen Camper unabhängig von der Monster-Einstellung, Nest-Monster und eigene Drohnen.
+- **Dutt** (ohne Kopfbedeckung): sitzt jetzt am Hinterkopf (Übergang Scheitel/Hinterkopf) und steht um 40° nach hinten-oben ab, der Ansatz liegt flach an. Vorher saß er senkrecht wie eine Kerze auf dem Scheitel.
+
+Technik: `MOB_KIND_NAMES`, `MOB_TOGGLE_KINDS`, `mob_off_of`, `mob_all_off`, `calculate_map_spawns(disabled=...)`, `World(mob_off=...)`, `World.mob_off`, `World.set_mob_rules`, Sperre in `World.spawn_mob`, KI/Bosswellen/Warteschlange in `World.update` nur mit Monstern; `MonsterPage`, Menüzustand `setup4`, `end_cfg` "mobs", `Game.mob_master_on` / `mob_off_cfg` / `mob_toggle_master` / `mob_set_density` / `mob_toggle_kind` / `mob_cfg_resolve` / `mob_summary` / `open_mob_page`, cfg-Felder `mob_on` und `mk_off`, Netzfeld `mk`. Dutt zum Nachjustieren: `DUTT_ANCHOR`, `DUTT_PITCH`, `DUTT_PARTS`, `DUTT_TIE` (kopf-lokale Werte, vorherige Position im Kommentar).
+
 ## Manhunt statt King, Harpyien gegen Camper (Robin, 2026-11-07)
 Gilt für alle Modi und Karten. NET_VERSION 62 -> 63.
 
